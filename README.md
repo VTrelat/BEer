@@ -6,6 +6,14 @@ The tool is implemented in Lean and includes a proof of correctness of the encod
 > [!WARNING]
 > Proving the correctness of the translation is still ongoing work.
 
+## Build
+Clone this repository, install Lean 4, and build using lake.
+```bash
+cd BEer
+lake build BEer
+```
+This may take about a few minutes, and should produce an executable `.lake/build/bin/BEer`.
+
 ## Paper
 An online version of the paper is available on my [personal website](https://vtrelat.github.io/papers/abz25.pdf).
 
