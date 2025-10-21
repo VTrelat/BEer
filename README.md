@@ -7,7 +7,7 @@ The tool is implemented in Lean and includes a proof of correctness of the encod
 > Proving the correctness of the translation is still ongoing work.
 
 ## Paper
-An online version of the paper is available on my [personal website](https://vtrelat.github.io/papers/abz25.pdf)
+An online version of the paper is available on my [personal website](https://vtrelat.github.io/papers/abz25.pdf).
 
 ## Cite
 ```bib
