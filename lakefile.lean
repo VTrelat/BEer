@@ -17,7 +17,7 @@ package «B» where
 require "leanprover-community" / "mathlib" @ git s!"v{Lean.versionString}"
 
 @[default_target]
-lean_exe «Bexe» where
+lean_exe «BEer» where
   root := `Main
 
 lean_lib «B»
