@@ -1114,10 +1114,9 @@ noncomputable def π₂ (x : ZFSet) : ZFSet :=
   · rw [π₁_pair]
     unfold pair at h
     rw [sUnion_pair, pair_union, sInter_pair, pair_inter] at h
-    by_cases eq : x = y
-    · assumption
-    · rw [pair_minus eq, ZFSet.ext_iff] at h
-      simp only [mem_singleton, notMem_empty, iff_false, forall_eq] at h
+    rw [ZFSet.ext_iff] at h
+    specialize h y
+    simpa only [mem_diff, mem_insert_iff, mem_singleton, eq_self, or_true, true_and, notMem_empty, iff_false, not_not, eq_comm] using h
   · unfold pair at *
     rw [sUnion_pair, pair_union, sInter_pair, pair_inter] at h ⊢
     rw [pair_minus]
