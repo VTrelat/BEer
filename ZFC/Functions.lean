@@ -62,8 +62,10 @@ theorem inv_involutive {R A B : ZFSet} (hR : R ⊆ A.prod B) : (R⁻¹)⁻¹ = R
 Domain of a (binary) relation. A proof that `f` is a relation is needed and tried to be
 automatically inferred.
 -/
+-- abbrev Dom   (f : ZFSet) {A B : ZFSet} (hf : f ⊆ A.prod B := by zrel) :=
+--   ⋃₀ (A.powerset.sep λ 𝒟 => IsFunc 𝒟 B f) --NOTE: this def was specific to functions
 abbrev Dom   (f : ZFSet) {A B : ZFSet} (hf : f ⊆ A.prod B := by zrel) :=
-  ⋃₀ (A.powerset.sep λ 𝒟 => IsFunc 𝒟 B f)
+  A.sep (fun x => ∃ y ∈ B, pair x y ∈ f)
 
 abbrev Range (f : ZFSet) {A B : ZFSet} (hf : f ⊆ A.prod B := by zrel) :=
   B.sep (fun y => ∃ x ∈ Dom f hf, pair x y ∈ f)
@@ -193,10 +195,8 @@ theorem is_pfunc_func_exists {f A B : ZFSet} : f.IsPFunc A B → ∃ A' B', IsFu
 
 theorem pfun_dom_subset (f : ZFSet) {A B} (hf : f.IsPFunc A B) : f.Dom ⊆ A := by
   rintro x x_dom
-  rw [mem_sUnion] at x_dom
-  obtain ⟨D, hD⟩ := x_dom
-  rw [mem_sep, mem_powerset] at hD
-  exact hD.left.left hD.right
+  rw [mem_sep] at x_dom
+  exact x_dom.1
 
 theorem mem_dom {f A B : ZFSet} (hf : f.IsPFunc A B) {x y : ZFSet} : pair x y ∈ f → x ∈ f.Dom := by classical
   intro mem_pair
@@ -205,15 +205,10 @@ theorem mem_dom {f A B : ZFSet} (hf : f.IsPFunc A B) {x y : ZFSet} : pair x y �
   obtain ⟨a, ha, b, hb, eq⟩ := mem_prod.mp <| sub mem_pair
   rw [pair_inj] at eq
   rcases eq with ⟨rfl, rfl⟩
-  simp_rw [mem_sUnion, mem_sep]
-  have : x ∈ D := by
-    rcases is_func_DC with ⟨sub, ex1⟩
-    obtain ⟨d, hd, c, hc, eq⟩ := mem_prod.mp <| sub mem_pair
-    rw [pair_inj] at eq; rcases eq with ⟨rfl, rfl⟩
-    assumption
-  by_contra! contr
-  simp only [mem_powerset, and_imp] at contr
-  nomatch contr D Dsub (is_func_extend_range is_func_DC Csub) this
+  rw [mem_sep]
+  and_intros
+  · exact ha
+  · use y
 
 theorem is_func_dom_range (f : ZFSet) {A B} (hf : f.IsPFunc A B) : IsFunc f.Dom f.Range f := by classical
   rcases hf with ⟨sub, unique⟩
@@ -222,26 +217,10 @@ theorem is_func_dom_range (f : ZFSet) {A B} (hf : f.IsPFunc A B) : IsFunc f.Dom 
     obtain ⟨a,a_A,b,b_B,rfl⟩ := mem_prod.mp <| sub h
     rw [pair_mem_prod]
     and_intros
-    · rw [mem_sUnion]
-      exists f.Dom
-      rw [mem_sep, mem_powerset]
+    · rw [mem_sep]
       and_intros
-      · intro x x_dom
-        rw [mem_sUnion] at x_dom
-        obtain ⟨D, hD⟩ := x_dom
-        rw [mem_sep, mem_powerset] at hD
-        exact hD.left.left hD.right
-      · intro p mem_p_f
-        obtain ⟨a, ha, b, hb, rfl⟩ := mem_prod.mp <| sub mem_p_f
-        rw [pair_mem_prod]
-        exact ⟨mem_dom ⟨sub, unique⟩ mem_p_f, hb⟩
-      · intro z z_dom
-        rw [mem_sUnion] at z_dom
-        obtain ⟨C, hC⟩ := z_dom
-        rw [mem_sep, mem_powerset] at hC
-        rcases hC with ⟨⟨sub_C_A, ⟨f_sub_CB, uniqueC⟩⟩, z_C⟩
-        exact uniqueC z z_C
-      · exact mem_dom ⟨sub, unique⟩ h
+      · exact a_A
+      · use b
     · unfold Range
       rw [mem_sep]
       and_intros
@@ -251,11 +230,13 @@ theorem is_func_dom_range (f : ZFSet) {A B} (hf : f.IsPFunc A B) : IsFunc f.Dom 
         · exact mem_dom ⟨sub, unique⟩ h
         · exact h
   · intro z z_dom
-    rw [mem_sUnion] at z_dom
-    obtain ⟨C, hC⟩ := z_dom
-    rw [mem_sep, mem_powerset] at hC
-    rcases hC with ⟨⟨sub_C_A, ⟨f_sub_CB, uniqueC⟩⟩, z_C⟩
-    exact uniqueC z z_C
+    rw [mem_sep] at z_dom
+    obtain ⟨zA, w, hw, zw_f⟩ := z_dom
+    use w
+    and_intros
+    · exact zw_f
+    · intro w' zw'_f
+      exact unique z w' zw'_f w zw_f
 
 theorem is_func_of_pfunc (f : ZFSet) {A B} (hf : f.IsPFunc A B) : IsFunc f.Dom B f := by
   obtain ⟨ftot, uniq⟩ := is_func_dom_range f hf
@@ -540,14 +521,9 @@ open Classical in
 noncomputable def fapply (f : ZFSet) {A B : ZFSet} (hf : f.IsPFunc A B := by zpfun) : {x // x ∈ f.Dom} → {x // x ∈ B} := λ ⟨x, x_dom⟩ =>
   have : ∃ y ∈ B, pair x y ∈ f := by
     unfold Dom at x_dom
-    simp_rw [mem_sUnion, mem_sep] at x_dom
-    obtain ⟨𝒟, ⟨𝒟_A, sub, ex1⟩, x_𝒟⟩ := x_dom
-    obtain ⟨y, pair, ex1⟩ := ex1 x x_𝒟
-    exists y
-    and_intros
-    · obtain ⟨_,_,_,_,eq⟩ := mem_prod.mp <| sub pair
-      rwa [(pair_inj.mp eq).right]
-    · assumption
+    rw [mem_sep] at x_dom
+    obtain ⟨xA, y, yB, xyf⟩ := x_dom
+    use y
   ⟨choose this, choose_spec this |>.left⟩
 
 notation:max "@ᶻ" f:max => fapply f
@@ -557,15 +533,18 @@ theorem is_func_dom_eq {f A B : ZFSet} (hf : IsFunc A B f := by zfun) : f.Dom = 
   ext1 x
   constructor
   · intro x_dom
-    rw [mem_sUnion] at x_dom
-    obtain ⟨D, hD⟩ := x_dom
-    rw [mem_sep, mem_powerset] at hD
-    exact hD.left.left hD.right
+    rw [mem_sep] at x_dom
+    obtain ⟨xA⟩ := x_dom
+    exact xA
   · intro mem_x_A
-    rw [mem_sUnion]
-    exists A
-    rw [mem_sep, mem_powerset]
-    exact ⟨⟨subset_refl _, hf⟩, mem_x_A⟩
+    rw [mem_sep]
+    and_intros
+    · exact mem_x_A
+    · obtain ⟨y, hy, _⟩ := hf.2 x mem_x_A
+      use y
+      and_intros
+      · exact hf.1 hy |> pair_mem_prod.mp |>.2
+      · exact hy
 
 open Classical in
 theorem fapply_Id {A x : ZFSet} (hx : x ∈ A) : @ᶻ𝟙A ⟨x, by rwa [is_func_dom_eq Id.IsFunc]⟩ = ⟨x, hx⟩ := by
@@ -617,11 +596,15 @@ theorem IsInjective.apply_inj {f A B : ZFSet} (hf : IsFunc A B f) (inj : f.IsInj
 theorem IsPFunc.exists_unique_of_mem_dom {f A B : ZFSet} (hf : f.IsPFunc A B) {x : ZFSet} (hx : x ∈ f.Dom) :
   ∃! y, pair x y ∈ f := by
   unfold Dom at hx
-  rw [mem_sUnion] at hx
-  obtain ⟨C, hC⟩ := hx
-  rw [mem_sep, mem_powerset] at hC
-  rcases hC with ⟨⟨sub_C_A, ⟨f_sub_CB, uniqueC⟩⟩, x_C⟩
-  exact uniqueC x x_C
+  rw [mem_sep] at hx
+  obtain ⟨xA, y, yB, xy_f⟩ := hx
+  use y
+  and_intros
+  · exact xy_f
+  · intro y' xy'_f
+    symm
+    exact hf.2 _ _ xy_f _ xy'_f
+
 
 theorem fapply.of_pair {f A B : ZFSet} (hf : f.IsPFunc A B) {x y : ZFSet} (hxy : x.pair y ∈ f) :
   @ᶻf ⟨x, mem_dom hf hxy⟩ = ⟨y, And.right <| pair_mem_prod.mp <| hf.1 hxy⟩ := by
@@ -665,12 +648,9 @@ theorem IsInjective.apply_inj_pfun {f A B : ZFSet} (hf : IsPFunc f A B) (inj : f
   · dsimp [fapply]
     have : ∃ z ∈ B, pair x z ∈ f := by
       unfold Dom at x_dom
-      rw [mem_sUnion] at x_dom
-      obtain ⟨_, hD⟩ := x_dom
-      rw [mem_sep, mem_powerset] at hD
-      obtain ⟨⟨-, f_sub, uniq⟩, x_D⟩ := hD
-      obtain ⟨z, xz, unqz⟩ := uniq x x_D
-      exact ⟨z, And.right <| pair_mem_prod.mp <| f_sub xz, xz⟩
+      rw [mem_sep] at x_dom
+      obtain ⟨xA, y, yB, xy_f⟩ := x_dom
+      use y
     generalize_proofs
     obtain ⟨memB, -⟩ := Classical.choose_spec this
     exact memB
@@ -912,10 +892,9 @@ theorem inv_is_func_of_injective {f A B : ZFSet} {f_is_func : A.IsFunc B f} (hf 
     obtain ⟨hy, x, hx, pair_f⟩ := hy
     use x
     have x_A : x ∈ A := by
-      rw [mem_sUnion] at hx
-      obtain ⟨C, hC⟩ := hx
-      rw [mem_sep, mem_powerset] at hC
-      exact hC.1.1 hC.2
+      rw [mem_sep] at hx
+      obtain ⟨xA, _, _, _⟩ := hx
+      exact xA
     and_intros <;> beta_reduce
     · unfold inv
       rw [mem_sep, pair_mem_prod, π₁_pair, π₂_pair]
@@ -1094,8 +1073,7 @@ theorem fapply_composition {g f : ZFSet} {A B C : ZFSet} (hg : B.IsFunc C g) (hf
       · apply fapply_mem_range
       · apply fapply.def
       · exact bc_g
-set_option pp.proofs true in
-#check fapply_composition
+
 @[simp]
 theorem Image_of_composition_inv_self_of_bijective {f A B : ZFSet} {f_is_func : A.IsFunc B f}
   (hf : f.IsBijective) {X : ZFSet} (hX : X ⊆ A) :
@@ -1347,11 +1325,8 @@ theorem IsPFunc.exists_dom_of_mem_range {f A B : ZFSet} (hf : IsPFunc f A B) {y 
   exists x
   and_intros
   · unfold Dom at x_dom
-    rw [mem_sUnion] at x_dom
-    obtain ⟨C, hC⟩ := x_dom
-    rw [mem_sep, mem_powerset] at hC
-    rcases hC with ⟨⟨sub_C_A, ⟨f_sub_CB, uniqueC⟩⟩, x_C⟩
-    exact sub_C_A x_C
+    rw [mem_sep] at x_dom
+    exact x_dom.1
   · exact pair
 
 theorem IsFunc.surj_on_range {f A B : ZFSet} (hf : IsFunc A B f) : IsSurjective (f := f) (A := A) (B := f.Range) (is_func_on_range hf) := by
@@ -1800,7 +1775,7 @@ def ZFFinSet.inductionOn {P : ZFFinSet → Prop}
           rcases bS with rfl | bS
           · unfold Range at n_range
             simp_rw [mem_sep, mem_insert_iff, true_or, true_and, not_exists, not_and] at n_range
-            nomatch (n_range _ <| mem_dom (is_func_is_pfunc fS_fun) hz) hz
+            nomatch n_range a ⟨aS, b, Or.inl rfl, hz⟩ hz
           · exact bS
         · exact fS_fun.2
       apply IH S fS (mem_funs.mpr this) S_fin this
@@ -2167,11 +2142,8 @@ theorem Min_mem_of_non_empty_finite {S : ZFSet} [inst : LinearOrder {x // x ∈ 
   rw [mem_sep] at this
   obtain ⟨x₀, x₀_dom, x₀_def⟩ := this.2
   have x₀_S : x₀ ∈ S := by
-    rw [mem_sUnion] at x₀_dom
-    obtain ⟨C, hC⟩ := x₀_dom
-    rw [mem_sep, mem_powerset] at hC
-    rcases hC with ⟨⟨sub_C_S, ⟨f_sub_CB, uniqueC⟩⟩, x₀_C⟩
-    exact sub_C_S x₀_C
+    rw [mem_sep] at x₀_dom
+    exact x₀_dom.1
 
   by_contra! contr
   specialize contr x₀ x₀_S
