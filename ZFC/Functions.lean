@@ -1,17 +1,18 @@
 import ZFC.Rationals
 import ZFC.Booleans
+import ZFC.Tactics
 
 namespace ZFSet
 
 section Relations
 
-syntax "zrel" : tactic
-macro_rules | `(tactic| zrel) => `(tactic| (
-  change ?R ⊆ ZFSet.prod ?A ?B
-  try
-    have : ZFSet.IsFunc ?A ?B ?R := by try assumption
-    obtain ⟨_,_⟩ := this
-  exact ‹?R ⊆ ZFSet.prod ?A ?B›))
+-- syntax "zrel" : tactic
+-- macro_rules | `(tactic| zrel) => `(tactic| (
+--   change ?R ⊆ ZFSet.prod ?A ?B
+--   try
+--     have : ZFSet.IsFunc ?A ?B ?R := by try assumption
+--     obtain ⟨_,_⟩ := this
+--   exact ‹?R ⊆ ZFSet.prod ?A ?B›))
 
 /--
 Inverse of a (binary) relation. A proof that `R` is a relation is needed and tried to be
@@ -41,12 +42,13 @@ theorem mem_inv {x y R A B : ZFSet} (hR : R ⊆ A.prod B) :
     · exact hR h |> pair_mem_prod.mp |>.1
     · exact h
 
+@[zrel]
 theorem subset_prod_inv {R A B : ZFSet} (hR : R ⊆ A.prod B) : R⁻¹ ⊆ B.prod A := by
   intro z hz
   rw [inv, mem_sep] at hz
   exact hz.1
 
-macro_rules | `(tactic| zrel) => `(tactic| apply subset_prod_inv; done)
+-- macro_rules | `(tactic| zrel) => `(tactic| apply subset_prod_inv; done)
 
 theorem inv_involutive {R A B : ZFSet} (hR : R ⊆ A.prod B) : (R⁻¹)⁻¹ = R := by
   ext1 z
@@ -102,24 +104,25 @@ theorem funs.nonempty {A B : ZFSet} (hB : B ≠ ∅) : ZFSet.funs A B ≠ ∅ :=
 -/
 def IsPFunc (f A B : ZFSet) := f ⊆ prod A B ∧ ∀ x y : ZFSet, pair x y ∈ f → ∀ z, pair x z ∈ f → y = z
 
-syntax "zpfun" : tactic
-macro_rules | `(tactic| zpfun) => `(tactic| assumption; done)
+-- syntax "zpfun" : tactic
+-- macro_rules | `(tactic| zpfun) => `(tactic| assumption; done)
 
-syntax "zfun" : tactic
-macro_rules | `(tactic| zfun) => `(tactic| assumption; done)
+-- syntax "zfun" : tactic
+-- macro_rules | `(tactic| zfun) => `(tactic| assumption; done)
 
-macro_rules | `(tactic| zrel) => `(tactic| first | zfun | zpfun)
+-- macro_rules | `(tactic| zrel) => `(tactic| first | zfun | zpfun)
 
+@[zrel]
 theorem is_rel_of_is_pfunc {f A B : ZFSet} (hf : f.IsPFunc A B) : f ⊆ A.prod B := hf.1
 
-macro_rules | `(tactic| zrel) => `(tactic| (
-  change ?R ⊆ ZFSet.prod ?A ?B
-  try
-    have : IsPFunc ?R ?A ?B := by try assumption
-    obtain ⟨_,_⟩ := this
-  exact ‹?R ⊆ ZFSet.prod ?A ?B›))
+-- macro_rules | `(tactic| zrel) => `(tactic| (
+--   change ?R ⊆ ZFSet.prod ?A ?B
+--   try
+--     have : IsPFunc ?R ?A ?B := by try assumption
+--     obtain ⟨_,_⟩ := this
+--   exact ‹?R ⊆ ZFSet.prod ?A ?B›))
 
-macro_rules | `(tactic| zrel) => `(tactic| apply is_rel_of_is_pfunc; assumption; done)
+-- macro_rules | `(tactic| zrel) => `(tactic| apply is_rel_of_is_pfunc; assumption; done)
 
 theorem pfunc_weaken {f A B C D : ZFSet} (hf : f.IsPFunc C D) (hAB : C ⊆ A) (hCD : D ⊆ B) : f.IsPFunc A B := by
   rcases hf with ⟨sub, unique⟩
@@ -133,6 +136,7 @@ theorem pfunc_weaken {f A B C D : ZFSet} (hf : f.IsPFunc C D) (hAB : C ⊆ A) (h
 
 -- macro_rules | `(tactic| zpfun) => `(tactic| (apply pfunc_weaken <;> first | (assumption; done) | zpfun))
 
+@[zpfun]
 theorem is_func_is_pfunc {f A B : ZFSet} (hf : A.IsFunc B f) : f.IsPFunc A B := by
   obtain ⟨sub, func⟩ := hf
   and_intros
@@ -143,11 +147,12 @@ theorem is_func_is_pfunc {f A B : ZFSet} (hf : A.IsFunc B f) : f.IsPFunc A B := 
     obtain ⟨w, pair_x_w, unique⟩ := func x x_A
     rw [unique z pair_x_z, unique y pair_x_y]
 
-macro_rules | `(tactic| zpfun) => `(tactic| apply is_func_is_pfunc; zfun; done)
+-- macro_rules | `(tactic| zpfun) => `(tactic| apply is_func_is_pfunc; zfun; done)
 
+@[zrel]
 theorem is_rel_of_is_func {f A B : ZFSet} (hf : A.IsFunc B f) : f ⊆ A.prod B := hf.1
 
-macro_rules | `(tactic| zrel) => `(tactic| apply is_rel_of_is_func; zfun; done)
+-- macro_rules | `(tactic| zrel) => `(tactic| apply is_rel_of_is_func; zfun; done)
 
 theorem is_func_extend_range {f D E : ZFSet} (hf : IsFunc D E f) {F : ZFSet} (sub_E_F : E ⊆ F) : IsFunc D F f := by
   rcases hf with ⟨sub, func⟩
@@ -160,7 +165,7 @@ theorem is_func_extend_range {f D E : ZFSet} (hf : IsFunc D E f) {F : ZFSet} (su
 
 -- macro_rules | `(tactic| zpfun) => `(tactic| apply is_func_extend_range <;> first | (assumption;done) | zpfun)
 
-@[simp]
+@[simp, zfun]
 theorem is_func_empty : IsFunc ∅ ∅ ∅ := ⟨empty_subset (prod ∅ ∅), λ _ h => nomatch h, notMem_empty _⟩
 
 theorem is_pfunc_func_exists {f A B : ZFSet} : f.IsPFunc A B → ∃ A' B', IsFunc A' B' f ∧ A' ⊆ A ∧ B' ⊆ B := by classical
@@ -320,6 +325,7 @@ theorem mem_Id_iff {A : ZFSet} {z : ZFSet} : z ∈ 𝟙A ↔ ∃ x ∈ A, z = x.
 theorem pair_self_mem_Id {A : ZFSet} {x : ZFSet} (hx : x ∈ A) : x.pair x ∈ 𝟙A := by
   rwa [pair_mem_Id_iff]
 
+@[zfun]
 theorem Id.IsFunc {A : ZFSet} : A.IsFunc A 𝟙A := by
   unfold Id
   and_intros
@@ -336,11 +342,12 @@ theorem Id.IsFunc {A : ZFSet} : A.IsFunc A 𝟙A := by
     · rintro _ _ _ rfl
       rfl
 
-macro_rules | `(tactic| zfun) => `(tactic| apply Id.IsFunc; done)
+-- macro_rules | `(tactic| zfun) => `(tactic| apply Id.IsFunc; done)
 
+@[zpfun]
 theorem Id.IsPFunc {A : ZFSet} : (𝟙A).IsPFunc A A := is_func_is_pfunc IsFunc
 
-macro_rules | `(tactic| zpfun) => `(tactic| apply Id.IsPFunc; done)
+-- macro_rules | `(tactic| zpfun) => `(tactic| apply Id.IsPFunc; done)
 
 theorem Id.IsBijective {A : ZFSet} : (𝟙A).IsBijective Id.IsFunc := by
   constructor
@@ -424,6 +431,7 @@ theorem Id.composition_right {f A B : ZFSet} (hf : f ⊆ A.prod B) : composition
     · obtain ⟨a, aA, b, bB, rfl⟩ := mem_prod.mp <| hf xf
       exists a, b
 
+@[zpfun]
 theorem IsPFunc_of_composition_IsPFunc {f g : ZFSet} {A B C : ZFSet} (hf : f.IsPFunc A B) (hg : g.IsPFunc B C) : (composition g f A B C).IsPFunc A C := by
   and_intros
   · intro z hz
@@ -441,8 +449,9 @@ theorem IsPFunc_of_composition_IsPFunc {f g : ZFSet} {A B C : ZFSet} (hf : f.IsP
     symm
     exact hg.2 _ _ bc_g _ bc_g'
 
-macro_rules | `(tactic| zpfun) => `(tactic| apply IsPFunc_of_composition_IsPFunc <;> first | (assumption; done) | zpfun)
+-- macro_rules | `(tactic| zpfun) => `(tactic| apply IsPFunc_of_composition_IsPFunc <;> first | (assumption; done) | zpfun)
 
+@[zfun]
 theorem IsFunc_of_composition_IsFunc {g f : ZFSet} {A B C : ZFSet} (hg : B.IsFunc C g) (hf : A.IsFunc B f) : A.IsFunc C (composition g f A B C) := by
   and_intros
   · intro z hz
@@ -473,7 +482,7 @@ theorem IsFunc_of_composition_IsFunc {g f : ZFSet} {A B C : ZFSet} (hg : B.IsFun
       apply y_unq
       exact x'y'f
 
-macro_rules | `(tactic| zfun) => `(tactic| apply IsFunc_of_composition_IsFunc <;> first | (assumption; done) | zfun)
+-- macro_rules | `(tactic| zfun) => `(tactic| apply IsFunc_of_composition_IsFunc <;> first | (assumption; done) | zfun)
 
 abbrev fcomp (g f : ZFSet) {A B C : ZFSet} (hg : B.IsFunc C g := by zfun) (hf : A.IsFunc B f := by zfun) :=
   composition g f A B C
@@ -604,7 +613,6 @@ theorem IsPFunc.exists_unique_of_mem_dom {f A B : ZFSet} (hf : f.IsPFunc A B) {x
   · intro y' xy'_f
     symm
     exact hf.2 _ _ xy_f _ xy'_f
-
 
 theorem fapply.of_pair {f A B : ZFSet} (hf : f.IsPFunc A B) {x y : ZFSet} (hxy : x.pair y ∈ f) :
   @ᶻf ⟨x, mem_dom hf hxy⟩ = ⟨y, And.right <| pair_mem_prod.mp <| hf.1 hxy⟩ := by
@@ -867,6 +875,7 @@ theorem fapply_lambda {A B : ZFSet} {f : ZFSet → ZFSet} (hf : ∀ {x}, x ∈ A
 /--
 The inverse of an injection is a function.
 -/
+@[zfun]
 theorem inv_is_func_of_injective {f A B : ZFSet} {f_is_func : A.IsFunc B f} (hf : f.IsInjective f_is_func) :
   (f.Range).IsFunc A f⁻¹ := by
   and_intros
@@ -904,11 +913,12 @@ theorem inv_is_func_of_injective {f A B : ZFSet} {f_is_func : A.IsFunc B f} (hf 
       symm
       exact hf x z y x_A hz.1.2 hy pair_f hz.2
 
-macro_rules | `(tactic| zfun) => `(tactic| apply inv_is_func_of_injective; zfun)
+-- macro_rules | `(tactic| zfun) => `(tactic| apply inv_is_func_of_injective; zfun)
 
 /--
 The inverse of a bijection is a function.
 -/
+@[zfun]
 theorem inv_is_func_of_bijective {f A B : ZFSet} {f_is_func : A.IsFunc B f} (hf : f.IsBijective f_is_func) :
     B.IsFunc A (f.inv ) := by
   and_intros
@@ -932,7 +942,7 @@ theorem inv_is_func_of_bijective {f A B : ZFSet} {f_is_func : A.IsFunc B f} (hf 
       refine And.intro ?_ hy
       exact f_is_func.1 hy |> pair_mem_prod.mp |>.1
 
-macro_rules | `(tactic| zfun) => `(tactic| apply inv_is_func_of_bijective; zfun)
+-- macro_rules | `(tactic| zfun) => `(tactic| apply inv_is_func_of_bijective; zfun)
 
 /--
 The inverse of a bijection is a bijection.
@@ -2189,7 +2199,7 @@ noncomputable def fprod {A B A' B' : ZFSet} (f g : ZFSet)
                      exact hz.2⟩
                    fa.pair gb
                   else ∅
-
+@[zfun]
 theorem fprod_is_func {A B A' B' φ ψ : ZFSet} (hφ : A.IsFunc A' φ) (hψ : B.IsFunc B' ψ) :
   (A.prod B).IsFunc (A'.prod B') (fprod φ ψ) := by
   and_intros
@@ -2229,7 +2239,7 @@ theorem fprod_is_func {A B A' B' φ ψ : ZFSet} (hφ : A.IsFunc A' φ) (hψ : B.
       rw [dite_cond_eq_true (eq_true (by rw [pair_mem_prod]; exact ⟨ha, hb⟩))] at hy
       exact hy.2.2
 
-macro_rules | `(tactic| zfun) => `(tactic| apply fprod_is_func <;> zfun)
+-- macro_rules | `(tactic| zfun) => `(tactic| apply fprod_is_func <;> zfun)
 
 theorem fprod_bijective_of_bijective {A B A' B' φ ψ : ZFSet} {hφ : A.IsFunc A' φ} {hψ : B.IsFunc B' ψ}
   (φ_bij : φ.IsBijective) (ψ_bij : ψ.IsBijective) :

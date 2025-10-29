@@ -494,6 +494,78 @@ theorem SMT.Term.getType_spec {Γ : TypeContext} {t : Term} {α : SMTType} (typ_
     unfold getType
     mspec
 
+/--
+TODO: Current state: skeleton for the proof, the correct statement still needs to be filled in.
+-/
+theorem castMembership_spec {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT.TypeContext} {n : ℕ}
+  (typ_x : Λ ⊢ x : α) (typ_S : Λ ⊢ S : β) :
+  ⦃ λ ⟨E, Λ'⟩ ↦ ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ Λ'.keys.length⌝ ⦄
+    castMembership ⟨x, α⟩ ⟨S, β⟩
+  ⦃ ⇓? ⟨t, τ⟩ ⟨E', Λ'⟩ =>
+    ⌜n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤ Λ'.keys.length ∧ Λ' = Λ ∧
+    τ = .bool ∧ Λ' ⊢ t : .bool⌝ ⦄ := by
+  induction β generalizing α x S Λ n with
+  | bool | int | unit | option | pair =>
+    mstart
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, hlen⟩ := pre
+    unfold castMembership
+    conv =>
+      enter [2,1,1]
+      dsimp
+    mspec Std.Do.Spec.throw_StateT
+  | «fun» τ σ τ_ih σ_ih =>
+    mstart
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, hlen⟩ := pre
+    unfold castMembership
+    conv =>
+      enter [2,1,1]
+      dsimp
+    split using _ _ case_eq | _ _ σ case_eq
+    on_goal 3 => mspec Std.Do.Spec.throw_StateT
+    · injection case_eq with τ_eq σ_eq
+      subst σ_eq τ_eq
+      split_ifs with eq_α_τ α_le_τ τ_le_α
+      · mspec Std.Do.Spec.pure
+        mpure_intro
+
+        simp only [beq_iff_eq] at eq_α_τ
+        subst α
+
+        done
+      · done
+      · done
+      · mspec Std.Do.Spec.throw_StateT
+    · injection case_eq with τ_eq σ_eq
+      subst σ_eq τ_eq
+      split using α β
+      · split_ifs with α_eq_τ β_eq_σ β_le_σ σ_le_β α_le_τ β_eq_σ β_le_σ σ_le_β τ_le_α β_eq_σ β_le_σ σ_le_β
+        · mspec Std.Do.Spec.pure
+          mpure_intro
+
+          simp only [beq_iff_eq] at α_eq_τ β_eq_σ
+          subst α β
+
+          done
+        · done
+        · done
+        · done
+        · done
+        · done
+        · done
+        · done
+        · done
+        · done
+        · done
+        · done
+        · done
+      · mspec Std.Do.Spec.throw_StateT
+
+
+
 section encodeTerm_correct
 open B SMT ZFSet
 
@@ -756,7 +828,6 @@ theorem encodeTerm_spec.var.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (v : B.𝒱) 
     · congr
       have τ_eq := @denote_welltyped_eq ((B.Term.var v).abstract «Δ» Δ_fv) T α hT ?_ den_t
       on_goal 2 =>
-        unfold WellTyped'
         use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, τ
         exact @Typing.of_abstract (B.Dom) («Δ» := «Δ») ?_ (.var v) E.context τ Δ_fv (B.Typing.var typ_t)
       exact τ_eq
@@ -1134,5 +1205,124 @@ theorem encodeTerm_spec.add.{u_1} {Λ : SMT.TypeContext} (x y : B.Term)
       · dsimp [retract] at retract_α_X_enc_eq_X retract_β_Y_enc_eq_Y ⊢
         subst Xenc Yenc
         rfl
+
+theorem encodeTerm_spec.mem.{u_1} {Λ : SMT.TypeContext} (x S : B.Term)
+  (x_ih :
+    ∀ (E : B.Env) {α : BType},
+      E.context ⊢ x : α →
+        ∀ {«Δ» : B.𝒱 → _root_.Option B.Dom} (Δ_fv : ∀ v ∈ B.fv x, («Δ» v).isSome = true) {T : ZFSet.{u_1}}
+          {hT : T ∈ ⟦α⟧ᶻ},
+          ⟦x.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
+            ∀ {n : ℕ},
+              ⦃fun x =>
+                match x with
+                | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ (AList.keys Λ').length⌝⦄
+                encodeTerm x E ⦃PostCond.mayThrow fun x x_1 =>
+                  match x with
+                  | (t', σ) =>
+                    match x_1 with
+                    | { env := E', types := Γ' } =>
+                      ⌜n ≤ E'.freshvarsc ∧
+                          E'.freshvarsc ≤ (AList.keys Γ').length ∧
+                            Γ' = Λ ∧
+                              σ = α.toSMTType ∧
+                                Γ' ⊢ t' : σ ∧
+                                  ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
+                                    ∃ denT',
+                                      ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧
+                                        ⟨T, ⟨α, hT⟩⟩ ≘ᶻ denT'⌝⦄)
+  (S_ih :
+    ∀ (E : B.Env) {α : BType},
+      E.context ⊢ S : α →
+        ∀ {«Δ» : B.𝒱 → _root_.Option B.Dom} (Δ_fv : ∀ v ∈ B.fv S, («Δ» v).isSome = true) {T : ZFSet.{u_1}}
+          {hT : T ∈ ⟦α⟧ᶻ},
+          ⟦S.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
+            ∀ {n : ℕ},
+              ⦃fun x =>
+                match x with
+                | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ (AList.keys Λ').length⌝⦄
+                encodeTerm S E ⦃PostCond.mayThrow fun x x_1 =>
+                  match x with
+                  | (t', σ) =>
+                    match x_1 with
+                    | { env := E', types := Γ' } =>
+                      ⌜n ≤ E'.freshvarsc ∧
+                          E'.freshvarsc ≤ (AList.keys Γ').length ∧
+                            Γ' = Λ ∧
+                              σ = α.toSMTType ∧
+                                Γ' ⊢ t' : σ ∧
+                                  ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
+                                    ∃ denT',
+                                      ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧
+                                        ⟨T, ⟨α, hT⟩⟩ ≘ᶻ denT'⌝⦄)
+  (E : B.Env) {α : BType} (typ_t : E.context ⊢ x ∈ᴮ S : α) {«Δ» : B.𝒱 → _root_.Option B.Dom}
+  (Δ_fv : ∀ v ∈ B.fv (x ∈ᴮ S), («Δ» v).isSome = true) {T : ZFSet.{u_1}} {hT : T ∈ ⟦α⟧ᶻ}
+  (den_t : ⟦(x ∈ᴮ S).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) {n : ℕ} :
+  ⦃fun ⟨E, Λ'⟩ => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ Λ'.keys.length⌝⦄
+    encodeTerm (x ∈ᴮ S) E
+  ⦃⇓? ⟨t', σ⟩ ⟨E', Γ'⟩ =>
+    ⌜n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤ Γ'.keys.length ∧ Γ' = Λ ∧
+    σ = α.toSMTType ∧ Γ' ⊢ t' : σ ∧
+    ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true), ∃ denT',
+      ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧ ⟨T, α, hT⟩ ≘ᶻ denT'⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, hlen⟩ := pre
+
+  apply Typing.memE at typ_t
+  obtain ⟨rfl, α, typ_x, typ_S⟩ := typ_t
+
+  rw [B.Term.abstract, B.denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff] at den_t
+  obtain ⟨⟨X, α', hX⟩, den_x, eq⟩ := den_t
+  have α_eq := @denote_welltyped_eq
+    (x.abstract «Δ» (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv))) X α' hX ?_ den_x
+  on_goal 2 =>
+    use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, α
+    exact @Typing.of_abstract (B.Dom) («Δ» := «Δ») ?_ x E.context α (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) typ_x
+  dsimp at α_eq
+  subst α'
+
+  dsimp at eq
+  rw [Option.bind_eq_some_iff] at eq
+  obtain ⟨⟨S', _, hS'⟩, den_S, eq⟩ := eq
+  have α_set_eq := @denote_welltyped_eq
+    (S.abstract «Δ» (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv))) S' _ hS' ?_ den_S
+  on_goal 2 =>
+    use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, α.set
+    exact @Typing.of_abstract (B.Dom) («Δ» := «Δ») ?_ S E.context α.set (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) typ_S
+  dsimp at α_set_eq
+  subst α_set_eq
+
+  dsimp at eq
+  rw [ite_cond_eq_true _ _ (eq_true rfl), Option.some_inj] at eq
+  injection eq with T_eq heq
+
+  subst T_eq
+
+  rw [encodeTerm]
+
+  mspec x_ih E typ_x (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) den_x
+  rename_i out_x
+  obtain ⟨x_enc, α'⟩ := out_x
+  mrename_i pre
+  mintro ∀St'
+  mpure pre
+  dsimp at pre
+  obtain ⟨St_St'_fv, St'_fv_le, St_eq_St', rfl, typ_x_enc, ΔSMT_fv, ⟨Xenc, α', hXenc⟩, den_x_enc, ⟨rfl, retract_Xenc⟩⟩ := pre
+
+  mspec S_ih E typ_S (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) den_S
+  rename_i out_S
+  obtain ⟨S_enc, β'⟩ := out_S
+  mrename_i pre
+  mintro ∀St''
+  mpure pre
+  dsimp at pre
+  obtain ⟨St'_St''_fv, St''_fv_le, St_eq_St'', rfl, typ_S_enc, ΔSMT_fv_S, ⟨Senc, β', hSenc⟩, den_S_enc, ⟨rfl, retract_Senc⟩⟩ := pre
+
+  admit
+
+
+
 
 end encodeTerm_correct

@@ -213,8 +213,8 @@ def castApp : Term × SMTType → Term × SMTType → Encoder (Term × SMTType)
   | (_, τ), _ => throw s!"encodeTerm:app: Expected a function, got {τ}"
 
 def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SMTType) := λ ⟨x, α⟩ ⟨S, τ⟩ =>
-  match α, τ with
-  | α, .fun α' .bool => do
+  match τ with
+  | .fun α' .bool => do
     if α == α' then
     /-
       x : α    S : α -> bool
@@ -241,98 +241,101 @@ def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SM
       declareConst S! (.fun α .bool)
       return (S!_spec ∧ˢ .app (.var S!) x, .bool)
     else throw s!"castMembership:1: Failed to unify {α} with {α'}"
-  | .pair α β, .fun α' (.option β') => do
-    if α == α' then
-      if β == β' then
-      /-
-        x : α × β    S : α -> Option β
-        -------------------------------------
-        x ∈ S    ↪    S (fst x) = some (snd x)
-      -/
-        return (.eq (.app S (.fst x)) (.some (.snd x)), .bool)
-      else if β ⊑ β' then
-      /-
-        x : α × β    S : α -> Option β'    β ⊑ β'
-        -------------------------------------------
-        x ∈ S    ↪    y!_spec ⇒ S (fst x) = some y!
-      -/
-        let ⟨y!, y!_spec⟩ ← loosen "mem!" (.snd x) β β'
-        declareConst y! β'
-        return (.and y!_spec (.eq (.app S (.fst x)) (.some (.var y!))), .bool)
-      else if β' ⊑ β then
-      /-
-        x : α × β    S : α -> Option β'    β' ⊑ β
-        -------------------------------------------------
-        x ∈ S    ↪    S!_spec ⇒ S! (fst x) = some (snd x)
-      -/
-        let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α (.option β')) (.fun α (.option β))
-        declareConst S! (.fun α (.option β))
-        return (.and S!_spec (.eq (.app (.var S!) (.fst x)) (.some (.snd x))), .bool)
-      else throw s!"castMembership:2: Failed to unify {β} with {β'}"
-    else if α ⊑ α' then
-      if β == β' then
-      /-
-        x : α × β    S : α' -> Option β    α ⊑ α'
-        -------------------------------------------
-        x ∈ S    ↪    x!_spec ⇒ S x! = some (snd x)
-      -/
-        let ⟨x!, x!_spec⟩ ← loosen "mem!" (.fst x) α α'
-        declareConst x! α'
-        return (.and x!_spec (.eq (.app S (.var x!)) (.some (.snd x))), .bool)
-      else if β ⊑ β' then
-      /-
-        x : α × β    S : α' -> Option β'    α ⊑ α'    β ⊑ β'
-        ----------------------------------------------------
-        x ∈ S    ↪    x!_spec ⇒ S (fst x!) = some (snd x!)
-      -/
-        let ⟨x!, x!_spec⟩ ← loosen "mem!" x (.pair α β) (.pair α' β')
-        declareConst x! (.pair α' β')
-        return (x!_spec ∧ˢ (.app S (.fst (.var x!)) =ˢ .some (.snd (.var x!))), .bool)
-      else if β' ⊑ β then
-      /-
-        x : α × β    S : α' -> Option β'    α ⊑ α'    β' ⊑ β
-        ------------------------------------------------------
-        x ∈ S    ↪    x!_spec ∧ S!_spec ⇒ S! (fst x!) = some (snd x)
-      -/
-        let ⟨x!, x!_spec⟩ ← loosen "mem!" (.fst x) α α'
-        declareConst x! α'
-        let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α' (.option β')) (.fun α' (.option β))
-        declareConst S! (.fun α' (.option β))
-        return (x!_spec ∧ˢ S!_spec ∧ˢ (.app (.var S!) (.var x!) =ˢ .some (.snd x)), .bool)
-      else throw s!"castMembership:3: Failed to unify {β} with {β'}"
-    else if α' ⊑ α then
-      if β == β' then
-      /-
-        x : α × β    S : α' -> Option β    α' ⊑ α
-        -------------------------------------------------
-        x ∈ S    ↪    S!_spec ∧ S! (fst x) = some (snd x)
-      -/
-        let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α' (.option β)) (.fun α (.option β))
-        declareConst S! (.fun α (.option β))
-        return (S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.snd x)), .bool)
-      else if β ⊑ β' then
-      /-
-        x : α × β    S : α' -> Option β'    α' ⊑ α    β ⊑ β'
-        ------------------------------------------------------
-        x ∈ S    ↪    y!_spec ∧ S!_spec ⇒ S! (fst x) = some y!
-      -/
-        let ⟨y!, y!_spec⟩ ← loosen "mem!" (.snd x) β β'
-        declareConst y! β'
-        let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α' (.option β')) (.fun α (.option β'))
-        declareConst S! (.fun α (.option β'))
-        return (y!_spec ∧ˢ S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.var y!)), .bool)
-      else if β' ⊑ β then
-      /-
-        x : α × β    S : α' -> Option β'    α' ⊑ α    β' ⊑ β
-        ------------------------------------------------------
-        x ∈ S    ↪    S!_spec ⇒ S! (fst x) = some (snd x)
-      -/
-        let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α' (.option β')) (.fun α (.option β))
-        declareConst S! (.fun α (.option β))
-        return (S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.snd x)), .bool)
-      else throw s!"castMembership:4: Failed to unify {β} with {β'}"
-    else throw s!"castMembership:5: Failed to unify {α} with {α'}"
-  | _, _ => throw s!"encodeTerm:mem:6: Failed to unify {α} with {τ}"
+  | .fun α' (.option β') => do
+    match α with
+    | .pair α β => do
+      if α == α' then
+        if β == β' then
+        /-
+          x : α × β    S : α -> Option β
+          -------------------------------------
+          x ∈ S    ↪    S (fst x) = some (snd x)
+        -/
+          return (.eq (.app S (.fst x)) (.some (.snd x)), .bool)
+        else if β ⊑ β' then
+        /-
+          x : α × β    S : α -> Option β'    β ⊑ β'
+          -------------------------------------------
+          x ∈ S    ↪    y!_spec ⇒ S (fst x) = some y!
+        -/
+          let ⟨y!, y!_spec⟩ ← loosen "mem!" (.snd x) β β'
+          declareConst y! β'
+          return (.and y!_spec (.eq (.app S (.fst x)) (.some (.var y!))), .bool)
+        else if β' ⊑ β then
+        /-
+          x : α × β    S : α -> Option β'    β' ⊑ β
+          -------------------------------------------------
+          x ∈ S    ↪    S!_spec ⇒ S! (fst x) = some (snd x)
+        -/
+          let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α (.option β')) (.fun α (.option β))
+          declareConst S! (.fun α (.option β))
+          return (.and S!_spec (.eq (.app (.var S!) (.fst x)) (.some (.snd x))), .bool)
+        else throw s!"castMembership:2: Failed to unify {β} with {β'}"
+      else if α ⊑ α' then
+        if β == β' then
+        /-
+          x : α × β    S : α' -> Option β    α ⊑ α'
+          -------------------------------------------
+          x ∈ S    ↪    x!_spec ⇒ S x! = some (snd x)
+        -/
+          let ⟨x!, x!_spec⟩ ← loosen "mem!" (.fst x) α α'
+          declareConst x! α'
+          return (.and x!_spec (.eq (.app S (.var x!)) (.some (.snd x))), .bool)
+        else if β ⊑ β' then
+        /-
+          x : α × β    S : α' -> Option β'    α ⊑ α'    β ⊑ β'
+          ----------------------------------------------------
+          x ∈ S    ↪    x!_spec ⇒ S (fst x!) = some (snd x!)
+        -/
+          let ⟨x!, x!_spec⟩ ← loosen "mem!" x (.pair α β) (.pair α' β')
+          declareConst x! (.pair α' β')
+          return (x!_spec ∧ˢ (.app S (.fst (.var x!)) =ˢ .some (.snd (.var x!))), .bool)
+        else if β' ⊑ β then
+        /-
+          x : α × β    S : α' -> Option β'    α ⊑ α'    β' ⊑ β
+          ------------------------------------------------------
+          x ∈ S    ↪    x!_spec ∧ S!_spec ⇒ S! (fst x!) = some (snd x)
+        -/
+          let ⟨x!, x!_spec⟩ ← loosen "mem!" (.fst x) α α'
+          declareConst x! α'
+          let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α' (.option β')) (.fun α' (.option β))
+          declareConst S! (.fun α' (.option β))
+          return (x!_spec ∧ˢ S!_spec ∧ˢ (.app (.var S!) (.var x!) =ˢ .some (.snd x)), .bool)
+        else throw s!"castMembership:3: Failed to unify {β} with {β'}"
+      else if α' ⊑ α then
+        if β == β' then
+        /-
+          x : α × β    S : α' -> Option β    α' ⊑ α
+          -------------------------------------------------
+          x ∈ S    ↪    S!_spec ∧ S! (fst x) = some (snd x)
+        -/
+          let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α' (.option β)) (.fun α (.option β))
+          declareConst S! (.fun α (.option β))
+          return (S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.snd x)), .bool)
+        else if β ⊑ β' then
+        /-
+          x : α × β    S : α' -> Option β'    α' ⊑ α    β ⊑ β'
+          ------------------------------------------------------
+          x ∈ S    ↪    y!_spec ∧ S!_spec ⇒ S! (fst x) = some y!
+        -/
+          let ⟨y!, y!_spec⟩ ← loosen "mem!" (.snd x) β β'
+          declareConst y! β'
+          let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α' (.option β')) (.fun α (.option β'))
+          declareConst S! (.fun α (.option β'))
+          return (y!_spec ∧ˢ S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.var y!)), .bool)
+        else if β' ⊑ β then
+        /-
+          x : α × β    S : α' -> Option β'    α' ⊑ α    β' ⊑ β
+          ------------------------------------------------------
+          x ∈ S    ↪    S!_spec ⇒ S! (fst x) = some (snd x)
+        -/
+          let ⟨S!, S!_spec⟩ ← loosen "mem!" S (.fun α' (.option β')) (.fun α (.option β))
+          declareConst S! (.fun α (.option β))
+          return (S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.snd x)), .bool)
+        else throw s!"castMembership:4: Failed to unify {β} with {β'}"
+      else throw s!"castMembership:5: Failed to unify {α} with {α'}"
+    | _ => throw s!"castMembership: Expected a pair type, got {α}"
+  | _ => throw s!"encodeTerm:mem:6: Failed to unify {α} with {τ}"
 
 def castUnion_aux_rel_rel : Term × SMTType × SMTType → Term × SMTType × SMTType → Encoder (Term × SMTType) := λ ⟨S, α, β⟩ ⟨T, α', β'⟩ => do
   if α == α' then
