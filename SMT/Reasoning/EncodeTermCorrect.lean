@@ -1,4 +1,3 @@
-import SMT.Reasoning.Defs
 import Std.Tactic.Do
 import SMT.Reasoning.Basic
 
@@ -33,17 +32,17 @@ theorem encodeTerm_spec (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term} {α : B.
   | le x y x_ih y_ih         => sorry
   | and x y x_ih y_ih        => sorry
   | not x ih                 => sorry
-  | eq x y x_ih y_ih         => sorry
   | pow S ih                 => sorry
-  | cprod S T S_ih T_ih      => sorry
-  | union S T S_ih T_ih      => sorry
-  | inter S T S_ih T_ih      => sorry
-  | card S ih                => sorry
-  | mem x S x_ih S_ih        => sorry
-  | app f x f_ih x_ih        => sorry
-  | pfun A B A_ih B_ih       => sorry
   | min S ih                 => sorry
   | max S ih                 => sorry
+  | card S ih                => sorry
+  | cprod S T S_ih T_ih      => sorry
+  | mem x S x_ih S_ih        => exact encodeTerm_spec.mem x S x_ih S_ih E typ_t Δ_fv den_t
+  | eq x y x_ih y_ih         => sorry
+  | union S T S_ih T_ih      => sorry
+  | inter S T S_ih T_ih      => sorry
+  | app f x f_ih x_ih        => sorry
+  | pfun A B A_ih B_ih       => sorry
   | collect vs D P D_ih P_ih => sorry
   | lambda vs D P D_ih P_ih  => sorry
   | all vs D P D_ih P_ih     => sorry
