@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"] # replace "main" with the default branch
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs_on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      # uses lean standard action with all default input values
+      - uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: true
+          build: true
+      # pack release
+      - name: Fetch release by tag
+        id: fetch-release
+        uses: pdamianik/release-tag-to-upload-url-action@v1.0.1
+        env: 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag: beer
+          token: ${{ github.token }}
+        continue-on-error: true
+        
+      - uses: dev-drprasad/delete-tag-and-release@v1.1
+        name: Delete release if already existing
+        with:
+          delete_release: true 
+          tag_name: beer
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        if: steps.fetch-release.outcome == 'success'
+                    
+      - name: Create release
+        id: create-release
+        uses: actions/create-release@latest
+        with:
+          tag_name: beer
+          release_name: "BEer"
+          body: |
+            Automated release of BEer for ubuntu.
+          prerelease: false
+          draft: false
+        env: 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+      - name: Upload beer
+        id: upload-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }} 
+          asset_path: .lake/build/bin/BEer
+          asset_name: BEer
+          asset_content_type: application/octet-stream
