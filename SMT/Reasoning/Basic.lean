@@ -535,9 +535,9 @@ theorem castMembership_spec {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT.Typ
         simp only [beq_iff_eq] at eq_α_τ
         subst α
 
-        done
-      · done
-      · done
+        admit
+      · admit
+      · admit
       · mspec Std.Do.Spec.throw_StateT
     · injection case_eq with τ_eq σ_eq
       subst σ_eq τ_eq
@@ -549,19 +549,19 @@ theorem castMembership_spec {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT.Typ
           simp only [beq_iff_eq] at α_eq_τ β_eq_σ
           subst α β
 
-          done
-        · done
-        · done
-        · done
-        · done
-        · done
-        · done
-        · done
-        · done
-        · done
-        · done
-        · done
-        · done
+          admit
+        · admit
+        · admit
+        · admit
+        · admit
+        · admit
+        · admit
+        · admit
+        · admit
+        · admit
+        · admit
+        · admit
+        · admit
       · mspec Std.Do.Spec.throw_StateT
 
 

@@ -148,7 +148,7 @@ Cantor–Bernstein theorem: if there are injective functions
 `f : A → B` and `g : B → A`, then `A` and `B` are isomorphic.
 -/
 theorem isIso_of_biembedding {E F f g : ZFSet} {hf : E.IsFunc F f}
-  (f_inj : IsInjective f) {hg : F.IsFunc E g} (g_inj : IsInjective g) : E ≅ᶻ F := by
+  (f_inj : IsInjective f) {hg : F.IsFunc E g} (g_inj : IsInjective g hg) : E ≅ᶻ F := by
   let B := g.Range
   have B_sub : B ⊆ E := sep_subset_self
   let u := composition g f E F B
@@ -164,15 +164,14 @@ theorem isIso_of_biembedding {E F f g : ZFSet} {hf : E.IsFunc F f}
     exact f_inj x y x' hx hy hx' x_x'_f y_y'_f
   obtain ⟨v, hv, bij⟩ := bijective_of_injective_on_subset B_sub u_inj
 
-  have hg : F.IsFunc B g := IsFunc.is_func_on_range hg
-  have := hg.1
-  have h_bij : IsBijective g := bijective_of_injective _ g_inj
-  have h_v_hinv : E.IsFunc F (composition g⁻¹ v E B F) :=
-    ZFSet.IsFunc_of_composition_IsFunc (inv_is_func_of_bijective h_bij) hv
-  use composition g⁻¹ v E B F, h_v_hinv
+  have hg' : F.IsFunc B g := IsFunc.is_func_on_range hg
+  have g_bij : IsBijective g hg' := bijective_of_injective hg g_inj
+  have h_v_hinv : E.IsFunc F (composition (inv g hg'.1) v E B F) :=
+    IsFunc_of_composition_IsFunc (inv_is_func_of_bijective g_bij) hv
 
-  apply IsBijective.composition_of_bijective bij
-  exact inv_bijective_of_bijective h_bij
+  use composition (inv g hg'.1) v E B F, h_v_hinv
+
+  exact IsBijective.composition_of_bijective bij (inv_bijective_of_bijective g_bij)
 
 alias schroeder_bernstein := isIso_of_biembedding
 
@@ -770,7 +769,7 @@ theorem isIso_of_funs {A B C D : ZFSet} (h : A ≅ᶻ C) (h' : B ≅ᶻ D) : A.f
         conv_rhs =>
           unfold fapply
         dsimp
-        generalize_proofs g'pfunc g'rel a_g'dom Grel Frel Finvrel acF dclambda bdGinv
+        generalize_proofs g'pfunc g'rel a_g'dom Grel Frel acF dclambda bdGinv
         have ⟨cC, ac_F⟩ := Classical.choose_spec acF
         have ⟨bB, db_G⟩ := Classical.choose_spec bdGinv
         have ⟨dD, dc_eq⟩:= Classical.choose_spec dclambda
