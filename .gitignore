@@ -1,4 +1,13 @@
-**/*/.DS_Store
+.DS_Store
+
+*.smt
+*.smt2
+
+.lake/
+Test/
+
+*.css
+*.js
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
