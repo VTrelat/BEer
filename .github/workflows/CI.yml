@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["main"] # replace "main" with the default branch
+    branches: ["*"] # replace "main" with the default branch
   pull_request:
-    branches: ["main"]
+    branches: ["*"]
   workflow_dispatch:
 
 jobs:
