@@ -54,7 +54,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag: beer
-          token: ${{ github.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
       - uses: dev-drprasad/delete-tag-and-release@v1.1
