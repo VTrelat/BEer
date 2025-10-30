@@ -97,6 +97,12 @@ jobs:
           name: BEer-Windows
           path: dist/windows
 
+      - name: List downloaded artifacts
+        run: |
+          echo "Linux:" && ls -la dist/linux || true
+          echo "macOS:" && ls -la dist/macos || true
+          echo "Windows:" && ls -la dist/windows || true
+
       # Upload all platform binaries to the same release
       - name: Upload Linux asset
         uses: actions/upload-release-asset@v1
@@ -104,7 +110,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-release.outputs.upload_url }}
-          asset_path: dist/linux/.lake/build/bin/BEer
+          asset_path: dist/linux/BEer
           asset_name: BEer-linux
           asset_content_type: application/octet-stream
 
@@ -114,7 +120,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-release.outputs.upload_url }}
-          asset_path: dist/macos/.lake/build/bin/BEer
+          asset_path: dist/macos/BEer
           asset_name: BEer-macos
           asset_content_type: application/octet-stream
 
@@ -124,6 +130,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-release.outputs.upload_url }}
-          asset_path: dist/windows/.lake/build/bin/BEer.exe
+          asset_path: dist/windows/BEer.exe
           asset_name: BEer-windows.exe
           asset_content_type: application/octet-stream
