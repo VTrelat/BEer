@@ -2,41 +2,69 @@ name: CI
 
 on:
   push:
-    branches: ["*"] # replace "main" with the default branch
-  pull_request:
-    branches: ["*"]
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
-      # uses lean standard action with all default input values
+
+      # Build BEer with Lean on each OS
       - uses: leanprover/lean-action@v1
         with:
           use-github-cache: true
           build: true
+
+      # Upload artifacts per-OS
+      - name: Upload BEer artifact (Linux/macOS)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BEer-${{ runner.os }} # BEer-Linux / BEer-macOS
+          path: .lake/build/bin/BEer
+          if-no-files-found: error
+
+      - name: Upload BEer artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BEer-${{ runner.os }} # BEer-Windows
+          path: .lake/build/bin/BEer.exe
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+
+    steps:
       # pack release
       - name: Fetch release by tag
         id: fetch-release
         uses: pdamianik/release-tag-to-upload-url-action@v1.0.1
-        env: 
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag: beer
-          token: ${{ github.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
-        
+
       - uses: dev-drprasad/delete-tag-and-release@v1.1
         name: Delete release if already existing
         with:
-          delete_release: true 
+          delete_release: true
           tag_name: beer
           github_token: ${{ secrets.GITHUB_TOKEN }}
         if: steps.fetch-release.outcome == 'success'
-                    
+
       - name: Create release
         id: create-release
         uses: actions/create-release@latest
@@ -44,19 +72,64 @@ jobs:
           tag_name: beer
           release_name: "BEer"
           body: |
-            Automated release of BEer for ubuntu.
+            Automated release of BEer for Linux, macOS, and Windows.
           prerelease: false
           draft: false
-        env: 
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-      - name: Upload beer
-        id: upload-release-asset 
+
+      # Download artifacts from the build matrix
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: BEer-Linux
+          path: dist/linux
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: BEer-macOS
+          path: dist/macos
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: BEer-Windows
+          path: dist/windows
+
+      - name: List downloaded artifacts
+        run: |
+          echo "Linux:" && ls -la dist/linux || true
+          echo "macOS:" && ls -la dist/macos || true
+          echo "Windows:" && ls -la dist/windows || true
+
+      # Upload all platform binaries to the same release
+      - name: Upload Linux asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create-release.outputs.upload_url }} 
-          asset_path: .lake/build/bin/BEer
-          asset_name: BEer
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: dist/linux/BEer
+          asset_name: BEer-linux
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: dist/macos/BEer
+          asset_name: BEer-macos
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: dist/windows/BEer.exe
+          asset_name: BEer-windows.exe
           asset_content_type: application/octet-stream
