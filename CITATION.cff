@@ -1,0 +1,23 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: BEer
+message: >-
+  Higher-order encoder for B proof obligations to SMT-LIB
+  2.7
+type: software
+authors:
+  - given-names: Vincent
+    family-names: Trélat
+    email: vincent.trelat@inria.fr
+    affiliation: 'Université de Lorraine, CNRS, INRIA'
+    orcid: 'https://orcid.org/0009-0006-4143-3939'
+repository-code: 'https://www.github.com/VTrelat/BEer'
+keywords:
+  - Theorem Proving
+  - SMT-LIB
+  - B
+  - Lean
+  - Set Theory
+license: Apache-2.0
