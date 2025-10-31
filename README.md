@@ -15,7 +15,7 @@ lake build BEer
 This may take about a few minutes, and should produce an executable `.lake/build/bin/BEer`.
 
 ## Paper
-An online version of the paper is available on my [personal website](https://vtrelat.github.io/papers/abz25.pdf).
+An online version of the paper is available [here](https://vtrelat.github.io/papers/abz25.pdf).
 
 ## Cite
 ```bib
