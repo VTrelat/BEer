@@ -1,8 +1,7 @@
 cff-version: 1.2.0
 title: BEer
 message: >-
-  Higher-order encoder for B proof obligations to SMT-LIB
-  2.7
+  Higher-order encoder for B proof obligations to SMT-LIB 2.7
 type: software
 authors:
   - given-names: Vincent
@@ -18,3 +17,25 @@ keywords:
   - Lean
   - Set Theory
 license: Apache-2.0
+preferred-citation:
+  type: conference-paper
+  authors:
+    - given-names: Vincent
+      family-names: Trélat
+  title: "Safely Encoding B Proof Obligations in SMT-LIB"
+  year: 2025
+  collection-title: "Rigorous State-Based Methods - 11th International Conference, ABZ 2025, Düsseldorf, Germany, June 10-13, 2025, Proceedings"
+  conference:
+    name: "ABZ 2025"
+  editors:
+    - given-names: Michael
+      family-names: Leuschel
+    - given-names: Fuyuki
+      family-names: Ishikawa
+  publisher:
+    name: Springer
+  volume: 15728
+  start: 52
+  end: 69
+  doi: "10.1007/978-3-031-94533-5_4"
+  url: "https://doi.org/10.1007/978-3-031-94533-5_4"
