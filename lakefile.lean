@@ -9,12 +9,9 @@ package «B» where
     ⟨`autoImplicit, false⟩
   ]
   -- add any additional package configuration options here
+require "leanprover-community" / "mathlib"
 
--- require batteries from git "https://github.com/leanprover-community/batteries" @ s!"v4.20.0"
-
--- require LeanSearchClient from git "https://github.com/leanprover-community/LeanSearchClient" @ "v4.12.0"
--- require "leanprover-community" / "mathlib" @ git "VT_ZFC_extension_rat"
-require "leanprover-community" / "mathlib" @ git s!"v{Lean.versionString}"
+require ZFLean from git "https://github.com/VTrelat/ZFLean.git"
 
 @[default_target]
 lean_exe «BEer» where
@@ -25,5 +22,5 @@ lean_lib «SMT»
 lean_lib «Extra»
 lean_lib «POGReader»
 lean_lib «Encoder»
-lean_lib «ZFC»
+-- lean_lib «ZFC»
 lean_lib «CustomPrelude»
