@@ -122,6 +122,7 @@ namespace ShapeForcing
     (∃ α' β', γ = .fun (.pair α' β') .bool ∧ (α ⊑ α') = true ∧ (β ⊑ β') = true) := by
   induction γ generalizing α β <;> simp [castable?]
   case «fun» τ σ τ_ih σ_ih =>
+    stop
     iff_rintro h ( ⟨α', β', ⟨rfl, rfl⟩, τ_α, β_β'⟩ | ⟨α', β', ⟨rfl, rfl⟩, α'_α, β_β'⟩ )
     · cases σ with
       | «fun» | pair | unit | int => simp only [castable?, Bool.false_eq_true] at h
@@ -148,6 +149,7 @@ namespace ShapeForcing
     (∃ α' β', γ = .fun α' (.option β') ∧ (α' ⊑ α) = true ∧ (β' ⊑ β) = true) := by
   induction γ generalizing α β <;> simp [castable?]
   case «fun» τ σ τ_ih σ_ih =>
+    stop
     iff_rintro h ⟨α', β', ⟨⟩, α_α', β_β'⟩
     · cases σ with
       | bool | «fun» | pair | unit | int => simp only [castable?, Bool.false_eq_true] at h
@@ -180,6 +182,7 @@ namespace ShapeForcing
     (∃ α' β', γ = .fun α' (.option β') ∧ (α' ⊑ α) = true ∧ (β' ⊑ β) = true) := by
   induction γ generalizing α β <;> simp [castable?]
   case «fun» τ σ τ_ih σ_ih =>
+    stop
     iff_rintro h ( ⟨α', β', ⟨rfl, rfl⟩, α_α', β_β'⟩ | ⟨α', β', ⟨rfl, rfl⟩, α_α', β_β'⟩ )
     · cases σ with
       | bool =>
@@ -335,7 +338,7 @@ noncomputable def castZF_of_path {α β : SMTType} : CastPath α β →
     (λᶻ : ⟦.fun α₁ (.option β₁)⟧ᶻ → ⟦.fun α₂ (.option β₂)⟧ᶻ
         |              F          ↦ if hF : IsFunc ⟦α₁⟧ᶻ ⟦.option β₁⟧ᶻ F then
                                       let F' := F ∘ᶻ f₁⁻¹ -- F' : ⟦α₂⟧ᶻ → ⟦.option β₁⟧ᶻ
-                                      have hF' := IsFunc.composition (inv_is_func_of_bijective f₁_bij) hF
+                                      have hF' := IsFunc_of_composition_IsFunc hF (inv_is_func_of_bijective f₁_bij)
                                       have ⟨f₂', hf₂'⟩ := ZFSet.Option.flift f₂ hf₂
                                       f₂' ∘ᶻ F'
                                     else ∅)

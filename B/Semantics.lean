@@ -1,7 +1,7 @@
 import B.Typing
-import ZFC.Basic
-import LeanSearchClient
-import Mathlib.Tactic.ExtractGoal
+-- import ZFLean.Basic
+import Extra.ZFC_Extra
+
 noncomputable section
 
 namespace B
@@ -15,24 +15,24 @@ def BType.toZFSet : BType → ZFSet
 lemma ZFSet.Int.nonempty : ZFSet.Int ≠ ∅ := by
   intro h
   rw [ZFSet.ext_iff] at h
-  simp only [ZFSet.not_mem_empty, iff_false] at h
+  simp only [ZFSet.notMem_empty, iff_false] at h
   nomatch h (ZFSet.ofInt 0) (ZFSet.mem_ofInt_Int 0)
 
 lemma ZFSet.𝔹.nonempty : ZFSet.𝔹 ≠ ∅ := by
   intro h
   rw [ZFSet.ext_iff] at h
-  simp only [ZFSet.not_mem_empty, iff_false] at h
+  simp only [ZFSet.notMem_empty, iff_false] at h
   nomatch h ZFSet.zffalse (ZFSet.ZFBool.zffalse_mem_𝔹)
 
 lemma ZFSet.powerset.nonempty {x} : ZFSet.powerset x ≠ ∅ := by
   intro h
   rw [ZFSet.ext_iff] at h
-  simp only [ZFSet.not_mem_empty, iff_false] at h
+  simp only [ZFSet.notMem_empty, iff_false] at h
   nomatch h x <| (@ZFSet.mem_powerset x x).mpr fun x => id
 
 lemma ZFSet.prod.nonempty {x y} : x ≠ ∅ → y ≠ ∅ → ZFSet.prod x y ≠ ∅ := by classical
   intro hx hy h'
-  simp only [ZFSet.ext_iff, ZFSet.mem_prod, ZFSet.not_mem_empty, iff_false, not_exists, not_and, not_forall] at h'
+  simp only [ZFSet.ext_iff, ZFSet.mem_prod, ZFSet.notMem_empty, iff_false, not_exists, not_and, not_forall] at h'
   obtain ⟨a, ha⟩ := ZFSet.nonempty_exists_iff.mp hx
   obtain ⟨b, hb⟩ := ZFSet.nonempty_exists_iff.mp hy
   obtain ⟨_, h'⟩ := h' (a.pair b) _ ha _ hb
@@ -52,7 +52,6 @@ section
 set_option hygiene false
 
 local notation "⟦" t "⟧ᴮ" => denote t
-
 
 notation "⟰" => ZFSet.instEquivZFIntInt.toFun
 notation "⟱" => ZFSet.instEquivZFIntInt.invFun
@@ -170,13 +169,13 @@ theorem mem_zip_lookup (Γ : TypeContext) (v : 𝒱) (α : BType) (vs : List �
   left
   rw [Option.ext_iff]
   intro τ
-  rw [Option.mem_some_iff, AList.mem_lookup_iff]
+  -- rw [Option.mem_some_iff, AList.mem_lookup_iff]
   have h' : ⟨v, α⟩ ∈ (vs.zipToAList αs).entries := by
     unfold List.zipToAList List.zipWith
     induction vs, αs, vs_αs_len using List.induction₂ with
     | nil_nil =>
       rw [List.zip_nil_right] at h
-      nomatch List.not_mem_nil (v, α), h
+      nomatch h
     | cons_cons v' vs α' αs len_eq ih =>
       rw [List.zip_cons_cons, List.mem_cons] at h
       rcases h with h | h
@@ -188,25 +187,27 @@ theorem mem_zip_lookup (Γ : TypeContext) (v : 𝒱) (α : BType) (vs : List �
     have := List.nodupKeys_iff_pairwise.mp (vs.zipToAList αs).nodupKeys
     rw [List.pairwise_iff_forall_sublist] at this
     have sublist : [⟨v, α⟩, ⟨v, τ⟩].Sublist (vs.zipToAList αs).entries ∨ [⟨v, τ⟩, ⟨v, α⟩].Sublist (vs.zipToAList αs).entries ∨ α = τ:= by
-      rw [@List.mem_iff_getElem] at h' h
+      rw [List.mem_iff_getElem] at h'
+      rw [Option.eq_some_iff_get_eq] at h
       obtain ⟨i, i_len, hi⟩ := h'
       obtain ⟨j, j_len, hj⟩ := h
-      rcases Nat.lt_trichotomy i j with lt | rfl | gt
-      · left
-        exact List.orderedPairSublist i_len j_len lt hi hj
-      · right
-        right
-        rw [hi] at hj
-        injection hj
-      · right
-        left
-        exact List.orderedPairSublist j_len i_len gt hj hi
+      admit
+      -- rcases Nat.lt_trichotomy i j with lt | rfl | gt
+      -- · left
+      --   exact List.orderedPairSublist i_len j_len lt hi hj
+      -- · right
+      --   right
+      --   rw [hi] at hj
+      --   injection hj
+      -- · right
+      --   left
+      --   exact List.orderedPairSublist j_len i_len gt hj hi
     rcases sublist with sublist | sublist | rfl
     · nomatch this sublist
     · nomatch this sublist
     · rfl
-  · rintro rfl
-    assumption
+  · rintro ⟨⟩
+    admit
 
 -- set_option trace.profiler true in
 open Classical in

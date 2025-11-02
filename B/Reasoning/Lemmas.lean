@@ -1502,7 +1502,9 @@ theorem ZFSet.ofFinDom_get {n : ℕ} {τ : BType}
   obtain ⟨n, rfl⟩ := Nat.exists_eq_add_one.mpr n_pos
   rw [ofFinDom]
   induction n generalizing x τ with
-  | zero => rfl
+  | zero =>
+    rw [Fin.foldl_zero]
+    rfl
   | succ n ih =>
     simp only [hasArity, if_false_right] at x_hasArity
     unfold BType.hasArity at τ_hasArity

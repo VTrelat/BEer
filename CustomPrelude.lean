@@ -1,7 +1,5 @@
 import Batteries.CodeAction
 
-import Aesop
-
 -- import Mathlib.Tactic
 -- NOTE: PLEASE NEVER DO THAT AGAIN
 import Mathlib.Tactic.Conv

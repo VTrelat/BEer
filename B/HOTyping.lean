@@ -43,7 +43,8 @@ theorem foldl_aux' {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n : ℕ} (
   | succ n IH =>
     -- simp only [lt_add_iff_pos_left, add_pos_iff, zero_lt_one, or_true, forall_const] at IH
     cases n with
-    | zero => exact typD 0
+    | zero =>
+      exact foldl_aux α D typD
     | succ n =>
       simp only [Nat.add_one_sub_one, Fin.foldl_succ_last, Fin.coe_castSucc, Fin.val_last]
       apply Typing.cprod

@@ -1,6 +1,5 @@
 import B.Typing.Basic
 import B.Syntax.Extra
-import Aesop
 
 open Batteries
 namespace B
@@ -73,7 +72,7 @@ inductive Typing : TypeContext → Term → BType → Prop where
     → (typD : List.Forall₂' D αs (λ Dᵢ αᵢ => Γ ⊢ Dᵢ : .set αᵢ) (vs_D_len ▸ vs_αs_len))
     → (typP : (vs.zipToAList αs ∪ Γ) ⊢ P : .bool) -- left-biased union
     --------------------------------------------------
-    → Γ ⊢ .collect vs (D.reduce (· ⨯ᴮ ·) (by simpa [vs_D_len, ← List.length_pos_iff] using vs_nemp)) P : .set (αs.reduce (· ×ᴮ ·) (by simpa [vs_αs_len, ← List.length_pos] using vs_nemp))
+    → Γ ⊢ .collect vs (D.reduce (· ⨯ᴮ ·) (by simpa [vs_D_len, ← List.length_pos_iff] using vs_nemp)) P : .set (αs.reduce (· ×ᴮ ·) (by simpa [vs_αs_len, ← List.length_pos_iff] using vs_nemp))
   | pow {Γ α S}:
       Γ ⊢ S : .set α
     ---------------------------------

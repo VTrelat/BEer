@@ -37,7 +37,7 @@ theorem TypeContext.update_lookup_self  {𝒱} [DecidableEq 𝒱] {n} {Γ : Type
 theorem TypeContext.update_lookup_not_self  {𝒱} [DecidableEq 𝒱] {n} {Γ : TypeContext 𝒱} {vs : Fin n → 𝒱} {αs : Fin n → BType} {v : 𝒱} (hv : ∀ i, vs i ≠ v) :
   Γ.update vs αs v = Γ v := by
   induction n with
-  | zero => rfl
+  | zero => rw [TypeContext.update, Fin.foldl_zero]
   | succ n ih =>
     rw [TypeContext.update, Fin.foldl_succ_last, ←TypeContext.update]
     unfold Function.update
@@ -63,7 +63,7 @@ theorem TypeContext.update_lookup_iff {𝒱} [DecidableEq 𝒱] {n} {Γ : TypeCo
   | zero =>
     rintro (⟨i, rfl, rfl⟩ | ⟨hvs, τ_eq⟩)
     · nomatch i
-    · exact τ_eq
+    · rwa [TypeContext.update, Fin.foldl_zero]
   | succ n ih =>
     rintro (⟨i, rfl, rfl⟩ | ⟨hvs, τ_eq⟩)
     · by_cases i_eq : i = ⟨n, Nat.lt_add_one n⟩

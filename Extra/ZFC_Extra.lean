@@ -1,7 +1,5 @@
 import CustomPrelude
-import ZFC.Sum
-import ZFC.Isomorphisms
-import ZFC.Embeddings
+import ZFLean
 
 namespace ZFSet.ZFBool
 
