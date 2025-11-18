@@ -17,6 +17,7 @@ infix:70 " ⊑ " => castable?
 
 -- ℤ +-> ℤ ⊑ ℤ <-> ℤ
 -- #eval (.fun (.pair .int .int) .bool) ⊑ (.fun .int (.option .int))
+-- #eval (.fun .int .int) ⊑ (.fun .int .int)
 
 -- TODO: document cases as done in castMembership
 def loosen (name : String) (x : Term) : SMTType → SMTType → Encoder (𝒱 × Term) -- term × spec
@@ -93,7 +94,8 @@ def loosen (name : String) (x : Term) : SMTType → SMTType → Encoder (𝒱 ×
         ⟩
   | α, β => do
     unless α == β do throw s!"loosen: Cannot loosen {α} to {β}"
-    return ⟨"", .bool true⟩
+    let x! ← freshVar β name
+    return ⟨x!, .bool true⟩
 
 def castEq : Term × SMTType → Term × SMTType → Encoder (Term × SMTType) | (A, α), (B, β) => do
   if α == β then return (A =ˢ B, .bool)

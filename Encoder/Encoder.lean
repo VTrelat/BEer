@@ -8,11 +8,13 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     match (←get).types.lookup v with
     | none => throw s!"encodeTerm:var: Unknown variable {v} in SMT context"
     | some τ => do
-      let .some τ' := E.context.lookup v | throw s!"encodeTerm:var: Missing type for {v} in B context"
-      if τ = τ'.toSMTType then
-        return (.var v, τ)
-      else
-        throw s!"encodeTerm:var: Type mismatch for {v}: expected {τ}, got {τ'.toSMTType}"
+      return (.var v, τ)
+      -- let .some τ' := E.context.lookup v | return (.var v, τ) --FIXME: hack?
+      --   -- throw s!"encodeTerm:var: Missing type for {v} in B context"
+      -- if τ = τ'.toSMTType then
+      --   return (.var v, τ)
+      -- else
+      --   throw s!"encodeTerm:var: Type mismatch for {v}: expected {τ}, got {τ'.toSMTType}"
   | .int n, _ => return (.int n, .int)
   | .bool b, _ => return (.bool b, .bool)
   -- | .imp x y, E => do
@@ -53,12 +55,12 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
   | .ℤ, _ => do
     let ctx := (←get).types
     let v ← freshVar .int
-    modify λ e => { e with types := ctx, env.freshvarsc := e.env.freshvarsc - 1 } -- rollback context
+    modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
     return (.lambda [v] [.int] (.bool true), .fun .int .bool)
   | .𝔹, _ => do
     let ctx := (←get).types
     let v ← freshVar .bool
-    modify λ e => { e with types := ctx, env.freshvarsc := e.env.freshvarsc - 1 } -- rollback context
+    modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
     return (.lambda [v] [.bool] (.bool true), .fun .bool .bool)
   | .mem x S, E => do
     castMembership (← encodeTerm x E) (← encodeTerm S E)
@@ -109,7 +111,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let xs ← freshVarList αs
       let ⟨Dxs, _⟩ ← castApp (D', α.fun β.option) (xs.map .var |>.toPairl, αs.toProdl)
       let P' := substList vs ((xs.map .var).concat Dxs) P'
-      modify λ e => { e with types := ctx, env.freshvarsc := e.env.freshvarsc - αs.length } -- rollback context
+      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
       return (.lambda xs αs (.ite P' (.some Dxs) (none$ β)), αs.toProdl.fun β.option)
     | .fun τ .bool => do
       -- `D` is a set
@@ -120,7 +122,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let z ← freshVar τ
       let P' := substList vs (toDestPair vs (.var z)) P'
       -- let D' := substList vs (toDestPair vs (.var z)) D'
-      modify λ e => { e with types := ctx, env.freshvarsc := e.env.freshvarsc - 1 } -- rollback context
+      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
       return (.lambda [z] [τ] (.and (.app D' (.var z)) P'), .fun τ .bool)
     | _ => throw s!"encodeTerm:collect: Expected a set or a function, got {τD}"
   | .lambda vs D P, E => do
@@ -140,7 +142,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let z ← freshVar τ
       let P' := substList vs (toDestPair vs (.var z)) P'
       let z_mem_D' := .app D' (.var z)
-      modify λ e => { e with types := ctx, env.freshvarsc := e.env.freshvarsc - 1 } -- rollback context
+      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
       return (.lambda [z] [τ] (.ite z_mem_D' (.some P') (none$ γ)), .fun τ (.option γ))
     | .fun α (.option β) => do
       let αs := α.fromProdl <| vs.length - 2
@@ -150,7 +152,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let z ← freshVar β
       let ⟨Dzs, _⟩ ← castMembership (zs.concat z |>.map .var |>.toPairl, (αs.concat β).toProdl) (D', α.fun β.option)
       let P' := substList vs (zs.concat z |>.map .var) P'
-      modify λ e => { e with types := ctx, env.freshvarsc := e.env.freshvarsc - (αs.length + 1) } -- rollback context
+      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
       return (.lambda (zs.concat z) (αs.concat β) (.ite Dzs (.some P') (none$ γ)), (αs.concat β).toProdl.fun (.option γ))
     | _ => throw s!"encodeTerm:lambda: Expected a set or a function, got {τD}"
   | .pfun A B, E => do
@@ -215,7 +217,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         let τ' := τs.toProdl
         let (z_mem_D', .bool) ← castMembership (zs.map .var |>.toPairl, τ') (D', .fun τ .bool) | throw s!"encodeTerm:all: Failed to cast {zs} ∈ {D'}"
 
-        modify λ e => { e with types := ctx, env.freshvarsc := e.env.freshvarsc - τs.length } -- rollback context
+        modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
         return (.forall zs τs (.imp z_mem_D' P'), .bool)
       else throw s!"encodeTerm:all: number of variables {vs.length} does not match number of gathered types {tmp_τs.length}"
     | .fun α (.option β) =>
@@ -232,7 +234,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
       let ⟨xsy_mem_D, _⟩ ← castMembership (xs.map .var |>.toPairl, τs.toProdl) (D', .fun α (.option β))
 
-      modify λ e => { e with types := ctx, env.freshvarsc := e.env.freshvarsc - τs.length } -- rollback context
+      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
 
       return (.forall xs τs (xsy_mem_D ⇒ˢ P'), .bool)
     | _ => throw s!"encodeTerm:all: Expected a set or a function, got {← encodeTerm D E}"
@@ -323,7 +325,7 @@ def EncoderState.toSMTFile : Encoder String := do
 def encodePOG (pogpath : System.FilePath) (show_encoding := false): IO String := do
   let pog ← readPOG pogpath |>.propagateError
   let ⟨(), st⟩ ← POGtoB pog |>.run ∅ |>.run |>.propagateError
-  -- dbg_trace st.env
+  dbg_trace st.env
   let st' ← match encode st.env |>.run ∅ with
     | .ok ⟨(), st'⟩ => pure st'
     | .error e => throw <| IO.userError e
@@ -336,8 +338,8 @@ def encodePOG (pogpath : System.FilePath) (show_encoding := false): IO String :=
   return r
 
 -- #eval encodePOG (".."/".."/"benchmark"/"dataset-pog"/"0002"/"00028.pog") >>= cvc5 (timeout := 1000) >>= IO.println
--- #eval MCH2POG "Test/Eval.mch" >>= encodePOG (show_encoding := true) >>= cvc5 >>= IO.println
--- #eval encodePOG ("Test"/"tmp.pog") (show_encoding := false) >>= cvc5 >>= IO.println
+-- #eval MCH2POG "Test/Test.mch" >>= encodePOG (show_encoding := true) >>= cvc5 >>= IO.println
+-- #eval encodePOG ("Test"/"Eval.pog") (show_encoding := true) >>= cvc5 >>= IO.println
 
 -- 0010_00006
 -- 0015/00132: malformed pog (s89 = s89_1)
