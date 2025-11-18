@@ -265,6 +265,30 @@ def AList.filter {α} {β : α → Type _} [DecidableEq α] (p : ∀ a, β a →
         · exact ih
       · exact hk
 
+theorem AList.erase_of_not_mem.{u_1} {α : Type u_1} [DecidableEq α] {β : α → Type _}
+  {a : α} {l : AList β} :
+    a ∉ l → l.erase a = l := by
+  induction l generalizing a with
+  | H0 =>
+    intro
+    rfl
+  | IH k v l notMem IH =>
+    intro h
+    rw [mem_insert, not_or] at h
+    obtain ⟨a_ne_k, a_notMem⟩ := h
+    conv_lhs =>
+      rw [erase]
+      conv =>
+        enter [1]
+        rw [entries_insert, List.kerase_cons_ne a_ne_k]
+    rw [AList.ext_iff]
+    dsimp
+    congr 1
+    rw [List.kerase_of_notMem_keys]
+    intro contr
+    rw [List.kerase_of_notMem_keys notMem] at contr
+    exact a_notMem contr
+
 theorem List.reduce_cons {α} {f : α → α → α} [Std.Associative f] {x : α} {xs : List α} (h : xs ≠ []) : (x::xs).reduce f (List.cons_ne_nil _ _) = f x (xs.reduce f h) := by
   let y::xs := xs
   simp [List.reduce, List.foldl_assoc]

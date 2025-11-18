@@ -1,4 +1,5 @@
 import SMT.Semantics
+import SMT.Typing
 
 namespace SMT.PHOAS
 
@@ -44,6 +45,16 @@ theorem WFTC.update {Γ} [WFTC Γ] {n} {vs : Fin n → Dom} {τs : Fin n → SMT
         apply @ih (Γ.update (fun _ : Fin 1 => vs 0) (fun _ => τs 0)) (WFTC.update1 (vs_τs_wf 0)) (fun i => vs i.succ) (fun i => τs i.succ)
         · exact (vs_τs_wf ·.succ)
         · exact eq_some
+
+theorem WFTC.of_abstract {«Δ» : 𝒱 → Option Dom} {Γ : SMT.TypeContext} : WFTC <| Γ.abstract («Δ» := «Δ») where
+  wf := by
+    rintro ⟨V, τ, hV⟩ τ' h
+    dsimp
+    unfold TypeContext.abstract at h
+    split_ifs at h with Δ_eq
+    let v' := Classical.choose Δ_eq
+    obtain ⟨eq, mem_Γ⟩ := Classical.choose_spec Δ_eq
+    admit
 
 abbrev WellTyped' (t : PHOAS.Term Dom) := Σ' (Γ : TypeContext Dom) (_ : WFTC Γ) (τ : SMTType), Γ ⊢ t : τ
 
@@ -287,4 +298,49 @@ theorem denote_welltyped_eq {t : PHOAS.Term Dom} {T τ hTτ}
     injection den_t with _ heq
     subst T
     injection heq
+
+theorem Typing.of_abstract
+  {𝒱} [DecidableEq 𝒱] {t : SMT.Term} {«Δ» : SMT.𝒱 → Option 𝒱} {Γ : SMT.TypeContext} {τ : SMTType}
+  (ht : ∀ v ∈ fv t, («Δ» v).isSome = true)
+  (typ_t : Γ ⊢ t : τ) :
+  Γ.abstract («Δ» := «Δ») ⊢ t.abstract «Δ» ht : τ := by
+  induction typ_t with
+  | var Γ v τ ih =>
+    simp only [fv, List.mem_cons, List.not_mem_nil, or_false, forall_eq] at ht
+    unfold Term.abstract
+    apply PHOAS.Typing.var
+    rw [TypeContext.abstract, dite_cond_eq_true (eq_true ?_)]
+    · generalize_proofs eq_some
+      obtain ⟨eq, _⟩ := Classical.choose_spec eq_some
+      simp only [Option.some_get] at eq
+      admit
+    · use v
+      simp only [Option.some_get, true_and]
+      rw [←AList.lookup_isSome, Option.isSome_iff_exists]
+      use τ
+  | int Γ n => sorry
+  | bool Γ b => sorry
+  | app Γ f x τ σ _ _ _ _ => sorry
+  | lambda Γ vs τs t γ _ len_pos len_eq _ _ => sorry
+  | «forall» Γ vs τs P _ len_pos len_eq _ _ => sorry
+  | «exists» Γ vs τs P _ len_pos len_eq _ _ => sorry
+  | eq Γ t₁ t₂ τ _ _ _ _ => sorry
+  | and Γ t₁ t₂ _ _ _ _ => sorry
+  | or Γ t₁ t₂ _ _ _ _ => sorry
+  | not Γ t _ _ => sorry
+  | imp Γ t₁ t₂ _ _ _ _ => sorry
+  | ite Γ c t e τ _ _ _ _ _ _ => sorry
+  | some Γ t τ _ _ => sorry
+  | none Γ τ => sorry
+  | the Γ t τ _ _ => sorry
+  | pair Γ t₁ τ₁ t₂ τ₂ _ _ _ _ => sorry
+  | fst Γ t τ σ _ _ => sorry
+  | snd Γ t τ σ _ _ => sorry
+  | distinct Γ ts τ _ _ => sorry
+  | le Γ t₁ t₂ _ _ _ _ => sorry
+  | add Γ t₁ t₂ _ _ _ _ => sorry
+  | sub Γ t₁ t₂ _ _ _ _ => sorry
+  | mul Γ t₁ t₂ _ _ _ _ => sorry
+
+
 end SMT.PHOAS

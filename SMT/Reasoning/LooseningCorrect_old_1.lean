@@ -597,207 +597,208 @@ theorem castZF_funOpt_graph_aux_is_func {α₁ β₁ α₂ β₂ : SMTType} {ζ�
         rw [←ZFBool.of_Bool_toBool ⟨b, hb⟩]
         congr
 
-theorem castZF_funOpt_graph_aux_is_bij {α₁ β₁ α₂ β₂ : SMTType} {ζ₁ ζ₂ : ZFSet}
+theorem castZF_funOpt_graph_aux_is_inj {α₁ β₁ α₂ β₂ : SMTType} {ζ₁ ζ₂ : ZFSet}
   {hζ₁ : IsFunc ⟦α₁⟧ᶻ ⟦α₂⟧ᶻ ζ₁} (ζ₁_bij : ζ₁.IsBijective hζ₁)
   {hζ₂ : IsFunc ⟦β₁⟧ᶻ ⟦β₂⟧ᶻ ζ₂} (ζ₂_bij : ζ₂.IsBijective hζ₂) :
-    (castZF_funOpt_graph_aux ζ₁_bij ζ₂_bij).IsBijective
+    (castZF_funOpt_graph_aux ζ₁_bij ζ₂_bij).IsInjective
       (castZF_funOpt_graph_aux_is_func ζ₁_bij ζ₂_bij) := by
-  and_intros
-  · intro f g R hf hg hR fR gR
-    rw [mem_funs] at hf hg hR
-    rw [castZF_funOpt_graph_aux, lambda_spec] at fR gR
-    rw [dite_cond_eq_true (eq_true hf)] at fR
-    rw [dite_cond_eq_true (eq_true hg)] at gR
-    obtain ⟨-, -, rfl⟩ := fR
-    obtain ⟨-, -, eq⟩ := gR
-    rw [
-      lambda_eta hf,
-      lambda_eta hg,
-      lambda_ext_iff (fun h ↦ by rw [dite_cond_eq_true (eq_true h)]; apply Subtype.property)]
-    intro z hz
-    iterate 2 rw [dite_cond_eq_true (eq_true hz)]
-    rw [←Subtype.ext_iff]
-    rw [ZFSet.ext_iff] at eq
-    simp only [mem_sep, mem_prod, ↓existsAndEq, and_true, SetLike.coe_eq_coe,
-      dite_else_false, and_exists_self] at eq
-    obtain isnone | ⟨fz, issome_fz⟩ := ZFSet.Option.casesOn (@ᶻf ⟨z, by rwa [is_func_dom_eq]⟩)
-    · rw [isnone]
-      by_contra! contr
-      have ⟨⟨y, hy⟩, issome⟩ := ZFSet.Option.ne_none_is_some _ contr.symm
+  intro f g R hf hg hR fR gR
+  rw [mem_funs] at hf hg hR
+  rw [castZF_funOpt_graph_aux, lambda_spec] at fR gR
+  rw [dite_cond_eq_true (eq_true hf)] at fR
+  rw [dite_cond_eq_true (eq_true hg)] at gR
+  obtain ⟨-, -, rfl⟩ := fR
+  obtain ⟨-, -, eq⟩ := gR
+  rw [
+    lambda_eta hf,
+    lambda_eta hg,
+    lambda_ext_iff (fun h ↦ by rw [dite_cond_eq_true (eq_true h)]; apply Subtype.property)]
+  intro z hz
+  iterate 2 rw [dite_cond_eq_true (eq_true hz)]
+  rw [←Subtype.ext_iff]
+  rw [ZFSet.ext_iff] at eq
+  simp only [mem_sep, mem_prod, ↓existsAndEq, and_true, SetLike.coe_eq_coe,
+    dite_else_false, and_exists_self] at eq
+  obtain isnone | ⟨fz, issome_fz⟩ := ZFSet.Option.casesOn (@ᶻf ⟨z, by rwa [is_func_dom_eq]⟩)
+  · rw [isnone]
+    by_contra! contr
+    have ⟨⟨y, hy⟩, issome⟩ := ZFSet.Option.ne_none_is_some _ contr.symm
 
-      obtain ⟨x, hx, hxy⟩ := (inv_bijective_of_bijective ζ₂_bij).2 y hy
-      have y_def := fapply.of_pair (is_func_is_pfunc (inv_is_func_of_bijective ζ₂_bij)) hxy
-      rw [Subtype.ext_iff, eq_comm] at y_def
-      dsimp at y_def
-      conv at issome =>
-        enter [2,1,1]
-        rw [y_def]
-      specialize eq (((@ᶻζ₁ ⟨z, by rwa [is_func_dom_eq]⟩).val.pair x).pair zftrue)
-      simp only [π₁_pair, π₂_pair, pair_inj, ↓existsAndEq, and_true, SetLike.coe_mem, hx, ZFBool.zftrue_mem_𝔹, exists_true_left, ZFBool.toBool, dite_true, iff_true] at eq
+    obtain ⟨x, hx, hxy⟩ := (inv_bijective_of_bijective ζ₂_bij).2 y hy
+    have y_def := fapply.of_pair (is_func_is_pfunc (inv_is_func_of_bijective ζ₂_bij)) hxy
+    rw [Subtype.ext_iff, eq_comm] at y_def
+    dsimp at y_def
+    conv at issome =>
+      enter [2,1,1]
+      rw [y_def]
+    specialize eq (((@ᶻζ₁ ⟨z, by rwa [is_func_dom_eq]⟩).val.pair x).pair zftrue)
+    simp only [π₁_pair, π₂_pair, pair_inj, ↓existsAndEq, and_true, SetLike.coe_mem, hx, ZFBool.zftrue_mem_𝔹, exists_true_left, ZFBool.toBool, dite_true, iff_true] at eq
 
-      iterate 2 rw [Subtype.ext_iff] at eq
-      conv_lhs at eq =>
-        enter [1]
-        rw [
-          ←fapply_composition hf (inv_is_func_of_bijective ζ₁_bij) (Subtype.property _),
-          ←fapply_composition
-            (IsFunc_of_composition_IsFunc hf (inv_is_func_of_bijective ζ₁_bij)) hζ₁ hz,
-          fapply_eq_Image_singleton
-            (IsFunc_of_composition_IsFunc
-              (IsFunc_of_composition_IsFunc hf (inv_is_func_of_bijective ζ₁_bij)) hζ₁) hz]
+    iterate 2 rw [Subtype.ext_iff] at eq
+    conv_lhs at eq =>
+      enter [1]
+      rw [
+        ←fapply_composition hf (inv_is_func_of_bijective ζ₁_bij) (Subtype.property _),
+        ←fapply_composition
+          (IsFunc_of_composition_IsFunc hf (inv_is_func_of_bijective ζ₁_bij)) hζ₁ hz,
+        fapply_eq_Image_singleton
+          (IsFunc_of_composition_IsFunc
+            (IsFunc_of_composition_IsFunc hf (inv_is_func_of_bijective ζ₁_bij)) hζ₁) hz]
+      conv =>
+        enter [1,1]
+        change f ∘ᶻ ζ₁⁻¹ ∘ᶻ ζ₁
+        rw [←fcomp_assoc]
         conv =>
-          enter [1,1]
-          change f ∘ᶻ ζ₁⁻¹ ∘ᶻ ζ₁
-          rw [←fcomp_assoc]
-          conv =>
-            enter [2]
-            rw [composition_self_inv_of_bijective ζ₁_bij]
-          rw [fcomp, Id.composition_right (is_rel_of_is_func hf)]
-        rw [←fapply_eq_Image_singleton hf hz]
-      conv_rhs at eq =>
-        enter [1]
-        rw [
-          ←fapply_composition hg (inv_is_func_of_bijective ζ₁_bij) (Subtype.property _),
-          ←fapply_composition
-            (IsFunc_of_composition_IsFunc hg (inv_is_func_of_bijective ζ₁_bij)) hζ₁ hz,
-          fapply_eq_Image_singleton
-            (IsFunc_of_composition_IsFunc
-              (IsFunc_of_composition_IsFunc hg (inv_is_func_of_bijective ζ₁_bij)) hζ₁) hz]
+          enter [2]
+          rw [composition_self_inv_of_bijective ζ₁_bij]
+        rw [fcomp, Id.composition_right (is_rel_of_is_func hf)]
+      rw [←fapply_eq_Image_singleton hf hz]
+    conv_rhs at eq =>
+      enter [1]
+      rw [
+        ←fapply_composition hg (inv_is_func_of_bijective ζ₁_bij) (Subtype.property _),
+        ←fapply_composition
+          (IsFunc_of_composition_IsFunc hg (inv_is_func_of_bijective ζ₁_bij)) hζ₁ hz,
+        fapply_eq_Image_singleton
+          (IsFunc_of_composition_IsFunc
+            (IsFunc_of_composition_IsFunc hg (inv_is_func_of_bijective ζ₁_bij)) hζ₁) hz]
+      conv =>
+        enter [1,1]
+        change g ∘ᶻ ζ₁⁻¹ ∘ᶻ ζ₁
+        rw [←fcomp_assoc]
         conv =>
-          enter [1,1]
-          change g ∘ᶻ ζ₁⁻¹ ∘ᶻ ζ₁
-          rw [←fcomp_assoc]
-          conv =>
-            enter [2]
-            rw [composition_self_inv_of_bijective ζ₁_bij]
-          rw [fcomp, Id.composition_right (is_rel_of_is_func hg)]
-        rw [←fapply_eq_Image_singleton hg hz]
-      conv_lhs at eq => rw [←Subtype.ext_iff, isnone]
-      conv_rhs at eq => rw [←Subtype.ext_iff, issome, ZFSet.Option.some.injEq]
-      simp only [Subtype.coe_eta, iff_true] at eq
-      nomatch ZFSet.Option.some_ne_none _ eq.symm
-    · obtain ⟨fz, hfz⟩ := fz
-      obtain ⟨y, hy, hyfz⟩ := inv_bijective_of_bijective ζ₂_bij |>.2 fz hfz
-      have y_def := fapply.of_pair (is_func_is_pfunc (inv_is_func_of_bijective ζ₂_bij)) hyfz
-      rw [Subtype.ext_iff, eq_comm] at y_def
-      dsimp at y_def
-      conv at issome_fz =>
-        enter [2,1,1]
-        rw [y_def]
-      specialize eq (((@ᶻζ₁ ⟨z, by rwa [is_func_dom_eq]⟩).val.pair y).pair zftrue)
-      simp only [π₁_pair, π₂_pair, pair_inj, ↓existsAndEq, and_true, SetLike.coe_mem, hy, ZFBool.zftrue_mem_𝔹, exists_true_left, ZFBool.toBool, dite_true, iff_true] at eq
-      iterate 2 rw [Subtype.ext_iff] at eq
-      conv_lhs at eq =>
-        enter [1]
-        rw [
-          ←fapply_composition hf (inv_is_func_of_bijective ζ₁_bij) (Subtype.property _),
-          ←fapply_composition
-            (IsFunc_of_composition_IsFunc hf (inv_is_func_of_bijective ζ₁_bij)) hζ₁ hz,
-          fapply_eq_Image_singleton
-            (IsFunc_of_composition_IsFunc
-              (IsFunc_of_composition_IsFunc hf (inv_is_func_of_bijective ζ₁_bij)) hζ₁) hz]
+          enter [2]
+          rw [composition_self_inv_of_bijective ζ₁_bij]
+        rw [fcomp, Id.composition_right (is_rel_of_is_func hg)]
+      rw [←fapply_eq_Image_singleton hg hz]
+    conv_lhs at eq => rw [←Subtype.ext_iff, isnone]
+    conv_rhs at eq => rw [←Subtype.ext_iff, issome, ZFSet.Option.some.injEq]
+    simp only [Subtype.coe_eta, iff_true] at eq
+    nomatch ZFSet.Option.some_ne_none _ eq.symm
+  · obtain ⟨fz, hfz⟩ := fz
+    obtain ⟨y, hy, hyfz⟩ := inv_bijective_of_bijective ζ₂_bij |>.2 fz hfz
+    have y_def := fapply.of_pair (is_func_is_pfunc (inv_is_func_of_bijective ζ₂_bij)) hyfz
+    rw [Subtype.ext_iff, eq_comm] at y_def
+    dsimp at y_def
+    conv at issome_fz =>
+      enter [2,1,1]
+      rw [y_def]
+    specialize eq (((@ᶻζ₁ ⟨z, by rwa [is_func_dom_eq]⟩).val.pair y).pair zftrue)
+    simp only [π₁_pair, π₂_pair, pair_inj, ↓existsAndEq, and_true, SetLike.coe_mem, hy, ZFBool.zftrue_mem_𝔹, exists_true_left, ZFBool.toBool, dite_true, iff_true] at eq
+    iterate 2 rw [Subtype.ext_iff] at eq
+    conv_lhs at eq =>
+      enter [1]
+      rw [
+        ←fapply_composition hf (inv_is_func_of_bijective ζ₁_bij) (Subtype.property _),
+        ←fapply_composition
+          (IsFunc_of_composition_IsFunc hf (inv_is_func_of_bijective ζ₁_bij)) hζ₁ hz,
+        fapply_eq_Image_singleton
+          (IsFunc_of_composition_IsFunc
+            (IsFunc_of_composition_IsFunc hf (inv_is_func_of_bijective ζ₁_bij)) hζ₁) hz]
+      conv =>
+        enter [1,1]
+        change f ∘ᶻ ζ₁⁻¹ ∘ᶻ ζ₁
+        rw [←fcomp_assoc]
         conv =>
-          enter [1,1]
-          change f ∘ᶻ ζ₁⁻¹ ∘ᶻ ζ₁
-          rw [←fcomp_assoc]
-          conv =>
-            enter [2]
-            rw [composition_self_inv_of_bijective ζ₁_bij]
-          rw [fcomp, Id.composition_right (is_rel_of_is_func hf)]
-        rw [←fapply_eq_Image_singleton hf hz]
-      conv_rhs at eq =>
-        enter [1]
-        rw [
-          ←fapply_composition hg (inv_is_func_of_bijective ζ₁_bij) (Subtype.property _),
-          ←fapply_composition
-            (IsFunc_of_composition_IsFunc hg (inv_is_func_of_bijective ζ₁_bij)) hζ₁ hz,
-          fapply_eq_Image_singleton
-            (IsFunc_of_composition_IsFunc
-              (IsFunc_of_composition_IsFunc hg (inv_is_func_of_bijective ζ₁_bij)) hζ₁) hz]
+          enter [2]
+          rw [composition_self_inv_of_bijective ζ₁_bij]
+        rw [fcomp, Id.composition_right (is_rel_of_is_func hf)]
+      rw [←fapply_eq_Image_singleton hf hz]
+    conv_rhs at eq =>
+      enter [1]
+      rw [
+        ←fapply_composition hg (inv_is_func_of_bijective ζ₁_bij) (Subtype.property _),
+        ←fapply_composition
+          (IsFunc_of_composition_IsFunc hg (inv_is_func_of_bijective ζ₁_bij)) hζ₁ hz,
+        fapply_eq_Image_singleton
+          (IsFunc_of_composition_IsFunc
+            (IsFunc_of_composition_IsFunc hg (inv_is_func_of_bijective ζ₁_bij)) hζ₁) hz]
+      conv =>
+        enter [1,1]
+        change g ∘ᶻ ζ₁⁻¹ ∘ᶻ ζ₁
+        rw [←fcomp_assoc]
         conv =>
-          enter [1,1]
-          change g ∘ᶻ ζ₁⁻¹ ∘ᶻ ζ₁
-          rw [←fcomp_assoc]
-          conv =>
-            enter [2]
-            rw [composition_self_inv_of_bijective ζ₁_bij]
-          rw [fcomp, Id.composition_right (is_rel_of_is_func hg)]
-        rw [←fapply_eq_Image_singleton hg hz]
-      conv_lhs at eq => rw [←Subtype.ext_iff, issome_fz, ZFSet.Option.some.injEq]
-      conv_rhs at eq => rw [←Subtype.ext_iff]
-      simp only [Subtype.coe_eta, true_iff] at eq
-      rw [eq, issome_fz]
-  · intro R hR
-    unfold castZF_funOpt_graph_aux
-    simp only [mem_funs, mem_prod, ↓existsAndEq, and_true, SetLike.coe_eq_coe, dite_else_false,
-      lambda_spec, and_self_left]
+          enter [2]
+          rw [composition_self_inv_of_bijective ζ₁_bij]
+        rw [fcomp, Id.composition_right (is_rel_of_is_func hg)]
+      rw [←fapply_eq_Image_singleton hg hz]
+    conv_lhs at eq => rw [←Subtype.ext_iff, issome_fz, ZFSet.Option.some.injEq]
+    conv_rhs at eq => rw [←Subtype.ext_iff]
+    simp only [Subtype.coe_eta, true_iff] at eq
+    rw [eq, issome_fz]
 
 abbrev castZF_funOpt_graph {α₁ α₂ β₁ β₂ : SMTType} :
   {ζ₁ // ∃ (h₁ : IsFunc ⟦α₁⟧ᶻ ⟦α₂⟧ᶻ ζ₁), ζ₁.IsBijective h₁} →
   {ζ₂ // ∃ (h₂ : IsFunc ⟦β₁⟧ᶻ ⟦β₂⟧ᶻ ζ₂), ζ₂.IsBijective h₂} →
   {ff : ZFSet //
-    ∃ (hff : IsFunc ⟦.fun α₁ (.option β₁)⟧ᶻ ⟦.fun (.pair α₂ β₂) .bool⟧ᶻ ff), ff.IsBijective hff} :=
+    ∃ (hff : IsFunc ⟦.fun α₁ (.option β₁)⟧ᶻ ⟦.fun (.pair α₂ β₂) .bool⟧ᶻ ff), ff.IsInjective hff} :=
   fun ⟨_, hζ₁⟩ ⟨_, hζ₂⟩ ↦
     let ζ₁_bij := Classical.choose_spec hζ₁
     let ζ₂_bij := Classical.choose_spec hζ₂
     ⟨
       castZF_funOpt_graph_aux ζ₁_bij ζ₂_bij,
       castZF_funOpt_graph_aux_is_func ζ₁_bij ζ₂_bij,
-      castZF_funOpt_graph_aux_is_bij ζ₁_bij ζ₂_bij⟩
+      castZF_funOpt_graph_aux_is_inj ζ₁_bij ζ₂_bij⟩
 
--- abbrev castZF_pairPred {α₁ α₂ β₁ β₂ : SMTType} :
---   {ζ₁ // ∃ (h₁ : IsFunc ⟦α₁⟧ᶻ ⟦α₂⟧ᶻ ζ₁), ζ₁.IsBijective h₁} →
---   {ζ₂ // ∃ (h₂ : IsFunc ⟦β₁⟧ᶻ ⟦β₂⟧ᶻ ζ₂), ζ₂.IsBijective h₂} →
---   {ff : ZFSet //
---     ∃ (hff : IsFunc ⟦.fun (.pair α₁ β₁) .bool⟧ᶻ ⟦.fun (.pair α₂ β₂) .bool⟧ᶻ ff), ff.IsBijective hff} :=
---   fun ⟨ζ₁, hζ₁⟩ ⟨ζ₂, hζ₂⟩ ↦
---     let ζ₁_bij := Classical.choose_spec hζ₁
---     let hζ₁ := hζ₁.1
---     let ζ₂_bij := Classical.choose_spec hζ₂
---     let hζ₂ := hζ₂.1
---     let ff : ZFSet :=
---       (λᶻ : ⟦.fun (.pair α₁ β₁) .bool⟧ᶻ → ⟦.fun (.pair α₂ β₂) .bool⟧ᶻ
---           | F ↦ if hF : IsFunc ⟦.pair α₁ β₁⟧ᶻ 𝔹 F then
---                   let R :=
---                     λᶻ: ⟦α₂.pair β₂⟧ᶻ → .𝔹
---                       |       xy      ↦ if hxy : xy ∈ ⟦.pair α₂ β₂⟧ᶻ then
---                                           let x := fapply ζ₁⁻¹ (is_func_is_pfunc (inv_is_func_of_bijective ζ₁_bij)) ⟨xy.π₁, by
---                                             rw [is_func_dom_eq]
---                                             rw [pair_eta hxy, pair_mem_prod] at hxy
---                                             exact hxy.1⟩
---                                           let y := fapply ζ₂⁻¹ (is_func_is_pfunc (inv_is_func_of_bijective ζ₂_bij)) ⟨xy.π₂, by
---                                             rw [is_func_dom_eq]
---                                             rw [pair_eta hxy, pair_mem_prod] at hxy
---                                             exact hxy.2⟩
---                                           fapply F (is_func_is_pfunc hF) ⟨.pair x y, by
---                                             rw [is_func_dom_eq, SMTType.toZFSet, pair_mem_prod]
---                                             and_intros <;> apply Subtype.property⟩
---                                         else ∅
---                   R
---                 else ∅)
---     have hff : IsFunc ⟦.fun (.pair α₁ β₁) .bool⟧ᶻ ⟦.fun (.pair _ _) .bool⟧ᶻ ff := by admit
---     have ff_bij : ff.IsBijective hff := by admit
---     ⟨ff, hff, ff_bij⟩
+abbrev castZF_pairPred {α₁ α₂ β₁ β₂ : SMTType} :
+  {ζ₁ // ∃ (h₁ : IsFunc ⟦α₁⟧ᶻ ⟦α₂⟧ᶻ ζ₁), ζ₁.IsBijective h₁} →
+  {ζ₂ // ∃ (h₂ : IsFunc ⟦β₁⟧ᶻ ⟦β₂⟧ᶻ ζ₂), ζ₂.IsBijective h₂} →
+  {ff : ZFSet //
+    ∃ (hff : IsFunc ⟦.fun (.pair α₁ β₁) .bool⟧ᶻ ⟦.fun (.pair α₂ β₂) .bool⟧ᶻ ff), ff.IsBijective hff} :=
+  fun ⟨ζ₁, hζ₁⟩ ⟨ζ₂, hζ₂⟩ ↦
+    let ζ₁_bij := Classical.choose_spec hζ₁
+    let hζ₁ := hζ₁.1
+    let ζ₂_bij := Classical.choose_spec hζ₂
+    let hζ₂ := hζ₂.1
+    let ff : ZFSet :=
+      (λᶻ : ⟦.fun (.pair α₁ β₁) .bool⟧ᶻ → ⟦.fun (.pair α₂ β₂) .bool⟧ᶻ
+          | F ↦ if hF : IsFunc ⟦.pair α₁ β₁⟧ᶻ 𝔹 F then
+                  let R :=
+                    λᶻ: ⟦α₂.pair β₂⟧ᶻ → .𝔹
+                      |       xy      ↦ if hxy : xy ∈ ⟦.pair α₂ β₂⟧ᶻ then
+                                          let x := fapply ζ₁⁻¹ (is_func_is_pfunc (inv_is_func_of_bijective ζ₁_bij)) ⟨xy.π₁, by
+                                            rw [is_func_dom_eq]
+                                            rw [pair_eta hxy, pair_mem_prod] at hxy
+                                            exact hxy.1⟩
+                                          let y := fapply ζ₂⁻¹ (is_func_is_pfunc (inv_is_func_of_bijective ζ₂_bij)) ⟨xy.π₂, by
+                                            rw [is_func_dom_eq]
+                                            rw [pair_eta hxy, pair_mem_prod] at hxy
+                                            exact hxy.2⟩
+                                          fapply F (is_func_is_pfunc hF) ⟨.pair x y, by
+                                            rw [is_func_dom_eq, SMTType.toZFSet, pair_mem_prod]
+                                            and_intros <;> apply Subtype.property⟩
+                                        else ∅
+                  R
+                else ∅)
+    have hff : IsFunc ⟦.fun (.pair α₁ β₁) .bool⟧ᶻ ⟦.fun (.pair _ _) .bool⟧ᶻ ff := by admit
+    have ff_bij : ff.IsBijective hff := by admit
+    ⟨ff, hff, ff_bij⟩
 
 end CastPathToZF
 
--- open Classical in
--- /-- Turn a `CastPath α β` into the semantic cast `⟦α⟧ᶻ → ⟦β⟧ᶻ` with an `IsFunc` certificate. -/
--- noncomputable def castZF_of_path {α β : SMTType} : CastPath α β →
---   {f : ZFSet // ∃ (hf : IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ f), f.IsBijective}
--- | CastPath.unit               => ⟨𝟙{∅}, Id.IsFunc, Id.IsBijective⟩
--- | CastPath.int                => ⟨𝟙Int, Id.IsFunc, Id.IsBijective⟩
--- | CastPath.bool               => ⟨𝟙𝔹, Id.IsFunc, Id.IsBijective⟩
--- | CastPath.pair p₁ p₂         => castZF_pair (castZF_of_path p₁) (castZF_of_path p₂)
--- | CastPath.option p           => castZF_option (castZF_of_path p)
--- | CastPath.funBool p          => castZF_funBool (castZF_of_path p)
--- | CastPath.funOpt_fun p₁ p₂   => castZF_funOpt (castZF_of_path p₁) (castZF_of_path p₂)
--- | CastPath.funOpt_graph p₁ p₂ => castZF_funOpt_graph (castZF_of_path p₁) (castZF_of_path p₂)
--- | CastPath.pairPred p₁ p₂     => castZF_pairPred (castZF_of_path p₁) (castZF_of_path p₂)
+open Classical in
+/-- Turn a `CastPath α β` into the semantic cast `⟦α⟧ᶻ → ⟦β⟧ᶻ` with an `IsFunc` certificate. -/
+noncomputable def castZF_of_path {α β : SMTType} : CastPath α β →
+  {f : ZFSet // ∃ (hf : IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ f), f.IsInjective}
+| CastPath.unit               => ⟨𝟙{∅}, Id.IsFunc, Id.IsBijective.1⟩
+| CastPath.int                => ⟨𝟙Int, Id.IsFunc, Id.IsBijective.1⟩
+| CastPath.bool               => ⟨𝟙𝔹, Id.IsFunc, Id.IsBijective.1⟩
+| CastPath.pair p₁ p₂         => castZF_pair (castZF_of_path p₁) (castZF_of_path p₂)
+| CastPath.option p           => castZF_option (castZF_of_path p)
+| CastPath.funBool p          => castZF_funBool (castZF_of_path p)
+| CastPath.funOpt_fun p₁ p₂   => castZF_funOpt (castZF_of_path p₁) (castZF_of_path p₂)
+| CastPath.funOpt_graph p₁ p₂ =>
+  let f1 := (castZF_of_path p₁)
+  let f2 := (castZF_of_path p₂)
+  -- castZF_funOpt_graph f1 f2
+  sorry
+| CastPath.pairPred p₁ p₂     =>
+  -- castZF_pairPred (castZF_of_path p₁) (castZF_of_path p₂)
+  sorry
 
 
--- open Classical in
--- noncomputable def castZF.{u} (α β : SMTType) (cast? : α ⊑ β) : {f : ZFSet.{u} // ∃ (hf : ⟦α⟧ᶻ.IsFunc ⟦β⟧ᶻ f), f.IsBijective hf} :=
---   castZF_of_path <| CastPath.of_true α β cast?
+open Classical in
+noncomputable def castZF.{u} (α β : SMTType) (cast? : α ⊑ β) : {f : ZFSet.{u} // ∃ (hf : ⟦α⟧ᶻ.IsFunc ⟦β⟧ᶻ f), f.IsInjective hf} :=
+  castZF_of_path <| CastPath.of_true α β cast?
 
--- -- denx! = (castZF α β cast?) @ᶻdenx ??
+-- denx! = (castZF α β cast?) @ᶻdenx ??

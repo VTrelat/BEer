@@ -8,10 +8,16 @@ package «B» where
     ⟨`pp.proofs.withType, false⟩,
     ⟨`autoImplicit, false⟩
   ]
+  -- moreLinkArgs := #[
+  --   "-L./.lake/packages/LeanCopilot/.lake/build/lib",
+  --   "-lctranslate2"
+  -- ]
+
   -- add any additional package configuration options here
 require "leanprover-community" / "mathlib"
+require ZFLean from git "https://github.com/VTrelat/ZFLean.git" @ s!"v{Lean.versionString}"
 
-require ZFLean from git "https://github.com/VTrelat/ZFLean.git"
+-- require LeanCopilot from git "https://github.com/lean-dojo/LeanCopilot.git" @ "main"
 
 @[default_target]
 lean_exe «BEer» where

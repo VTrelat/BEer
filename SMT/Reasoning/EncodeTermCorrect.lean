@@ -27,8 +27,8 @@ theorem encodeTerm_spec (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term} {α : B.
   | bool b                   => exact encodeTerm_spec.bool b E typ_t Δ_fv den_t
   | maplet x y x_ih y_ih     => exact encodeTerm_spec.maplet x y x_ih y_ih E typ_t Δ_fv den_t
   | add x y x_ih y_ih        => exact encodeTerm_spec.add x y x_ih y_ih E typ_t Δ_fv den_t
-  | sub x y x_ih y_ih        => sorry
-  | mul x y x_ih y_ih        => sorry
+  | sub x y x_ih y_ih        => exact encodeTerm_spec.sub x y x_ih y_ih E typ_t Δ_fv den_t
+  | mul x y x_ih y_ih        => exact encodeTerm_spec.mul x y x_ih y_ih E typ_t Δ_fv den_t
   | le x y x_ih y_ih         => sorry
   | and x y x_ih y_ih        => sorry
   | not x ih                 => sorry

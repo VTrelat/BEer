@@ -1,5 +1,4 @@
 import SMT.HOTyping.Def
-import Mathlib.Tactic.MkIffOfInductiveProp
 
 namespace SMT.PHOAS
 

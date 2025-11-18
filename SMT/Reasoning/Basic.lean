@@ -1,4 +1,5 @@
 import SMT.Reasoning.Defs
+import SMT.Reasoning.LooseningDefs
 import Std.Tactic.Do
 
 set_option mvcgen.warning false
@@ -564,7 +565,120 @@ theorem castMembership_spec {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT.Typ
         · admit
       · mspec Std.Do.Spec.throw_StateT
 
+open Std.Do SMT ZFSet ShapeForcing
 
+/-- Convenience predicate for “all free variables are mapped by a renaming”. -/
+abbrev FVok («Δ» : B.𝒱 → Option B.Dom) (t : SMT.Term) : Prop :=
+  ∀ v ∈ SMT.fv t, (B.RenamingContext.toSMT «Δ» v).isSome = true
+
+/-- `loosen` returns a fresh variable `x! : β` and a Boolean equation `φ`
+    that pins `x!` to be the semantic cast of `x : α` via the canonical ZF map. -/
+@[spec]
+theorem loosen_spec
+  {Λ : SMT.TypeContext} {n : ℕ} {name : String}
+  {x : SMT.Term} {α β : SMTType}
+  (typ_x : Λ ⊢ x : α) (hTrue : (α ⊑ β) = true)
+  («Δ» : B.𝒱 → Option B.Dom)
+  (hx  : FVok «Δ» x) :
+  ⦃ fun ⟨E, Λ'⟩ => ⌜ Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ Λ'.keys.length ⌝ ⦄
+    loosen name x α β
+  ⦃ ⇓? ⟨x!, φ⟩ ⟨E', Γ'⟩ =>
+     ⌜ n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤ Γ'.keys.length ∧
+       Γ' = Λ.insert x! β ∧
+       Γ' ⊢ (.var x!) : β ∧
+       Γ' ⊢ φ : .bool ∧
+       SMT.fv φ ⊆ SMT.fv x ∪ {x!} ∧
+       -- Denotation adequacy: x! denotes the forward cast of the denotation of x,
+       -- and φ holds (is zftrue) in every admissible renaming.
+        ∃ (hφ : FVok «Δ» φ) (X Φ X' : SMT.Dom)
+          (denx : ⟦x.abstract (B.RenamingContext.toSMT «Δ») hx⟧ˢ = some X)
+          (denφ : ⟦φ.abstract (B.RenamingContext.toSMT «Δ») hφ⟧ˢ = some Φ)
+          (denx! : ⟦(Term.var x!).abstract (Function.update (B.RenamingContext.toSMT «Δ») x! (some X)) (fun v hv ↦ by
+            rw [fv, List.mem_singleton] at hv
+            rw [hv, Function.update_self, Option.isSome_some])⟧ˢ = some X'),
+          (Φ.1 = zftrue →
+            let ⟨F, hF⟩ := castZF_of_path (CastPath.of_true α β hTrue);
+            X'.1 = @ᶻF ⟨X.1, by
+              rw [is_func_dom_eq]
+              let ⟨X, α', hX⟩ := X
+              obtain ⟨⟩ := SMT.PHOAS.denote_welltyped_eq
+                (t := x.abstract («Δ» := B.RenamingContext.toSMT «Δ») (fun v hv ↦ hx v hv))
+                ⟨Λ.abstract (B.RenamingContext.toSMT «Δ»), PHOAS.WFTC.of_abstract, α, PHOAS.Typing.of_abstract hx typ_x⟩ denx
+              exact hX⟩) ⌝ ⦄ := by
+  induction x with
+  | var v =>
+    mstart
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, hfvc⟩ := pre
+    rw [loosen]
+    split_ifs with α_eq_β
+    · rw [beq_iff_eq] at α_eq_β
+      subst α_eq_β
+      mspec Std.Do.Spec.pure
+      mspec freshVar_spec
+      rename_i x!
+      mrename_i pre
+      mintro ∀St'
+      mpure pre
+      obtain ⟨types_eq, x!_fresh, hfvc'⟩ := pre
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      and_intros
+      · exact Nat.le.intro hfvc'.symm
+      · rw [types_eq, AList.keys_insert, List.length_cons]
+        trans St.env.freshvarsc + 1
+        · exact Nat.le_of_eq hfvc'
+        · simp only [Nat.add_le_add_iff_right, ←AList.keys_erase]
+          rwa [AList.erase_of_not_mem x!_fresh]
+      · exact types_eq
+      · rw [types_eq]
+        apply Typing.var
+        apply AList.lookup_insert
+      · apply Typing.bool
+      · simp only [fv, List.cons_union, List.nil_union, List.nil_subset]
+      · use
+          by simp only [FVok, fv, List.not_mem_nil, IsEmpty.forall_iff, implies_true],
+          (B.RenamingContext.toSMT «Δ» v |>.get (hx _ fv.mem_var)),
+          ⟨zftrue, .bool, ZFBool.zftrue_mem_𝔹⟩,
+          (Function.update (B.RenamingContext.toSMT «Δ») x!
+            (some ((B.RenamingContext.toSMT «Δ» v).get (hx _ fv.mem_var))) x!).get
+              (by simpa using hx _ fv.mem_var),
+          by rw [SMT.Term.abstract, denote, Option.pure_def],
+          by rw [SMT.Term.abstract, denote, Option.pure_def]; congr,
+          by rw [SMT.Term.abstract, denote, Option.pure_def]
+        intro
+        simp only [Option.some_get, Function.update_self]
+
+    · done
+    · done
+    · done
+    · done
+    · done
+  | int n => sorry
+  | bool b => sorry
+  | app f x _ _ => sorry
+  | lambda v τs t _ => sorry
+  | «forall» v τs t _ => sorry
+  | «exists» v τs t _ => sorry
+  | as t τ _ => sorry
+  | eq t₁ t₂ _ _ => sorry
+  | and t₁ t₂ _ _ => sorry
+  | or t₁ t₂ _ _ => sorry
+  | not t _ => sorry
+  | imp t₁ t₂ _ _ => sorry
+  | ite c t e _ _ _ => sorry
+  | some t _ => sorry
+  | the t _ => sorry
+  | none => sorry
+  | pair t₁ t₂ _ _ => sorry
+  | fst t _ => sorry
+  | snd t _ => sorry
+  | distinct ts _ => sorry
+  | le t₁ t₂ _ _ => sorry
+  | add t₁ t₂ _ _ => sorry
+  | sub t₁ t₂ _ _ => sorry
+  | mul t₁ t₂ _ _ => sorry
 
 section encodeTerm_correct
 open B SMT ZFSet
@@ -1205,6 +1319,310 @@ theorem encodeTerm_spec.add.{u_1} {Λ : SMT.TypeContext} (x y : B.Term)
       · dsimp [retract] at retract_α_X_enc_eq_X retract_β_Y_enc_eq_Y ⊢
         subst Xenc Yenc
         rfl
+
+theorem encodeTerm_spec.sub.{u_1} {Λ : SMT.TypeContext} (x y : B.Term)
+  (x_ih :
+    ∀ (E : B.Env) {α : BType},
+      E.context ⊢ x : α →
+        ∀ {«Δ» : B.𝒱 → _root_.Option B.Dom} (Δ_fv : ∀ v ∈ B.fv x, («Δ» v).isSome = true) {T : ZFSet.{u_1}}
+          {hT : T ∈ ⟦α⟧ᶻ},
+          ⟦x.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
+            ∀ {n : ℕ},
+              ⦃fun x =>
+                match x with
+                | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ (AList.keys Λ').length⌝⦄
+                encodeTerm x E ⦃PostCond.mayThrow fun x x_1 =>
+                  match x with
+                  | (t', σ) =>
+                    match x_1 with
+                    | { env := E', types := Γ' } =>
+                      ⌜n ≤ E'.freshvarsc ∧
+                          E'.freshvarsc ≤ (AList.keys Γ').length ∧
+                            Γ' = Λ ∧
+                              σ = α.toSMTType ∧
+                                Γ' ⊢ t' : σ ∧
+                                  ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
+                                    ∃ denT',
+                                      ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧
+                                        ⟨T, ⟨α, hT⟩⟩ ≘ᶻ denT'⌝⦄)
+  (y_ih :
+    ∀ (E : B.Env) {α : BType},
+      E.context ⊢ y : α →
+        ∀ {«Δ» : B.𝒱 → _root_.Option B.Dom} (Δ_fv : ∀ v ∈ B.fv y, («Δ» v).isSome = true) {T : ZFSet.{u_1}}
+          {hT : T ∈ ⟦α⟧ᶻ},
+          ⟦y.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
+            ∀ {n : ℕ},
+              ⦃fun x =>
+                match x with
+                | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ (AList.keys Λ').length⌝⦄
+                encodeTerm y E ⦃PostCond.mayThrow fun x x_1 =>
+                  match x with
+                  | (t', σ) =>
+                    match x_1 with
+                    | { env := E', types := Γ' } =>
+                      ⌜n ≤ E'.freshvarsc ∧
+                          E'.freshvarsc ≤ (AList.keys Γ').length ∧
+                            Γ' = Λ ∧
+                              σ = α.toSMTType ∧
+                                Γ' ⊢ t' : σ ∧
+                                  ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
+                                    ∃ denT',
+                                      ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧
+                                        ⟨T, ⟨α, hT⟩⟩ ≘ᶻ denT'⌝⦄)
+  (E : B.Env) {α : BType} (typ_t : E.context ⊢ x -ᴮ y : α) {«Δ» : B.𝒱 → _root_.Option B.Dom}
+  (Δ_fv : ∀ v ∈ B.fv (x -ᴮ y), («Δ» v).isSome = true) {T : ZFSet.{u_1}} {hT : T ∈ ⟦α⟧ᶻ}
+  (den_t : ⟦(x -ᴮ y).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) {n : ℕ} :
+  ⦃fun x =>
+    match x with
+    | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ (AList.keys Λ').length⌝⦄
+    encodeTerm (x -ᴮ y) E ⦃PostCond.mayThrow fun x x_1 =>
+      match x with
+      | (t', σ) =>
+        match x_1 with
+        | { env := E', types := Γ' } =>
+          ⌜n ≤ E'.freshvarsc ∧
+              E'.freshvarsc ≤ (AList.keys Γ').length ∧
+                Γ' = Λ ∧
+                  σ = α.toSMTType ∧
+                    Γ' ⊢ t' : σ ∧
+                      ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
+                        ∃ denT',
+                          ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧ ⟨T, ⟨α, hT⟩⟩ ≘ᶻ denT'⌝⦄ := by
+  mstart
+  mintro pre ∀σ
+  mpure pre
+  rw [encodeTerm]
+  apply B.Typing.subE at typ_t
+  obtain ⟨rfl, typ_x, typ_y⟩ := typ_t
+  rw [B.Term.abstract, B.denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff] at den_t
+  obtain ⟨⟨X, α, hX⟩, den_x, eq⟩ := den_t
+  have := denote_welltyped_eq
+    (t := x.abstract («Δ» := «Δ»)
+    (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)))
+    ?_ den_x
+  on_goal 2 =>
+    use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, .int
+    exact @Typing.of_abstract (B.Dom) («Δ» := «Δ») ?_ x E.context .int (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) typ_x
+  subst α
+  dsimp at eq
+  rw [Option.bind_eq_some_iff] at eq
+  obtain ⟨⟨Y, β, hY⟩, den_y, eq⟩ := eq
+  have := denote_welltyped_eq
+    (t := y.abstract («Δ» := «Δ»)
+    (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+    ?_ den_y
+  on_goal 2 =>
+    use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, .int
+    exact @Typing.of_abstract (B.Dom) («Δ» := «Δ») ?_ y E.context .int (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) typ_y
+  subst β
+  rw [Option.some_inj] at eq
+  injection eq with T_eq heq
+  subst T
+  clear heq
+
+  specialize x_ih (n := n) E typ_x («Δ» := «Δ») (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) den_x
+  mspec x_ih
+  rename_i out_x
+  obtain ⟨x_enc, α'⟩ := out_x
+  mrename_i pre
+  mintro ∀σ_x
+  mpure pre
+  dsimp at pre
+  obtain ⟨n_le, σ_x_freshc_le, rfl, rfl, typ_x_enc, hΔ_x_enc, ⟨Xenc, _, hXenc⟩, den_x_enc, ⟨rfl, retract_α_X_enc_eq_X⟩⟩ := pre
+  conv =>
+    enter [2,1,1]
+    rw [BType.toSMTType]
+    dsimp
+
+  specialize y_ih (n := σ_x.env.freshvarsc) E typ_y («Δ» := «Δ») (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) den_y
+  mspec y_ih
+  rename_i out_y
+  obtain ⟨y_enc, β'⟩ := out_y
+  mrename_i pre
+  mintro ∀σ_y
+  mpure pre
+  dsimp at pre
+  obtain ⟨σ_x_freshc_le_σ_y_freshc, σ_y_freshc_le, pre, rfl, typ_y_enc, hΔ_y_enc, ⟨Yenc, _, hYenc⟩, den_y_enc, ⟨rfl, retract_β_Y_enc_eq_Y⟩⟩ := pre
+  mspec Std.Do.Spec.pure
+  mpure_intro
+
+  and_intros
+  · trans σ_x.env.freshvarsc
+    · exact n_le
+    · exact σ_x_freshc_le_σ_y_freshc
+  · exact σ_y_freshc_le
+  · exact pre
+  · rfl
+  · apply SMT.Typing.sub
+    · rw [pre]
+      exact typ_x_enc
+    · exact typ_y_enc
+  · exists ?_
+    · intro v hv
+      rw [SMT.fv, List.mem_append] at hv
+      rcases hv with hv | hv
+      · exact hΔ_x_enc v hv
+      · exact hΔ_y_enc v hv
+    · use ⟨Xenc -ᶻ Yenc, .int, overloadBinOp_mem hXenc hYenc⟩
+      and_intros
+      · rw [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.bind_eq_bind, den_x_enc, Option.bind_some, den_y_enc]
+        rfl
+      · congr
+      · dsimp [retract] at retract_α_X_enc_eq_X retract_β_Y_enc_eq_Y ⊢
+        subst Xenc Yenc
+        rfl
+
+theorem encodeTerm_spec.mul.{u_1} {Λ : SMT.TypeContext} (x y : B.Term)
+  (x_ih :
+    ∀ (E : B.Env) {α : BType},
+      E.context ⊢ x : α →
+        ∀ {«Δ» : B.𝒱 → _root_.Option B.Dom} (Δ_fv : ∀ v ∈ B.fv x, («Δ» v).isSome = true) {T : ZFSet.{u_1}}
+          {hT : T ∈ ⟦α⟧ᶻ},
+          ⟦x.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
+            ∀ {n : ℕ},
+              ⦃fun x =>
+                match x with
+                | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ (AList.keys Λ').length⌝⦄
+                encodeTerm x E ⦃PostCond.mayThrow fun x x_1 =>
+                  match x with
+                  | (t', σ) =>
+                    match x_1 with
+                    | { env := E', types := Γ' } =>
+                      ⌜n ≤ E'.freshvarsc ∧
+                          E'.freshvarsc ≤ (AList.keys Γ').length ∧
+                            Γ' = Λ ∧
+                              σ = α.toSMTType ∧
+                                Γ' ⊢ t' : σ ∧
+                                  ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
+                                    ∃ denT',
+                                      ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧
+                                        ⟨T, ⟨α, hT⟩⟩ ≘ᶻ denT'⌝⦄)
+  (y_ih :
+    ∀ (E : B.Env) {α : BType},
+      E.context ⊢ y : α →
+        ∀ {«Δ» : B.𝒱 → _root_.Option B.Dom} (Δ_fv : ∀ v ∈ B.fv y, («Δ» v).isSome = true) {T : ZFSet.{u_1}}
+          {hT : T ∈ ⟦α⟧ᶻ},
+          ⟦y.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
+            ∀ {n : ℕ},
+              ⦃fun x =>
+                match x with
+                | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ (AList.keys Λ').length⌝⦄
+                encodeTerm y E ⦃PostCond.mayThrow fun x x_1 =>
+                  match x with
+                  | (t', σ) =>
+                    match x_1 with
+                    | { env := E', types := Γ' } =>
+                      ⌜n ≤ E'.freshvarsc ∧
+                          E'.freshvarsc ≤ (AList.keys Γ').length ∧
+                            Γ' = Λ ∧
+                              σ = α.toSMTType ∧
+                                Γ' ⊢ t' : σ ∧
+                                  ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
+                                    ∃ denT',
+                                      ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧
+                                        ⟨T, ⟨α, hT⟩⟩ ≘ᶻ denT'⌝⦄)
+  (E : B.Env) {α : BType} (typ_t : E.context ⊢ x *ᴮ y : α) {«Δ» : B.𝒱 → _root_.Option B.Dom}
+  (Δ_fv : ∀ v ∈ B.fv (x *ᴮ y), («Δ» v).isSome = true) {T : ZFSet.{u_1}} {hT : T ∈ ⟦α⟧ᶻ}
+  (den_t : ⟦(x *ᴮ y).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) {n : ℕ} :
+  ⦃fun x =>
+    match x with
+    | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ (AList.keys Λ').length⌝⦄
+    encodeTerm (x *ᴮ y) E ⦃PostCond.mayThrow fun x x_1 =>
+      match x with
+      | (t', σ) =>
+        match x_1 with
+        | { env := E', types := Γ' } =>
+          ⌜n ≤ E'.freshvarsc ∧
+              E'.freshvarsc ≤ (AList.keys Γ').length ∧
+                Γ' = Λ ∧
+                  σ = α.toSMTType ∧
+                    Γ' ⊢ t' : σ ∧
+                      ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
+                        ∃ denT',
+                          ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧ ⟨T, ⟨α, hT⟩⟩ ≘ᶻ denT'⌝⦄ := by
+  mstart
+  mintro pre ∀σ
+  mpure pre
+  rw [encodeTerm]
+  apply B.Typing.mulE at typ_t
+  obtain ⟨rfl, typ_x, typ_y⟩ := typ_t
+  rw [B.Term.abstract, B.denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff] at den_t
+  obtain ⟨⟨X, α, hX⟩, den_x, eq⟩ := den_t
+  have := denote_welltyped_eq
+    (t := x.abstract («Δ» := «Δ»)
+    (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)))
+    ?_ den_x
+  on_goal 2 =>
+    use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, .int
+    exact @Typing.of_abstract (B.Dom) («Δ» := «Δ») ?_ x E.context .int (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) typ_x
+  subst α
+  dsimp at eq
+  rw [Option.bind_eq_some_iff] at eq
+  obtain ⟨⟨Y, β, hY⟩, den_y, eq⟩ := eq
+  have := denote_welltyped_eq
+    (t := y.abstract («Δ» := «Δ»)
+    (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+    ?_ den_y
+  on_goal 2 =>
+    use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, .int
+    exact @Typing.of_abstract (B.Dom) («Δ» := «Δ») ?_ y E.context .int (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) typ_y
+  subst β
+  rw [Option.some_inj] at eq
+  injection eq with T_eq heq
+  subst T
+  clear heq
+
+  specialize x_ih (n := n) E typ_x («Δ» := «Δ») (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) den_x
+  mspec x_ih
+  rename_i out_x
+  obtain ⟨x_enc, α'⟩ := out_x
+  mrename_i pre
+  mintro ∀σ_x
+  mpure pre
+  dsimp at pre
+  obtain ⟨n_le, σ_x_freshc_le, rfl, rfl, typ_x_enc, hΔ_x_enc, ⟨Xenc, _, hXenc⟩, den_x_enc, ⟨rfl, retract_α_X_enc_eq_X⟩⟩ := pre
+  conv =>
+    enter [2,1,1]
+    rw [BType.toSMTType]
+    dsimp
+
+  specialize y_ih (n := σ_x.env.freshvarsc) E typ_y («Δ» := «Δ») (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) den_y
+  mspec y_ih
+  rename_i out_y
+  obtain ⟨y_enc, β'⟩ := out_y
+  mrename_i pre
+  mintro ∀σ_y
+  mpure pre
+  dsimp at pre
+  obtain ⟨σ_x_freshc_le_σ_y_freshc, σ_y_freshc_le, pre, rfl, typ_y_enc, hΔ_y_enc, ⟨Yenc, _, hYenc⟩, den_y_enc, ⟨rfl, retract_β_Y_enc_eq_Y⟩⟩ := pre
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  and_intros
+  · trans σ_x.env.freshvarsc
+    · exact n_le
+    · exact σ_x_freshc_le_σ_y_freshc
+  · exact σ_y_freshc_le
+  · exact pre
+  · rfl
+  · apply SMT.Typing.mul
+    · rw [pre]
+      exact typ_x_enc
+    · exact typ_y_enc
+  · exists ?_
+    · intro v hv
+      rw [SMT.fv, List.mem_append] at hv
+      rcases hv with hv | hv
+      · exact hΔ_x_enc v hv
+      · exact hΔ_y_enc v hv
+    · use ⟨Xenc *ᶻ Yenc, .int, overloadBinOp_mem hXenc hYenc⟩
+      and_intros
+      · rw [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.bind_eq_bind, den_x_enc, Option.bind_some, den_y_enc]
+        rfl
+      · congr
+      · dsimp [retract] at retract_α_X_enc_eq_X retract_β_Y_enc_eq_Y ⊢
+        subst Xenc Yenc
+        rfl
+
 
 theorem encodeTerm_spec.mem.{u_1} {Λ : SMT.TypeContext} (x S : B.Term)
   (x_ih :
