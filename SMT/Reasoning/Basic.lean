@@ -4,7 +4,7 @@ import Std.Tactic.Do
 
 set_option mvcgen.warning false
 
-open Batteries Std.Do
+open Std.Do
 
 theorem encode_type_context_subset (E : B.Env) :
   ⦃ λ _ ↦ ⌜True⌝ ⦄
@@ -495,6 +495,317 @@ theorem SMT.Term.getType_spec {Γ : TypeContext} {t : Term} {α : SMTType} (typ_
     unfold getType
     mspec
 
+/-- Convenience predicate for “all free variables are mapped by a renaming”. -/
+abbrev FVok («Δ» : SMT.𝒱 → Option SMT.Dom) (t : SMT.Term) : Prop :=
+  ∀ v ∈ SMT.fv t, («Δ» v).isSome = true
+
+open SMT ZFSet ShapeForcing in
+/-- `loosen` returns a fresh variable `x! : β` and a Boolean equation `φ`
+    that pins `x!` to be the semantic cast of `x : α` via the canonical ZF map. -/
+@[spec]
+theorem loosen_spec
+  {Λ : SMT.TypeContext} {n : ℕ} {name : String}
+  {x : SMT.Term} {α β : SMTType}
+  (typ_x : Λ ⊢ x : α) (hTrue : (α ⊑ β) = true)
+  («Δ» : B.𝒱 → Option B.Dom)
+  (hx  : FVok (B.RenamingContext.toSMT «Δ») x) :
+  ⦃ fun ⟨E, Λ'⟩ => ⌜ Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ Λ'.keys.length ⌝ ⦄
+    loosen name x α β
+  ⦃ ⇓? ⟨x!, φ⟩ ⟨E', Γ'⟩ =>
+     ⌜ n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤ Γ'.keys.length ∧
+       Γ' = Λ.insert x! β ∧
+       Γ' ⊢ (.var x!) : β ∧
+       Γ' ⊢ φ : .bool ∧
+       SMT.fv φ ⊆ SMT.fv x ∪ {x!} ∧
+       -- Denotation adequacy: x! denotes the forward cast of the denotation of x,
+       -- and φ holds (is zftrue) in every admissible renaming.
+        ∃ (X Φ X' : SMT.Dom)
+          (denx : ⟦x.abstract (B.RenamingContext.toSMT «Δ») hx⟧ˢ = some X)
+          (denx! : ⟦(Term.var x!).abstract (Function.update (B.RenamingContext.toSMT «Δ») x! (some X')) (fun v hv ↦ by
+            rw [fv, List.mem_singleton] at hv
+            rw [hv, Function.update_self, Option.isSome_some])⟧ˢ = some X')
+          (hφ : FVok (Function.update (B.RenamingContext.toSMT «Δ») x! (some X')) φ)
+          (denφ : ⟦φ.abstract (Function.update (B.RenamingContext.toSMT «Δ») x! (some X')) hφ⟧ˢ = some Φ),
+          (Φ.1 = zftrue →
+            let ⟨F, hF⟩ := castZF_of_path (CastPath.of_true α β hTrue);
+            X'.1 = @ᶻF ⟨X.1, by
+              rw [is_func_dom_eq]
+              let ⟨X, α', hX⟩ := X
+              obtain ⟨⟩ := SMT.PHOAS.denote_welltyped_eq
+                (t := x.abstract («Δ» := B.RenamingContext.toSMT «Δ») (fun v hv ↦ hx v hv))
+                ⟨Λ.abstract (B.RenamingContext.toSMT «Δ»), PHOAS.WFTC.of_abstract, α, PHOAS.Typing.of_abstract hx typ_x⟩ denx
+              exact hX⟩) ⌝ ⦄ := by
+  induction typ_x generalizing β with
+  | var Γ v α ih =>
+    mstart
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, hlen⟩ := pre
+
+    induction α generalizing β with
+    | bool =>
+      simp only [bool_cast_true_iff] at hTrue
+      subst hTrue
+      simp only [loosen]
+      rw [ite_cond_eq_true _ _ (eq_true (by rw [BEq.rfl]))]
+      mspec Std.Do.Spec.pure
+      mspec SMT.freshVar_spec (τ := .bool) (name := name)
+      rename_i x!
+      mrename_i pre
+      mintro ∀St'
+      mpure pre
+      obtain ⟨eq, x!_fresh, hfvc⟩ := pre
+      mspec Std.Do.Spec.pure
+      mpure_intro
+
+      refine ⟨
+        Nat.le.intro hfvc.symm, ?_, eq, ?_,
+        Typing.bool St'.types true,
+        by simp only [fv, List.cons_union, List.nil_union, List.nil_subset],
+        (B.RenamingContext.toSMT «Δ» v).get (hx _ fv.mem_var),
+        ?_⟩
+      · rw [hfvc, eq]
+        have : St.types.keys.erase x! = St.types.keys := by
+          simpa only [List.erase_eq_self_iff]
+        simpa only [AList.keys_insert, this, List.length_cons, Nat.add_le_add_iff_right, ge_iff_le]
+      · rw [eq]
+        apply Typing.var
+        exact AList.lookup_insert St.types
+      · use
+          ?_,
+          ?_,
+          by rw [Term.abstract, denote, Option.pure_def, Option.some_inj],
+          by
+            rw [Term.abstract, denote, Option.pure_def, Option.some_inj]
+            simp only [Function.update_self, Option.get_some],
+          by simp only [FVok, fv, List.not_mem_nil, IsEmpty.forall_iff, implies_true],
+          by rw [Term.abstract, denote, Option.pure_def, Option.some_inj]
+        intros
+        have mem_bool : ((B.RenamingContext.toSMT «Δ» v).get (hx _ fv.mem_var)).fst ∈ ⟦SMTType.bool⟧ᶻ := by
+          obtain ⟨⟨V, τ, hV⟩, den_v⟩ := (hx _ fv.mem_var) |> Option.isSome_iff_exists.mp
+          have eq := PHOAS.denote_welltyped_eq
+            (t := (Term.var v).abstract (B.RenamingContext.toSMT «Δ») (fun v hv ↦ hx v hv))
+            ⟨St.types.abstract (B.RenamingContext.toSMT «Δ»),
+              PHOAS.WFTC.of_abstract, .bool,
+              PHOAS.Typing.of_abstract hx (Typing.var St.types v SMTType.bool ih)⟩
+            (T := V) (τ := τ) (hTτ := hV)
+            (by rwa [Term.abstract, denote, Option.pure_def, Option.some_get])
+          dsimp at eq
+          subst τ
+          conv =>
+            enter [2,1,1]
+            rw [den_v]
+          rwa [Option.get_some]
+        conv_rhs =>
+          rw [fapply_eq_Image_singleton (Subtype.property _) mem_bool]
+          conv =>
+            enter [1,1,1]
+            rw [castZF_of_path_id]
+          rw [←fapply_eq_Image_singleton Id.IsFunc mem_bool,
+            fapply_Id mem_bool]
+    | int =>
+      simp only [int_cast_true_iff] at hTrue
+      subst hTrue
+      simp only [loosen]
+      rw [ite_cond_eq_true _ _ (eq_true (by rw [BEq.rfl]))]
+      mspec Std.Do.Spec.pure
+      mspec SMT.freshVar_spec (τ := .int) (name := name)
+      rename_i x!
+      mrename_i pre
+      mintro ∀St'
+      mpure pre
+      obtain ⟨eq, x!_fresh, hfvc⟩ := pre
+      mspec Std.Do.Spec.pure
+      mpure_intro
+
+      refine ⟨
+        Nat.le.intro hfvc.symm, ?_, eq, ?_,
+        Typing.bool St'.types true,
+        by simp only [fv, List.cons_union, List.nil_union, List.nil_subset],
+        (B.RenamingContext.toSMT «Δ» v).get (hx _ fv.mem_var),
+        ?_⟩
+      · rw [hfvc, eq]
+        have : St.types.keys.erase x! = St.types.keys := by
+          simpa only [List.erase_eq_self_iff]
+        simpa only [AList.keys_insert, this, List.length_cons, Nat.add_le_add_iff_right, ge_iff_le]
+      · rw [eq]
+        apply Typing.var
+        exact AList.lookup_insert St.types
+      · use
+          ?_,
+          ?_,
+          by rw [Term.abstract, denote, Option.pure_def, Option.some_inj],
+          by
+            rw [Term.abstract, denote, Option.pure_def, Option.some_inj]
+            simp only [Function.update_self, Option.get_some],
+          by simp only [FVok, fv, List.not_mem_nil, IsEmpty.forall_iff, implies_true],
+          by rw [Term.abstract, denote, Option.pure_def, Option.some_inj]
+        intros
+        have mem_int : ((B.RenamingContext.toSMT «Δ» v).get (hx _ fv.mem_var)).fst ∈ ⟦SMTType.int⟧ᶻ := by
+          obtain ⟨⟨V, τ, hV⟩, den_v⟩ := (hx _ fv.mem_var) |> Option.isSome_iff_exists.mp
+          have eq := PHOAS.denote_welltyped_eq
+            (t := (Term.var v).abstract (B.RenamingContext.toSMT «Δ») (fun v hv ↦ hx v hv))
+            ⟨St.types.abstract (B.RenamingContext.toSMT «Δ»),
+              PHOAS.WFTC.of_abstract, .int,
+              PHOAS.Typing.of_abstract hx (Typing.var St.types v SMTType.int ih)⟩
+            (T := V) (τ := τ) (hTτ := hV)
+            (by rwa [Term.abstract, denote, Option.pure_def, Option.some_get])
+          dsimp at eq
+          subst τ
+          conv =>
+            enter [2,1,1]
+            rw [den_v]
+          rwa [Option.get_some]
+        conv_rhs =>
+          rw [fapply_eq_Image_singleton (Subtype.property _) mem_int]
+          conv =>
+            enter [1,1,1]
+            rw [castZF_of_path_id]
+          rw [←fapply_eq_Image_singleton Id.IsFunc mem_int,
+            fapply_Id mem_int]
+    | unit =>
+      simp only [unit_cast_true_iff] at hTrue
+      subst hTrue
+      simp only [loosen]
+      rw [ite_cond_eq_true _ _ (eq_true (by rw [BEq.rfl]))]
+      mspec Std.Do.Spec.pure
+      mspec SMT.freshVar_spec (τ := .unit) (name := name)
+      rename_i x!
+      mrename_i pre
+      mintro ∀St'
+      mpure pre
+      obtain ⟨eq, x!_fresh, hfvc⟩ := pre
+      mspec Std.Do.Spec.pure
+      mpure_intro
+
+      refine ⟨
+        Nat.le.intro hfvc.symm, ?_, eq, ?_,
+        Typing.bool St'.types true,
+        by simp only [fv, List.cons_union, List.nil_union, List.nil_subset],
+        (B.RenamingContext.toSMT «Δ» v).get (hx _ fv.mem_var),
+        ?_⟩
+      · rw [hfvc, eq]
+        have : St.types.keys.erase x! = St.types.keys := by
+          simpa only [List.erase_eq_self_iff]
+        simpa only [AList.keys_insert, this, List.length_cons, Nat.add_le_add_iff_right, ge_iff_le]
+      · rw [eq]
+        apply Typing.var
+        exact AList.lookup_insert St.types
+      · use
+          ?_,
+          ?_,
+          by rw [Term.abstract, denote, Option.pure_def, Option.some_inj],
+          by
+            rw [Term.abstract, denote, Option.pure_def, Option.some_inj]
+            simp only [Function.update_self, Option.get_some],
+          by simp only [FVok, fv, List.not_mem_nil, IsEmpty.forall_iff, implies_true],
+          by rw [Term.abstract, denote, Option.pure_def, Option.some_inj]
+        intros
+        have mem_unit : ((B.RenamingContext.toSMT «Δ» v).get (hx _ fv.mem_var)).fst ∈ ⟦SMTType.unit⟧ᶻ := by
+          obtain ⟨⟨V, τ, hV⟩, den_v⟩ := (hx _ fv.mem_var) |> Option.isSome_iff_exists.mp
+          have eq := PHOAS.denote_welltyped_eq
+            (t := (Term.var v).abstract (B.RenamingContext.toSMT «Δ») (fun v hv ↦ hx v hv))
+            ⟨St.types.abstract (B.RenamingContext.toSMT «Δ»),
+              PHOAS.WFTC.of_abstract, .unit,
+              PHOAS.Typing.of_abstract hx (Typing.var St.types v SMTType.unit ih)⟩
+            (T := V) (τ := τ) (hTτ := hV)
+            (by rwa [Term.abstract, denote, Option.pure_def, Option.some_get])
+          dsimp at eq
+          subst τ
+          conv =>
+            enter [2,1,1]
+            rw [den_v]
+          rwa [Option.get_some]
+        conv_rhs =>
+          rw [fapply_eq_Image_singleton (Subtype.property _) mem_unit]
+          conv =>
+            enter [1,1,1]
+            rw [castZF_of_path_id]
+          rw [←fapply_eq_Image_singleton Id.IsFunc mem_unit,
+            fapply_Id mem_unit]
+    | pair α₁ α₂ α₁_ih α₂_ih =>
+      simp only [pair_cast_true_iff] at hTrue
+      obtain ⟨β₁, β₂, rfl, hα₁β₁, hα₂β₂⟩ := hTrue
+      simp only [loosen]
+      rw [ite_cond_eq_true _ _ (eq_true <| Bool.and_eq_true_iff.mp hTrue)]
+      mspec Std.Do.Spec.pure
+      mspec freshVar_spec
+      rename_i x!
+      mrename_i pre
+      mintro ∀St'
+      mpure pre
+      obtain ⟨eq1, x!_fresh, hfvc1⟩ := pre
+      -- specialize α₁_ih hα₁β₁
+      -- specialize α₂_ih hα₂β₂
+      clear α₁_ih α₂_ih
+      split_ifs with h₁ h₂
+      · simp only [beq_iff_eq] at h₁ h₂
+        subst β₁ β₂
+        mspec Std.Do.Spec.pure
+        mpure_intro
+        and_intros
+        · exact Nat.le.intro hfvc1.symm
+        · rw [hfvc1, eq1]
+          have : St.types.keys.erase x! = St.types.keys := by
+            simpa only [List.erase_eq_self_iff]
+          simpa only [AList.keys_insert, this, List.length_cons, Nat.add_le_add_iff_right, ge_iff_le]
+        · exact eq1
+        · apply Typing.var
+          rw [eq1]
+          simp only [AList.lookup_insert]
+        · rw [eq1]
+          apply Typing.eq (τ := α₁.pair α₂)
+          · apply Typing.var
+            rw [AList.lookup_insert]
+          · apply Typing.var
+            rw [AList.lookup_insert_ne]
+            · exact ih
+            · rintro rfl
+              rw [←AList.lookup_eq_none] at x!_fresh
+              rw [x!_fresh] at ih
+              nomatch ih
+        · simp only [fv, List.cons_append, List.nil_append, List.cons_union, List.nil_union, List.cons_subset, List.mem_insert_iff, true_or, List.nil_subset, and_self, Singleton.singleton, List.mem_singleton, or_true]
+        · let X := (B.RenamingContext.toSMT «Δ» v).get (hx _ fv.mem_var)
+          have den_v : ⟦(Term.var v).abstract (B.RenamingContext.toSMT «Δ») hx⟧ˢ = X := by
+            rw [Term.abstract, denote, Option.pure_def, Option.some_inj]
+          have den_x! : ⟦(Term.var x!).abstract (Function.update (B.RenamingContext.toSMT «Δ») x! X) (fun v hv ↦ by
+            rw [fv, List.mem_singleton] at hv
+            rw [hv, Function.update_self, Option.isSome_some])⟧ˢ = some X := by
+            rw [Term.abstract, denote, Option.pure_def, Option.some_inj]
+            simp only [Function.update_self, Option.get_some]
+          use X
+          admit
+      · admit
+      · admit
+      · admit
+    | «fun» τ σ τ_ih σ_ih => sorry
+    | option τ ih => sorry
+
+
+  | int Γ n => sorry
+  | bool Γ b => sorry
+  | app Γ f x τ σ _ _ _ _ => sorry
+  | lambda Γ vs τs t γ _ len_pos len_eq _ _ => sorry
+  | «forall» Γ vs τs P _ len_pos len_eq _ _ => sorry
+  | «exists» Γ vs τs P _ len_pos len_eq _ _ => sorry
+  | eq Γ t₁ t₂ τ _ _ _ _ => sorry
+  | and Γ t₁ t₂ _ _ _ _ => sorry
+  | or Γ t₁ t₂ _ _ _ _ => sorry
+  | not Γ t _ _ => sorry
+  | imp Γ t₁ t₂ _ _ _ _ => sorry
+  | ite Γ c t e τ _ _ _ _ _ _ => sorry
+  | some Γ t τ _ _ => sorry
+  | none Γ τ => sorry
+  | the Γ t τ _ _ => sorry
+  | pair Γ t₁ τ₁ t₂ τ₂ _ _ _ _ => sorry
+  | fst Γ t τ σ _ _ => sorry
+  | snd Γ t τ σ _ _ => sorry
+  | distinct Γ ts τ _ _ => sorry
+  | le Γ t₁ t₂ _ _ _ _ => sorry
+  | add Γ t₁ t₂ _ _ _ _ => sorry
+  | sub Γ t₁ t₂ _ _ _ _ => sorry
+  | mul Γ t₁ t₂ _ _ _ _ => sorry
+
 /--
 TODO: Current state: skeleton for the proof, the correct statement still needs to be filled in.
 -/
@@ -565,121 +876,6 @@ theorem castMembership_spec {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT.Typ
         · admit
       · mspec Std.Do.Spec.throw_StateT
 
-open Std.Do SMT ZFSet ShapeForcing
-
-/-- Convenience predicate for “all free variables are mapped by a renaming”. -/
-abbrev FVok («Δ» : B.𝒱 → Option B.Dom) (t : SMT.Term) : Prop :=
-  ∀ v ∈ SMT.fv t, (B.RenamingContext.toSMT «Δ» v).isSome = true
-
-/-- `loosen` returns a fresh variable `x! : β` and a Boolean equation `φ`
-    that pins `x!` to be the semantic cast of `x : α` via the canonical ZF map. -/
-@[spec]
-theorem loosen_spec
-  {Λ : SMT.TypeContext} {n : ℕ} {name : String}
-  {x : SMT.Term} {α β : SMTType}
-  (typ_x : Λ ⊢ x : α) (hTrue : (α ⊑ β) = true)
-  («Δ» : B.𝒱 → Option B.Dom)
-  (hx  : FVok «Δ» x) :
-  ⦃ fun ⟨E, Λ'⟩ => ⌜ Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤ Λ'.keys.length ⌝ ⦄
-    loosen name x α β
-  ⦃ ⇓? ⟨x!, φ⟩ ⟨E', Γ'⟩ =>
-     ⌜ n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤ Γ'.keys.length ∧
-       Γ' = Λ.insert x! β ∧
-       Γ' ⊢ (.var x!) : β ∧
-       Γ' ⊢ φ : .bool ∧
-       SMT.fv φ ⊆ SMT.fv x ∪ {x!} ∧
-       -- Denotation adequacy: x! denotes the forward cast of the denotation of x,
-       -- and φ holds (is zftrue) in every admissible renaming.
-        ∃ (hφ : FVok «Δ» φ) (X Φ X' : SMT.Dom)
-          (denx : ⟦x.abstract (B.RenamingContext.toSMT «Δ») hx⟧ˢ = some X)
-          (denφ : ⟦φ.abstract (B.RenamingContext.toSMT «Δ») hφ⟧ˢ = some Φ)
-          (denx! : ⟦(Term.var x!).abstract (Function.update (B.RenamingContext.toSMT «Δ») x! (some X)) (fun v hv ↦ by
-            rw [fv, List.mem_singleton] at hv
-            rw [hv, Function.update_self, Option.isSome_some])⟧ˢ = some X'),
-          (Φ.1 = zftrue →
-            let ⟨F, hF⟩ := castZF_of_path (CastPath.of_true α β hTrue);
-            X'.1 = @ᶻF ⟨X.1, by
-              rw [is_func_dom_eq]
-              let ⟨X, α', hX⟩ := X
-              obtain ⟨⟩ := SMT.PHOAS.denote_welltyped_eq
-                (t := x.abstract («Δ» := B.RenamingContext.toSMT «Δ») (fun v hv ↦ hx v hv))
-                ⟨Λ.abstract (B.RenamingContext.toSMT «Δ»), PHOAS.WFTC.of_abstract, α, PHOAS.Typing.of_abstract hx typ_x⟩ denx
-              exact hX⟩) ⌝ ⦄ := by
-  induction x with
-  | var v =>
-    mstart
-    mintro pre ∀St
-    mpure pre
-    obtain ⟨rfl, rfl, hfvc⟩ := pre
-    rw [loosen]
-    split_ifs with α_eq_β
-    · rw [beq_iff_eq] at α_eq_β
-      subst α_eq_β
-      mspec Std.Do.Spec.pure
-      mspec freshVar_spec
-      rename_i x!
-      mrename_i pre
-      mintro ∀St'
-      mpure pre
-      obtain ⟨types_eq, x!_fresh, hfvc'⟩ := pre
-      mspec Std.Do.Spec.pure
-      mpure_intro
-      and_intros
-      · exact Nat.le.intro hfvc'.symm
-      · rw [types_eq, AList.keys_insert, List.length_cons]
-        trans St.env.freshvarsc + 1
-        · exact Nat.le_of_eq hfvc'
-        · simp only [Nat.add_le_add_iff_right, ←AList.keys_erase]
-          rwa [AList.erase_of_not_mem x!_fresh]
-      · exact types_eq
-      · rw [types_eq]
-        apply Typing.var
-        apply AList.lookup_insert
-      · apply Typing.bool
-      · simp only [fv, List.cons_union, List.nil_union, List.nil_subset]
-      · use
-          by simp only [FVok, fv, List.not_mem_nil, IsEmpty.forall_iff, implies_true],
-          (B.RenamingContext.toSMT «Δ» v |>.get (hx _ fv.mem_var)),
-          ⟨zftrue, .bool, ZFBool.zftrue_mem_𝔹⟩,
-          (Function.update (B.RenamingContext.toSMT «Δ») x!
-            (some ((B.RenamingContext.toSMT «Δ» v).get (hx _ fv.mem_var))) x!).get
-              (by simpa using hx _ fv.mem_var),
-          by rw [SMT.Term.abstract, denote, Option.pure_def],
-          by rw [SMT.Term.abstract, denote, Option.pure_def]; congr,
-          by rw [SMT.Term.abstract, denote, Option.pure_def]
-        intro
-        simp only [Option.some_get, Function.update_self]
-
-    · done
-    · done
-    · done
-    · done
-    · done
-  | int n => sorry
-  | bool b => sorry
-  | app f x _ _ => sorry
-  | lambda v τs t _ => sorry
-  | «forall» v τs t _ => sorry
-  | «exists» v τs t _ => sorry
-  | as t τ _ => sorry
-  | eq t₁ t₂ _ _ => sorry
-  | and t₁ t₂ _ _ => sorry
-  | or t₁ t₂ _ _ => sorry
-  | not t _ => sorry
-  | imp t₁ t₂ _ _ => sorry
-  | ite c t e _ _ _ => sorry
-  | some t _ => sorry
-  | the t _ => sorry
-  | none => sorry
-  | pair t₁ t₂ _ _ => sorry
-  | fst t _ => sorry
-  | snd t _ => sorry
-  | distinct ts _ => sorry
-  | le t₁ t₂ _ _ => sorry
-  | add t₁ t₂ _ _ => sorry
-  | sub t₁ t₂ _ _ => sorry
-  | mul t₁ t₂ _ _ => sorry
-
 section encodeTerm_correct
 open B SMT ZFSet
 
@@ -689,7 +885,7 @@ theorem encodeTerm_spec.ℤ.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (E : B.Env) {
   ⦃fun ⟨E, Λ'⟩ ↦ ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤  Λ'.keys.length⌝⦄
     encodeTerm .ℤ E
   ⦃⇓? ⟨t', σ⟩ ⟨E', Γ'⟩ =>
-    ⌜n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤ Γ'.keys.length ∧ Γ' = Λ ∧
+    ⌜n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤ Γ'.keys.length + 1 ∧ Γ' = Λ ∧
     σ = α.toSMTType ∧ Γ' ⊢ t' : σ ∧
     ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
       ∃ denT', ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧ ⟨T, α, hT⟩ ≘ᶻ denT'⌝⦄ := by
@@ -719,9 +915,8 @@ theorem encodeTerm_spec.ℤ.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (E : B.Env) {
     mpure_intro
     and_intros
     · rw [freshvarsc_eq]
-      apply Nat.le_refl
-    · rw [freshvarsc_eq]
-      exact hlen
+      exact Nat.le_add_right S.env.freshvarsc 1
+    · rwa [freshvarsc_eq, Nat.add_le_add_iff_right]
     · trivial
     · rfl
     · apply SMT.Typing.lambda
@@ -802,7 +997,7 @@ theorem encodeTerm_spec.𝔹.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (E : B.Env) 
   ⦃fun ⟨E, Λ'⟩ ↦ ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤  Λ'.keys.length⌝⦄
     encodeTerm Term.𝔹 E
   ⦃⇓? ⟨t', σ⟩ ⟨E', Γ'⟩ =>
-    ⌜n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤ Γ'.keys.length ∧ Γ' = Λ ∧
+    ⌜n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤ Γ'.keys.length + 1 ∧ Γ' = Λ ∧
     σ = α.toSMTType ∧
     Γ' ⊢ t' : σ ∧
     ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
@@ -834,9 +1029,8 @@ theorem encodeTerm_spec.𝔹.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (E : B.Env) 
     mpure_intro
     and_intros
     · rw [freshvarsc_eq]
-      apply Nat.le_refl
-    · rw [freshvarsc_eq]
-      exact hlen
+      exact Nat.le_add_right S.env.freshvarsc 1
+    · rwa [freshvarsc_eq, Nat.add_le_add_iff_right]
     · trivial
     · rfl
     · apply SMT.Typing.lambda
@@ -917,14 +1111,14 @@ theorem encodeTerm_spec.var.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (v : B.𝒱) 
   (typ_t : E.context ⊢ .var v : α) {«Δ» : B.𝒱 → Option B.Dom}
   (Δ_fv : ∀ v_1 ∈ B.fv (B.Term.var v), («Δ» v_1).isSome = true) {T : ZFSet.{u_1}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(B.Term.var v).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, α, hT⟩) :
-  ⦃fun ⟨E, Λ'⟩ ↦ ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ n ≤  Λ'.keys.length⌝⦄
+  ⦃fun ⟨E', Λ'⟩ ↦ ⌜Λ' = Λ ∧ E'.freshvarsc = n ∧ n ≤  Λ'.keys.length⌝⦄
     encodeTerm (.var v) E
   ⦃⇓? ⟨t', σ⟩ ⟨E', Γ'⟩ =>
     ⌜n ≤ E'.freshvarsc ∧ E'.freshvarsc ≤  Γ'.keys.length ∧
       Γ' = Λ ∧ σ = α.toSMTType ∧ Γ' ⊢ t' : σ ∧
       ∃ (hΔ : ∀ v ∈ SMT.fv t', (RenamingContext.toSMT «Δ» v).isSome = true),
       ∃ denT',
-        ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧ ⟨T, ⟨α, hT⟩⟩ ≘ᶻ denT'⌝⦄ := by
+        ⟦t'.abstract (RenamingContext.toSMT «Δ») hΔ⟧ˢ = some denT' ∧ ⟨T, α, hT⟩ ≘ᶻ denT'⌝⦄ := by
   mstart
   mintro pre ∀S
   mpure pre
@@ -932,21 +1126,34 @@ theorem encodeTerm_spec.var.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (v : B.𝒱) 
 
   rw [encodeTerm]
   mvcgen
-  case vc1 τ' typ_t_enc τ typ_t τ'_eq =>
-    subst τ'
-
+  case vc1 τ τ_lookup =>
     and_intros
     · apply Nat.le_refl
     · exact hlen
     · trivial
-    · congr
-      have τ_eq := @denote_welltyped_eq ((B.Term.var v).abstract «Δ» Δ_fv) T α hT ?_ den_t
+    · rw [B.Term.abstract, B.denote, Option.pure_def, Option.some_get] at den_t
+      have hΔ : ∀ v' ∈ SMT.fv (.var v), (RenamingContext.toSMT «Δ» v').isSome = true := by
+        intro _ hv
+        rw [SMT.fv, List.mem_singleton, eq_comm] at hv
+        subst hv
+        simp only [RenamingContext.toSMT, den_t, Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.isSome_some]
+
+      set den₁ := RenamingContext.toSMT «Δ» v with den₁_def
+      simp only [RenamingContext.toSMT, Option.pure_def, Option.bind_eq_bind] at den₁_def
+      rw [den_t, Option.bind_some] at den₁_def
+
+      have := @PHOAS.denote_welltyped_eq
+        (t := (SMT.Term.var v).abstract (RenamingContext.toSMT «Δ») (fun v hv ↦ by apply hΔ; simpa only [B.fv, SMT.fv] using hv))
+      simp [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.some_get] at this
+      dsimp [den₁] at den₁_def
+      have := @this _ _ _ ?_ den₁_def
       on_goal 2 =>
-        use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, τ
-        exact @Typing.of_abstract (B.Dom) («Δ» := «Δ») ?_ (.var v) E.context τ Δ_fv (B.Typing.var typ_t)
-      exact τ_eq
+        use S.types.abstract (RenamingContext.toSMT «Δ»), PHOAS.WFTC.of_abstract, τ
+        apply SMT.PHOAS.Typing.of_abstract
+        exact SMT.Typing.var S.types v τ τ_lookup
+      exact this
     · apply SMT.Typing.var
-      exact typ_t_enc
+      exact τ_lookup
     · rw [B.Term.abstract, B.denote, Option.pure_def, Option.some_get] at den_t
       have hΔ : ∀ v' ∈ SMT.fv (.var v), (RenamingContext.toSMT «Δ» v').isSome = true := by
         intro _ hv

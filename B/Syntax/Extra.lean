@@ -79,7 +79,7 @@ partial def Term.pretty (b : Bool) : Term -> Nat -> Std.Format
   | .app f x => λ _ => Term.pretty b f 300 ++ .paren (Term.pretty b x 0)
   | .pow S => «prefix» (Term.pretty b) 290 "𝒫 " S
   | .min S => «prefix» (Term.pretty b) 290 "min " S
-  | .max S => «prefix» (Term.pretty b) 290 "min " S
+  | .max S => «prefix» (Term.pretty b) 290 "max " S
   | .card S => λ _ => "‖" ++ Term.pretty b S 0 ++ "‖ᴮ"
 
 end B

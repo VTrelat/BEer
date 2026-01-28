@@ -1,6 +1,6 @@
 import Extra.BeerElab
 
-#beer (verbose) "Test/Test.mch"
+-- #beer (verbose) "Test/Test.mch"
 
 -- #beer "Test/Union.mch"
 

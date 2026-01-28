@@ -325,7 +325,7 @@ def EncoderState.toSMTFile : Encoder String := do
 def encodePOG (pogpath : System.FilePath) (show_encoding := false): IO String := do
   let pog ← readPOG pogpath |>.propagateError
   let ⟨(), st⟩ ← POGtoB pog |>.run ∅ |>.run |>.propagateError
-  dbg_trace st.env
+  -- dbg_trace st.env
   let st' ← match encode st.env |>.run ∅ with
     | .ok ⟨(), st'⟩ => pure st'
     | .error e => throw <| IO.userError e

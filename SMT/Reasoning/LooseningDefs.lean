@@ -189,13 +189,13 @@ inductive CastPath : SMTType → SMTType → Type
 | option {a b} (p : CastPath a b) :
   CastPath (.option a) (.option b)
 | funBool {a a'} (p : CastPath a a') :
-    CastPath (.fun a .bool) (.fun a' .bool)
+  CastPath (.fun a .bool) (.fun a' .bool)
 | funOpt_fun {a a' b b'} (pd : CastPath a a') (pc : CastPath b b') :
-    CastPath (.fun a (.option b)) (.fun a' (.option b'))
+  CastPath (.fun a (.option b)) (.fun a' (.option b'))
 | funOpt_graph {a a' b b'} (pd : CastPath a a') (pc : CastPath b b') :
-    CastPath (.fun a (.option b)) (.fun (.pair a' b') .bool)
+  CastPath (.fun a (.option b)) (.fun (.pair a' b') .bool)
 | pairPred {a a' b b'} (p₁ : CastPath a a') (p₂ : CastPath b b') :
-    CastPath (.fun (.pair a b) .bool) (.fun (.pair a' b') .bool)
+  CastPath (.fun (.pair a b) .bool) (.fun (.pair a' b') .bool)
   deriving BEq, DecidableEq
 
 end ShapeForcing
@@ -205,51 +205,65 @@ open ShapeForcing
 /-- Build a `CastPath α β` from a truth witness `(α ⊑ β) = true` -/
 noncomputable def CastPath.of_true (α β : SMTType) (h : (α ⊑ β) = true) :
     CastPath α β :=
-  match hα : α with
+  match α with
   | .unit => by
-      subst hα
       have : β = .unit := unit_cast_true_iff.mp h
       exact this ▸ CastPath.unit
   | .int => by
-      subst hα
       have : β = .int := int_cast_true_iff.mp h
       exact this ▸ CastPath.int
   | .bool => by
-      subst hα
+      -- subst hα
       have : β = .bool := bool_cast_true_iff.mp h
       exact this ▸ CastPath.bool
   | .pair a₁ a₂ => by
-      subst hα
       -- shape forcing gives us β₁, β₂ and recursive witnesses
-      choose β₁ β₂ hβ h₁ h₂ using (pair_cast_true_iff).mp h
-      subst hβ
-      exact CastPath.pair (CastPath.of_true a₁ β₁ h₁) (CastPath.of_true a₂ β₂ h₂)
+      -- choose β₁ β₂ hβ h₁ h₂ using (pair_cast_true_iff).mp h
+      let hβ := (Classical.choose_spec <| Classical.choose_spec (pair_cast_true_iff.mp h)).1
+      let h₁ := (Classical.choose_spec <| Classical.choose_spec (pair_cast_true_iff.mp h)).2.1
+      let h₂ := (Classical.choose_spec <| Classical.choose_spec (pair_cast_true_iff.mp h)).2.2
+      let β₁ := Classical.choose (pair_cast_true_iff.mp h)
+      let β₂ := Classical.choose <| Classical.choose_spec (pair_cast_true_iff.mp h)
+      exact hβ ▸ CastPath.pair (CastPath.of_true a₁ β₁ h₁) (CastPath.of_true a₂ β₂ h₂)
   | .option a => by
-      subst hα
+      -- subst hα
       choose β' hβ ha using (option_cast_true_iff).mp h
       subst hβ
       exact CastPath.option (CastPath.of_true a β' ha)
   | .fun (.pair a b) .bool => by
-      subst hα
+      -- subst hα
       choose a' b' hγ ha hb using (pairPred_cast_true_iff).mp h
       subst hγ
       exact CastPath.pairPred (CastPath.of_true a a' ha) (CastPath.of_true b b' hb)
   | .fun a .bool => by
-      subst hα
-      choose a' ha hdom using (fun_bool_cast_true_iff).mp h
-      subst ha
-      exact CastPath.funBool (CastPath.of_true a a' hdom)
+      -- subst hα
+      -- choose a' ha hdom using (fun_bool_cast_true_iff).mp h
+      let ha := (Classical.choose_spec (fun_bool_cast_true_iff.mp h)).1
+      let hdom := (Classical.choose_spec (fun_bool_cast_true_iff.mp h)).2
+      let a' := Classical.choose (fun_bool_cast_true_iff.mp h)
+      -- subst ha
+      exact ha ▸ CastPath.funBool (CastPath.of_true a a' hdom)
   | .fun a (.option b) => by
-      subst hα
+      -- subst hα
       let cases := (fun_opt_cast_true_iff).mp h
       if hcases : ∃ α' β', β = α'.fun β'.option ∧ a ⊑ α' = true ∧ b ⊑ β' = true then
-        choose a' b' hγ ha hb using hcases
-        subst hγ
-        exact CastPath.funOpt_fun (CastPath.of_true a a' ha) (CastPath.of_true b b' hb)
+        -- choose a' b' hγ ha hb using hcases
+        let hγ := (Classical.choose_spec <| Classical.choose_spec hcases).1
+        let ha := (Classical.choose_spec <| Classical.choose_spec hcases).2.1
+        let hb := (Classical.choose_spec <| Classical.choose_spec hcases).2.2
+        let a' := Classical.choose hcases
+        let b' := Classical.choose <| Classical.choose_spec hcases
+        -- subst hγ
+        exact hγ ▸ CastPath.funOpt_fun (CastPath.of_true a a' ha) (CastPath.of_true b b' hb)
       else
-        choose a' b' hγ ha hb using Or.resolve_left cases hcases
-        subst hγ
-        exact CastPath.funOpt_graph (CastPath.of_true a a' ha) (CastPath.of_true b b' hb)
+        -- choose a' b' hγ ha hb using Or.resolve_left cases hcases
+        let hγ := (Classical.choose_spec <| Classical.choose_spec (Or.resolve_left cases hcases)).1
+        let ha := (Classical.choose_spec <| Classical.choose_spec (Or.resolve_left cases hcases)).2.1
+        let hb := (Classical.choose_spec <| Classical.choose_spec (Or.resolve_left cases hcases)).2.2
+        let a' := Classical.choose (Or.resolve_left cases hcases)
+        let b' := Classical.choose <| Classical.choose_spec (Or.resolve_left cases hcases)
+        -- subst hγ
+        exact hγ ▸ CastPath.funOpt_graph (CastPath.of_true a a' ha) (CastPath.of_true b b' hb)
   | SMTType.fun (SMTType.pair _ _) (SMTType.pair _ _)
   | SMTType.fun (SMTType.pair _ _) (SMTType.fun _ _)
   | SMTType.fun (SMTType.pair _ _) SMTType.unit
@@ -274,7 +288,7 @@ noncomputable def CastPath.of_true (α β : SMTType) (h : (α ⊑ β) = true) :
   | SMTType.fun SMTType.bool (SMTType.fun _ _)
   | SMTType.fun SMTType.bool SMTType.unit
   | SMTType.fun SMTType.bool SMTType.int => by
-    subst hα
+    -- subst hα
     simp only [castable?, Bool.false_eq_true] at h
 
 noncomputable section CastPathToZF
@@ -941,14 +955,56 @@ theorem castZF_of_path__funBool_id.{u} {α : SMTType} (hTrue : (α ⊑ α) = tru
             rw [ZFSet.range_Id]
           nomatch z_ran hz
 
-lemma castZF_of_path_of_true_funBool_aux {α : SMTType} (h : (α.fun .bool ⊑ α.fun .bool) = true) :
+-- @[push_cast]
+-- theorem CastPath.push_cast_left {α β γ : SMTType} {p : CastPath α β} (h : α = γ) :
+--     h ▸ p.funBool = (h ▸ p).funBool := by
+--   cases h
+--   rfl
+
+@[push_cast]
+theorem CastPath.funBool.push_cast {α β γ : SMTType} {p : CastPath α β} (h : β.fun .bool = γ.fun .bool) :
+    h ▸ p.funBool = ((SMTType.fun.inj h).1 ▸ p).funBool := by
+  cases h
+  rfl
+
+@[push_cast]
+theorem CastPath.of_true.push_cast {α β γ : SMTType} {h : β = γ} {h' : α ⊑ β = true} :
+    h ▸ CastPath.of_true α β h' = CastPath.of_true α γ (h ▸ h') := by
+  cases h
+  rfl
+
+lemma castZF_of_path_of_true_funBool_aux {α : SMTType} {h : (α.fun .bool ⊑ α.fun .bool) = true} :
   castZF_of_path (CastPath.of_true (α.fun SMTType.bool) (α.fun SMTType.bool) h) =
-  castZF_funBool (castZF_of_path (CastPath.of_true α α (by simpa using h))) := by
+  castZF_funBool (castZF_of_path (CastPath.of_true α α (by cases α <;> exact h))) := by
   conv =>
     enter [1,1]
     unfold CastPath.of_true
     simp only [SMTType.fun.injEq, reduceCtorEq, and_false, false_and, exists_const, ↓reduceDIte]
-  admit
+  cases α with
+  | bool =>
+    push_cast
+    rfl
+  | int =>
+    push_cast
+    rfl
+  | unit =>
+    push_cast
+    rfl
+  | «fun» arg ret =>
+    push_cast
+    rfl
+  | option τ =>
+    push_cast
+    rfl
+  | pair α β =>
+    dsimp
+    rw [castZF_of_path__funBool_id]
+    · admit
+    · admit
+
+
+
+
 
 
 theorem castZF_of_path_id {α : SMTType} (h : (α ⊑ α) = true) :
@@ -986,9 +1042,48 @@ theorem castZF_of_path_id {α : SMTType} (h : (α ⊑ α) = true) :
         ext1 z
         iff_intro hz hz
         · simp only [mem_sep, mem_lambda, ↓existsAndEq, mem_funs, and_true]
-          admit
-        · admit
-
+          conv at hz =>
+            enter [1,1]
+            rw [castZF_of_path_of_true_funBool_aux, α_ih]
+          simp only [range_Id, mem_lambda, ↓existsAndEq,
+            mem_funs, and_true] at hz
+          obtain ⟨ζ, rfl, hζ, -, ζ_def⟩ := hz
+          rw [dif_pos hζ] at ζ_def
+          simp only [range_Id, pair_inj, ↓existsAndEq, true_and, dif_pos hζ]
+          rw [lambda_ext_iff (fun _ ↦ by rw [dif_pos (by rwa [range_Id])]; apply fapply_mem_range)]
+          refine ⟨?_, hζ, ?_, ?_⟩
+          · intro y hy
+            rw [dif_pos (by rwa [range_Id]), α_ih, dif_pos (by rwa [range_Id])]
+            simp only [mem_sep]
+          · exact lambda_subset
+          · intro y hy
+            rw [α_ih]
+            specialize ζ_def y hy
+            simp only [lambda_spec] at ζ_def ⊢
+            rw [dif_pos (by rwa [range_Id])] at ζ_def
+            obtain ⟨w, ⟨w_def, w_𝔹, w_eq⟩, w_unq⟩ := ζ_def
+            exists w, ?_
+            · refine ⟨hy, w_𝔹, ?_⟩
+              rw [dif_pos (by rwa [range_Id]), w_eq]
+              simp only [mem_sep]
+            · rintro w' ⟨-, w'_𝔹, w'_eq⟩
+              rw [dif_pos (by rwa [range_Id])] at w'_eq
+              rw [w_eq, w'_eq]
+              simp only [mem_sep]
+        · rw [α_ih] at hz
+          simp only [mem_sep, subset_refl, subset_of_empty, mem_lambda] at hz
+          obtain ⟨f₁, f₂, rfl, hf₁, hf₂, rfl⟩ := hz
+          rw [mem_funs] at hf₁
+          rw [dif_pos hf₁, castZF_of_path_of_true_funBool_aux, α_ih, lambda_spec]
+          and_intros
+          · rwa [←mem_funs] at hf₁
+          · apply mem_funs_of_lambda
+            intro x hx
+            rw [dif_pos (by rwa [range_Id])]
+            apply fapply_mem_range
+          · rw [dif_pos hf₁, lambda_ext_iff (fun _ ↦ by rw [dif_pos (by rwa [range_Id])]; apply fapply_mem_range)]
+            intro y hy
+            simp only [mem_sep]
       rwa [this, castZF_of_path__funBool_id hα]
     | option β => admit
   | option τ ih => admit
