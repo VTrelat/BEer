@@ -1,3 +1,5 @@
+<img src="https://wakatime.com/badge/user/8d0110fb-6b70-4990-ab86-45c404715c2b/project/a38e0d01-6529-445e-b548-0eaa60613112.svg" alt="wakatime">
+
 # <img src=".assets/beer.png" height="60px"> BEer
 
 BEer (**B** **E**ncod**er**) translates Atelier B proof obligation `.pog` files into SMT-LIB v2.7 `.smt` files via a _certified_ higher-order encoding.
