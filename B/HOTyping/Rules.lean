@@ -5,124 +5,124 @@ namespace B.PHOAS
 
 section
 set_option hygiene false
-local notation:90 Γ:90 " ⊢ " x " : " τ:90 => Typing Γ x τ
+local notation:90 Γ:90 " ⊢ᴮ' " x " : " τ:90 => Typing Γ x τ
 -- local notation:90 Γ:90 " ⊩ " xs " : " τs:90 => Typing' Γ xs τs
 inductive Typing.{u} {𝒱 : Type u} [DecidableEq 𝒱] : TypeContext 𝒱 → Term 𝒱 → BType → Prop where
   | var {Γ v τ} :
       Γ v = some τ
     ----------------------
-    → Γ ⊢ .var v : τ
-  | int {Γ n} : Γ ⊢ .int n : .int
-  | bool {Γ b} : Γ ⊢ .bool b : .bool
+    → Γ ⊢ᴮ' .var v : τ
+  | int {Γ n} : Γ ⊢ᴮ' .int n : .int
+  | bool {Γ b} : Γ ⊢ᴮ' .bool b : .bool
   | maplet {Γ α β x y}:
-      Γ ⊢ x : α
-    → Γ ⊢ y : β
+      Γ ⊢ᴮ' x : α
+    → Γ ⊢ᴮ' y : β
     ----------------------------
-    → Γ ⊢ x ↦ᴮ' y : α ×ᴮ β
+    → Γ ⊢ᴮ' x ↦ᴮ' y : α ×ᴮ β
   | add {Γ x y} :
-      Γ ⊢ x : .int
-    → Γ ⊢ y : .int
+      Γ ⊢ᴮ' x : .int
+    → Γ ⊢ᴮ' y : .int
     -------------------------
-    → Γ ⊢ x +ᴮ' y : .int
+    → Γ ⊢ᴮ' x +ᴮ' y : .int
   | sub {Γ x y} :
-      Γ ⊢ x : .int
-    → Γ ⊢ y : .int
+      Γ ⊢ᴮ' x : .int
+    → Γ ⊢ᴮ' y : .int
     -------------------------
-    → Γ ⊢ x -ᴮ' y : .int
+    → Γ ⊢ᴮ' x -ᴮ' y : .int
   | mul {Γ x y} :
-      Γ ⊢ x : .int
-    → Γ ⊢ y : .int
+      Γ ⊢ᴮ' x : .int
+    → Γ ⊢ᴮ' y : .int
     -------------------------
-    → Γ ⊢ x *ᴮ' y : .int
+    → Γ ⊢ᴮ' x *ᴮ' y : .int
   | and {Γ x y} :
-      Γ ⊢ x : .bool
-    → Γ ⊢ y : .bool
+      Γ ⊢ᴮ' x : .bool
+    → Γ ⊢ᴮ' y : .bool
     -------------------------
-    → Γ ⊢ x ∧ᴮ' y : .bool
+    → Γ ⊢ᴮ' x ∧ᴮ' y : .bool
   | not {Γ x} :
-      Γ ⊢ x : .bool
+      Γ ⊢ᴮ' x : .bool
     ------------------------
-    → Γ ⊢ ¬ᴮ' x : .bool
+    → Γ ⊢ᴮ' ¬ᴮ' x : .bool
   | eq {Γ α x y} :
-      Γ ⊢ x : α
-    → Γ ⊢ y : α
+      Γ ⊢ᴮ' x : α
+    → Γ ⊢ᴮ' y : α
     ------------------------
-    → Γ ⊢ x =ᴮ' y : .bool
+    → Γ ⊢ᴮ' x =ᴮ' y : .bool
   | le {Γ x y} :
-      Γ ⊢ x : .int
-    → Γ ⊢ y : .int
+      Γ ⊢ᴮ' x : .int
+    → Γ ⊢ᴮ' y : .int
     ------------------------
-    → Γ ⊢ x ≤ᴮ' y : .bool
-  | ℤ {Γ} : Γ ⊢ .ℤ : .set .int
-  | 𝔹 {Γ} : Γ ⊢ .𝔹 : .set .bool
+    → Γ ⊢ᴮ' x ≤ᴮ' y : .bool
+  | ℤ {Γ} : Γ ⊢ᴮ' .ℤ : .set .int
+  | 𝔹 {Γ} : Γ ⊢ᴮ' .𝔹 : .set .bool
   | mem {Γ α x S}:
-      Γ ⊢ x : α
-    → Γ ⊢ S : .set α
+      Γ ⊢ᴮ' x : α
+    → Γ ⊢ᴮ' S : .set α
     --------------------------
-    → Γ ⊢ x ∈ᴮ' S : .bool
+    → Γ ⊢ᴮ' x ∈ᴮ' S : .bool
   | collect {Γ : TypeContext 𝒱} {n : ℕ} (α : Fin n → BType) (D : Fin n → Term 𝒱) (P : (Fin n → 𝒱) → Term 𝒱) :
       (n_pos : 0 < n)
-    → (typD : ∀ i : Fin n, Γ ⊢ D i : (.set <| α i))
-    → (typP : ∀ v : Fin n → 𝒱, Γ.update v α ⊢ P v : .bool)
+    → (typD : ∀ i : Fin n, Γ ⊢ᴮ' D i : (.set <| α i))
+    → (typP : ∀ v : Fin n → 𝒱, Γ.update v α ⊢ᴮ' P v : .bool)
     --------------------------------------------------
-    → Γ ⊢ .collect (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (D ⟨0, n_pos⟩)) P : .set (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ×ᴮ α ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (α ⟨0, n_pos⟩))
+    → Γ ⊢ᴮ' .collect (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (D ⟨0, n_pos⟩)) P : .set (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ×ᴮ α ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (α ⟨0, n_pos⟩))
   | pow {Γ α S}:
-      Γ ⊢ S : .set α
+      Γ ⊢ᴮ' S : .set α
     ---------------------------------
-    → Γ ⊢ 𝒫ᴮ' S : .set (.set α)
+    → Γ ⊢ᴮ' 𝒫ᴮ' S : .set (.set α)
   | cprod {Γ α β S T}:
-      Γ ⊢ S : .set α
-    → Γ ⊢ T : .set β
+      Γ ⊢ᴮ' S : .set α
+    → Γ ⊢ᴮ' T : .set β
     -----------------------------
-    → Γ ⊢ S ⨯ᴮ' T : .set (α ×ᴮ β)
+    → Γ ⊢ᴮ' S ⨯ᴮ' T : .set (α ×ᴮ β)
   | union {Γ α S T}:
-      Γ ⊢ S : .set α
-    → Γ ⊢ T : .set α
+      Γ ⊢ᴮ' S : .set α
+    → Γ ⊢ᴮ' T : .set α
     -----------------------------
-    → Γ ⊢ S ∪ᴮ' T : .set α
+    → Γ ⊢ᴮ' S ∪ᴮ' T : .set α
   | inter {Γ α S T}:
-      Γ ⊢ S : .set α
-    → Γ ⊢ T : .set α
+      Γ ⊢ᴮ' S : .set α
+    → Γ ⊢ᴮ' T : .set α
     -----------------------------
-    → Γ ⊢ S ∩ᴮ' T : .set α
+    → Γ ⊢ᴮ' S ∩ᴮ' T : .set α
   | pfun {Γ α β S T}:
-      Γ ⊢ S : .set α
-    → Γ ⊢ T : .set β
+      Γ ⊢ᴮ' S : .set α
+    → Γ ⊢ᴮ' T : .set β
     -----------------------------
-    → Γ ⊢ S ⇸ᴮ' T : .set (.set (α ×ᴮ β))
+    → Γ ⊢ᴮ' S ⇸ᴮ' T : .set (.set (α ×ᴮ β))
   | all {Γ : TypeContext 𝒱} {n : ℕ} (α : Fin n → BType) (D : Fin n → Term 𝒱) (P : (Fin n → 𝒱) → Term 𝒱) :
       (n_pos : 0 < n)
-    → (typD : ∀ i : Fin n, Γ ⊢ D i : (.set <| α i))
-    → (typP : ∀ v, Γ.update v α ⊢ P v : .bool)
+    → (typD : ∀ i : Fin n, Γ ⊢ᴮ' D i : (.set <| α i))
+    → (typP : ∀ v, Γ.update v α ⊢ᴮ' P v : .bool)
     --------------------------------------------------
-    → Γ ⊢ .all (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (D ⟨0, n_pos⟩)) P : .bool
+    → Γ ⊢ᴮ' .all (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (D ⟨0, n_pos⟩)) P : .bool
   | lambda {Γ : TypeContext 𝒱} {n : ℕ} (α : Fin n → BType) (β : BType) (D : Fin n → Term 𝒱) (E : (Fin n → 𝒱) → Term 𝒱) :
       (n_pos : 0 < n)
-    → (typD : ∀ i : Fin n, Γ ⊢ D i : (.set <| α i))
-    → (typE : ∀ v, Γ.update v α ⊢ E v : β)
+    → (typD : ∀ i : Fin n, Γ ⊢ᴮ' D i : (.set <| α i))
+    → (typE : ∀ v, Γ.update v α ⊢ᴮ' E v : β)
     --------------------------------------------------
-    → Γ ⊢ .lambda (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (D ⟨0, n_pos⟩)) E : .set ((Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ×ᴮ α ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (α ⟨0, n_pos⟩)) ×ᴮ β)
+    → Γ ⊢ᴮ' .lambda (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (D ⟨0, n_pos⟩)) E : .set ((Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ×ᴮ α ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (α ⟨0, n_pos⟩)) ×ᴮ β)
   | app {Γ α β f x}:
-      Γ ⊢ f : .set (α ×ᴮ β)
-    → Γ ⊢ x : α
+      Γ ⊢ᴮ' f : .set (α ×ᴮ β)
+    → Γ ⊢ᴮ' x : α
     ------------------------
-    → Γ ⊢ .app f x : β
+    → Γ ⊢ᴮ' .app f x : β
   | card {Γ α S}:
-      Γ ⊢ S : .set α
+      Γ ⊢ᴮ' S : .set α
     ------------------------
-    → Γ ⊢ |S|ᴮ' : .int
+    → Γ ⊢ᴮ' |S|ᴮ' : .int
   | min {Γ S}:
-      Γ ⊢ S : .set .int
+      Γ ⊢ᴮ' S : .set .int
     ------------------------
-    → Γ ⊢ .min S : .int
+    → Γ ⊢ᴮ' .min S : .int
   | max {Γ S}:
-      Γ ⊢ S : .set .int
+      Γ ⊢ᴮ' S : .set .int
     ------------------------
-    → Γ ⊢ .max S : .int
+    → Γ ⊢ᴮ' .max S : .int
 end
 
-notation:90 Γ:90 " ⊢ " x " : " τ:90 => Typing Γ x τ
-notation:90 "⊢ " x " : "  τ:90 => Typing ∅ x τ
+notation:90 Γ:90 " ⊢ᴮ' " x " : " τ:90 => Typing Γ x τ
+notation:90 "⊢ᴮ' " x " : "  τ:90 => Typing ∅ x τ
 
 section RuleInversion
 
@@ -174,30 +174,30 @@ theorem Fin.foldl_cprod_inj {𝒱} {n} {αs βs : Fin n → Term 𝒱} {α β : 
       | succ i => exact r ⟨i, Nat.succ_lt_succ_iff.mp hi⟩
 
 namespace Typing
-theorem 𝔹E       {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {τ} : Γ ⊢ .𝔹 : τ → τ = .set .bool := λ h => match h with | .𝔹 => rfl
-theorem ℤE       {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {τ} : Γ ⊢ .ℤ : τ → τ = .set .int := λ h => match h with | .ℤ => rfl
-theorem varE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {v τ} : Γ ⊢ .var v : τ → Γ v = some τ := λ h => match h with | .var h => h
-theorem intE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n τ} : Γ ⊢ .int n : τ → τ = .int := λ h => match h with | .int => rfl
-theorem boolE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {b τ} : Γ ⊢ .bool b : τ → τ = .bool := λ h => match h with | .bool => rfl
-theorem mapletE  {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ x ↦ᴮ' y : τ → ∃ α β, τ = α ×ᴮ β ∧ Γ ⊢ x : α ∧ Γ ⊢ y : β := λ h => match h with | .maplet h h' => ⟨_, _, rfl, h, h'⟩
-theorem addE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ x +ᴮ' y : τ → τ = .int ∧ Γ ⊢ x : .int ∧ Γ ⊢ y : .int := λ h => match h with | .add h h' => ⟨rfl, h, h'⟩
-theorem subE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ x -ᴮ' y : τ → τ = .int ∧ Γ ⊢ x : .int ∧ Γ ⊢ y : .int := λ h => match h with | .sub h h' => ⟨rfl, h, h'⟩
-theorem mulE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ x *ᴮ' y : τ → τ = .int ∧ Γ ⊢ x : .int ∧ Γ ⊢ y : .int := λ h => match h with | .mul h h' => ⟨rfl, h, h'⟩
-theorem andE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ x ∧ᴮ' y : τ → τ = .bool ∧ Γ ⊢ x : .bool ∧ Γ ⊢ y : .bool := λ h => match h with | .and h h' => ⟨rfl, h, h'⟩
-theorem notE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x τ} : Γ ⊢ ¬ᴮ' x : τ → τ = .bool ∧ Γ ⊢ x : .bool := λ h => match h with | .not h => ⟨rfl, h⟩
-theorem eqE      {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ x =ᴮ' y : τ → τ = .bool ∧ ∃ α, Γ ⊢ x : α ∧ Γ ⊢ y : α := λ h => match h with | .eq h h' => ⟨rfl, _, h, h'⟩
-theorem leE      {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ x ≤ᴮ' y : τ → τ = .bool ∧ Γ ⊢ x : .int ∧ Γ ⊢ y : .int := λ h => match h with | .le h h' => ⟨rfl, h, h'⟩
-theorem memE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x S τ} : Γ ⊢ x ∈ᴮ' S : τ → τ  = .bool ∧ ∃ α, Γ ⊢ x : α ∧ Γ ⊢ S : .set α := λ h => match h with | .mem h h' => ⟨rfl, _, h, h'⟩
-theorem powE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S τ} : Γ ⊢ 𝒫ᴮ' S : τ → ∃ β, τ = .set (.set β) ∧ Γ ⊢ S : .set β := λ h => match h with | .pow h => ⟨_, rfl, h⟩
-theorem cprodE   {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S T τ} : Γ ⊢ S ⨯ᴮ' T : τ → ∃ α β, τ = .set (α ×ᴮ β) ∧ Γ ⊢ S : .set α ∧ Γ ⊢ T : .set β := by rintro ⟨⟩; rename_i α β _ _; exists α, β
-theorem unionE   {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S T τ} : Γ ⊢ S ∪ᴮ' T : τ → ∃ α, τ = .set α ∧ Γ ⊢ S : .set α ∧ Γ ⊢ T : .set α := λ h => match h with | .union h h' => ⟨_, rfl, h, h'⟩
-theorem interE   {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S T τ} : Γ ⊢ S ∩ᴮ' T : τ → ∃ α, τ = .set α ∧ Γ ⊢ S : .set α ∧ Γ ⊢ T : .set α := λ h => match h with | .inter h h' => ⟨_, rfl, h, h'⟩
-theorem pfunE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S T τ} : Γ ⊢ S ⇸ᴮ' T : τ → ∃ α β, τ = .set (.set (α ×ᴮ β)) ∧ Γ ⊢ S : .set α ∧ Γ ⊢ T : .set β := λ h => match h with | .pfun h h' => ⟨_, _, rfl, h, h'⟩
-theorem collectE {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n D P τ} : (h : Γ ⊢ .collect D P : τ) → 0 < n ∧ (∃! αs_Ds : (Fin n → BType) × (Fin n → Term 𝒱),
+theorem 𝔹E       {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {τ} : Γ ⊢ᴮ' .𝔹 : τ → τ = .set .bool := λ h => match h with | .𝔹 => rfl
+theorem ℤE       {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {τ} : Γ ⊢ᴮ' .ℤ : τ → τ = .set .int := λ h => match h with | .ℤ => rfl
+theorem varE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {v τ} : Γ ⊢ᴮ' .var v : τ → Γ v = some τ := λ h => match h with | .var h => h
+theorem intE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n τ} : Γ ⊢ᴮ' .int n : τ → τ = .int := λ h => match h with | .int => rfl
+theorem boolE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {b τ} : Γ ⊢ᴮ' .bool b : τ → τ = .bool := λ h => match h with | .bool => rfl
+theorem mapletE  {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ᴮ' x ↦ᴮ' y : τ → ∃ α β, τ = α ×ᴮ β ∧ Γ ⊢ᴮ' x : α ∧ Γ ⊢ᴮ' y : β := λ h => match h with | .maplet h h' => ⟨_, _, rfl, h, h'⟩
+theorem addE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ᴮ' x +ᴮ' y : τ → τ = .int ∧ Γ ⊢ᴮ' x : .int ∧ Γ ⊢ᴮ' y : .int := λ h => match h with | .add h h' => ⟨rfl, h, h'⟩
+theorem subE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ᴮ' x -ᴮ' y : τ → τ = .int ∧ Γ ⊢ᴮ' x : .int ∧ Γ ⊢ᴮ' y : .int := λ h => match h with | .sub h h' => ⟨rfl, h, h'⟩
+theorem mulE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ᴮ' x *ᴮ' y : τ → τ = .int ∧ Γ ⊢ᴮ' x : .int ∧ Γ ⊢ᴮ' y : .int := λ h => match h with | .mul h h' => ⟨rfl, h, h'⟩
+theorem andE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ᴮ' x ∧ᴮ' y : τ → τ = .bool ∧ Γ ⊢ᴮ' x : .bool ∧ Γ ⊢ᴮ' y : .bool := λ h => match h with | .and h h' => ⟨rfl, h, h'⟩
+theorem notE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x τ} : Γ ⊢ᴮ' ¬ᴮ' x : τ → τ = .bool ∧ Γ ⊢ᴮ' x : .bool := λ h => match h with | .not h => ⟨rfl, h⟩
+theorem eqE      {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ᴮ' x =ᴮ' y : τ → τ = .bool ∧ ∃ α, Γ ⊢ᴮ' x : α ∧ Γ ⊢ᴮ' y : α := λ h => match h with | .eq h h' => ⟨rfl, _, h, h'⟩
+theorem leE      {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x y τ} : Γ ⊢ᴮ' x ≤ᴮ' y : τ → τ = .bool ∧ Γ ⊢ᴮ' x : .int ∧ Γ ⊢ᴮ' y : .int := λ h => match h with | .le h h' => ⟨rfl, h, h'⟩
+theorem memE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x S τ} : Γ ⊢ᴮ' x ∈ᴮ' S : τ → τ  = .bool ∧ ∃ α, Γ ⊢ᴮ' x : α ∧ Γ ⊢ᴮ' S : .set α := λ h => match h with | .mem h h' => ⟨rfl, _, h, h'⟩
+theorem powE     {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S τ} : Γ ⊢ᴮ' 𝒫ᴮ' S : τ → ∃ β, τ = .set (.set β) ∧ Γ ⊢ᴮ' S : .set β := λ h => match h with | .pow h => ⟨_, rfl, h⟩
+theorem cprodE   {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S T τ} : Γ ⊢ᴮ' S ⨯ᴮ' T : τ → ∃ α β, τ = .set (α ×ᴮ β) ∧ Γ ⊢ᴮ' S : .set α ∧ Γ ⊢ᴮ' T : .set β := by rintro ⟨⟩; rename_i α β _ _; exists α, β
+theorem unionE   {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S T τ} : Γ ⊢ᴮ' S ∪ᴮ' T : τ → ∃ α, τ = .set α ∧ Γ ⊢ᴮ' S : .set α ∧ Γ ⊢ᴮ' T : .set α := λ h => match h with | .union h h' => ⟨_, rfl, h, h'⟩
+theorem interE   {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S T τ} : Γ ⊢ᴮ' S ∩ᴮ' T : τ → ∃ α, τ = .set α ∧ Γ ⊢ᴮ' S : .set α ∧ Γ ⊢ᴮ' T : .set α := λ h => match h with | .inter h h' => ⟨_, rfl, h, h'⟩
+theorem pfunE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S T τ} : Γ ⊢ᴮ' S ⇸ᴮ' T : τ → ∃ α β, τ = .set (.set (α ×ᴮ β)) ∧ Γ ⊢ᴮ' S : .set α ∧ Γ ⊢ᴮ' T : .set β := λ h => match h with | .pfun h h' => ⟨_, _, rfl, h, h'⟩
+theorem collectE {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n D P τ} : (h : Γ ⊢ᴮ' .collect D P : τ) → 0 < n ∧ (∃! αs_Ds : (Fin n → BType) × (Fin n → Term 𝒱),
     τ = .set (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ×ᴮ αs_Ds.1 ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (αs_Ds.1 ⟨0, by cases h with | collect _ _ _ h => exact h ⟩))
-  ∧ (∀ i : Fin n, Γ ⊢ αs_Ds.2 i : (.set <| αs_Ds.1 i))
+  ∧ (∀ i : Fin n, Γ ⊢ᴮ' αs_Ds.2 i : (.set <| αs_Ds.1 i))
   ∧ (D = (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' αs_Ds.2 ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (αs_Ds.2 ⟨0, by cases h with | collect _ _ _ h => exact h ⟩)))
-  ∧ (∀ v, Γ.update v αs_Ds.1 ⊢ P v : .bool)) := by
+  ∧ (∀ v, Γ.update v αs_Ds.1 ⊢ᴮ' P v : .bool)) := by
   rintro ⟨⟩
   rename_i αs Ds n_pos typD typP
   and_intros
@@ -225,14 +225,14 @@ theorem collectE {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n D P τ} : 
           rw [funext_iff] at succ
           exact succ ⟨i, by exact Nat.lt_sub_of_add_lt hi⟩
 
-theorem lambdaE {𝒱} [DecidableEq 𝒱] {n Γ D E τ} : (h : Γ ⊢ .lambda D E : τ) → 0 < n ∧ (∃! (β_αs_Ds : BType × (Fin n → BType) × (Fin n → Term 𝒱)),
+theorem lambdaE {𝒱} [DecidableEq 𝒱] {n Γ D E τ} : (h : Γ ⊢ᴮ' .lambda D E : τ) → 0 < n ∧ (∃! (β_αs_Ds : BType × (Fin n → BType) × (Fin n → Term 𝒱)),
     let β := β_αs_Ds.1
     let αs := β_αs_Ds.2.1
     let Ds := β_αs_Ds.2.2
     τ = .set ((Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ×ᴮ αs ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (αs ⟨0, by cases h with | lambda _ _ _ _ h => exact h ⟩)) ×ᴮ β)
-  ∧ (∀ i : Fin n, Γ ⊢ Ds i : (.set <| αs i))
+  ∧ (∀ i : Fin n, Γ ⊢ᴮ' Ds i : (.set <| αs i))
   ∧ (D = (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' Ds ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (Ds ⟨0, by cases h with | lambda _ _ _ _ h => exact h ⟩)))
-  ∧ (∀ v, Γ.update v αs ⊢ E v : β)) := by
+  ∧ (∀ v, Γ.update v αs ⊢ᴮ' E v : β)) := by
   rintro ⟨⟩
   rename_i β αs Ds n_pos typD typE
   and_intros
@@ -262,11 +262,11 @@ theorem lambdaE {𝒱} [DecidableEq 𝒱] {n Γ D E τ} : (h : Γ ⊢ .lambda D 
         | succ i =>
           rw [funext_iff] at succ
           exact succ ⟨i, by exact Nat.lt_sub_of_add_lt hi⟩
-theorem allE {𝒱} [DecidableEq 𝒱] {n Γ D P τ} : (h : Γ ⊢ .all D P : τ) → τ = .bool ∧ 0 < n ∧ (∃ (αs_Ds : (Fin n → BType) × (Fin n → Term 𝒱)),
+theorem allE {𝒱} [DecidableEq 𝒱] {n Γ D P τ} : (h : Γ ⊢ᴮ' .all D P : τ) → τ = .bool ∧ 0 < n ∧ (∃ (αs_Ds : (Fin n → BType) × (Fin n → Term 𝒱)),
     let αs := αs_Ds.1; let Ds := αs_Ds.2
-    (∀ i : Fin n, Γ ⊢ Ds i : (.set <| αs i))
+    (∀ i : Fin n, Γ ⊢ᴮ' Ds i : (.set <| αs i))
   ∧ (D = (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' Ds ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (Ds ⟨0, by cases h with | all _ _ _ h => exact h ⟩)))
-  ∧ (∀ v, Γ.update v αs ⊢ P v : .bool)) := by
+  ∧ (∀ v, Γ.update v αs ⊢ᴮ' P v : .bool)) := by
   rintro ⟨⟩
   rename_i αs Ds n_pos typD typP
   and_intros
@@ -290,10 +290,10 @@ theorem allE {𝒱} [DecidableEq 𝒱] {n Γ D P τ} : (h : Γ ⊢ .all D P : τ
     --   congr
     --   · subst Ds_eq
     --   · exact Ds_eq.symm
-theorem appE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {β f x} : Γ ⊢ .app f x : β → ∃ α, Γ ⊢ f : .set (α ×ᴮ β) ∧ Γ ⊢ x : α := λ h => match h with | .app h h' => ⟨_, h, h'⟩
-theorem cardE   {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S τ} : Γ ⊢ |S|ᴮ' : τ → τ = .int ∧ ∃ α, Γ ⊢ S : .set α := λ h => match h with | .card h => ⟨rfl, _, h⟩
-theorem minE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S τ} : Γ ⊢ .min S : τ → τ = .int ∧ Γ ⊢ S : .set .int := λ h => match h with | .min h => ⟨rfl, h⟩
-theorem maxE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S τ} : Γ ⊢ .max S : τ → τ = .int ∧ Γ ⊢ S : .set .int := λ h => match h with | .max h => ⟨rfl, h⟩
+theorem appE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {β f x} : Γ ⊢ᴮ' .app f x : β → ∃ α, Γ ⊢ᴮ' f : .set (α ×ᴮ β) ∧ Γ ⊢ᴮ' x : α := λ h => match h with | .app h h' => ⟨_, h, h'⟩
+theorem cardE   {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S τ} : Γ ⊢ᴮ' |S|ᴮ' : τ → τ = .int ∧ ∃ α, Γ ⊢ᴮ' S : .set α := λ h => match h with | .card h => ⟨rfl, _, h⟩
+theorem minE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S τ} : Γ ⊢ᴮ' .min S : τ → τ = .int ∧ Γ ⊢ᴮ' S : .set .int := λ h => match h with | .min h => ⟨rfl, h⟩
+theorem maxE    {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {S τ} : Γ ⊢ᴮ' .max S : τ → τ = .int ∧ Γ ⊢ᴮ' S : .set .int := λ h => match h with | .max h => ⟨rfl, h⟩
 
 end Typing
 
@@ -326,7 +326,7 @@ theorem Typing.reduce_prod_inj {αs αs' : List BType} (h : αs ≠ []) (h' : α
   exact ⟨α_eq_α', List.map_ext @BType.set.inj r⟩
 
 /-
-theorem Typing.typing_det {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x : Term 𝒱} {α β : BType} : Γ ⊢ x : α → Γ ⊢ x : β → α = β := by
+theorem Typing.typing_det {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x : Term 𝒱} {α β : BType} : Γ ⊢ᴮ' x : α → Γ ⊢ᴮ' x : β → α = β := by
   intro h₁ h₂
   induction h₁ generalizing β with
     | var v₁ =>
@@ -378,7 +378,7 @@ theorem Typing.typing_det {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x :
     | max _ ih => cases h₂; rfl
     | all => exact Typing.allE h₂ |>.left.symm
     | @collect Γ n α D P n_pos typD typP IH₁ IH₂ =>
-      dsimp at h₂ ⊢
+      dsimp at h₂ ⊢ᴮ'
       obtain ⟨α', D', β_eq, typD', D'_eq, typP'⟩ := Typing.collectE h₂
       dsimp at β_eq D'_eq
       have : α = α' := by
@@ -389,7 +389,7 @@ theorem Typing.typing_det {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {x :
       subst α'
       exact β_eq.symm
     | @lambda Γ n α γ D E n_pos typD typE IH₁ IH₂ =>
-      dsimp at h₂ ⊢
+      dsimp at h₂ ⊢ᴮ'
       obtain ⟨γ', α', D', β_eq, typD', D'_eq, typE'⟩ := Typing.lambdaE h₂
       dsimp at β_eq D'_eq
       have : γ = γ' := by admit
@@ -419,7 +419,7 @@ theorem Finmap.zipToFinmap_keys {Γ : TypeContext} {vs : List 𝒱} {αs : List 
     rw [Finmap.toFinmap_cons, ← List.zipToFinmap.eq_def, ← ih]
     admit
 
-theorem Typing.typed_by_fv {Γ : TypeContext} {e : Term} {τ : BType} : Γ ⊢ e : τ → (fv e).toAList ⊆ Γ.dom := by
+theorem Typing.typed_by_fv {Γ : TypeContext} {e : Term} {τ : BType} : Γ ⊢ᴮ' e : τ → (fv e).toAList ⊆ Γ.dom := by
   intro h
   induction h with
   | var hv =>
@@ -472,7 +472,7 @@ theorem Typing.union_find?_iff {Γ Δ : TypeContext} {x : 𝒱} {τ : BType} : (
 theorem Typing.union_extend_left {Γ Δ₁ Δ₂ : TypeContext} : Δ₁.find? = Δ₂.find? → ∀ {x : 𝒱}, (Γ ∪ Δ₁).find? x = (Γ ∪ Δ₂).find? x := by
   admit
 
-theorem Typing.context_perm {Γ Δ : TypeContext} {e : Term} {τ : BType}: (∀ x, Γ.find? x = Δ.find? x) → Γ ⊢ e : τ → Δ ⊢ e : τ := by
+theorem Typing.context_perm {Γ Δ : TypeContext} {e : Term} {τ : BType}: (∀ x, Γ.find? x = Δ.find? x) → Γ ⊢ᴮ' e : τ → Δ ⊢ᴮ' e : τ := by
   intro h he
   induction e generalizing τ Γ Δ with
   | var v =>
@@ -584,10 +584,10 @@ theorem Typing.context_perm {Γ Δ : TypeContext} {e : Term} {τ : BType}: (∀ 
     apply Typing.max
     exact Sih h hS
 
-theorem Typing.context_swap {Γ : TypeContext} {x y} {α β τ} {e} : (Γ.insert x α).insert y β ⊢ e : τ → x ≠ y → (Γ.insert y β).insert x α ⊢ e : τ := by
+theorem Typing.context_swap {Γ : TypeContext} {x y} {α β τ} {e} : (Γ.insert x α).insert y β ⊢ᴮ' e : τ → x ≠ y → (Γ.insert y β).insert x α ⊢ᴮ' e : τ := by
   admit
 
-theorem Typing.context_weakening {Γ} {y} {α β} {e} : y ∉ fv e → Γ ⊢ e : α → (Γ.insert y β) ⊢ e : α := by
+theorem Typing.context_weakening {Γ} {y} {α β} {e} : y ∉ fv e → Γ ⊢ᴮ' e : α → (Γ.insert y β) ⊢ᴮ' e : α := by
   admit
 
 -/

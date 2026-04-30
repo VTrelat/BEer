@@ -84,7 +84,7 @@ theorem WFTC.update {Γ} [WFTC Γ] {n} {vs : Fin n → Dom} {τs : Fin n → BTy
         · exact (vs_τs_wf ·.succ)
         · exact eq_some
 
-abbrev WellTyped' (t : PHOAS.Term Dom) := Σ' (Γ : TypeContext Dom) (_ : WFTC Γ) (τ : BType), Γ ⊢ t : τ
+abbrev WellTyped' (t : PHOAS.Term Dom) := Σ' (Γ : TypeContext Dom) (_ : WFTC Γ) (τ : BType), Γ ⊢ᴮ' t : τ
 
 instance : Nonempty (Π n, Fin n → Dom) := ⟨fun _ _ => ⟨∅, .bool, ZFBool.zffalse_mem_𝔹⟩⟩
 
@@ -246,7 +246,7 @@ theorem denote_welltyped_eq {t : PHOAS.Term Dom} {T τ hTτ}
     dsimp at D_eq α_eq
 
     obtain ⟨n, rfl⟩ := Nat.exists_add_one_eq.mpr n_pos
-    have wt_D : Γ ⊢ D : α := by
+    have wt_D : Γ ⊢ᴮ' D : α := by
       simp_rw [D_eq, Nat.add_one_sub_one, Fin.zero_eta, α_eq]
       exact PHOAS.Typing.foldl_aux _ _ hDs
     specialize D_ih ⟨Γ, Γwf, α, wt_D⟩ den_D
@@ -254,19 +254,24 @@ theorem denote_welltyped_eq {t : PHOAS.Term Dom} {T τ hTτ}
     subst D_ih
 
     simp only [α_eq, Nat.add_one_sub_one, Fin.zero_eta] at other
-    split_ifs at other with den_P_isSome typ_den_P_det
-
-    rw [Option.some_inj] at other
-    injection other with T_eq αs_heq_τ
-    subst T
 
     have := Typing.foldl_aux αs Ds hDs
     dsimp at this D_eq
     rw [←D_eq] at this
     rcases Typing.det wt_D this
 
-    rcases eq_of_heq αs_heq_τ
-    rfl
+    rw [show (failure : Option _) = none from rfl] at other
+    have bind_none_eq : ∀ {α β : Type _} (o : Option α),
+        (o.bind fun _ => (none : Option β)) = none := fun o => by cases o <;> rfl
+    split_ifs at other with h_arity h_den_P h_typP_det
+    · -- all conditions true: extract bind result
+      simp only [Option.bind_eq_some_iff, PSigma.exists] at other
+      obtain ⟨_, _, _, _, rfl, heq⟩ := other
+      rfl
+    · -- ¬typP_det: bind with none
+      rw [bind_none_eq] at other; exact Option.noConfusion other
+    · -- ¬den_P: bind with none
+      rw [bind_none_eq] at other; exact Option.noConfusion other
   | lambda D t D_ih t_ih =>
     obtain ⟨Γ, Γwf, ρ, hτ⟩ := wt_t
     obtain ⟨n_pos, ⟨γ, αs, Ds⟩, ⟨ρ_eq, hDs, D_eq, typ_t⟩, αs_Ds_unq⟩ := PHOAS.Typing.lambdaE hτ
@@ -347,11 +352,12 @@ theorem denote_welltyped_eq {t : PHOAS.Term Dom} {T τ hTτ}
     obtain ⟨⟩ := wt_D
 
     dsimp at other
-    split_ifs at other with hArity
-    · injection other with h_eq
+    split_ifs at other with hArity hDenP hTypDet hEmpty
+    all_goals (
+      injection other with h_eq
       injection h_eq with h_eq₁ h_eq₂
       subst h_eq₁
-      injection eq_of_heq h_eq₂
+      injection eq_of_heq h_eq₂)
 
 theorem PHOAS.TypeContext.abstract_of_mem
   {«Δ» : B.𝒱 → Option Dom} (v : B.𝒱) {v' : Dom} {Γ : TypeContext}
@@ -392,8 +398,8 @@ theorem PHOAS.TypeContext.abstract_of_mem
 theorem Typing.of_abstract
   {𝒱} [DecidableEq 𝒱] {t : Term} {«Δ» : B.𝒱 → Option 𝒱} {Γ : TypeContext} {τ : BType}
   (ht : ∀ v ∈ fv t, («Δ» v).isSome = true)
-  (typ_t : Γ ⊢ t : τ) :
-  Γ.abstract («Δ» := «Δ») ⊢ t.abstract «Δ» ht : τ := by
+  (typ_t : Γ ⊢ᴮ t : τ) :
+  Γ.abstract («Δ» := «Δ») ⊢ᴮ' t.abstract «Δ» ht : τ := by
   induction typ_t with
   | var ih =>
     simp_rw [fv, List.mem_cons, List.not_mem_nil, or_false, forall_eq] at ht
@@ -611,7 +617,7 @@ theorem fv_simplifier_aux_add {x y} : fv (simplifier_aux_add x y) ⊆ fv x ++ fv
     exact simplifier_aux_add.fv
 
 theorem B.Typing.mem_context_of_mem_fv {Γ : B.TypeContext} {x : 𝒱} {t : Term} {τ : BType}
-  (ht : Γ ⊢ t : τ) (hx : x ∈ fv t) : Γ.lookup x |>.isSome := by
+  (ht : Γ ⊢ᴮ t : τ) (hx : x ∈ fv t) : Γ.lookup x |>.isSome := by
   induction ht with
   | var _ =>
     rw [fv, List.mem_singleton] at hx
@@ -619,36 +625,139 @@ theorem B.Typing.mem_context_of_mem_fv {Γ : B.TypeContext} {x : 𝒱} {t : Term
     unfold B.TypeContext.find? at *
     apply Option.isSome_of_eq_some
     assumption
-  | int => sorry
-  | bool => sorry
-  | maplet _ _ _ _ => sorry
-  | add _ _ _ _ => sorry
-  | sub _ _ _ _ => sorry
-  | mul _ _ _ _ => sorry
-  | and _ _ _ _ => sorry
-  | not _ _ => sorry
-  | eq _ _ _ _ => sorry
-  | le _ _ _ _ => sorry
-  | «ℤ» => sorry
-  | 𝔹 => sorry
-  | mem _ _ _ _ => sorry
-  | collect vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
-  | pow _ _ => sorry
-  | cprod _ _ _ _ => sorry
-  | union _ _ _ _ => sorry
-  | inter _ _ _ _ => sorry
-  | pfun _ _ _ _ => sorry
-  | all vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
-  | lambda vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
-  | app _ _ _ _ => sorry
-  | card _ _ => sorry
-  | min _ _ => sorry
-  | max _ _ => sorry
+  | int => exact absurd hx fv.mem_int
+  | bool => exact absurd hx fv.mem_bool
+  | maplet _ _ ihx ihy =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihx ihy
+  | add _ _ ihx ihy =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihx ihy
+  | sub _ _ ihx ihy =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihx ihy
+  | mul _ _ ihx ihy =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihx ihy
+  | and _ _ ihx ihy =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihx ihy
+  | not _ ih => exact ih hx
+  | eq _ _ ihx ihy =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihx ihy
+  | le _ _ ihx ihy =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihx ihy
+  | «ℤ» => exact absurd hx (by simp [fv])
+  | 𝔹 => exact absurd hx (by simp [fv])
+  | mem _ _ ihx ihS =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihx ihS
+  | @collect Γ vs αs Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih =>
+    rw [fv, List.mem_append] at hx
+    rcases hx with hx_D | hx_P
+    · -- x ∈ fv(Ds.reduce (· ⨯ᴮ ·) _): show x ∈ fv(Ds[i]) for some i, then use typD_ih
+      have : ∀ (acc : Term) (rest : List Term),
+          x ∈ fv (rest.foldl (· ⨯ᴮ ·) acc) → x ∈ fv acc ∨ ∃ D ∈ rest, x ∈ fv D := by
+        intro acc rest
+        induction rest generalizing acc with
+        | nil => intro h; exact Or.inl h
+        | cons D rest ih =>
+          intro h
+          rcases ih _ h with h | ⟨D', hD', hx_D'⟩
+          · rw [fv, List.mem_append] at h
+            rcases h with h | h
+            · exact Or.inl h
+            · exact Or.inr ⟨D, List.mem_cons_self .., h⟩
+          · exact Or.inr ⟨D', List.mem_cons_of_mem _ hD', hx_D'⟩
+      rw [List.reduce] at hx_D
+      rcases this _ _ hx_D with hx_head | ⟨D', hD', hx_D'⟩
+      · have hne : 0 < Ds.length := List.length_pos_of_ne_nil
+            (by simpa [vs_D_len, ← List.length_pos_iff] using vs_nemp)
+        rw [List.head_eq_getElem] at hx_head
+        exact typD_ih 0 hne hx_head
+      · obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem (List.mem_of_mem_tail hD')
+        exact typD_ih i hi hx_D'
+    · rw [List.mem_removeAll_iff] at hx_P
+      have hP := typP_ih hx_P.1
+      have hx_not_zip : x ∉ vs.zipToAList αs :=
+        fun h => hx_P.2 (AList.mem_zipToAList h)
+      rwa [AList.lookup_union_right hx_not_zip] at hP
+  | pow _ ih => exact ih hx
+  | cprod _ _ ihS ihT =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihS ihT
+  | union _ _ ihS ihT =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihS ihT
+  | inter _ _ ihS ihT =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihS ihT
+  | pfun _ _ ihA ihB =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihA ihB
+  | @all Γ vs αs Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih =>
+    rw [fv, List.mem_append] at hx
+    rcases hx with hx_D | hx_P
+    · have mem_fv_foldl : ∀ (acc : Term) (rest : List Term),
+          x ∈ fv (rest.foldl (· ⨯ᴮ ·) acc) → x ∈ fv acc ∨ ∃ D ∈ rest, x ∈ fv D := by
+        intro acc rest; induction rest generalizing acc with
+        | nil => exact Or.inl
+        | cons D rest ih =>
+          intro h; rcases ih _ h with h | ⟨D', hD', hx_D'⟩
+          · rw [fv, List.mem_append] at h; rcases h with h | h
+            · exact Or.inl h
+            · exact Or.inr ⟨D, List.mem_cons_self .., h⟩
+          · exact Or.inr ⟨D', List.mem_cons_of_mem _ hD', hx_D'⟩
+      rw [List.reduce] at hx_D
+      rcases mem_fv_foldl _ _ hx_D with hx_head | ⟨D', hD', hx_D'⟩
+      · rw [List.head_eq_getElem] at hx_head
+        exact typD_ih 0 (List.length_pos_of_ne_nil
+            (by simpa [vs_D_len, ← List.length_pos_iff] using vs_nemp)) hx_head
+      · obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem (List.mem_of_mem_tail hD')
+        exact typD_ih i hi hx_D'
+    · rw [List.mem_removeAll_iff] at hx_P
+      have hP := typP_ih hx_P.1
+      have hx_not_zip : x ∉ vs.zipToAList αs :=
+        fun h => hx_P.2 (AList.mem_zipToAList h)
+      rwa [AList.lookup_union_right hx_not_zip] at hP
+  | @lambda Γ vs αs _ Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih =>
+    rw [fv, List.mem_append] at hx
+    rcases hx with hx_D | hx_P
+    · have mem_fv_foldl : ∀ (acc : Term) (rest : List Term),
+          x ∈ fv (rest.foldl (· ⨯ᴮ ·) acc) → x ∈ fv acc ∨ ∃ D ∈ rest, x ∈ fv D := by
+        intro acc rest; induction rest generalizing acc with
+        | nil => exact Or.inl
+        | cons D rest ih =>
+          intro h; rcases ih _ h with h | ⟨D', hD', hx_D'⟩
+          · rw [fv, List.mem_append] at h; rcases h with h | h
+            · exact Or.inl h
+            · exact Or.inr ⟨D, List.mem_cons_self .., h⟩
+          · exact Or.inr ⟨D', List.mem_cons_of_mem _ hD', hx_D'⟩
+      rw [List.reduce] at hx_D
+      rcases mem_fv_foldl _ _ hx_D with hx_head | ⟨D', hD', hx_D'⟩
+      · rw [List.head_eq_getElem] at hx_head
+        exact typD_ih 0 (List.length_pos_of_ne_nil
+            (by simpa [vs_D_len, ← List.length_pos_iff] using vs_nemp)) hx_head
+      · obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem (List.mem_of_mem_tail hD')
+        exact typD_ih i hi hx_D'
+    · rw [List.mem_removeAll_iff] at hx_P
+      have hP := typP_ih hx_P.1
+      have hx_not_zip : x ∉ vs.zipToAList αs :=
+        fun h => hx_P.2 (AList.mem_zipToAList h)
+      rwa [AList.lookup_union_right hx_not_zip] at hP
+  | app _ _ ihf ihx =>
+    rw [fv, List.mem_append] at hx
+    exact hx.elim ihf ihx
+  | card _ ih => exact ih hx
+  | min _ ih => exact ih hx
+  | max _ ih => exact ih hx
 
 
-theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BType} (h : Γ ⊢ t : τ)
-  (h' : (hx : Γ.lookup x |>.isSome) → Γ ⊢ e : (Γ.lookup x).get hx) :
-  Γ ⊢ t[x := e] : τ := by
+theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BType} (h : Γ ⊢ᴮ t : τ)
+  (h' : (hx : Γ.lookup x |>.isSome) → Γ ⊢ᴮ e : (Γ.lookup x).get hx) :
+  Γ ⊢ᴮ t[x := e] : τ := by
   by_cases h_fv : x ∉ fv t
   · rwa [not_mem_fv_subst h_fv]
   · rw [not_not] at h_fv
@@ -1047,8 +1156,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
           exact Typing.all vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_Ds_len typ_Dᵢ typP
 
 
-theorem B.Typing.simplifier {Γ : B.TypeContext} {x : B.Term} {τ : BType} (h : Γ ⊢ x : τ) :
-  Γ ⊢ simplifier x : τ := by
+theorem B.Typing.simplifier {Γ : B.TypeContext} {x : B.Term} {τ : BType} (h : Γ ⊢ᴮ x : τ) :
+  Γ ⊢ᴮ simplifier x : τ := by
   induction h with
   | var hv => exact var hv
   | int => exact B.Typing.int
@@ -1164,7 +1273,7 @@ theorem B.Typing.simplifier {Γ : B.TypeContext} {x : B.Term} {τ : BType} (h : 
     · apply B.Typing.bool
     · apply B.Typing.bool
     · rename B.simplifier _ = _ => eq
-      rename _ ⊢ B.simplifier _ : _ => typ
+      rename _ ⊢ᴮ B.simplifier _ : _ => typ
       rw [eq] at typ
       obtain ⟨-, _, _⟩ := B.Typing.notE typ
       assumption

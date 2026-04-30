@@ -57,12 +57,13 @@ structure Env where
   declarations : Chunk := []
   asserts : Stages := .asserts []
   freshvarsc : Nat := 0
+  usedVars : List SMT.𝒱 := []
   deriving Inhabited
 
 instance : ToString Env where
   toString E :=
     let nl := "\n"
     let nltab := nl++"  "
-    s!"Env:{nltab}declarations:{nl}{E.declarations.printLines}{nltab}asserts:{nl}{E.asserts}"
+    s!"Env:{nltab}declarations:{nl}{E.declarations.printLines}{nltab}asserts:{nl}{E.asserts}{nltab}usedVars: {E.usedVars}"
 
 end SMT

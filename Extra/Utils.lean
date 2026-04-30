@@ -231,6 +231,21 @@ theorem List.mem_zipWith_fst {a : α} {xs : List α} {ys : List β} : a ∈ List
 
 theorem AList.zipToAList_cons {α β} [DecidableEq α] {x : α} {y : β} {xs : List α} {ys : List β} : (x :: xs).zipToAList (y :: ys) = (xs.zipToAList ys).insert x y := rfl
 
+theorem AList.mem_zipToAList_of_mem {α β} [DecidableEq α] {xs : List α} {ys : List β}
+    (hnd : xs.Nodup) (hlen : xs.length = ys.length) {x : α} (hx : x ∈ xs) :
+    x ∈ List.zipToAList xs ys := by
+  induction xs generalizing ys with
+  | nil => simp at hx
+  | cons a as ih =>
+    cases ys with
+    | nil => simp at hlen
+    | cons b bs =>
+      rw [AList.zipToAList_cons, AList.mem_insert]
+      rcases List.mem_cons.mp hx with rfl | hx'
+      · left; rfl
+      · right
+        exact ih hnd.of_cons (by simp at hlen ⊢; omega) hx'
+
 theorem AList.mem_zipToAList {α β} [DecidableEq α] {xs : List α} {ys : List β} {x : α} : x ∈ List.zipToAList xs ys → x ∈ xs := by
   intro h
   rw [List.zipToAList, List.toAList, AList.mem_keys, AList.keys] at h
@@ -288,6 +303,233 @@ theorem AList.erase_of_not_mem.{u_1} {α : Type u_1} [DecidableEq α] {β : α �
     intro contr
     rw [List.kerase_of_notMem_keys notMem] at contr
     exact a_notMem contr
+
+instance {α} {β : α → Type _} : HasSubset (AList β) where
+  Subset Γ Δ := Γ.entries ⊆ Δ.entries
+instance {α} {β : α → Type _} : IsRefl (AList β) (· ⊆ ·) where
+  refl _ _ := id
+@[trans]
+theorem AList.subset_trans {α} {β : α → Type _} [DecidableEq α] {xs ys zs : AList β} : xs ⊆ ys → ys ⊆ zs → xs ⊆ zs :=
+  fun x y _ z => y <| x z
+instance {α} [DecidableEq α] {β : α → Type _} : IsTrans (AList β) (· ⊆ ·) where
+  trans _ _ _ := AList.subset_trans
+
+/-- If `Γ₁ ⊆ Γ₂` and `Γ₁.lookup v = some b`, then `Γ₂.lookup v = some b`. -/
+theorem AList.lookup_of_subset {α} {β : α → Type _} [DecidableEq α]
+    {Γ₁ Γ₂ : AList β} (h_sub : Γ₁ ⊆ Γ₂) {v : α} {b : β v}
+    (h_lkp : Γ₁.lookup v = some b) : Γ₂.lookup v = some b :=
+  Option.mem_def.mp (AList.mem_lookup_iff.mpr (h_sub (AList.mem_lookup_iff.mp (Option.mem_def.mpr h_lkp))))
+
+/-- If `Γ₁ ⊆ Γ₂` (entries subset) and `v ∈ Γ₁`, then `v ∈ Γ₂`. -/
+theorem AList.mem_of_subset {α} {β : α → Type _} [DecidableEq α]
+    {Γ₁ Γ₂ : AList β} (h_sub : Γ₁ ⊆ Γ₂) {v : α} (hv : v ∈ Γ₁) : v ∈ Γ₂ := by
+  rw [AList.mem_keys] at hv ⊢
+  obtain ⟨τ', hτ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv)
+  have h_ent : ⟨v, τ'⟩ ∈ Γ₂.entries :=
+    h_sub (AList.mem_lookup_iff.mp (Option.mem_def.mpr hτ'))
+  exact List.mem_map.mpr ⟨_, h_ent, rfl⟩
+
+@[mono]
+theorem AList.insert_mono {α} {β : α → Type _} [DecidableEq α] {k : α} {v : β k} {xs : AList β}
+    (hk : k ∉ xs) : xs ⊆ xs.insert k v := by
+  intro x hx
+  rw [AList.entries_insert_of_notMem hk]
+  exact List.mem_cons_of_mem _ hx
+
+theorem List.mem_kerase_of_ne_key {α : Type*} {β : α → Type*} [DecidableEq α]
+    {a : α} {l : List (Sigma β)} {x : Sigma β}
+    (hne : x.1 ≠ a) (hx : x ∈ l) : x ∈ l.kerase a := by
+  induction l with
+  | nil => cases hx
+  | cons y ys ih =>
+    rcases List.mem_cons.mp hx with rfl | hys
+    · rw [List.kerase_cons_ne (Ne.symm hne)]; exact List.mem_cons.mpr (Or.inl rfl)
+    · by_cases hay : a = y.1
+      · rw [List.kerase_cons_eq hay]; exact hys
+      · rw [List.kerase_cons_ne hay]; exact List.mem_cons.mpr (Or.inr (ih hys))
+
+theorem AList.erase_entries_subset {α : Type*} {β : α → Type*} [DecidableEq α]
+    (a : α) (l : AList β) : (l.erase a).entries ⊆ l.entries :=
+  (List.kerase_sublist a l.entries).subset
+
+theorem AList.foldl_erase_entries_subset {α : Type*} {β : α → Type*} [DecidableEq α]
+    (vs : List α) (l : AList β) :
+    (vs.foldl (fun Γ v => AList.erase v Γ) l).entries ⊆ l.entries := by
+  induction vs generalizing l with
+  | nil => exact fun _ h => h
+  | cons v vs ih => exact fun x hx => AList.erase_entries_subset v l (ih (l.erase v) hx)
+
+theorem AList.fst_ne_of_mem_erase_entries {α : Type*} {β : α → Type*} [DecidableEq α]
+    {a : α} {l : AList β} {x : Sigma β} (hx : x ∈ (l.erase a).entries) : x.1 ≠ a := by
+  intro heq; subst heq
+  have : x.1 ∈ (l.erase x.1).entries.keys := List.mem_keys.mpr ⟨x.2, hx⟩
+  exact List.notMem_keys_kerase x.1 l.nodupKeys this
+
+theorem AList.not_mem_foldl_erase_of_mem {α : Type*} {β : α → Type*} [DecidableEq α]
+    {vs : List α} {l : AList β} {v : α} (hv : v ∈ vs) (hnd : vs.Nodup) :
+    v ∉ vs.foldl (fun Γ w => AList.erase w Γ) l := by
+  induction vs generalizing l with
+  | nil => simp at hv
+  | cons w ws ih =>
+    simp only [List.foldl_cons]
+    rcases List.mem_cons.mp hv with rfl | hv'
+    · intro hmem
+      have : v ∈ AList.erase v l :=
+        (List.map_subset _ (AList.foldl_erase_entries_subset ws _)) hmem
+      exact absurd ((AList.mem_erase.mp this).1) (not_not.mpr rfl)
+    · exact ih hv' hnd.of_cons
+
+theorem AList.mem_foldl_erase_of_not_mem_keys {α : Type*} {β : α → Type*} [DecidableEq α]
+    {vs : List α} {l : AList β} {x : Sigma β}
+    (hx : x ∈ l.entries) (hk : x.1 ∉ vs) :
+    x ∈ (vs.foldl (fun Γ v => AList.erase v Γ) l).entries := by
+  induction vs generalizing l with
+  | nil => exact hx
+  | cons v vs ih =>
+    simp only [List.foldl_cons]
+    exact ih (List.mem_kerase_of_ne_key (fun h => hk (h ▸ List.mem_cons.mpr (Or.inl rfl))) hx)
+      (fun h => hk (List.mem_cons.mpr (Or.inr h)))
+
+theorem List.mem_fst_of_mem_zip {α : Type*} {β : Type*} {a : α} {b : β} {l₁ : List α} {l₂ : List β}
+    (h : (a, b) ∈ l₁.zip l₂) : a ∈ l₁ := by
+  induction l₁ generalizing l₂ with
+  | nil => simp at h
+  | cons x xs ih =>
+    cases l₂ with
+    | nil => simp at h
+    | cons y ys =>
+      simp only [List.zip_cons_cons, List.mem_cons, Prod.mk.injEq] at h
+      rcases h with ⟨rfl, _⟩ | h
+      · exact List.mem_cons_self ..
+      · exact List.mem_cons_of_mem _ (ih h)
+
+theorem List.nodup_map_fst_of_nodup_zip {α : Type*} {β : Type*} {l₁ : List α} {l₂ : List β}
+    (hnd : l₁.Nodup) : ((l₁.zip l₂).map Prod.fst).Nodup := by
+  induction l₁ generalizing l₂ with
+  | nil => simp
+  | cons x xs ih =>
+    cases l₂ with
+    | nil => simp
+    | cons y ys =>
+      simp only [List.zip_cons_cons, List.map_cons, List.nodup_cons] at hnd ⊢
+      constructor
+      · intro hmem
+        rw [List.mem_map] at hmem
+        obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmem
+        exact hnd.1 (List.mem_fst_of_mem_zip hab)
+      · exact ih hnd.2
+
+/-- If all keys in `l` are fresh w.r.t. `Γ` and pairwise distinct, then `Γ ⊆ foldl insert Γ l`. -/
+theorem AList.subset_foldl_insert {α : Type*} {β : α → Type*} [DecidableEq α]
+    {l : List (Sigma β)} {Γ : AList β}
+    (hdisj : ∀ p ∈ l, p.1 ∉ Γ)
+    (hnodup : (l.map Sigma.fst).Nodup) :
+    Γ ⊆ l.foldl (fun Γ (p : Sigma β) => Γ.insert p.1 p.2) Γ := by
+  induction l generalizing Γ with
+  | nil => exact fun _ h => h
+  | cons p ps ih =>
+    simp only [List.foldl_cons, List.map_cons, List.nodup_cons] at *
+    apply AList.subset_trans (AList.insert_mono (hdisj p (List.mem_cons_self ..)))
+    apply ih
+    · intro q hq hq_mem
+      have hq_ne_p : q.1 ≠ p.1 := fun heq => hnodup.1 (heq ▸ List.mem_map.mpr ⟨q, hq, rfl⟩)
+      rw [AList.mem_keys, AList.keys_insert, List.mem_cons] at hq_mem
+      rcases hq_mem with heq | hq_mem'
+      · exact absurd heq hq_ne_p
+      · exact hdisj q (List.mem_cons_of_mem _ hq) (AList.mem_keys.mpr (List.mem_of_mem_erase hq_mem'))
+    · exact hnodup.2
+
+theorem AList.entry_mem_insert_of_ne {α : Type*} {β : α → Type*} [DecidableEq α]
+    {k k2 : α} {v : β k} {v2 : β k2} {Γ : AList β}
+    (h : ⟨k, v⟩ ∈ Γ.entries) (hne : k ≠ k2) :
+    ⟨k, v⟩ ∈ (Γ.insert k2 v2).entries := by
+  rw [AList.entries_insert]
+  exact List.mem_cons_of_mem _ (List.mem_kerase_of_ne_key hne h)
+
+/-- If Γ₁ ⊆ Γ₂ and all keys of Γ₁ are disjoint from the inserted keys,
+    then Γ₁ ⊆ foldl insert l Γ₂. -/
+theorem AList.subset_foldl_insert_of_keys_disj {α : Type*} {β : α → Type*} [DecidableEq α]
+    {l : List (Sigma β)} {Γ₁ Γ₂ : AList β}
+    (hsub : Γ₁ ⊆ Γ₂)
+    (hdisj : ∀ k, k ∈ AList.keys Γ₁ → k ∉ l.map Sigma.fst) :
+    Γ₁ ⊆ l.foldl (fun Γ (p : Sigma β) => Γ.insert p.1 p.2) Γ₂ := by
+  induction l generalizing Γ₂ with
+  | nil => exact hsub
+  | cons p ps ih =>
+    simp only [List.foldl_cons]
+    apply ih
+    · intro x hx
+      have hk : x.1 ∈ AList.keys Γ₁ := AList.mem_keys.mpr (List.mem_map.mpr ⟨x, hx, rfl⟩)
+      exact AList.entry_mem_insert_of_ne (hsub hx)
+        (fun heq => hdisj x.1 hk (heq ▸ List.mem_map.mpr ⟨p, List.mem_cons_self .., rfl⟩))
+    · exact fun k hk hmem => hdisj k hk (List.mem_cons_of_mem _ hmem)
+
+theorem AList.mem_of_mem_foldl_insert {α : Type*} {β : α → Type*} [DecidableEq α]
+    {l : List (Sigma β)} {Γ : AList β} {v : α}
+    (hv : v ∈ l.foldl (fun Γ (p : Sigma β) => Γ.insert p.1 p.2) Γ)
+    (hv_not : v ∉ l.map Sigma.fst) :
+    v ∈ Γ := by
+  induction l generalizing Γ with
+  | nil => exact hv
+  | cons p ps ih =>
+    simp only [List.map_cons, List.mem_cons, not_or] at hv_not
+    exact ((AList.mem_insert _).mp (ih hv hv_not.2)).resolve_left hv_not.1
+
+/-- Variant of `AList.subset_foldl_insert` for `Prod`-typed pair lists over a constant-family AList. -/
+theorem AList.subset_foldl_insert' {α : Type*} {γ : Type*} [DecidableEq α]
+    {l : List (α × γ)} {Γ : AList fun _ : α => γ}
+    (hdisj : ∀ p ∈ l, p.1 ∉ Γ)
+    (hnodup : (l.map Prod.fst).Nodup) :
+    Γ ⊆ l.foldl (fun Γ (p : α × γ) => Γ.insert p.1 p.2) Γ := by
+  induction l generalizing Γ with
+  | nil => exact fun _ h => h
+  | cons p ps ih =>
+    simp only [List.foldl_cons, List.map_cons, List.nodup_cons] at *
+    apply AList.subset_trans (AList.insert_mono (hdisj p (List.mem_cons_self ..)))
+    apply ih
+    · intro q hq hq_mem
+      have hq_ne_p : q.1 ≠ p.1 := fun heq => hnodup.1 (heq ▸ List.mem_map.mpr ⟨q, hq, rfl⟩)
+      rw [AList.mem_keys, AList.keys_insert, List.mem_cons] at hq_mem
+      rcases hq_mem with heq | hq_mem'
+      · exact absurd heq hq_ne_p
+      · exact hdisj q (List.mem_cons_of_mem _ hq) (AList.mem_keys.mpr (List.mem_of_mem_erase hq_mem'))
+    · exact hnodup.2
+
+theorem AList.entry_mem_insert_of_ne' {α : Type*} {γ : Type*} [DecidableEq α]
+    {k k2 : α} {v v2 : γ} {Γ : AList fun _ : α => γ}
+    (h : ⟨k, v⟩ ∈ Γ.entries) (hne : k ≠ k2) :
+    ⟨k, v⟩ ∈ (Γ.insert k2 v2).entries := by
+  rw [AList.entries_insert]
+  exact List.mem_cons_of_mem _ (List.mem_kerase_of_ne_key hne h)
+
+/-- Variant of `AList.subset_foldl_insert_of_keys_disj` for `Prod`-typed pair lists. -/
+theorem AList.subset_foldl_insert_of_keys_disj' {α : Type*} {γ : Type*} [DecidableEq α]
+    {l : List (α × γ)} {Γ₁ Γ₂ : AList fun _ : α => γ}
+    (hsub : Γ₁ ⊆ Γ₂)
+    (hdisj : ∀ k, k ∈ AList.keys Γ₁ → k ∉ l.map Prod.fst) :
+    Γ₁ ⊆ l.foldl (fun Γ (p : α × γ) => Γ.insert p.1 p.2) Γ₂ := by
+  induction l generalizing Γ₂ with
+  | nil => exact hsub
+  | cons p ps ih =>
+    simp only [List.foldl_cons]
+    apply ih
+    · intro x hx
+      have hk : x.1 ∈ AList.keys Γ₁ := AList.mem_keys.mpr (List.mem_map.mpr ⟨x, hx, rfl⟩)
+      exact AList.entry_mem_insert_of_ne' (hsub hx)
+        (fun heq => hdisj x.1 hk (heq ▸ List.mem_map.mpr ⟨p, List.mem_cons_self .., rfl⟩))
+    · exact fun k hk hmem => hdisj k hk (List.mem_cons_of_mem _ hmem)
+
+/-- Variant of `AList.mem_of_mem_foldl_insert` for `Prod`-typed pair lists. -/
+theorem AList.mem_of_mem_foldl_insert' {α : Type*} {γ : Type*} [DecidableEq α]
+    {l : List (α × γ)} {Γ : AList fun _ : α => γ} {v : α}
+    (hv : v ∈ l.foldl (fun Γ (p : α × γ) => Γ.insert p.1 p.2) Γ)
+    (hv_not : v ∉ l.map Prod.fst) :
+    v ∈ Γ := by
+  induction l generalizing Γ with
+  | nil => exact hv
+  | cons p ps ih =>
+    simp only [List.map_cons, List.mem_cons, not_or] at hv_not
+    exact ((AList.mem_insert _).mp (ih hv hv_not.2)).resolve_left hv_not.1
 
 theorem List.reduce_cons {α} {f : α → α → α} [Std.Associative f] {x : α} {xs : List α} (h : xs ≠ []) : (x::xs).reduce f (List.cons_ne_nil _ _) = f x (xs.reduce f h) := by
   let y::xs := xs

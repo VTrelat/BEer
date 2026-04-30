@@ -16,9 +16,9 @@ def subst (x : 𝒱) (t e : Term) : Term :=
   | Term.or a b => .or (subst x t a) (subst x t b)
   | Term.and a b => .and (subst x t a) (subst x t b)
   | Term.eq a b => .eq (subst x t a) (subst x t b)
-  | Term.forall vs τs e => if x ∈ vs then e else .forall vs τs (subst x t e)
-  | Term.exists vs τs e => if x ∈ vs then e else .exists vs τs (subst x t e)
-  | Term.lambda vs τs e => if x ∈ vs then e else .lambda vs τs (subst x t e)
+  | Term.forall vs τs body => if x ∈ vs then .forall vs τs body else .forall vs τs (subst x t body)
+  | Term.exists vs τs body => if x ∈ vs then .exists vs τs body else .exists vs τs (subst x t body)
+  | Term.lambda vs τs body => if x ∈ vs then .lambda vs τs body else .lambda vs τs (subst x t body)
   | Term.app f a => .app (subst x t f) (subst x t a)
   | Term.distinct ts => .distinct (ts.attach.map (λ ⟨e, _⟩ => subst x t e))
   | Term.snd p => .snd (subst x t p)
@@ -26,7 +26,7 @@ def subst (x : 𝒱) (t e : Term) : Term :=
   | Term.none => .none
   | Term.the e => .the (subst x t e)
   | Term.ite c ct cf => .ite (subst x t c) (subst x t ct) (subst x t cf)
-  | Term.as e τ => .as (subst x t e) τ
+  | Term.as a τ => .as (subst x t a) τ
   | Term.bool b => .bool b
   | Term.int n => .int n
 

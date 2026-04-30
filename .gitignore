@@ -1,4 +1,5 @@
 .DS_Store
+Icon?
 
 *.smt
 *.smt2
@@ -8,6 +9,20 @@ Test/
 
 *.css
 *.js
+
+## AI tooling / local dev
+.claude/
+CLAUDE.md
+.mcp.json
+.vscode/mcp.json
+
+## Planning / scratch docs
+CollectCaseProof.md
+PLAN_WEAKEN_AGREEMENT.md
+
+## Node
+package-lock.json
+node_modules/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux

@@ -28,12 +28,54 @@ abbrev Encoder := StateT EncoderState (Except String)
 def SMT.incrementFreshVarC : Encoder Nat :=
   modifyGet λ st => (st.env.freshvarsc, { st with env.freshvarsc := st.env.freshvarsc + 1 } )
 
+def SMT.foldMaxLen (xs : List SMT.𝒱) : Nat :=
+  xs.foldl (fun n s => max n s.length) 0
+
+def SMT.superFresh (xs : List SMT.𝒱) : SMT.𝒱 :=
+  String.mk (List.replicate (SMT.foldMaxLen xs + 1) 'x')
+
+theorem SMT.le_foldMaxLen (acc : Nat) (xs : List SMT.𝒱) :
+    acc ≤ xs.foldl (fun n t => max n t.length) acc := by
+  induction xs generalizing acc with
+  | nil => simp
+  | cons a as ih =>
+    simp
+    exact Nat.le_trans (Nat.le_max_left _ _) (ih (acc := max acc a.length))
+
+theorem SMT.length_le_foldMaxLenAux (acc : Nat) (xs : List SMT.𝒱) (s : SMT.𝒱) (hs : s ∈ xs) :
+    s.length ≤ xs.foldl (fun n t => max n t.length) acc := by
+  induction xs generalizing acc with
+  | nil => cases hs
+  | cons a as ih =>
+    simp at hs ⊢
+    cases hs with
+    | inl hsa =>
+      subst hsa
+      exact Nat.le_trans (Nat.le_max_right acc s.length) (SMT.le_foldMaxLen (acc := max acc s.length) as)
+    | inr hmem =>
+      exact ih (acc := max acc a.length) hmem
+
+theorem SMT.length_le_foldMaxLen (xs : List SMT.𝒱) (s : SMT.𝒱) (hs : s ∈ xs) :
+    s.length ≤ SMT.foldMaxLen xs := by
+  simpa [SMT.foldMaxLen] using SMT.length_le_foldMaxLenAux 0 xs s hs
+
+theorem SMT.superFresh_not_mem (xs : List SMT.𝒱) : SMT.superFresh xs ∉ xs := by
+  intro hs
+  have hle : (SMT.superFresh xs).length ≤ SMT.foldMaxLen xs :=
+    SMT.length_le_foldMaxLen xs (SMT.superFresh xs) hs
+  have hgt : SMT.foldMaxLen xs < (SMT.superFresh xs).length := by
+    simp [SMT.superFresh, SMT.foldMaxLen]
+  exact Nat.not_lt_of_ge hle hgt
+
 def SMT.freshVar (τ : SMTType) (name := "x") : Encoder SMT.𝒱 := do
-  let v : SMT.𝒱 := s!"{name}{←incrementFreshVarC}"
-  if v ∈ (←get).types.keys then
-    throw s!"SMT.freshVar: variable {v} already in context"
-  else
-    modifyGet λ st => (v, { st with types := st.types.insert v τ })
+  let mut n ← incrementFreshVarC
+  let mut v₀ : SMT.𝒱 := s!"{name}{n}"
+  modifyGet λ st =>
+    let used := st.env.usedVars ++ st.types.keys
+    let v := if v₀ ∈ used then SMT.superFresh used else v₀
+    (v, { st with
+      env := { st.env with usedVars := v :: st.env.usedVars }
+      types := st.types.insert v τ })
 
 def SMT.freshVarList : List SMTType → Encoder (List 𝒱)
   | [] => return []
@@ -46,7 +88,10 @@ def SMT.declareConst (v : 𝒱) (τ : SMTType) : Encoder Unit :=
   modify λ e => { e with env := { e.env with declarations := e.env.declarations.concat <| .declare_const v τ }}
 
 def SMT.addToContext (v : 𝒱) (τ : SMTType) : Encoder Unit :=
-  modify λ e => { e with types := e.types.insert v τ }
+  modify λ e => { e with types := e.types.insert v τ, env.usedVars := v :: e.env.usedVars }
+
+def SMT.eraseFromContext (v : 𝒱) : Encoder Unit :=
+  modify λ e => { e with types := e.types.erase v }
 
 partial def addInstr : Stages → Chunk → Stages
   | .instr is, as => .instr <| as ++ is --NOTE: is the order correct?
@@ -161,37 +206,44 @@ theorem SMT.SMTType.fromProdl_length (τ : SMT.SMTType) (n : Nat) : (τ.fromProd
     unfold SMT.SMTType.fromProdl
     simp only [List.length_singleton, Nat.le_add_left]
 
-partial def List.toProdl (xs : List SMTType) : SMTType :=
-  aux xs.reverse
-where aux : List SMTType → SMTType
+/-- Build a left-associated product type from a list, reading the list in reverse.
+Empty input returns a default `.unit`; this case is unreachable for all encoder
+call sites (which pass non-empty lists via typing invariants), but making the
+function total is necessary for the correctness proof. -/
+def List.toProdl.aux : List SMTType → SMTType
+  | [] => .unit
   | [x] => x
-  | x::xs => .pair (aux xs) x
-  | _ => panic! "SMT.Term.toProdl: Empty list"
+  | x::xs => .pair (List.toProdl.aux xs) x
 
-partial def List.toProdr (xs : List SMTType) : SMTType :=
-  match xs.reverse with
-  | [x] => x
-  | x::xs => .pair x xs.toProdr
-  | _ => panic! "SMT.Term.toProdr: Empty list"
+def List.toProdl (xs : List SMTType) : SMTType := List.toProdl.aux xs.reverse
 
-partial def List.currify (xs : List SMTType) : SMTType :=
-  match xs with
+/-- Build a right-associated product type. -/
+def List.toProdr.aux : List SMTType → SMTType
+  | [] => .unit
   | [x] => x
-  | x::xs => .fun x xs.currify
-  | _ => panic! "SMT.Term.toProdl: Empty list"
+  | x::xs => .pair x (List.toProdr.aux xs)
+
+def List.toProdr (xs : List SMTType) : SMTType := List.toProdr.aux xs.reverse
+
+/-- Curry a list of SMT types into a single function type. -/
+def List.currify : List SMTType → SMTType
+  | [] => .unit
+  | [x] => x
+  | x::xs => .fun x (List.currify xs)
 
 def SMT.SMTType.fromCurry : SMTType → List SMTType
   | .fun α β => α::β.fromCurry
   | τ => [τ]
 
-partial def List.toPairl (xs : List Term) : Term :=
-  match xs with
+/-- Build a left-associated pair term from a list, reading the list in reverse.
+Empty input returns a default boolean-false term; this case is unreachable for
+all encoder call sites. -/
+def List.toPairl.aux : List Term → Term
+  | [] => .bool false
   | [x] => x
-  | x::xs =>
-    let last := (x::xs).getLast (cons_ne_nil x xs)
-    let xs' := (x::xs).dropLast
-    .pair (toPairl xs') last
-  | _ => panic! "SMT.Term.toPairl: Empty list"
+  | x::xs => .pair (List.toPairl.aux xs) x
+
+def List.toPairl (xs : List Term) : Term := List.toPairl.aux xs.reverse
 
 def gatherPairsl : Term → List Term
   | .pair x y => gatherPairsl x |>.concat y

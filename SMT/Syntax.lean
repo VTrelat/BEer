@@ -9,6 +9,8 @@ inductive SMTType where
   | pair (α β : SMTType)
   deriving Inhabited, DecidableEq
 
+abbrev SMTType.rel (α β : SMTType) : SMTType := (α.pair β).fun .bool
+
 instance : LawfulBEq SMTType where
   eq_of_beq := by
     intro a b h
@@ -120,7 +122,7 @@ def noneCast : SMTType → Term := λ τ => .as .none (.option τ)
 prefix:50 "none$" => noneCast
 
 prefix:70 "λˢ " => Term.lambda
-infixl:60 "∧ˢ" => Term.and
+infixl:60 " ∧ˢ " => Term.and
 infixl:40 " =ˢ " => Term.eq
 infixl:50 " ⇒ˢ " => Term.imp
 infixl:40 " ≤ˢ " => Term.le
@@ -191,6 +193,31 @@ def fv : Term → List 𝒱
   | .mul t₁ t₂ => fv t₁ ++ fv t₂
   | .ite c t e => fv c ++ fv t ++ fv e
   | .distinct ts => ts.attach.map (λ ⟨x, _⟩ => fv x) |>.flatten
+
+def bv : Term → List 𝒱
+  | .var _ => []
+  | .int _ => []
+  | .bool _ => []
+  | .app f x => bv f ++ bv x
+  | .lambda vs _ t | .forall vs _ t | .exists vs _ t => vs ++ bv t
+  | .as t _ => bv t
+  | .eq t₁ t₂ => bv t₁ ++ bv t₂
+  | .and t₁ t₂ => bv t₁ ++ bv t₂
+  | .or t₁ t₂ => bv t₁ ++ bv t₂
+  | .not t => bv t
+  | .imp t₁ t₂ => bv t₁ ++ bv t₂
+  | .le t₁ t₂ => bv t₁ ++ bv t₂
+  | .some t => bv t
+  | .none => []
+  | .the t => bv t
+  | .pair t₁ t₂ => bv t₁ ++ bv t₂
+  | .fst t => bv t
+  | .snd t => bv t
+  | .add t₁ t₂ => bv t₁ ++ bv t₂
+  | .sub t₁ t₂ => bv t₁ ++ bv t₂
+  | .mul t₁ t₂ => bv t₁ ++ bv t₂
+  | .ite c t e => bv c ++ bv t ++ bv e
+  | .distinct ts => ts.attach.map (λ ⟨x, _⟩ => bv x) |>.flatten
 
 theorem fv.mem_var {v} : v ∈ fv (Term.var v) := by rw [fv, List.mem_singleton]
 theorem fv.mem_int {x n} : ¬ x ∈ fv (Term.int n) := by

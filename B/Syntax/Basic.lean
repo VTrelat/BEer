@@ -78,6 +78,17 @@ def fv : Term → List 𝒱
   | .min S => fv S
   | .max S => fv S
 
+def bv : Term → List 𝒱
+  | .var _ | .int _ | .bool _ | .ℤ | .𝔹 => []
+  | .maplet x y | .add x y | .sub x y | .mul x y | .and x y | .le x y | .eq x y => bv x ++ bv y
+  | .not x => bv x
+  | .mem x S => bv x ++ bv S
+  | .collect vs D P | .all vs D P | .lambda vs D P => vs ++ bv D ++ bv P
+  | .cprod S T | .union S T | .inter S T => bv S ++ bv T
+  | .pfun A B => bv A ++ bv B
+  | .app f x => bv f ++ bv x
+  | .card S | .min S | .max S | .pow S => bv S
+
 theorem fv.mem_var {v} : v ∈ fv (Term.var v) := by rw [fv, List.mem_singleton]
 theorem fv.mem_int {x n} : ¬ x ∈ fv (Term.int n) := List.count_eq_zero.mp rfl
 theorem fv.mem_bool {x b} : ¬ x ∈ fv (Term.bool b) := List.count_eq_zero.mp rfl

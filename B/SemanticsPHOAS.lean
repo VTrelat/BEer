@@ -57,7 +57,7 @@ open Classical B.PHOAS in
 def denote_aux.all {n} {D} {P : (Fin n → ZFSet) → B.PHOAS.Term ZFSet} {Γ}
   (denoteD : (wt : WellTyped D) → Option {x : ZFSet // let ⟨_,τ,_⟩ := wt; x ∈ τ.toZFSet})
   (denoteP : (z : Fin n → ZFSet) → (wt : WellTyped (P z)) → Option {x : ZFSet // let ⟨_,τ,_⟩ := wt; x ∈ τ.toZFSet})
-  (h : Γ ⊢ .all D P : .bool) : Option {x : ZFSet // x ∈ ZFSet.𝔹} := do
+  (h : Γ ⊢ᴮ' .all D P : .bool) : Option {x : ZFSet // x ∈ ZFSet.𝔹} := do
     let αs_Ds := choose (Typing.allE h).2.2; let αs := αs_Ds.1
     let n_pos := (Typing.allE h).2.1
     let ⟨𝒟, _⟩ ← denoteD ⟨Γ, .set (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ×ᴮ αs ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (αs ⟨0, n_pos⟩)), PHOAS.Typing.all_dom h⟩
@@ -73,7 +73,7 @@ open Classical B.PHOAS in
 def denote_aux.lambda {n} {D} {P : (Fin n → ZFSet) → B.PHOAS.Term ZFSet} {Γ} {τ γ : BType}
   (denoteD : (wt : WellTyped D) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
   (denoteP : (z : Fin n → ZFSet) → (wt : WellTyped (P z)) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ .lambda D P : (τ ×ᴮ γ).set) : Option {x : ZFSet // x ∈ (τ ×ᴮ γ).set.toZFSet} := do
+  (h : Γ ⊢ᴮ' .lambda D P : (τ ×ᴮ γ).set) : Option {x : ZFSet // x ∈ (τ ×ᴮ γ).set.toZFSet} := do
     let β_αs_Ds := choose (Typing.lambdaE h).2; let β := β_αs_Ds.1; let αs := β_αs_Ds.2.1
     let ⟨𝒟, h𝒟⟩ ← denoteD ⟨Γ, .set τ, PHOAS.Typing.lambda_dom h⟩
     let ℙ (xy : ZFSet) := xy.hasArity 2 ∧
@@ -89,7 +89,7 @@ open Classical B.PHOAS in
 def denote_aux.collect {n} {D} {P : (Fin n → ZFSet) → B.PHOAS.Term ZFSet} {Γ} {τ : BType}
   (denoteD : (wt : WellTyped D) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
   (denoteP : (z : Fin n → ZFSet) → (wt : WellTyped (P z)) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ .collect D P : τ.set) : Option {x : ZFSet // x ∈ τ.set.toZFSet} := do
+  (h : Γ ⊢ᴮ' .collect D P : τ.set) : Option {x : ZFSet // x ∈ τ.set.toZFSet} := do
     let αs_Ds := choose (Typing.collectE h).2; let αs := αs_Ds.1
     let ⟨𝒟, h𝒟⟩ ← denoteD ⟨Γ, τ.set, PHOAS.Typing.collect_dom (h := h)⟩
     let ℙ z :=
@@ -111,7 +111,7 @@ open Classical B.PHOAS in
 def denote_aux.pfun {A B : PHOAS.Term ZFSet} {Γ} {α β : BType}
   (denoteA : (wt : WellTyped A) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
   (denoteB : (wt : WellTyped B) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ .pfun A B : (α ×ᴮ β).set.set) : Option {x : ZFSet // x ∈ (α ×ᴮ β).set.set.toZFSet} := do
+  (h : Γ ⊢ᴮ' .pfun A B : (α ×ᴮ β).set.set) : Option {x : ZFSet // x ∈ (α ×ᴮ β).set.set.toZFSet} := do
     let α' := choose (Typing.pfunE h)
     let β' := choose <| choose_spec (Typing.pfunE h)
     let ⟨eq, hX, hY⟩ := choose_spec <| choose_spec (Typing.pfunE h)
@@ -124,7 +124,7 @@ open Classical B.PHOAS in
 def denote_aux.apply {f x : PHOAS.Term ZFSet} {Γ} {β : BType}
   (denotef : (wt : WellTyped f) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
   (denotex : (wt : WellTyped x) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ .app f x : β) : Option {x : ZFSet // x ∈ β.toZFSet} := do
+  (h : Γ ⊢ᴮ' .app f x : β) : Option {x : ZFSet // x ∈ β.toZFSet} := do
     let α := choose (Typing.appE h)
     let ⟨hF, hX⟩ := choose_spec (Typing.appE h)
     let ⟨F, _⟩ ← denotef ⟨Γ, .set (α ×ᴮ β), hF⟩
@@ -138,7 +138,7 @@ def denote_aux.apply {f x : PHOAS.Term ZFSet} {Γ} {β : BType}
 open Classical B.PHOAS in
 def denote_aux.card {S : PHOAS.Term ZFSet} {Γ}
   (denoteS : (wt : WellTyped S) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ |S|ᴮ' : .int) : Option {x : ZFSet // x ∈ ZFSet.Int} := do
+  (h : Γ ⊢ᴮ' |S|ᴮ' : .int) : Option {x : ZFSet // x ∈ ZFSet.Int} := do
     let α := choose (Typing.cardE h |>.right)
     let hS := choose_spec (Typing.cardE h |>.right)
     let ⟨X, _⟩ ← denoteS ⟨Γ, .set α, hS⟩
@@ -150,7 +150,7 @@ def denote_aux.card {S : PHOAS.Term ZFSet} {Γ}
 open Classical B.PHOAS in
 def denote_aux.max {S : PHOAS.Term ZFSet} {Γ}
   (denoteS : (wt : WellTyped S) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ .max S : .int) : Option {x : ZFSet // x ∈ ZFSet.Int} := do
+  (h : Γ ⊢ᴮ' .max S : .int) : Option {x : ZFSet // x ∈ ZFSet.Int} := do
     let ⟨X, hX⟩ ← denoteS ⟨Γ, .set .int, Typing.maxE h |>.right⟩
     have linord : LinearOrder {x // x ∈ X} :=
       ZFSet.LinearOrder.ofSubset (by dsimp [BType.toZFSet] at hX; rw [← ZFSet.mem_powerset]; exact hX)
@@ -162,7 +162,7 @@ def denote_aux.max {S : PHOAS.Term ZFSet} {Γ}
 open Classical B.PHOAS in
 def denote_aux.min {S : PHOAS.Term ZFSet} {Γ}
   (denoteS : (wt : WellTyped S) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ .min S : .int) : Option {x : ZFSet // x ∈ ZFSet.Int} := do
+  (h : Γ ⊢ᴮ' .min S : .int) : Option {x : ZFSet // x ∈ ZFSet.Int} := do
     let ⟨X, hX⟩ ← denoteS ⟨Γ, .set .int, Typing.minE h |>.right⟩
     have linord : LinearOrder {x // x ∈ X} :=
       ZFSet.LinearOrder.ofSubset (by dsimp [BType.toZFSet] at hX; rw [← ZFSet.mem_powerset]; exact hX)
@@ -175,7 +175,7 @@ open Classical B.PHOAS
 def denote_aux.inter {X Y : PHOAS.Term ZFSet} {Γ} {α : BType}
   (denoteX : (wt : WellTyped X) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
   (denoteY : (wt : WellTyped Y) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ X ∩ᴮ' Y : α.set) : Option {x : ZFSet // x ∈ α.set.toZFSet} := do
+  (h : Γ ⊢ᴮ' X ∩ᴮ' Y : α.set) : Option {x : ZFSet // x ∈ α.set.toZFSet} := do
     let α' := choose (Typing.interE h)
     let ⟨hα', hS, hT⟩ := choose_spec (Typing.interE h)
     have eq : α = α' := by injections hα'
@@ -190,7 +190,7 @@ open Classical B.PHOAS
 def denote_aux.union {X Y : PHOAS.Term ZFSet} {Γ} {α : BType}
   (denoteX : (wt : WellTyped X) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
   (denoteY : (wt : WellTyped Y) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ X ∪ᴮ' Y : α.set) : Option {x : ZFSet // x ∈ α.set.toZFSet} := do
+  (h : Γ ⊢ᴮ' X ∪ᴮ' Y : α.set) : Option {x : ZFSet // x ∈ α.set.toZFSet} := do
     let α' := choose (Typing.unionE h)
     let ⟨hα', hS, hT⟩ := choose_spec (Typing.unionE h)
     have eq : α = α' := by injections hα'
@@ -204,7 +204,7 @@ def denote_aux.union {X Y : PHOAS.Term ZFSet} {Γ} {α : BType}
 open Classical B.PHOAS
 def denote_aux.powerset {S : PHOAS.Term ZFSet} {Γ} {α : BType}
   (denoteS : (wt : WellTyped S) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ 𝒫ᴮ' S : α.set.set) : Option {x : ZFSet // x ∈ α.set.set.toZFSet} := do
+  (h : Γ ⊢ᴮ' 𝒫ᴮ' S : α.set.set) : Option {x : ZFSet // x ∈ α.set.set.toZFSet} := do
     let α' := choose (Typing.powE h)
     let ⟨hα', hS⟩ := choose_spec (Typing.powE h)
     have α_eq : α = α' := by injections hα'
@@ -218,7 +218,7 @@ open Classical B.PHOAS
 def denote_aux.cprod {X Y : PHOAS.Term ZFSet} {Γ} {α β : BType}
   (denoteX : (wt : WellTyped X) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
   (denoteY : (wt : WellTyped Y) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ X ⨯ᴮ' Y : (α ×ᴮ β).set) : Option {x : ZFSet // x ∈ (α ×ᴮ β).set.toZFSet} := do
+  (h : Γ ⊢ᴮ' X ⨯ᴮ' Y : (α ×ᴮ β).set) : Option {x : ZFSet // x ∈ (α ×ᴮ β).set.toZFSet} := do
     let α' := choose (Typing.cprodE h)
     let hα' := choose_spec (Typing.cprodE h)
     let β' := choose hα'
@@ -239,7 +239,7 @@ open Classical B.PHOAS
 def denote_aux.mem {x S : PHOAS.Term ZFSet} {Γ}
   (denotex : (wt : WellTyped x) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
   (denoteS : (wt : WellTyped S) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ x ∈ᴮ' S : .bool) : Option {x : ZFSet // x ∈ ZFSet.𝔹} := do
+  (h : Γ ⊢ᴮ' x ∈ᴮ' S : .bool) : Option {x : ZFSet // x ∈ ZFSet.𝔹} := do
     let α := choose (Typing.memE h |>.right)
     let ⟨hx, hS⟩ := choose_spec (Typing.memE h |>.right)
     let ⟨X, _⟩ ← denotex ⟨Γ, α, hx⟩
@@ -250,7 +250,7 @@ open Classical B.PHOAS
 def denote_aux.eq {x y : PHOAS.Term ZFSet} {Γ}
   (denotex : (wt : WellTyped x) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
   (denotey : (wt : WellTyped y) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ x =ᴮ' y : .bool) : Option {x : ZFSet // x ∈ ZFSet.𝔹} := do
+  (h : Γ ⊢ᴮ' x =ᴮ' y : .bool) : Option {x : ZFSet // x ∈ ZFSet.𝔹} := do
     let α := choose (Typing.eqE h |>.right)
     let ⟨hx, hy⟩ := choose_spec (Typing.eqE h |>.right)
     let ⟨X, hX⟩ ← denotex ⟨Γ, α, hx⟩
@@ -525,16 +525,28 @@ def denote (t : PHOAS.Term Dom) : Option Dom :=
   | @B.PHOAS.Term.collect _ n D P => do
     -- denote_aux.collect ⟦D⟧ᴮ (λ z => ⟦P z⟧ᴮ) h
     let ⟨𝒟, .set τ, h𝒟⟩ ← ⟦D⟧ᴮ | failure
-    if den_P : ∀ {x}, ZFSet.ofFinDom x ∈ 𝒟 → ⟦P x⟧ᴮ.isSome then
-      if typP_det : ∀ x y, (x_𝒟 : ZFSet.ofFinDom x ∈ 𝒟) → (y_𝒟 : ZFSet.ofFinDom y ∈ 𝒟) → ⟦P x⟧ᴮ.get (den_P x_𝒟) |>.2.1 = (⟦P y⟧ᴮ.get (den_P y_𝒟) |>.2.1) then
-        let ℙ z :=
-          if hz : z.hasArity n ∧ τ.hasArity n ∧ z ∈ τ.toZFSet then
-            let zₙ : Fin n → Dom := fun i => ⟨z.get n i, τ.get n i, get_mem_type_of_isTuple hz.1 hz.2.1 hz.2.2⟩
-            match ⟦P zₙ⟧ᴮ with
-            | some ⟨Pz, _, _⟩ => Pz = ZFSet.zftrue
-            | none => False
-          else False
-        return ⟨𝒟.sep ℙ, .set τ, (ZFSet.sep_mem_powerset h𝒟)⟩
+    if h : τ.defaultZFSet.hasArity n ∧ τ.hasArity n then
+      let def_dom : Fin n → Dom := fun i =>
+        ⟨τ.defaultZFSet.get n i, τ.get n i,
+         get_mem_type_of_isTuple h.1 h.2 BType.mem_toZFSet_of_defaultZFSet⟩
+      let _ ← ⟦P def_dom⟧ᴮ
+      if den_P : ∀ {x : Fin n → Dom},
+          (∀ i, (x i).snd.fst = τ.get n i ∧ (x i).fst ∈ ⟦τ.get n i⟧ᶻ) →
+          ZFSet.ofFinDom x ∈ 𝒟 → ⟦P x⟧ᴮ.isSome then
+        if typP_det : ∀ {x y : Fin n → Dom},
+            (hx_typ : ∀ i, (x i).snd.fst = τ.get n i ∧ (x i).fst ∈ ⟦τ.get n i⟧ᶻ) →
+            (hy_typ : ∀ i, (y i).snd.fst = τ.get n i ∧ (y i).fst ∈ ⟦τ.get n i⟧ᶻ) →
+            (x_𝒟 : ZFSet.ofFinDom x ∈ 𝒟) → (y_𝒟 : ZFSet.ofFinDom y ∈ 𝒟) →
+            ⟦P x⟧ᴮ.get (den_P hx_typ x_𝒟) |>.2.1 = (⟦P y⟧ᴮ.get (den_P hy_typ y_𝒟) |>.2.1) then
+          let ℙ z :=
+            if hz : z.hasArity n ∧ τ.hasArity n ∧ z ∈ τ.toZFSet then
+              let zₙ : Fin n → Dom := fun i => ⟨z.get n i, τ.get n i, get_mem_type_of_isTuple hz.1 hz.2.1 hz.2.2⟩
+              match ⟦P zₙ⟧ᴮ with
+              | some ⟨Pz, _, _⟩ => Pz = ZFSet.zftrue
+              | none => False
+            else False
+          return ⟨𝒟.sep ℙ, .set τ, (ZFSet.sep_mem_powerset h𝒟)⟩
+        else failure
       else failure
     else failure
   | @B.PHOAS.Term.lambda _ n D E => do
@@ -542,8 +554,14 @@ def denote (t : PHOAS.Term Dom) : Option Dom :=
     let ⟨𝒟, .set τ, h𝒟⟩ ← ⟦D⟧ᴮ | failure
     if hτ : τ.hasArity n then
       -- check if the domain is non-empty (should be provable not a conditional)
-      if den_E : ∀ {x}, ZFSet.ofFinDom x ∈ 𝒟 → ⟦E x⟧ᴮ.isSome then
-        if typE_det : ∀ x y, (x_𝒟 : ZFSet.ofFinDom x ∈ 𝒟) → (y_𝒟 : ZFSet.ofFinDom y ∈ 𝒟) → ⟦E x⟧ᴮ.get (den_E x_𝒟) |>.2.1 = (⟦E y⟧ᴮ.get (den_E y_𝒟) |>.2.1) then
+      if den_E : ∀ {x : Fin n → Dom},
+          (∀ i, (x i).snd.fst = τ.get n i ∧ (x i).fst ∈ ⟦τ.get n i⟧ᶻ) →
+          ZFSet.ofFinDom x ∈ 𝒟 → ⟦E x⟧ᴮ.isSome then
+        if typE_det : ∀ {x y : Fin n → Dom},
+            (hx_typ : ∀ i, (x i).snd.fst = τ.get n i ∧ (x i).fst ∈ ⟦τ.get n i⟧ᶻ) →
+            (hy_typ : ∀ i, (y i).snd.fst = τ.get n i ∧ (y i).fst ∈ ⟦τ.get n i⟧ᶻ) →
+            (x_𝒟 : ZFSet.ofFinDom x ∈ 𝒟) → (y_𝒟 : ZFSet.ofFinDom y ∈ 𝒟) →
+            ⟦E x⟧ᴮ.get (den_E hx_typ x_𝒟) |>.2.1 = (⟦E y⟧ᴮ.get (den_E hy_typ y_𝒟) |>.2.1) then
           if 𝒟_nemp : 𝒟 ≠ ∅ then
             /- compute the return type γ of the function -/
             let x := choose (ZFSet.nonempty_exists_iff.mp 𝒟_nemp)
@@ -583,8 +601,14 @@ def denote (t : PHOAS.Term Dom) : Option Dom :=
     -- let ⟨𝒟, _⟩ ← denoteD ⟨Γ, .set (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ×ᴮ αs ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (αs ⟨0, n_pos⟩)), PHOAS.Typing.all_dom h⟩
     let ⟨𝒟, .set τ, h𝒟⟩ ← ⟦D⟧ᴮ | failure
     if hτ : τ.hasArity n then
-      if den_P : ∀ {x}, ZFSet.ofFinDom x ∈ 𝒟 → ⟦P x⟧ᴮ.isSome then
-        if typP_det : ∀ x y, (x_𝒟 : ZFSet.ofFinDom x ∈ 𝒟) → (y_𝒟 : ZFSet.ofFinDom y ∈ 𝒟) → ⟦P x⟧ᴮ.get (den_P x_𝒟) |>.2.1 = (⟦P y⟧ᴮ.get (den_P y_𝒟) |>.2.1) then
+      if den_P : ∀ {x : Fin n → Dom},
+          (∀ i, (x i).snd.fst = τ.get n i ∧ (x i).fst ∈ ⟦τ.get n i⟧ᶻ) →
+          ZFSet.ofFinDom x ∈ 𝒟 → ⟦P x⟧ᴮ.isSome then
+        if typP_det : ∀ {x y : Fin n → Dom},
+            (hx_typ : ∀ i, (x i).snd.fst = τ.get n i ∧ (x i).fst ∈ ⟦τ.get n i⟧ᶻ) →
+            (hy_typ : ∀ i, (y i).snd.fst = τ.get n i ∧ (y i).fst ∈ ⟦τ.get n i⟧ᶻ) →
+            (x_𝒟 : ZFSet.ofFinDom x ∈ 𝒟) → (y_𝒟 : ZFSet.ofFinDom y ∈ 𝒟) →
+            ⟦P x⟧ᴮ.get (den_P hx_typ x_𝒟) |>.2.1 = (⟦P y⟧ᴮ.get (den_P hy_typ y_𝒟) |>.2.1) then
           /- compute the denotation of `P` -/
           let ℙ (x : ZFSet) :=
             if hx : x.hasArity n ∧ x ∈ τ.toZFSet then
@@ -593,7 +617,13 @@ def denote (t : PHOAS.Term Dom) : Option Dom :=
               | some ⟨Px, _, _⟩ => Px
               | none => ZFSet.zffalse
             else ZFSet.zffalse
-          return ⟨ZFSet.sInter (ZFSet.𝔹.sep fun (y : ZFSet) => ∃ x ∈ 𝒟, y = ℙ x), .bool, ZFSet.sInter_sep_subset_of_𝔹_mem_𝔹 λ _ => id⟩
+          -- Empty-domain case: `∀ x ∈ ∅, P(x)` is vacuously true. Without this
+          -- guard, `sInter ∅ = ∅ = zffalse`, which disagrees with standard
+          -- mathematical (and SMT) semantics of universal quantification.
+          if 𝒟 = ∅ then
+            return ⟨ZFSet.zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩
+          else
+            return ⟨ZFSet.sInter (ZFSet.𝔹.sep fun (y : ZFSet) => ∃ x ∈ 𝒟, y = ℙ x), .bool, ZFSet.sInter_sep_subset_of_𝔹_mem_𝔹 λ _ => id⟩
         else failure
       else failure
     else failure
