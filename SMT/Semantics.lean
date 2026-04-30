@@ -133,25 +133,25 @@ def denote : PHOAS.Term Dom → Option Dom
     else failure
   | @SMT.PHOAS.Term.lambda _ n τs t => do
     if n_pos : n > 0 then
-      if den_t_isSome : ∀ {x : Fin n → Dom}, (∀ i, (x i).1 ∈ (τs i).toZFSet) → ⟦t x⟧ˢ.isSome then
-        if den_t_typ_det : ∀ x y : Fin n → Dom, (hx : ∀ i, (x i).1 ∈ (τs i).toZFSet) → (hy : ∀ i, (y i).1 ∈ (τs i).toZFSet) → ⟦t x⟧ˢ.get (den_t_isSome hx) |>.2.1 = (⟦t y⟧ˢ.get (den_t_isSome hy) |>.2.1) then
+      if den_t_isSome : ∀ {x : Fin n → Dom}, (∀ i, (x i).2.1 = (τs i) ∧ (x i).1 ∈ (τs i).toZFSet) → ⟦t x⟧ˢ.isSome then
+        if den_t_typ_det : ∀ x y : Fin n → Dom, (hx : ∀ i, (x i).2.1 = (τs i) ∧ (x i).1 ∈ (τs i).toZFSet) → (hy : ∀ i, (y i).2.1 = (τs i) ∧ (y i).1 ∈ (τs i).toZFSet) → ⟦t x⟧ˢ.get (den_t_isSome hx) |>.2.1 = (⟦t y⟧ˢ.get (den_t_isSome hy) |>.2.1) then
           -- compute the return type
           let xₙ : Fin n → Dom := fun i ↦ ⟨(τs i).defaultZFSet, τs i, SMTType.mem_toZFSet_of_defaultZFSet⟩
-          let γ := ⟦t xₙ⟧ˢ.get (den_t_isSome (fun i ↦ SMTType.mem_toZFSet_of_defaultZFSet)) |>.2.1
+          let γ := ⟦t xₙ⟧ˢ.get (den_t_isSome (fun i ↦ ⟨rfl, SMTType.mem_toZFSet_of_defaultZFSet⟩)) |>.2.1
           let τ : SMTType := Fin.foldr (n-1) (fun ⟨i, hi⟩ acc ↦ (τs ⟨i, Nat.lt_of_lt_pred hi⟩).pair acc) (τs ⟨n-1, Nat.sub_one_lt_of_lt n_pos⟩)
 
-          have γ_out (x : Fin n → Dom) (hx : ∀ i, (x i).1 ∈ (τs i).toZFSet) :
+          have γ_out (x : Fin n → Dom) (hx : ∀ i, (x i).2.1 = (τs i) ∧ (x i).1 ∈ (τs i).toZFSet) :
               ⟦t x⟧ˢ.get (den_t_isSome hx) |>.2.1 = γ := by
             specialize den_t_typ_det x xₙ hx ?_
             · intro
-              exact SMTType.mem_toZFSet_of_defaultZFSet
+              exact ⟨rfl, SMTType.mem_toZFSet_of_defaultZFSet⟩
             · exact den_t_typ_det
 
           -- compute the denotation of `t`
           let T (x : ZFSet) : ZFSet :=
             if hx : x.hasArity n ∧ (∀ i, x.get n i ∈ (τs i).toZFSet) then
               let xₙ : Fin n → Dom := fun i ↦ ⟨x.get n i, τs i, hx.2 i⟩
-              ⟦t xₙ⟧ˢ.get (den_t_isSome hx.2) |>.1
+              ⟦t xₙ⟧ˢ.get (den_t_isSome (fun i ↦ ⟨rfl, hx.2 i⟩)) |>.1
             else γ.defaultZFSet
 
           have range_T {x : ZFSet} (hx : x ∈ τ.toZFSet) : T x ∈ γ.toZFSet := by
@@ -159,7 +159,8 @@ def denote : PHOAS.Term Dom → Option Dom
             split_ifs with cond
             · extract_lets xₙ
               specialize γ_out xₙ ?_
-              · exact cond.2
+              · intro i
+                exact ⟨rfl, cond.2 i⟩
               · rw [←γ_out]
                 exact ⟦t xₙ⟧ˢ.get _ |>.2.2
             · exact SMTType.mem_toZFSet_of_defaultZFSet
@@ -170,15 +171,11 @@ def denote : PHOAS.Term Dom → Option Dom
     else failure
   | @PHOAS.Term.forall _ n τs P => do
     if n_pos : n > 0 then
-      if den_t_isSome : ∀ {x : Fin n → Dom}, (∀ i, (x i).1 ∈ (τs i).toZFSet) → ⟦P x⟧ˢ.isSome then
+      if den_t_isSome : ∀ {x : Fin n → Dom}, (∀ i, (x i).2.1 = (τs i) ∧ (x i).1 ∈ (τs i).toZFSet) → ⟦P x⟧ˢ.isSome then
         -- compute the denotation of `P`
-        let ℙ (xy : ZFSet) :=
-          if hxy : xy.hasArity 2 then
-            let x := xy.π₁
-            let y := xy.π₂
-            if hx : x.hasArity n ∧ (∀ i, x.get n i ∈ (τs i).toZFSet) then
-              ⟦P (fun i => ⟨x.get n i, τs i, hx.2 i⟩)⟧ˢ.get (den_t_isSome hx.2) |>.1
-            else ZFSet.zffalse
+        let ℙ (x : ZFSet) :=
+          if hx : x.hasArity n ∧ (∀ i, x.get n i ∈ (τs i).toZFSet) then
+            ⟦P (fun i => ⟨x.get n i, τs i, hx.2 i⟩)⟧ˢ.get (den_t_isSome (fun i ↦ ⟨rfl, hx.2 i⟩)) |>.1
           else ZFSet.zffalse
         let 𝒟 := Fin.foldl (n-1) (fun acc ⟨i, hi⟩ ↦ acc.prod (τs ⟨i+1, Nat.add_lt_of_lt_sub hi⟩).toZFSet) (τs ⟨0, n_pos⟩).toZFSet
         return ⟨ZFSet.sInter (ZFSet.𝔹.sep fun y ↦ ∃ x ∈ 𝒟, y = ℙ x : ZFSet), .bool, ZFSet.sInter_sep_subset_of_𝔹_mem_𝔹 fun _ ↦ id⟩

@@ -275,18 +275,18 @@ theorem denote_welltyped_eq {t : PHOAS.Term Dom} {T τ hTτ}
     congr
 
     let xₙ : Fin _ → Dom := fun i ↦ ⟨(τs i).defaultZFSet, τs i, SMTType.mem_toZFSet_of_defaultZFSet⟩
-    let den_t_xₙ := ⟦t xₙ⟧ˢ.get (den_is_some (fun i ↦ SMTType.mem_toZFSet_of_defaultZFSet))
+    let den_t_xₙ := ⟦t xₙ⟧ˢ.get (den_is_some (fun i ↦ ⟨rfl, SMTType.mem_toZFSet_of_defaultZFSet⟩))
     let ξ := den_t_xₙ.2.1
-    have all_ξ (x : Fin _ → Dom) (hx : ∀ i, (x i).1 ∈ (τs i).toZFSet) :
+    have all_ξ (x : Fin _ → Dom) (hx : ∀ i, (x i).2.1 = τs i ∧ (x i).1 ∈ (τs i).toZFSet) :
         ⟦t x⟧ˢ.get (den_is_some hx) |>.2.1 = ξ := by
       specialize typ_det x xₙ hx ?_
       · intro
-        exact SMTType.mem_toZFSet_of_defaultZFSet
+        exact ⟨rfl, SMTType.mem_toZFSet_of_defaultZFSet⟩
       · exact typ_det
-    specialize ih xₙ ⟨Γ.update xₙ τs, WFTC.update (congrFun rfl), γ, typ_t xₙ⟩ (Option.eq_some_iff_get_eq.mpr ⟨den_is_some fun i => SMTType.mem_toZFSet_of_defaultZFSet, rfl⟩)
+    specialize ih xₙ ⟨Γ.update xₙ τs, WFTC.update (congrFun rfl), γ, typ_t xₙ⟩ (Option.eq_some_iff_get_eq.mpr ⟨den_is_some (fun i => ⟨rfl, SMTType.mem_toZFSet_of_defaultZFSet⟩), rfl⟩)
     obtain rfl : γ = ξ := ih
     apply all_ξ
-    exact fun i ↦ SMTType.mem_toZFSet_of_defaultZFSet
+    exact fun i ↦ ⟨rfl, SMTType.mem_toZFSet_of_defaultZFSet⟩
   | «forall» τs t ih =>
     obtain ⟨Γ, Γwf, τ, hτ⟩ := wt_t
     apply Typing.forallE at hτ
@@ -302,7 +302,7 @@ theorem denote_welltyped_eq {t : PHOAS.Term Dom} {T τ hTτ}
 theorem Typing.of_abstract
   {𝒱} [DecidableEq 𝒱] {t : SMT.Term} {«Δ» : SMT.𝒱 → Option 𝒱} {Γ : SMT.TypeContext} {τ : SMTType}
   (ht : ∀ v ∈ fv t, («Δ» v).isSome = true)
-  (typ_t : Γ ⊢ t : τ) :
+  (typ_t : Γ ⊢ˢ t : τ) :
   Γ.abstract («Δ» := «Δ») ⊢ t.abstract «Δ» ht : τ := by
   induction typ_t with
   | var Γ v τ ih =>

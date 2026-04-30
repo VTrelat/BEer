@@ -3,6 +3,30 @@ import Encoder.Loosening
 
 open Batteries SMT
 
+def B.Term.vars (t : B.Term) : List B.𝒱 :=
+  fv t ∪ bv t
+
+def B.SimpleGoal.vars (g : B.SimpleGoal) : List B.𝒱 :=
+  (g.hyps.map B.Term.vars).flatten ++ g.goal.vars
+
+def B.ProofObligation.vars (po : B.ProofObligation) : List B.𝒱 :=
+  (po.defs.map B.Term.vars).flatten ++
+  (po.hyps.map B.Term.vars).flatten ++
+  (po.goals.map B.SimpleGoal.vars).flatten
+
+def B.Env.initialUsedVars (E : B.Env) : List B.𝒱 := Id.run do
+  let mut used := E.context.keys
+  used := E.flags ++ used
+  for ⟨v, d⟩ in E.defs.entries do
+    used := v :: d.vars ++ used
+  for ⟨_, hs⟩ in E.hypotheses do
+    used := (hs.map B.Term.vars).flatten ++ used
+  for ds in E.distinct do
+    used := (ds.map B.Term.vars).flatten ++ used
+  used := (E.finite.map B.Term.vars).flatten ++ used
+  used := (E.po.map B.ProofObligation.vars).flatten ++ used
+  return used
+
 def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
   | .var v, E => do
     match (←get).types.lookup v with
@@ -68,14 +92,18 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     let ⟨S', τS⟩ ← encodeTerm S E
     match τS with
     | .fun α .bool => do -- `S` is a set
+      let ctx := (←get).types
       let x ← freshVar α
       let ℰ ← freshVar <| .fun α .bool
+      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
       return (.lambda [ℰ] [.fun α .bool] (.forall [x] [α] (.imp (.app (.var ℰ) (.var x)) (.app S' (.var x)))), .fun (.fun α .bool) .bool)
     | .fun α (.option β) => do -- `S` is a function
       -- `𝒫(S) = { f : α +-> β | ∀ x y, f(x) = y ⇒ S(x) = y}`
+      let ctx := (←get).types
       let x ← freshVar α
       let y ← freshVar β
       let f ← freshVar <| α.fun β.option
+      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
       return (.lambda [f] [α.fun β.option] (.forall [x, y] [α, β] (.imp
         (.eq (.app (.var f) (.var x)) (.var y))
         (.eq (.app S' (.var x)) (.var y)))), .fun (α.fun β.option) .bool)
@@ -104,96 +132,79 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let αs := α.fromProdl <| vs.length - 2
       unless αs.length == vs.length - 1 do
         throw s!"encodeTerm:collect: Expected {vs.length - 1} types, got {αs.length}"
-      let ctx := (←get).types
       for ⟨v, ξ⟩ in vs.zip (αs.concat β) do
         modify λ e => { e with types := e.types.insert v ξ }
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
       let xs ← freshVarList αs
       let ⟨Dxs, _⟩ ← castApp (D', α.fun β.option) (xs.map .var |>.toPairl, αs.toProdl)
       let P' := substList vs ((xs.map .var).concat Dxs) P'
-      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
+      -- Erase bound vars from context (they were temporarily added for P encoding)
+      for v in vs do SMT.eraseFromContext v
       return (.lambda xs αs (.ite P' (.some Dxs) (none$ β)), αs.toProdl.fun β.option)
     | .fun τ .bool => do
       -- `D` is a set
       let τs := τ.fromProdl <| vs.length - 1
-      let ctx := (←get).types
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
       let z ← freshVar τ
       let P' := substList vs (toDestPair vs (.var z)) P'
-      -- let D' := substList vs (toDestPair vs (.var z)) D'
-      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
-      return (.lambda [z] [τ] (.and (.app D' (.var z)) P'), .fun τ .bool)
+      -- Erase bound vars and lambda-bound var from context
+      for v in vs do SMT.eraseFromContext v
+      SMT.eraseFromContext z
+      return (.lambda [z] [τ] (.ite (.app D' (.var z)) P' (.bool false)), .fun τ .bool)
     | _ => throw s!"encodeTerm:collect: Expected a set or a function, got {τD}"
   | .lambda vs D P, E => do
-    let τs ← vs.mapM (λ v => do
-      let .some τ := (←get).types.lookup v | throw s!"encodeTerm:lambda: missing type for {v}"
-      return τ)
-    let ctx := (←get).types
-    for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
-    let ⟨P', γ⟩ ← encodeTerm P E
-    /- `D` can be a set or a function! -/
+    /- Encode `λ vs ∈ D. P` (B type `(τ ×ᴮ β).set`) as the SMT relation
+       `{xy : τ × β | xy.π₁ ∈ D ∧ xy.π₂ = P[xy.π₁/vs]}`, i.e. the graph of the
+       partial function. The resulting SMT type is `.fun (.pair τ β) .bool`,
+       matching `(τ ×ᴮ β).set.toSMTType`.
+
+       `D` must have SMT type `.fun τ .bool` (a set / characteristic function),
+       guaranteed by `B.Typing.lambda`'s requirement that `D : .set τ`. -/
     let ⟨D', τD⟩ ← encodeTerm D E
     match τD with
     | .fun τ .bool => do
+      -- `D` is a set of tuples with arity `vs.length`
       let τs := τ.fromProdl <| vs.length - 1
-      -- FIXME: what if one of the vs[i] is flagged as function?
-
-      let z ← freshVar τ
-      let P' := substList vs (toDestPair vs (.var z)) P'
-      let z_mem_D' := .app D' (.var z)
-      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
-      return (.lambda [z] [τ] (.ite z_mem_D' (.some P') (none$ γ)), .fun τ (.option γ))
-    | .fun α (.option β) => do
-      let αs := α.fromProdl <| vs.length - 2
-      unless αs.length == vs.length - 1 do
-        throw s!"encodeTerm:lambda: Expected {vs.length - 1} types, got {αs.length}"
-      let zs ← freshVarList αs
-      let z ← freshVar β
-      let ⟨Dzs, _⟩ ← castMembership (zs.concat z |>.map .var |>.toPairl, (αs.concat β).toProdl) (D', α.fun β.option)
-      let P' := substList vs (zs.concat z |>.map .var) P'
-      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
-      return (.lambda (zs.concat z) (αs.concat β) (.ite Dzs (.some P') (none$ γ)), (αs.concat β).toProdl.fun (.option γ))
-    | _ => throw s!"encodeTerm:lambda: Expected a set or a function, got {τD}"
+      for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
+      let ⟨P', γ⟩ ← encodeTerm P E
+      -- Single bound variable `xy : τ × γ` representing the input-output pair
+      let xy ← freshVar (.pair τ γ)
+      -- Destructure `xy.fst` (type `τ`) into the individual vs components
+      let Px := substList vs (toDestPair vs (.fst (.var xy))) P'
+      let x_mem_D' := .app D' (.fst (.var xy))
+      for v in vs do SMT.eraseFromContext v
+      SMT.eraseFromContext xy
+      return (.lambda [xy] [.pair τ γ]
+        (.and x_mem_D' (.eq (.snd (.var xy)) Px)),
+        .fun (.pair τ γ) .bool)
+    | _ => throw s!"encodeTerm:lambda: Expected a set (.fun τ .bool), got {τD}"
   | .pfun A B, E => do
     /-
-    A +-> B = λ f : α → Option β. ∀ x : α. ¬ (f(x) = none) ⇒ x ∈ A ∧ f(x) ∈ B`
+    A ⇸ B = { R ∈ 𝒫(A × B) | R is a partial function }
+    Encoded as: λ R : (α × β) → bool.
+      (∀ x : α, y : β. R(⟨x,y⟩) ⇒ A(x) ∧ B(y)) ∧
+      (∀ x : α, y : β, y' : β. R(⟨x,y⟩) ∧ R(⟨x,y'⟩) ⇒ y = y')
     -/
-    /- two cases : `A` is either a set or a function -/
-    -- TODO: FIXME: rollback context
-    let ⟨A'', τA'⟩ ← encodeTerm A E
-    let (⟨A', α⟩ : Term × SMTType) ← match τA' with
-      | .fun α .bool => pure (A'', α)
-      | .fun α (.option β) => do
-        let ⟨A'!, A'!_spec⟩ ← loosen "pfun!" A'' (.fun α (.option β)) (.fun (.pair α β) .bool)
-        declareConst A'! (.fun (.pair α β) .bool)
-        addSpec A'! A'!_spec
-        pure ⟨.var A'!, .pair α β⟩
-      | _ => throw s!"encodeTerm:pfun: Expected a set or a function, got {τA'}"
-    -- let ⟨B', .fun β .bool⟩ ← encodeTerm B E | throw s!"encodeTerm:pfun: Expected a set, got {← encodeTerm B E}"
-    let ⟨B'', τB'⟩ ← encodeTerm B E
-    let (⟨B', β⟩ : Term × SMTType) ← match τB' with
-      | .fun α .bool => pure ⟨B'', α⟩
-      | .fun α (.option β) => do
-        let ⟨B'!, B'!_spec⟩ ← loosen "pfun!" B'' (.fun α (.option β)) (.fun (.pair α β) .bool)
-        declareConst B'! (.fun (.pair α β) .bool)
-        addSpec B'! B'!_spec
-        pure ⟨.var B'!, .pair α β⟩
-      | _ => throw s!"encodeTerm:collect: Expected a set or a function, got {τB'}"
-    let f ← freshVar <| .fun α <| .option β
+    let ⟨A', .fun α .bool⟩ ← encodeTerm A E | throw "encodeTerm:pfun: Expected a set for domain"
+    let ⟨B', .fun β .bool⟩ ← encodeTerm B E | throw "encodeTerm:pfun: Expected a set for codomain"
+    let R ← freshVar (.fun (.pair α β) .bool)
     let x ← freshVar α
-    let x' ← freshVar α
-    return (.lambda [f] [.fun α (.option β)] (.and
-      (.forall [x] [α] (.imp (.not (.eq (.app (.var f) (.var x)) (none$ β))) (.app A' (.var x))))
-      (.forall [x'] [α] (.imp
-        (.not (.eq (.app (.var f) (.var x')) (none$ β)))
-        (.app B' (.the (.app (.var f) (.var x'))))))
-    ),
-      .fun (.fun α (.option β)) .bool)
+    let y ← freshVar β
+    let y' ← freshVar β
+    return (.lambda [R] [.fun (.pair α β) .bool] (.and
+      -- (1) R ⊆ A × B: ∀ x y. R(⟨x,y⟩) ⇒ A(x) ∧ B(y)
+      (.forall [x, y] [α, β] (.imp (.app (.var R) (.pair (.var x) (.var y)))
+        (.and (.app A' (.var x)) (.app B' (.var y)))))
+      -- (2) R is functional: ∀ x y y'. R(⟨x,y⟩) ∧ R(⟨x,y'⟩) ⇒ y = y'
+      (.forall [x, y, y'] [α, β, β] (.imp
+        (.and (.app (.var R) (.pair (.var x) (.var y)))
+              (.app (.var R) (.pair (.var x) (.var y'))))
+        (.eq (.var y) (.var y'))))
+    ), .fun (.fun (.pair α β) .bool) .bool)
   -- | .min S, E => _
   -- | .max S, E => _
   | .all vs D P, E => do
-    let ctx := (←get).types
     let ⟨D', τD⟩ ← encodeTerm D E
     match τD with
     | .fun τ .bool =>
@@ -213,11 +224,12 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:all: Expected a boolean, got {← encodeTerm P E}"
         let zs ← freshVarList τs
         let P' := substList vs (zs.map .var) P'
-        -- let D' := substList vs (toDestPair vs (.var z)) D'
         let τ' := τs.toProdl
         let (z_mem_D', .bool) ← castMembership (zs.map .var |>.toPairl, τ') (D', .fun τ .bool) | throw s!"encodeTerm:all: Failed to cast {zs} ∈ {D'}"
 
-        modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
+        -- Erase bound vars and forall-bound vars from context
+        for v in vs do SMT.eraseFromContext v
+        for v in zs do SMT.eraseFromContext v
         return (.forall zs τs (.imp z_mem_D' P'), .bool)
       else throw s!"encodeTerm:all: number of variables {vs.length} does not match number of gathered types {tmp_τs.length}"
     | .fun α (.option β) =>
@@ -234,7 +246,9 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
       let ⟨xsy_mem_D, _⟩ ← castMembership (xs.map .var |>.toPairl, τs.toProdl) (D', .fun α (.option β))
 
-      modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
+      -- Erase bound vars and forall-bound vars from context
+      for v in vs do SMT.eraseFromContext v
+      for v in xs do SMT.eraseFromContext v
 
       return (.forall xs τs (xsy_mem_D ⇒ˢ P'), .bool)
     | _ => throw s!"encodeTerm:all: Expected a set or a function, got {← encodeTerm D E}"
@@ -315,7 +329,9 @@ def encodeProofObligations (E : B.Env) : Encoder Unit := do
       aux φs
   aux E.po
 def encode (e : B.Env) : Encoder Unit := do
-  modify λ st => { st with env := {st.env with freshvarsc := e.freshvarsc} }
+  modify λ st => { st with env := { st.env with
+    freshvarsc := e.freshvarsc
+    usedVars := e.initialUsedVars } }
   encodeTypeContext e *> encodeDefs e *> encodeDistinctFinite e *> encodeProofObligations e
 
 def EncoderState.toSMTFile : Encoder String := do
@@ -325,7 +341,7 @@ def EncoderState.toSMTFile : Encoder String := do
 def encodePOG (pogpath : System.FilePath) (show_encoding := false): IO String := do
   let pog ← readPOG pogpath |>.propagateError
   let ⟨(), st⟩ ← POGtoB pog |>.run ∅ |>.run |>.propagateError
-  dbg_trace st.env
+  -- dbg_trace st.env
   let st' ← match encode st.env |>.run ∅ with
     | .ok ⟨(), st'⟩ => pure st'
     | .error e => throw <| IO.userError e

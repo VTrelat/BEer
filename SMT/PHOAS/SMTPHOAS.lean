@@ -49,8 +49,8 @@ mutual
     | ite c t e, Δ, Δ_fv => .ite (c.abstract Δ (Δ_fv · <| fv.mem_ite <| .inl ·)) (t.abstract Δ (Δ_fv · <| fv.mem_ite <| .inr <| .inl ·)) (e.abstract Δ (Δ_fv · <| fv.mem_ite <| .inr <| .inr ·))
     | imp x y, Δ, Δ_fv => (x.abstract Δ (Δ_fv · <| fv.mem_imp <| .inl ·)) ⇒ˢ' (y.abstract Δ (Δ_fv · <| fv.mem_imp <| .inr ·))
     | or x y, Δ, Δ_fv => (x.abstract Δ (Δ_fv · <| fv.mem_or <| .inl ·)) ∨ˢ' (y.abstract Δ (Δ_fv · <| fv.mem_or <| .inr ·))
-    | as none τ, Δ, Δ_fv => .none τ
-    | as _ _, _, _ => unreachable!
+    | as none (.option τ), Δ, Δ_fv => .none τ
+    | as a _, Δ, Δ_fv => a.abstract Δ (Δ_fv · <| fv.mem_as ·)
     | none, _, _ => unreachable!
   where
     go (P : SMT.Term) : (vs : List SMT.𝒱) → (Δ : SMT.𝒱 → Option α) → (∀ v ∈ fv P, v ∉ vs → (Δ v).isSome) → Function.OfArity α (PHOAS.Term α) vs.length
