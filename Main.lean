@@ -24,33 +24,51 @@ def String.addPrelude (content : String) (preludePath : String) : IO String := d
 def saveFile (content : String) (path : String) : IO Unit := do
   IO.FS.writeFile path content
 
+def usage : String :=
+  "Usage: BEer --in <input.pog> [--out <output.smt2>] [--prelude <prelude.smt>]"
+
+def parseArgs (args : List String) : IO (String × String × String) := do
+  let mut inPath : Option String := none
+  let mut outPath : Option String := none
+  let mut preludePath : Option String := none
+  let arr := args.toArray
+  let mut i := 0
+  while i < arr.size do
+    let f := arr[i]!
+    if f == "--in" || f == "-i" || f == "--out" || f == "-o" || f == "--prelude" || f == "-p" then
+      if i + 1 < arr.size then
+        let v := arr[i + 1]!
+        if f == "--in" || f == "-i" then inPath := some v
+        else if f == "--out" || f == "-o" then outPath := some v
+        else preludePath := some v
+        i := i + 2
+      else throw <| IO.userError s!"{f} requires a path argument"
+    else throw <| IO.userError s!"Unknown flag: {f}\n{usage}"
+  let pog ← match inPath with
+    | some p => pure p
+    | none   => throw <| IO.userError s!"--in is required\n{usage}"
+  let pogName := ((pog.splitOn "/").getLast!.splitOn ".")[0]!
+  let out := outPath.getD s!"{pogName}.smt2"
+  let prelude ← match preludePath with
+    | some p => pure p
+    | none => match ← IO.getEnv "BEER_PRELUDE" with
+      | some p => pure p
+      | none => pure "prelude.smt"
+  return (pog, out, prelude)
+
 def main (args : List String) : IO Unit := do
-  -- println! s!"Reading: .../dataset-pog/{pogs[45]!}.pog"
-  -- let test := readPOG s!"/Users/vtrelat/Documents/phd-b2smt/benchmark/dataset-pog/{pogs[45]!}.pog"
-  if h : args.length == 0 then
-    println! "No path to pog provided"
-    return
-  else
-    let pog := args[0]'(by rw [beq_iff_eq, List.length_eq_zero_iff] at h; exact List.length_pos_iff.mpr h)
-    let pogName := ((pog.splitOn "/").getLast!.splitOn ".")[0]!
-    println! s!"Reading:\t{pog}"
-    let test := readPOG pog
-    let ⟨(), st⟩ ← POGtoB (← test.propagateError) |>.run ∅ |>.run |>.propagateError
-    let ⟨(), st'⟩ ← match encode (st.env) |>.run ∅ with
-      | .ok r => pure r
-      | .error e =>
-        throw <| IO.userError s!"Error while encoding {pogName}: {e}"
-    -- let ⟨(), st'⟩ ← encode (st.env) |>.run ∅ |>.propagateError
-    println! s!"Encoded:\t{pog}"
-    let r ← match EncoderState.toSMTFile |>.run st' with
+  let (pog, out, prelude) ← parseArgs args
+  let pogName := ((pog.splitOn "/").getLast!.splitOn ".")[0]!
+  println! s!"Reading:\t{pog}"
+  let ⟨(), st⟩ ← POGtoB (← (readPOG pog).propagateError) |>.run ∅ |>.run |>.propagateError
+  let ⟨(), st'⟩ ← match encode st.env |>.run ∅ with
+    | .ok r => pure r
+    | .error e => throw <| IO.userError s!"Error while encoding {pogName}: {e}"
+  println! s!"Encoded:\t{pog}"
+  let r ← match EncoderState.toSMTFile |>.run st' with
     | .ok ⟨r, _⟩ => pure r
     | .error e => throw <| IO.userError e
-    if h1 : args.length == 1 then
-      saveFile (← r.addPrelude "/Users/vtrelat/Documents/phd-b2smt/lean/B/prelude.smt") s!"/Users/vtrelat/Documents/phd-b2smt/lean/B/Test/{pogName}.smt2"
-    else if h2 : args.length == 2 then
-      saveFile (← r.addPrelude "/Users/vtrelat/Documents/phd-b2smt/lean/B/prelude.smt") <| args[1]'(by rw [beq_iff_eq] at h2; simp [h2])
-    else
-      println! "Too many arguments provided"
-      return
+  saveFile (← r.addPrelude prelude) out
+  println! s!"Written:\t{out}"
 
--- #eval MCH2POG "Test/Test.mch" >>= encodePOG >>= cvc5 >>= IO.println
+-- #eval MCH2POG "Test/Kumar.mch" >>= encodePOG >>= cvc5 >>= IO.println
