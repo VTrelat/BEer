@@ -32,7 +32,7 @@ def SMT.foldMaxLen (xs : List SMT.𝒱) : Nat :=
   xs.foldl (fun n s => max n s.length) 0
 
 def SMT.superFresh (xs : List SMT.𝒱) : SMT.𝒱 :=
-  String.mk (List.replicate (SMT.foldMaxLen xs + 1) 'x')
+  String.ofList (List.replicate (SMT.foldMaxLen xs + 1) 'x')
 
 theorem SMT.le_foldMaxLen (acc : Nat) (xs : List SMT.𝒱) :
     acc ≤ xs.foldl (fun n t => max n t.length) acc := by
