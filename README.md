@@ -6,7 +6,7 @@ BEer (**B** **E**ncod**er**) translates Atelier B proof obligation `.pog` files 
 The tool is implemented in Lean and includes a proof of correctness of the encoding.
 
 > [!WARNING]
-> Proving the correctness of the translation is still ongoing work.
+> The tool has been proved correct in an earlier version, pinned in branch `beer-correctness`. Every change in the code from this point is consequently *unverified*.
 
 ## Build
 Clone this repository, install Lean 4, and build using lake.
