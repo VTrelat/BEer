@@ -8,6 +8,11 @@ The tool is implemented in Lean and includes a proof of correctness of the encod
 > [!WARNING]
 > The tool has been proved correct in an earlier version, pinned in branch `beer-correctness`. Every change in the code from this point is consequently *unverified*.
 
+## Usage
+```
+BEer --in <input.pog> [--out <output.smt>] [--prelude <prelude.smt>]
+```
+
 ## Build
 Clone this repository, install Lean 4, and build using lake.
 ```bash
