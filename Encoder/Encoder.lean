@@ -138,8 +138,6 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let xs ← freshVarList αs
       let ⟨Dxs, _⟩ ← castApp (D', α.fun β.option) (xs.map .var |>.toPairl, αs.toProdl)
       let P' := substList vs ((xs.map .var).concat Dxs) P'
-      -- Erase bound vars from context (they were temporarily added for P encoding)
-      for v in vs do SMT.eraseFromContext v
       return (.lambda xs αs (.ite P' (.some Dxs) (none$ β)), αs.toProdl.fun β.option)
     | .fun τ .bool => do
       -- `D` is a set
@@ -148,8 +146,6 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
       let z ← freshVar τ
       let P' := substList vs (toDestPair vs (.var z)) P'
-      -- Erase bound vars and lambda-bound var from context
-      for v in vs do SMT.eraseFromContext v
       SMT.eraseFromContext z
       return (.lambda [z] [τ] (.ite (.app D' (.var z)) P' (.bool false)), .fun τ .bool)
     | _ => throw s!"encodeTerm:collect: Expected a set or a function, got {τD}"
@@ -173,7 +169,6 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       -- Destructure `xy.fst` (type `τ`) into the individual vs components
       let Px := substList vs (toDestPair vs (.fst (.var xy))) P'
       let x_mem_D' := .app D' (.fst (.var xy))
-      for v in vs do SMT.eraseFromContext v
       SMT.eraseFromContext xy
       return (.lambda [xy] [.pair τ γ]
         (.and x_mem_D' (.eq (.snd (.var xy)) Px)),
@@ -221,16 +216,32 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
         for ⟨v, τ⟩ in vs.zip τs do addToContext v τ
 
+        -- Snapshot before encoding body + membership: cast helpers generated here
+        -- must be scoped inside the ∀ rather than left as global free constants.
+        -- We snapshot types too so freshVar-created cast vars don't leak to finalBulkDeclare.
+        let decls_snap := (← get).env.declarations
+        let asserts_snap := (← get).env.asserts
+        let types_snap := (← get).types
+
         let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:all: Expected a boolean, got {← encodeTerm P E}"
         let zs ← freshVarList τs
         let P' := substList vs (zs.map .var) P'
         let τ' := τs.toProdl
         let (z_mem_D', .bool) ← castMembership (zs.map .var |>.toPairl, τ') (D', .fun τ .bool) | throw s!"encodeTerm:all: Failed to cast {zs} ∈ {D'}"
 
-        -- Erase bound vars and forall-bound vars from context
-        for v in vs do SMT.eraseFromContext v
+        -- Collect cast-helper delta and revert: declarations, asserts, and types.
+        -- usedVars is kept growing to prevent future freshVar collisions.
+        let new_decls := (← get).env.declarations.drop decls_snap.length
+        modify λ e => { e with env := { e.env with declarations := decls_snap, asserts := asserts_snap }, types := types_snap }
+
+        -- Scope cast helpers inside the ∀: declare_const → ∃ binder; define_fun spec → conjunct.
+        let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
+        let spec_bodies := new_decls.filterMap fun | .define_fun _ .unit .bool b => some b | _ => none
+        let inner := spec_bodies.foldr (.and · ·) (.imp z_mem_D' P')
+        let scoped_body := ex_binders.foldr (fun (v, τ) t => .exists [v] [τ] t) inner
+
         for v in zs do SMT.eraseFromContext v
-        return (.forall zs τs (.imp z_mem_D' P'), .bool)
+        return (.forall zs τs scoped_body, .bool)
       else throw s!"encodeTerm:all: number of variables {vs.length} does not match number of gathered types {tmp_τs.length}"
     | .fun α (.option β) =>
       let τs := (α.pair β).fromProdl <| vs.length - 1
@@ -241,16 +252,27 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
       let xs ← freshVarList τs
 
+      -- Snapshot before encoding body + membership (same scoping rationale as .fun τ .bool).
+      let decls_snap := (← get).env.declarations
+      let asserts_snap := (← get).env.asserts
+      let types_snap := (← get).types
+
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:all: Expected a boolean, got {← encodeTerm P E}"
       let P' := substList vs (xs.map .var) P'
 
       let ⟨xsy_mem_D, _⟩ ← castMembership (xs.map .var |>.toPairl, τs.toProdl) (D', .fun α (.option β))
 
-      -- Erase bound vars and forall-bound vars from context
-      for v in vs do SMT.eraseFromContext v
+      let new_decls := (← get).env.declarations.drop decls_snap.length
+      modify λ e => { e with env := { e.env with declarations := decls_snap, asserts := asserts_snap }, types := types_snap }
+
+      let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
+      let spec_bodies := new_decls.filterMap fun | .define_fun _ .unit .bool b => some b | _ => none
+      let inner := spec_bodies.foldr (.and · ·) (xsy_mem_D ⇒ˢ P')
+      let scoped_body := ex_binders.foldr (fun (v, τ) t => .exists [v] [τ] t) inner
+
       for v in xs do SMT.eraseFromContext v
 
-      return (.forall xs τs (xsy_mem_D ⇒ˢ P'), .bool)
+      return (.forall xs τs scoped_body, .bool)
     | _ => throw s!"encodeTerm:all: Expected a set or a function, got {← encodeTerm D E}"
   | t, _ => throw s!"Unsupported term {t}"
 
@@ -328,11 +350,27 @@ def encodeProofObligations (E : B.Env) : Encoder Unit := do
         )
       aux φs
   aux E.po
+-- Declare any vars still in `types` that have no declaration yet.
+-- Needed for bound B variables (e.g. flagged vars in `finite`) whose
+-- cast-helper specs are committed globally during body encoding but whose
+-- `addToContext` runs after `encodeDefs`'s bulk-declare pass.
+def finalBulkDeclare : Encoder Unit := do
+  let e ← get
+  let alreadyDeclared : List SMT.𝒱 := e.env.declarations.filterMap fun
+    | .declare_const v _ => some v
+    | .define_fun v _ _ _ => some v
+    | .define_const v _ _ => some v
+    | _ => none
+  let Γ : TypeContext := e.types.filter (λ k _ => k ∉ alreadyDeclared)
+  let decl := Γ.entries.map (λ ⟨v, τ⟩ => Instr.declare_const v τ)
+  modify λ e => { e with env := { e.env with
+    declarations := decl.reverse ++ e.env.declarations } }
+
 def encode (e : B.Env) : Encoder Unit := do
   modify λ st => { st with env := { st.env with
     freshvarsc := e.freshvarsc
     usedVars := e.initialUsedVars } }
-  encodeTypeContext e *> encodeDefs e *> encodeDistinctFinite e *> encodeProofObligations e
+  encodeTypeContext e *> encodeDefs e *> encodeDistinctFinite e *> encodeProofObligations e *> finalBulkDeclare
 
 def EncoderState.toSMTFile : Encoder String := do
   let env := (← get).env.simplify
