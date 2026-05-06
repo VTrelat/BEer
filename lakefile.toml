@@ -1,0 +1,38 @@
+name = "B"
+defaultTargets = ["BEer"]
+
+[leanOptions]
+pp.proofs.withType = false
+autoImplicit = false
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.27.0"
+
+[[require]]
+name = "ZFLean"
+git = "https://github.com/VTrelat/ZFLean.git"
+rev = "v4.27.0"
+
+[[lean_exe]]
+name = "BEer"
+root = "Main"
+
+[[lean_lib]]
+name = "B"
+
+[[lean_lib]]
+name = "SMT"
+
+[[lean_lib]]
+name = "Extra"
+
+[[lean_lib]]
+name = "POGReader"
+
+[[lean_lib]]
+name = "Encoder"
+
+[[lean_lib]]
+name = "CustomPrelude"
