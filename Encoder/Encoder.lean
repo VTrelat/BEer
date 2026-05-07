@@ -234,11 +234,15 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         let new_decls := (← get).env.declarations.drop decls_snap.length
         modify λ e => { e with env := { e.env with declarations := decls_snap, asserts := asserts_snap }, types := types_snap }
 
-        -- Scope cast helpers inside the ∀: declare_const → ∃ binder; define_fun spec → conjunct.
+        -- Scope cast helpers inside the ∀ as universals guarded by their spec:
+        -- `∀ helper. spec(helper) → body`. Using `∃ helper. spec ∧ body` would be
+        -- unsound when the surrounding goal is negated: the solver could pick a
+        -- helper violating `spec` to make the implication's negation trivially
+        -- satisfiable.
         let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
         let spec_bodies := new_decls.filterMap fun | .define_fun _ .unit .bool b => some b | _ => none
-        let inner := spec_bodies.foldr (.and · ·) (.imp z_mem_D' P')
-        let scoped_body := ex_binders.foldr (fun (v, τ) t => .exists [v] [τ] t) inner
+        let inner := spec_bodies.foldr (.imp · ·) (.imp z_mem_D' P')
+        let scoped_body := ex_binders.foldr (fun (v, τ) t => .forall [v] [τ] t) inner
 
         for v in zs do SMT.eraseFromContext v
         return (.forall zs τs scoped_body, .bool)
@@ -267,8 +271,8 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
       let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
       let spec_bodies := new_decls.filterMap fun | .define_fun _ .unit .bool b => some b | _ => none
-      let inner := spec_bodies.foldr (.and · ·) (xsy_mem_D ⇒ˢ P')
-      let scoped_body := ex_binders.foldr (fun (v, τ) t => .exists [v] [τ] t) inner
+      let inner := spec_bodies.foldr (.imp · ·) (xsy_mem_D ⇒ˢ P')
+      let scoped_body := ex_binders.foldr (fun (v, τ) t => .forall [v] [τ] t) inner
 
       for v in xs do SMT.eraseFromContext v
 
@@ -303,13 +307,11 @@ def encodeDefs (E : B.Env) : Encoder Unit := do
   let Γ : TypeContext := e.types.filter (λ k _ => k ∉ declared)
   -- for ⟨v, τ⟩ in e.types do if v ∉ declared then Γ := Γ.cons v τ
   let decl := Γ.entries.map (λ ⟨v, τ⟩ => Instr.declare_const v τ)
-  let mut ass := []
-  for ⟨_, d⟩ in E.hypotheses do
-    ass := ass ++ (← d.mapM (encodeTerm · E))
+  -- NOTE: per-PO hypotheses come from `po.defs` (populated from each PO's
+  -- `<Definition>` list in the POG). Asserting `E.hypotheses` globally is
+  -- unsound because categories like `inv`/`ass` are GOALS for some POs
+  -- (e.g. `Initialisation` does not list `inv`).
   modify λ e => { e with env := { e.env with
-    asserts := match e.env.asserts with
-    | .asserts as => .asserts <| as.concat <| Stages.instr <| ass.map (Instr.assert ∘ Prod.fst)
-    | _ => panic! "encodeDefs: malformed assert in environment"
     declarations := decl.reverse ++ e.env.declarations }}
 
 def encodeDistinctFinite (E : B.Env) : Encoder Unit := do
