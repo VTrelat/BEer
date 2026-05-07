@@ -334,11 +334,33 @@ def B.ProofObligation.negateGoals (po : ProofObligation) : ProofObligation :=
   { po with goals := po.goals.map (·.negate)}
 
 def encodeProofObligation (φ : B.ProofObligation) (E : B.Env) : Encoder Stages := do
-  let defs ← (φ.defs.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E))
-  let globalHyps : Chunk ← (φ.hyps.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E))
-  let goals : List Stages ← φ.negateGoals.goals.mapM (encodeSimpleGoal · E)
-  -- let goals : List Stages ← φ.goals.mapM (encodeSimpleGoal · E)
-  return Stages.asserts <| (.instr <| defs ++ globalHyps) :: goals.map (fun s => Stages.asserts [s])
+  -- Inject this PO's local type bindings into the encoder state and emit a
+  -- `declare-const` per local variable. Declarations are scoped inside the
+  -- PO's `(push 1) ... (pop 1)` so the same name can have different types
+  -- in different POs (Atelier B reuses fresh names like `s392`).
+  let typesSnapshot := (← get).types
+  let mut localDecls : Chunk := []
+  for ⟨v, τ⟩ in φ.localContext.entries do
+    let smtτ : SMTType ←
+      if v ∈ φ.localFlags ∨ v ∈ E.flags then
+        match τ with
+        | .set (.prod α β) => pure <| .fun α.toSMTType (.option β.toSMTType)
+        | ξ => throw s!"encodeProofObligation: unsupported flag type {v} : {ξ}"
+      else pure τ.toSMTType
+    modify λ e => { e with types := e.types.insert v smtτ }
+    localDecls := localDecls.concat (Instr.declare_const v smtτ)
+  -- Augment the B environment with PO-local context/flags so `encodeTerm`'s
+  -- B-side lookups succeed for the duration of this PO.
+  let E_local : B.Env :=
+    { E with
+      context := φ.localContext.entries.foldl (fun acc ⟨k, τ⟩ => acc.insert k τ) E.context
+      flags := φ.localFlags ++ E.flags }
+  let defs ← (φ.defs.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
+  let globalHyps : Chunk ← (φ.hyps.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
+  let goals : List Stages ← φ.negateGoals.goals.mapM (encodeSimpleGoal · E_local)
+  -- Pop PO-local types so subsequent POs start clean.
+  modify λ e => { e with types := typesSnapshot }
+  return Stages.asserts <| (.instr <| localDecls ++ defs ++ globalHyps) :: goals.map (fun s => Stages.asserts [s])
 
 def encodeProofObligations (E : B.Env) : Encoder Unit := do
   let rec aux : List B.ProofObligation → Encoder Unit

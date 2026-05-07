@@ -259,14 +259,12 @@ def decodeTerm : Xml.Element → Decoder B.Term
         `x<i>` is used for naming fresh variables. We need to account for potential name clashes
         from the POG file.
       -/
-      if s.get! 0 == 'x' then
+      if String.Pos.Raw.get! s 0 == 'x' then
         if let some n := s.drop 1 |>.toNat? then
           modify λ st => { st with env.freshvarsc := max n st.env.freshvarsc }
       let typref := (a.get! "typref").toNat!
       let τ := (← get).types[typref]!
       let v := s ++ (match a.get? "suffix" with | some s => "_" ++ s | none => "")
-      if let some τ' := (← get).env.context.find? s then
-        unless τ == τ' do throw s!"Type mismatch: {s} is of type {τ'} but was expected to be of type {τ}"
       addToContext v τ
       pure <| .var v
   | ⟨"Exp_Comparison",a,c⟩ | ⟨"Binary_Exp",a,c⟩ | ⟨"Binary_Pred",a,c⟩ => do
@@ -673,9 +671,31 @@ def decodeProofObligationElement (c : Array Xml.Content) : Decoder B.ProofObliga
   return po
 
 def decodeProofObligation (c : Array Xml.Content) : Decoder Unit := do
+  -- Snapshot global context/flags before decoding this PO so PO-local
+  -- additions can be isolated. Atelier B reuses fresh names (e.g. `s392`)
+  -- across POs with potentially different types — keeping them in the
+  -- global env would cause spurious type conflicts.
+  let ctxBefore := (← get).env.context
+  let flagsBefore := (← get).env.flags
   let po ← decodeProofObligationElement c
-  let po_simp : B.ProofObligation := {po with goals := po.goals.map (λ sg => { sg with goal := sg.goal.simplify }) }
-  modify λ st => { st with env := { st.env with po := st.env.po.concat po_simp } }
+  let stAfter := (← get)
+  -- Compute PO-local additions: keys in ctxAfter not in ctxBefore.
+  let beforeKeys : Std.HashSet B.𝒱 := Std.HashSet.ofList ctxBefore.keys
+  let localCtx : B.TypeContext :=
+    stAfter.env.context.entries.foldl
+      (fun acc ⟨k, τ⟩ => if beforeKeys.contains k then acc else acc.insert k τ)
+      ∅
+  let localFlags : List B.𝒱 := stAfter.env.flags.filter (· ∉ flagsBefore)
+  let po_simp : B.ProofObligation :=
+    { po with
+      goals := po.goals.map (λ sg => { sg with goal := sg.goal.simplify })
+      localContext := localCtx
+      localFlags := localFlags }
+  -- Restore the global env to its pre-PO state, then record the PO.
+  modify λ st => { st with env := { st.env with
+    context := ctxBefore
+    flags := flagsBefore
+    po := st.env.po.concat po_simp } }
 
 def readPOG (path : System.FilePath) : IO <| Except String Xml.Element := Xml.parse <$> IO.FS.readFile path
 

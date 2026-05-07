@@ -16,12 +16,19 @@ structure ProofObligation where
   defs : List Term
   hyps : List Term
   goals : List SimpleGoal
+  /-- Type bindings introduced *only* during this PO's decoding. Atelier B
+  emits PO-local fresh names (e.g. `s392`) that may be reused across POs with
+  different types. Keeping them here (rather than in the global `Env.context`)
+  isolates each PO's namespace. -/
+  localContext : TypeContext := ∅
+  /-- Function-flag entries introduced only during this PO's decoding. -/
+  localFlags : List 𝒱 := []
 
 instance : ToString ProofObligation where
   toString po := s!"PO:\ndefs:\n{po.defs.printLines}\nhyps:\n{po.hyps.printLines}\n⊢\n{po.goals.printLines}"
 
 instance : EmptyCollection ProofObligation where
-  emptyCollection := { defs := [], hyps := [], goals := [] }
+  emptyCollection := { defs := [], hyps := [], goals := [], localContext := ∅, localFlags := [] }
 
 abbrev TermContext := AList (λ _ : 𝒱 => Term)
 
