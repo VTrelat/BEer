@@ -32,7 +32,10 @@ theorem TypeContext.update_lookup_self  {𝒱} [DecidableEq 𝒱] {n} {Γ : Type
       unfold Fin.last Function.update
       split_ifs with vs_i_eq
       · nomatch i_eq <| vs_inj vs_i_eq
-      · exact @ih _ (fun _ _ h => Fin.eq_of_val_eq (Fin.noConfusion (vs_inj h) id)) _ ⟨i, Fin.val_lt_last i_eq⟩
+      · obtain ⟨i, hi⟩ := i
+        simp only [Fin.mk.injEq] at i_eq
+        exact @ih (fun x ↦ vs x.castSucc) (fun _ _ h ↦ Fin.castSucc_inj.mp <| vs_inj h) (fun x ↦ αs x.castSucc) ⟨i, by omega⟩
+
 
 theorem TypeContext.update_lookup_not_self  {𝒱} [DecidableEq 𝒱] {n} {Γ : TypeContext 𝒱} {vs : Fin n → 𝒱} {αs : Fin n → BType} {v : 𝒱} (hv : ∀ i, vs i ≠ v) :
   Γ.update vs αs v = Γ v := by

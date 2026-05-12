@@ -1042,7 +1042,10 @@ theorem SMT.Term.getType_spec {Γ : TypeContext} {t : Term} {α : SMTType} (typ_
     mpure pre
     obtain ⟨pre, ⟨⟩⟩ := pre
 
-    split <;> mspec
+    split
+    · mspec Std.Do.Spec.throw_StateT
+    · mspec Std.Do.Spec.modifyGet_StateT
+    · mspec Std.Do.Spec.modifyGet_StateT
   | «forall» vs τs t
   | «exists» v τs t =>
     first
