@@ -32,12 +32,12 @@ def defaultZFSet.{u} : SMTType → ZFSet.{u}
   | .«fun» α β => (α.toZFSet.prod β.toZFSet).sep fun z ↦ z.π₂ = β.defaultZFSet
   | .unit => ∅
 
-theorem default_type_correct {𝒱} [DecidableEq 𝒱] {Γ : PHOAS.TypeContext 𝒱} (τ : SMTType) : Γ ⊢ τ.default : τ := by
+theorem default_type_correct {𝒱} [DecidableEq 𝒱] {Γ : PHOAS.TypeContext 𝒱} (τ : SMTType) : Γ ⊢ˢ' τ.default : τ := by
   induction τ generalizing Γ with
   | bool => apply PHOAS.Typing.bool
   | int => apply PHOAS.Typing.int
   | unit => apply PHOAS.Typing.«()»
-  | «fun» τ σ τ_ih σ_ih => apply PHOAS.Typing.lambda _ _ _ _ (fun _ ↦ σ_ih) Nat.one_pos
+  | «fun» τ σ τ_ih σ_ih => apply PHOAS.Typing.lambda _ _ _ _ (fun _ _ _ ↦ σ_ih) Nat.one_pos
   | option τ ih => apply PHOAS.Typing.none
   | pair α β α_ih β_ih => apply PHOAS.Typing.pair _ _ _ _ _ α_ih β_ih
 

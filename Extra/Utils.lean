@@ -814,6 +814,60 @@ theorem updates_eq_if {α β} [DecidableEq α] {f : α → β} {xs : List α} {y
         simp_rw [List.idxOf_cons_ne _ this, Nat.succ_eq_add_one, List.getElem_cons_succ]
     · push_neg at hk
       rw [ih (List.Nodup.of_cons hxs), dite_cond_eq_false (eq_false hk.2), update, dite_cond_eq_false (eq_false hk.1)]
+
+theorem updates_of_not_mem {α β} [DecidableEq α]
+  (f : α → β) (xs : List α) (ys : List β) (k : α)
+  (hk : k ∉ xs) : (Function.updates f xs ys) k = f k := by
+  induction xs generalizing f ys with
+  | nil => simp [Function.updates]
+  | cons x xs ih =>
+    cases ys with
+    | nil => simp [Function.updates]
+    | cons y ys =>
+      simp at hk
+      simp [Function.updates]
+      rw [ih (Function.update f x y) ys hk.2]
+      simp [Function.update, hk.1]
+
+theorem updates_eq_of_mem_map_some {α β} [DecidableEq α]
+  (f g : α → _root_.Option β) (xs : List α) (ys : List β) (k : α)
+  (hmem : k ∈ xs) (hlen : xs.length = ys.length) :
+  (Function.updates f xs (ys.map _root_.Option.some)) k =
+  (Function.updates g xs (ys.map _root_.Option.some)) k := by
+  induction xs generalizing f g ys with
+  | nil => cases hmem
+  | cons x xs ih =>
+    cases ys with
+    | nil => simp at hlen
+    | cons y ys =>
+      simp at hlen
+      simp [Function.updates] at hmem ⊢
+      rcases hmem with rfl | hmem
+      · by_cases hkxs : k ∈ xs
+        · exact ih (Function.update f k (_root_.Option.some y)) (Function.update g k (_root_.Option.some y)) ys hkxs hlen
+        · rw [Function.updates_of_not_mem (f := Function.update f k (_root_.Option.some y)) (xs := xs) (ys := ys.map _root_.Option.some) (k := k) hkxs]
+          rw [Function.updates_of_not_mem (f := Function.update g k (_root_.Option.some y)) (xs := xs) (ys := ys.map _root_.Option.some) (k := k) hkxs]
+          simp [Function.update]
+      · exact ih (Function.update f x (_root_.Option.some y)) (Function.update g x (_root_.Option.some y)) ys hmem hlen
+
+theorem updates_isSome_of_mem_map_some {α β} [DecidableEq α]
+  (f : α → _root_.Option β) (xs : List α) (ys : List β) (k : α)
+  (hmem : k ∈ xs) (hlen : xs.length = ys.length) :
+  ((Function.updates f xs (ys.map _root_.Option.some)) k).isSome = true := by
+  induction xs generalizing f ys with
+  | nil => cases hmem
+  | cons x xs ih =>
+    cases ys with
+    | nil => simp at hlen
+    | cons y ys =>
+      simp at hlen
+      simp [Function.updates] at hmem ⊢
+      rcases hmem with rfl | hmem
+      · by_cases hkxs : k ∈ xs
+        · exact ih (Function.update f k (_root_.Option.some y)) ys hkxs hlen
+        · rw [Function.updates_of_not_mem (f := Function.update f k (_root_.Option.some y)) (xs := xs) (ys := ys.map _root_.Option.some) (k := k) hkxs]
+          simp [Function.update]
+      · exact ih (Function.update f x (_root_.Option.some y)) ys hmem hlen
 end Function
 
 def MCH2POG (mchPath : String) : IO System.FilePath := do
