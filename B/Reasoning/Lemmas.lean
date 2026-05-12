@@ -269,9 +269,9 @@ theorem denote_welltyped_eq {t : PHOAS.Term Dom} {T τ hTτ}
       obtain ⟨_, _, _, _, rfl, heq⟩ := other
       rfl
     · -- ¬typP_det: bind with none
-      rw [bind_none_eq] at other; exact Option.noConfusion other
+      rw [bind_none_eq] at other; nomatch other
     · -- ¬den_P: bind with none
-      rw [bind_none_eq] at other; exact Option.noConfusion other
+      rw [bind_none_eq] at other; nomatch other
   | lambda D t D_ih t_ih =>
     obtain ⟨Γ, Γwf, ρ, hτ⟩ := wt_t
     obtain ⟨n_pos, ⟨γ, αs, Ds⟩, ⟨ρ_eq, hDs, D_eq, typ_t⟩, αs_Ds_unq⟩ := PHOAS.Typing.lambdaE hτ
