@@ -16,11 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Build BEer with Lean on each OS
+      # Build BEer with Lean on each OS.
+      # `build: false` skips the action's default `lake build` (which would
+      # only build `defaultTargets`, i.e. the libraries used for doc generation);
+      # we then build the `BEer` executable explicitly below.
       - uses: leanprover/lean-action@v1
         with:
           use-github-cache: true
-          build: true
+          build: false
+
+      - name: Build BEer executable
+        run: lake build BEer
 
       # Upload artifacts per-OS
       - name: Upload BEer artifact (Linux/macOS)

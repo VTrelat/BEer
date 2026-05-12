@@ -1,5 +1,5 @@
 name = "B"
-defaultTargets = ["BEer"]
+defaultTargets = ["B", "SMT", "Encoder", "POGReader", "Extra", "CustomPrelude"]
 
 [leanOptions]
 pp.proofs.withType = false
