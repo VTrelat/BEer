@@ -868,6 +868,52 @@ theorem updates_isSome_of_mem_map_some {α β} [DecidableEq α]
         · rw [Function.updates_of_not_mem (f := Function.update f k (_root_.Option.some y)) (xs := xs) (ys := ys.map _root_.Option.some) (k := k) hkxs]
           simp [Function.update]
       · exact ih (Function.update f x (_root_.Option.some y)) ys hmem hlen
+
+/-- Append-singleton characterization of `Function.updates`: at the appended pair
+    `(x, y)` the result is `some y`, otherwise it agrees with `updates f xs ys`. -/
+theorem updates_append_singleton {α β} [DecidableEq α] (f : α → _root_.Option β)
+    (xs : List α) (ys : List β) (x : α) (y : β) (hlen : xs.length = ys.length) (k : α) :
+    Function.updates f (xs ++ [x]) ((ys ++ [y]).map _root_.Option.some) k =
+      Function.update (Function.updates f xs (ys.map _root_.Option.some)) x (_root_.Option.some y) k := by
+  induction xs, ys, hlen using List.induction₂ generalizing f with
+  | nil_nil => simp [Function.updates]
+  | cons_cons x' xs' y' ys' hlen' ih =>
+    simp only [List.cons_append, List.map_cons, Function.updates]
+    exact ih (Function.update f x' (_root_.Option.some y'))
+
+/-- If `v ∈ xs`, `Function.updates f xs (ys.map some) v = some ys[k]` for some
+    `k : Fin xs.length` with `xs[k.1] = v`. The position `k` is the latest
+    occurrence of `v` in `xs`. -/
+theorem updates_eq_some_of_mem {α β} [DecidableEq α] (xs : List α) (ys : List β)
+    (hlen : xs.length = ys.length) (f : α → _root_.Option β) (v : α) (hmem : v ∈ xs) :
+    ∃ k : Fin xs.length, xs[k.1] = v ∧
+      Function.updates f xs (ys.map _root_.Option.some) v =
+        _root_.Option.some (ys[k.1]'(by rw [←hlen]; exact k.2)) := by
+  induction xs, ys, hlen using List.reverse_induction₂ generalizing f with
+  | nil_nil => exact absurd hmem List.not_mem_nil
+  | cons_cons x xs' y ys' hlen' ih =>
+    simp only [List.concat_eq_append] at hmem ⊢
+    by_cases hvx : v = x
+    · refine ⟨⟨xs'.length, by simp⟩, ?_, ?_⟩
+      · simp [hvx]
+      · rw [updates_append_singleton f xs' ys' x y hlen']
+        rw [Function.update_apply, if_pos hvx]
+        congr 1
+        simp [hlen']
+    · have hv_xs' : v ∈ xs' := by
+        rcases List.mem_append.mp hmem with h | h
+        · exact h
+        · exact absurd (List.mem_singleton.mp h) hvx
+      obtain ⟨k, hk_vs, hk_Δ⟩ := ih f hv_xs'
+      refine ⟨⟨k.1, by simp; omega⟩, ?_, ?_⟩
+      · show (xs' ++ [x])[k.1]'_ = v
+        rw [List.getElem_append_left k.2]
+        exact hk_vs
+      · rw [updates_append_singleton f xs' ys' x y hlen']
+        rw [Function.update_apply, if_neg hvx]
+        show updates f xs' (List.map some ys') v = some ((ys' ++ [y])[k.1]'_)
+        rw [List.getElem_append_left (by rw [←hlen']; exact k.2)]
+        exact hk_Δ
 end Function
 
 def MCH2POG (mchPath : String) : IO System.FilePath := do

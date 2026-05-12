@@ -115,6 +115,50 @@ theorem TypeContext.update_apply_self_of_inj {𝒱} [DecidableEq 𝒱] :
         exact Fin.castSucc_injective k this
       exact ih Ξ (fun j => vs j.castSucc) (fun j => αs j.castSucc) j hcastInj
 
+/-- AList variant: `(Γ.update vs τs).lookup v = some τs[k]` for the latest `k` in `vs` at `v`. -/
+theorem _root_.SMT.TypeContext.lookup_update_eq_some_of_mem (Γ : SMT.TypeContext)
+    (vs : List 𝒱) (τs : List SMTType) (hlen : vs.length = τs.length)
+    (v : 𝒱) (hmem : v ∈ vs) :
+    ∃ k : Fin vs.length, vs[k.1] = v ∧
+      (Γ.update vs τs hlen).lookup v =
+        Option.some (τs[k.1]'(by rw [←hlen]; exact k.2)) := by
+  induction vs, τs, hlen using List.reverse_induction₂ generalizing Γ with
+  | nil_nil => exact absurd hmem List.not_mem_nil
+  | cons_cons x xs' y ys' hlen' ih =>
+    simp only [List.concat_eq_append] at hmem ⊢
+    rw [SMT.TypeContext.update_concat Γ xs' ys' x y hlen']
+    by_cases hvx : v = x
+    · refine ⟨⟨xs'.length, by simp⟩, ?_, ?_⟩
+      · simp [hvx]
+      · rw [hvx, AList.lookup_insert]
+        congr
+        simp [hlen']
+    · have hv_xs' : v ∈ xs' := by
+        rcases List.mem_append.mp hmem with h | h
+        · exact h
+        · exact absurd (List.mem_singleton.mp h) hvx
+      obtain ⟨k, hk_vs, hk_Γ⟩ := ih Γ hv_xs'
+      refine ⟨⟨k.1, by simp; omega⟩, ?_, ?_⟩
+      · show (xs' ++ [x])[k.1] = v
+        rw [List.getElem_append_left k.2]; exact hk_vs
+      · rw [AList.lookup_insert_ne hvx, hk_Γ]
+        congr 1
+        rw [List.getElem_append_left (by rw [←hlen']; exact k.2)]
+
+/-- For `v ∈ vs`, `Function.updates` and `AList.update` extract values from the same
+    latest position `k`. -/
+theorem _root_.SMT.TypeContext.updates_alist_match
+    (vs : List 𝒱) (τs : List SMTType) (hlen : vs.length = τs.length)
+    («Δ» : 𝒱 → Option Dom) (Γ : SMT.TypeContext) (ws : Fin vs.length → Dom)
+    (v : 𝒱) (d : Dom) (σ : SMTType) (hmem : v ∈ vs)
+    (hΔ : Function.updates «Δ» vs ((List.ofFn ws).map Option.some) v = Option.some d)
+    (hΓ : (Γ.update vs τs hlen).lookup v = Option.some σ) :
+    ∃ k : Fin vs.length, ws k = d ∧
+      τs[k.1]'(by rw [←hlen]; exact k.2) = σ := by
+  -- TODO: prove via joint reverse induction over (vs, τs), with ws as List Dom to avoid
+  -- dependent-type issues with Fin-indexed ws.
+  sorry
+
 theorem denote_welltyped_eq {t : PHOAS.Term Dom} {T τ hTτ}
   (wt_t : WellTyped' t)
   (den_t : ⟦t⟧ˢ = some ⟨T, τ, hTτ⟩) : wt_t.2.2.1 = τ := by
@@ -596,7 +640,14 @@ theorem Typing.of_abstract_gen
     apply body_ih hcov_body (Ξ.update ws (fun (⟨i, hi⟩ : Fin vs.length) => τs[i]'(by omega)))
     intro v hv d Δ_eq σ Γ_eq
     by_cases hvs : v ∈ vs
-    · sorry
+    · -- v ∈ vs case: use updates_alist_match to extract k, then update_apply_self_of_inj
+      rw [Δ'_def] at Δ_eq
+      obtain ⟨k, hk_ws, hk_τ⟩ :=
+        SMT.TypeContext.updates_alist_match vs τs len_eq «Δ» Γ ws v d σ hvs Δ_eq Γ_eq
+      rw [← hk_ws]
+      rw [TypeContext.update_apply_self_of_inj Ξ ws _ k vs_inj]
+      cases k with
+      | mk i hi => exact congrArg Option.some hk_τ
     · -- v ∉ vs case
       rw [Δ'_def, Function.updates_of_not_mem _ vs _ v hvs] at Δ_eq
       rw [SMT.TypeContext.lookup_update _ v vs τs len_eq hvs] at Γ_eq
@@ -636,7 +687,14 @@ theorem Typing.of_abstract_gen
     apply body_ih hcov_body (Ξ.update ws (fun (⟨i, hi⟩ : Fin vs.length) => τs[i]'(by omega)))
     intro v hv d Δ_eq σ Γ_eq
     by_cases hvs : v ∈ vs
-    · sorry
+    · -- v ∈ vs case: use updates_alist_match to extract k, then update_apply_self_of_inj
+      rw [Δ'_def] at Δ_eq
+      obtain ⟨k, hk_ws, hk_τ⟩ :=
+        SMT.TypeContext.updates_alist_match vs τs len_eq «Δ» Γ ws v d σ hvs Δ_eq Γ_eq
+      rw [← hk_ws]
+      rw [TypeContext.update_apply_self_of_inj Ξ ws _ k vs_inj]
+      cases k with
+      | mk i hi => exact congrArg Option.some hk_τ
     · -- v ∉ vs case
       rw [Δ'_def, Function.updates_of_not_mem _ vs _ v hvs] at Δ_eq
       rw [SMT.TypeContext.lookup_update _ v vs τs len_eq hvs] at Γ_eq
@@ -652,7 +710,52 @@ theorem Typing.of_abstract_gen
       rw [TypeContext.update_apply_of_not_mem Ξ ws _ d hne_ws]
       exact hΞ_d
   | «exists» Γ vs τs P vs_Γ fresh len_pos len_eq body_typ body_ih =>
-    sorry
+    simp only [fv, List.mem_removeAll_iff, and_imp] at ht
+    unfold Term.abstract
+    rw [dite_cond_eq_true (eq_true len_eq)]
+    apply PHOAS.Typing.not
+    apply PHOAS.Typing.forall (n_pos := len_pos)
+    intro ws vs_inj vs_fresh
+    apply PHOAS.Typing.not
+    set Δ' := Function.updates «Δ» vs ((List.ofFn ws).map Option.some) with Δ'_def
+    have hcov_body : ∀ v ∈ fv P, (Δ' v).isSome = true := by
+      intro v hv
+      by_cases hvs : v ∈ vs
+      · exact Function.updates_isSome_of_mem_map_some «Δ» vs (List.ofFn ws) v hvs (by simp [len_eq])
+      · rw [Δ'_def, Function.updates_of_not_mem «Δ» vs ((List.ofFn ws).map Option.some) v hvs]
+        exact ht v hv hvs
+    have hws_eq : (fun (⟨i, hi⟩ : Fin vs.length) => (List.ofFn ws)[i]'(by simp; exact hi)) = ws := by
+      funext ⟨i, hi⟩; simp
+    have eq_body :
+        (SMT.Term.abstract.go P vs «Δ» (fun v hv h => ht v hv h)).uncurry ws =
+        P.abstract Δ' hcov_body := by
+      conv_lhs => rw [show ws = (fun (⟨i, hi⟩ : Fin vs.length) => (List.ofFn ws)[i]'(by simp; exact hi)) from hws_eq.symm]
+      exact SMT.Term.abstract.go.alt_def₂ vs P (List.ofFn ws)
+        (by simp [len_eq]) (fun v hv hvs => ht v hv hvs) hcov_body
+    rw [eq_body]
+    apply body_ih hcov_body (Ξ.update ws (fun (⟨i, hi⟩ : Fin vs.length) => τs[i]'(by omega)))
+    intro v hv d Δ_eq σ Γ_eq
+    by_cases hvs : v ∈ vs
+    · rw [Δ'_def] at Δ_eq
+      obtain ⟨k, hk_ws, hk_τ⟩ :=
+        SMT.TypeContext.updates_alist_match vs τs len_eq «Δ» Γ ws v d σ hvs Δ_eq Γ_eq
+      rw [← hk_ws]
+      rw [TypeContext.update_apply_self_of_inj Ξ ws _ k vs_inj]
+      cases k with
+      | mk i hi => exact congrArg Option.some hk_τ
+    · rw [Δ'_def, Function.updates_of_not_mem _ vs _ v hvs] at Δ_eq
+      rw [SMT.TypeContext.lookup_update _ v vs τs len_eq hvs] at Γ_eq
+      have hΞ_d : Ξ d = Option.some σ :=
+        hΞ v (by simp [fv, List.mem_removeAll_iff]; exact ⟨hv, hvs⟩) d Δ_eq σ Γ_eq
+      have hne_ws : ∀ i, d ≠ ws i := by
+        intro i heq
+        rw [heq] at hΞ_d
+        have hnone := vs_fresh i
+        rw [Option.isNone_iff_eq_none] at hnone
+        rw [hnone] at hΞ_d
+        cases hΞ_d
+      rw [TypeContext.update_apply_of_not_mem Ξ ws _ d hne_ws]
+      exact hΞ_d
 
 theorem Typing.of_abstract
   {t : SMT.Term} {«Δ» : SMT.𝒱 → Option Dom} {Γ : SMT.TypeContext} {τ : SMTType}
@@ -854,8 +957,45 @@ theorem Typing.of_abstract
     apply Typing.of_abstract_gen body_typ hcov_body
     intro v hv d Δ_eq σ Γ_eq
     by_cases hvs : v ∈ vs
-    · sorry
-    · sorry
+    · rw [Δ'_def] at Δ_eq
+      obtain ⟨k, hk_ws, hk_τ⟩ :=
+        SMT.TypeContext.updates_alist_match vs τs len_eq «Δ» Γ ws v d σ hvs Δ_eq Γ_eq
+      rw [← hk_ws]
+      rw [TypeContext.update_apply_self_of_inj _ ws _ k vs_inj]
+      cases k with
+      | mk i hi => exact congrArg Option.some hk_τ
+    · -- v ∉ vs case
+      rw [Δ'_def, Function.updates_of_not_mem _ vs _ v hvs] at Δ_eq
+      rw [SMT.TypeContext.lookup_update _ v vs τs len_eq hvs] at Γ_eq
+      -- Derive (Γ.abstract Δ) d = some σ via abstract definition
+      have hd_2_1 : d.2.1 = σ := by
+        have hh := hΔΓ v
+        rw [Δ_eq] at hh; rw [Γ_eq] at hh
+        injection hh with heq
+        exact heq.symm
+      have hΞ_d : (Γ.abstract («Δ» := «Δ»)) d = Option.some σ := by
+        rcases d with ⟨V, σd, hσd⟩
+        simp only at hd_2_1
+        have hex : ∃ k, «Δ» k = .some ⟨V, σd, hσd⟩ ∧ Γ.lookup k = σd := by
+          refine ⟨v, Δ_eq, ?_⟩
+          rw [Γ_eq, hd_2_1]
+        show (Γ.abstract («Δ» := «Δ»)) ⟨V, σd, hσd⟩ = Option.some σ
+        classical
+        rw [show (Γ.abstract («Δ» := «Δ»)) ⟨V, σd, hσd⟩ =
+              (if h : ∃ k, «Δ» k = .some ⟨V, σd, hσd⟩ ∧ Γ.lookup k = σd then
+                  Γ.lookup (Classical.choose h)
+                else Option.none) from rfl]
+        rw [dite_cond_eq_true (eq_true hex)]
+        rw [(Classical.choose_spec hex).2, hd_2_1]
+      have hne_ws : ∀ i, d ≠ ws i := by
+        intro i heq
+        have hnone := vs_fresh i
+        rw [← heq] at hnone
+        rw [Option.isNone_iff_eq_none] at hnone
+        rw [hnone] at hΞ_d
+        cases hΞ_d
+      rw [TypeContext.update_apply_of_not_mem _ ws _ d hne_ws]
+      exact hΞ_d
   | «forall» Γ vs τs P vs_Γ fresh len_pos len_eq body_typ body_ih =>
     simp only [fv, List.mem_removeAll_iff, and_imp] at ht
     unfold Term.abstract
@@ -881,8 +1021,43 @@ theorem Typing.of_abstract
     apply Typing.of_abstract_gen body_typ hcov_body
     intro v hv d Δ_eq σ Γ_eq
     by_cases hvs : v ∈ vs
-    · sorry
-    · sorry
+    · rw [Δ'_def] at Δ_eq
+      obtain ⟨k, hk_ws, hk_τ⟩ :=
+        SMT.TypeContext.updates_alist_match vs τs len_eq «Δ» Γ ws v d σ hvs Δ_eq Γ_eq
+      rw [← hk_ws]
+      rw [TypeContext.update_apply_self_of_inj _ ws _ k vs_inj]
+      cases k with
+      | mk i hi => exact congrArg Option.some hk_τ
+    · rw [Δ'_def, Function.updates_of_not_mem _ vs _ v hvs] at Δ_eq
+      rw [SMT.TypeContext.lookup_update _ v vs τs len_eq hvs] at Γ_eq
+      have hd_2_1 : d.2.1 = σ := by
+        have hh := hΔΓ v
+        rw [Δ_eq] at hh; rw [Γ_eq] at hh
+        injection hh with heq
+        exact heq.symm
+      have hΞ_d : (Γ.abstract («Δ» := «Δ»)) d = Option.some σ := by
+        rcases d with ⟨V, σd, hσd⟩
+        simp only at hd_2_1
+        have hex : ∃ k, «Δ» k = .some ⟨V, σd, hσd⟩ ∧ Γ.lookup k = σd := by
+          refine ⟨v, Δ_eq, ?_⟩
+          rw [Γ_eq, hd_2_1]
+        show (Γ.abstract («Δ» := «Δ»)) ⟨V, σd, hσd⟩ = Option.some σ
+        classical
+        rw [show (Γ.abstract («Δ» := «Δ»)) ⟨V, σd, hσd⟩ =
+              (if h : ∃ k, «Δ» k = .some ⟨V, σd, hσd⟩ ∧ Γ.lookup k = σd then
+                  Γ.lookup (Classical.choose h)
+                else Option.none) from rfl]
+        rw [dite_cond_eq_true (eq_true hex)]
+        rw [(Classical.choose_spec hex).2, hd_2_1]
+      have hne_ws : ∀ i, d ≠ ws i := by
+        intro i heq
+        have hnone := vs_fresh i
+        rw [← heq] at hnone
+        rw [Option.isNone_iff_eq_none] at hnone
+        rw [hnone] at hΞ_d
+        cases hΞ_d
+      rw [TypeContext.update_apply_of_not_mem _ ws _ d hne_ws]
+      exact hΞ_d
   | «exists» Γ vs τs P vs_Γ fresh len_pos len_eq body_typ body_ih =>
     simp only [fv, List.mem_removeAll_iff, and_imp] at ht
     unfold Term.abstract
@@ -890,7 +1065,63 @@ theorem Typing.of_abstract
     apply PHOAS.Typing.not
     apply PHOAS.Typing.forall (n_pos := len_pos)
     intro ws vs_inj vs_fresh
-    sorry
+    apply PHOAS.Typing.not
+    set Δ' := Function.updates «Δ» vs ((List.ofFn ws).map Option.some) with Δ'_def
+    have hcov_body : ∀ v ∈ fv P, (Δ' v).isSome = true := by
+      intro v hv
+      by_cases hvs : v ∈ vs
+      · exact Function.updates_isSome_of_mem_map_some «Δ» vs (List.ofFn ws) v hvs (by simp [len_eq])
+      · rw [Δ'_def, Function.updates_of_not_mem «Δ» vs ((List.ofFn ws).map Option.some) v hvs]
+        exact ht v hv hvs
+    have hws_eq : (fun (⟨i, hi⟩ : Fin vs.length) => (List.ofFn ws)[i]'(by simp; exact hi)) = ws := by
+      funext ⟨i, hi⟩; simp
+    have eq_body :
+        (SMT.Term.abstract.go P vs «Δ» (fun v hv h => ht v hv h)).uncurry ws =
+        P.abstract Δ' hcov_body := by
+      conv_lhs => rw [show ws = (fun (⟨i, hi⟩ : Fin vs.length) => (List.ofFn ws)[i]'(by simp; exact hi)) from hws_eq.symm]
+      exact SMT.Term.abstract.go.alt_def₂ vs P (List.ofFn ws)
+        (by simp [len_eq]) (fun v hv hvs => ht v hv hvs) hcov_body
+    rw [eq_body]
+    apply Typing.of_abstract_gen body_typ hcov_body
+    intro v hv d Δ_eq σ Γ_eq
+    by_cases hvs : v ∈ vs
+    · rw [Δ'_def] at Δ_eq
+      obtain ⟨k, hk_ws, hk_τ⟩ :=
+        SMT.TypeContext.updates_alist_match vs τs len_eq «Δ» Γ ws v d σ hvs Δ_eq Γ_eq
+      rw [← hk_ws]
+      rw [TypeContext.update_apply_self_of_inj _ ws _ k vs_inj]
+      cases k with
+      | mk i hi => exact congrArg Option.some hk_τ
+    · rw [Δ'_def, Function.updates_of_not_mem _ vs _ v hvs] at Δ_eq
+      rw [SMT.TypeContext.lookup_update _ v vs τs len_eq hvs] at Γ_eq
+      have hd_2_1 : d.2.1 = σ := by
+        have hh := hΔΓ v
+        rw [Δ_eq] at hh; rw [Γ_eq] at hh
+        injection hh with heq
+        exact heq.symm
+      have hΞ_d : (Γ.abstract («Δ» := «Δ»)) d = Option.some σ := by
+        rcases d with ⟨V, σd, hσd⟩
+        simp only at hd_2_1
+        have hex : ∃ k, «Δ» k = .some ⟨V, σd, hσd⟩ ∧ Γ.lookup k = σd := by
+          refine ⟨v, Δ_eq, ?_⟩
+          rw [Γ_eq, hd_2_1]
+        show (Γ.abstract («Δ» := «Δ»)) ⟨V, σd, hσd⟩ = Option.some σ
+        classical
+        rw [show (Γ.abstract («Δ» := «Δ»)) ⟨V, σd, hσd⟩ =
+              (if h : ∃ k, «Δ» k = .some ⟨V, σd, hσd⟩ ∧ Γ.lookup k = σd then
+                  Γ.lookup (Classical.choose h)
+                else Option.none) from rfl]
+        rw [dite_cond_eq_true (eq_true hex)]
+        rw [(Classical.choose_spec hex).2, hd_2_1]
+      have hne_ws : ∀ i, d ≠ ws i := by
+        intro i heq
+        have hnone := vs_fresh i
+        rw [← heq] at hnone
+        rw [Option.isNone_iff_eq_none] at hnone
+        rw [hnone] at hΞ_d
+        cases hΞ_d
+      rw [TypeContext.update_apply_of_not_mem _ ws _ d hne_ws]
+      exact hΞ_d
 
 
 end SMT.PHOAS
