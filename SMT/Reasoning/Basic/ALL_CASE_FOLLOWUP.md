@@ -176,3 +176,38 @@ axioms make this informal soundness argument explicit and re-discharge-able.
 Compared to the prior gap (1 sorry covering the entire all_case body, ~5000
 lines of proof needed), this represents a reduction of roughly 87% in
 remaining proof work.
+
+## fix-proofs branch build status
+
+After commits `37afde4` (all_case body) and `21cbb1a` (LoosenAux Refl
+hypothesis propagation), `lake build SMT.Reasoning.EncodeTermCorrect` on
+`fix-proofs` reports ~70 type errors. These are pre-existing from commit
+`f74c480` (WIP: prove non-binder cases of of_abstract_gen, fill binder
+sub-sorries) which:
+
+1. Strengthened `PHOAS.Typing.of_abstract` signature with `hΔΓ :
+   RespectsTypeContext «Δ» Γ` parameter,
+2. Added `(hbv : ∀ v ∈ bv t, v ∉ Δ)` to `SMT.Typing.weakening` calls in
+   `SMT/Reasoning/SubstLemmas.lean` (but `SMT.Typing.weakening` in
+   `SMT/Typing.lean` was NOT updated to take `hbv`),
+
+and left dozens of callers unupdated. Files with remaining errors:
+
+- `SMT/Reasoning/Basic/EncodeTermCorrectBase.lean` (2 call sites)
+- `SMT/Reasoning/Basic/LoosenAuxSpec/{Pair,Chpred,Opt,FunDefault}.lean`
+- `SMT/Reasoning/Basic/LoosenAuxExact/{Pair,Chpred,Opt,FunDefault}.lean`
+
+To resolve:
+1. Decide whether `SMT.Typing.weakening` should take `hbv` (re-add) or
+   `SubstLemmas.lean` should drop `hbv` arg (chosen here for SubstLemmas
+   to keep the build advancing). Currently aligned: weakening has no hbv,
+   SubstLemmas calls without hbv.
+2. For each `apply PHOAS.Typing.of_abstract` call site, add `respects`
+   parameter to the enclosing spec and propagate through `@`-form calls:
+   `@PHOAS.Typing.of_abstract _ _ Λ _ ht respects typ_t`.
+3. Update Pair.lean / Chpred.lean / Opt.lean / FunDefault.lean similarly,
+   then update their `LoosenAuxExact` counterparts.
+
+The all_case proof (in EncodeTermCorrectAll.lean) does **not** depend on
+these LoosenAux files for its own typechecking, but the full
+`EncodeTermCorrect` import chain does.
