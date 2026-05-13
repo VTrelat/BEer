@@ -184,8 +184,9 @@ private abbrev GraphOuterIH.{u}
     {τ τ' : SMTType} (p : τ ⇝ τ') : Prop :=
   ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
     Λ ⊢ˢ x : τ →
-      ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x)
-        (pf₀ : GraphPf «Δ₀»),
+      ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
+        SMT.RenamingContext.RespectsTypeContext «Δ₀» Λ →
+      ∀ (pf₀ : GraphPf «Δ₀»),
         ⦃fun x =>
           match x with
           | { env := E, types := Λ' } =>
@@ -729,7 +730,7 @@ private theorem graphDenSpecSomeAt
     simpa [SMT.RenamingContext.denote] using hspec_isSome
   obtain ⟨Φ, hdenΦ⟩ := Option.isSome_iff_exists.mp hspec_some_goal
   refine ⟨hφ_goal, Φ, hdenΦ, ?_⟩
-  exact denote_type_eq_of_typing (typ_t := typ_z!_spec_body) (hden := hdenΦ)
+  exact denote_type_eq_of_typing (typ_t := typ_z!_spec_body) (hden := hdenΦ) (hΔΓ := sorry)
 
 private theorem graphDenSomeSndAt
     {«Δ» : RenamingContext.Context} {x! z z! : 𝒱}
@@ -870,7 +871,7 @@ private theorem graphDenSpecTrueAtCast
   have hx₀_cast_dom : x₀.fst ∈ cast.Dom := by
     simpa [ZFSet.is_func_dom_eq hcast] using hx₀_mem
   have hX₀_ty : X₀!.snd.fst = σ' :=
-    denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!)
+    denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!) (hΔΓ := sorry)
   have hX₀_val :
       X₀!.fst = (@ᶻcast ⟨x₀.fst, hx₀_cast_dom⟩) := by
     symm
@@ -1325,7 +1326,7 @@ private theorem graphBodyTyOf
     rw [←hgo_exists Yfun x_1 hx_1]
     exact hden_body
   have hD0_ty : D0.snd.fst = SMTType.bool :=
-    denote_type_eq_of_typing (typ_t := typ_exists) (hden := hden_exists)
+    denote_type_eq_of_typing (typ_t := typ_exists) (hden := hden_exists) (hΔΓ := sorry)
   have hget_eq :
       (⟦(Term.abstract.go
           (Term.exists [z] [σ] (((@ˢx) (.fst (.var z)) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec))
@@ -2752,7 +2753,7 @@ private theorem graphDenZAt.{u}
     (fun {Λ} {n} {used} {name} {x} htyp hx' => pα_ih htyp Δx₀ hx' pf_var_z_x₀)
     (fun {Λ} {n} {used} {name} {x} htyp hx' => pβ_ih htyp Δx₀ hx' pf_var_z_x₀)
     (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀
+    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀ sorry
   have post_x₀ := ih_pair_z_x₀ St₃ <|
     graphPairVarPre sub St₂_types_eq St₂_used_eq St₃_types_eq St₃_used_eq
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post_x₀
@@ -2951,7 +2952,7 @@ private theorem graphDenZExactAt.{u}
   have exact_var_z_x₀ := loosenAux_prf_exact.pair
     (Δx₀) (pα := pα) (pβ := pβ) pf_var_z_x₀ pα_ih_x₀ pβ_ih_x₀
     (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀
+    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀ sorry
   have post_x₀ := exact_var_z_x₀ St₃ <|
     graphPairVarPre sub St₂_types_eq St₂_used_eq St₃_types_eq St₃_used_eq
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post_x₀
@@ -4359,7 +4360,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
             (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
             htyp Δz hx pf_var_z)
         (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-        (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z
+        (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z sorry
       mspec (Std.Do.Triple.and _
         (graphRunPairVarSpec (pα := pα) (pβ := pβ) (name := name) (z := z) (St₃ := St₃))
         ih_pair_z)
@@ -4524,7 +4525,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
                 exact (hv_ne_z hvz).elim
               · exact (hv_ne_z! (List.mem_singleton.mp hvz!)).elim
         · intro X denx
-          have hX_ty : X.snd.fst = α.fun β.option := denote_type_eq_of_typing typ_x denx
+          have hX_ty : X.snd.fst = α.fun β.option := denote_type_eq_of_typing typ_x denx sorry
           have hX_mem : X.fst ∈ ⟦α.fun β.option⟧ᶻ := by
             rw [← hX_ty]
             exact X.snd.snd
@@ -4783,7 +4784,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
                   (hbody_total := hbody_total) Y
               obtain ⟨Dlam, hDlam_raw⟩ := Option.isSome_iff_exists.mp hlam_some
               have hDlam_ty : Dlam.snd.fst = (α'.pair β').fun SMTType.bool :=
-                denote_type_eq_of_typing (typ_t := typing_pack.typ_lambda) (hden := hDlam_raw)
+                denote_type_eq_of_typing (typ_t := typing_pack.typ_lambda) (hden := hDlam_raw) (hΔΓ := sorry)
               have hEq_ty : Y.snd.fst = Dlam.snd.fst := by
                 rw [hY, hDlam_ty]
               obtain ⟨Deq, hDeq_raw, hDeq_ty⟩ :=

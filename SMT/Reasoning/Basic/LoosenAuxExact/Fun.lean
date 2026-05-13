@@ -577,7 +577,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                   fv_a!_spec fv_b!_spec fv_hdefault
               · intro X denx
                 have hX_ty : X.snd.fst = α.fun β := by
-                  exact denote_type_eq_of_typing (typ_t := typ_x) (hden := denx)
+                  exact denote_type_eq_of_typing (typ_t := typ_x) (hden := denx) (hΔΓ := sorry)
                 have hX_mem : X.fst ∈ ⟦α.fun β⟧ᶻ := by
                   erw [← hX_ty]
                   exact X.snd.snd

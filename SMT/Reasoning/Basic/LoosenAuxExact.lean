@@ -17,7 +17,8 @@ theorem loosenAux_prf_exact
   {x : SMT.Term} {α β : SMTType}
   (typ_x : Λ ⊢ˢ x : α) (𝕔 : α ~> β)
   («Δ» : RenamingContext.Context)
-  (hx : RenamingContext.CoversFV «Δ» x) :
+  (hx : RenamingContext.CoversFV «Δ» x)
+  (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ) :
   ⦃ fun ⟨E, Λ'⟩ => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ Λ'.keys ⊆ E.usedVars ∧ E.usedVars = used⌝ ⦄
     loosenAux_prf name 𝕔 x
   ⦃ ⇓? ⟨x!, x!_spec⟩ ⟨E', Γ'⟩ =>
@@ -49,23 +50,23 @@ theorem loosenAux_prf_exact
                ΦY.1 = zftrue →
                (X.1.pair Y.1) ∈ (castZF_of_path 𝕔).1)⌝ ⦄ := by
   generalize_proofs pf
-  revert «Δ» hx pf
+  revert «Δ» hx pf respects
   induction 𝕔 generalizing x Λ n used name with
   | @refl α hα =>
-      intro «Δ» hx pf
-      exact loosenAux_prf_exact.refl «Δ» hα typ_x hx pf
+      intro «Δ» hx respects pf
+      exact loosenAux_prf_exact.refl «Δ» hα typ_x hx pf respects
   | @pair α β α' β' pα pβ pα_ih pβ_ih =>
-      intro «Δ» hx pf
-      exact loosenAux_prf_exact.pair «Δ» pα pβ pf (pα_ih · «Δ» · pf) (pβ_ih · «Δ» · pf) typ_x hx
+      intro «Δ» hx respects pf
+      exact loosenAux_prf_exact.pair «Δ» pα pβ pf (fun ht hx' => pα_ih ht «Δ» hx' sorry pf) (fun ht hx' => pβ_ih ht «Δ» hx' sorry pf) typ_x hx respects
   | @opt α α' hα ih =>
-      intro «Δ» hx pf
-      exact loosenAux_prf_exact.opt «Δ» pf hα ih typ_x hx
+      intro «Δ» hx respects pf
+      exact loosenAux_prf_exact.opt «Δ» pf hα ih typ_x hx respects
   | @chpred α α' p ih =>
-      intro «Δ» hx pf
-      exact loosenAux_prf_exact.chpred «Δ» pf p ih typ_x hx
+      intro «Δ» hx respects pf
+      exact loosenAux_prf_exact.chpred «Δ» pf p ih typ_x hx respects
   | @graph α β α' β' pα pβ pα_ih pβ_ih =>
-      intro «Δ» hx pf
+      intro «Δ» hx respects pf
       apply loosenAux_prf_exact.graph pα pβ pα_ih pβ_ih typ_x
   | @«fun» α β α' β' hβ pα pβ pα_ih pβ_ih =>
-      intro «Δ» hx pf
+      intro «Δ» hx respects pf
       exact loosenAux_prf_exact.fun hβ pα pβ pα_ih pβ_ih typ_x «Δ» hx pf

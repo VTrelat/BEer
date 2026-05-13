@@ -113,7 +113,8 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
                                                                   X.fst.pair Y.fst ∈
                                                                     (castZF_of_path pβ).1⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.pair β)
-  (hx : RenamingContext.CoversFV «Δ» x) :
+  (hx : RenamingContext.CoversFV «Δ» x)
+  (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ) :
   ⦃fun x =>
     match x with
     | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -428,8 +429,7 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
           ?_
         on_goal 2 =>
           use SMT.TypeContext.abstract («Δ» := «Δ») ?_, PHOAS.WFTC.of_abstract, (.pair α β)
-          · apply PHOAS.Typing.of_abstract
-            exact typ_x
+          · exact @PHOAS.Typing.of_abstract _ _ St₁.types _ hx respects typ_x
         obtain ⟨Xv, τX, hXpair_mem⟩ := X
         obtain rfl : τX = .pair α β := by
           dsimp at hXτ'
@@ -728,7 +728,7 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
                   · rw [π₁_pair]
                   · obtain ⟨Xfst!, τXfst!, hXfst!⟩ := Xfst!
                     dsimp
-                    obtain rfl := denote_type_eq_of_typing (typ_t := typ_fst!) (hden := denfst!)
+                    obtain rfl := denote_type_eq_of_typing (typ_t := typ_fst!) (hden := denfst!) (hΔΓ := sorry)
                     congr 1
                     · funext τ
                       rw [π₁_pair]
@@ -829,7 +829,7 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
                     dsimp
                     congr
                     symm
-                    exact denote_type_eq_of_typing (typ_t := typ_snd!) (hden := densnd!)
+                    exact denote_type_eq_of_typing (typ_t := typ_snd!) (hden := densnd!) (hΔΓ := sorry)
                 obtain ⟨Φsnd, τΦsnd, hΦsnd⟩ := Φsnd
                 obtain rfl := hΦsnd_true
                 obtain rfl := hΦsnd_ty
@@ -1080,9 +1080,9 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
                           (hxy := fst_ne_snd.symm) (vx := some (x_1 i1)) (vy := some (x_1 i0))] using hφsnd_xf)⟧ˢ = some Dsnd := by
                 simpa [SMT.RenamingContext.denote] using hDsnd
               have hDfst_ty : Dfst.2.1 = .bool := by
-                exact denote_type_eq_of_typing (typ_t := typ_fst!_spec_St₃) (hden := hDfst_raw)
+                exact denote_type_eq_of_typing (typ_t := typ_fst!_spec_St₃) (hden := hDfst_raw) (hΔΓ := sorry)
               have hDsnd_ty : Dsnd.2.1 = .bool := by
-                exact denote_type_eq_of_typing (typ_t := typ_snd!_spec_St₄) (hden := hDsnd_raw)
+                exact denote_type_eq_of_typing (typ_t := typ_snd!_spec_St₄) (hden := hDsnd_raw) (hΔΓ := sorry)
               let Δgoal : SMT.RenamingContext.Context :=
                 Function.update (Function.update (Function.update «Δ» x! (some X!))
                   fst! (some (x_1 i0))) snd! (some (x_1 i1))
@@ -1485,9 +1485,9 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
                                 (hxy := fst_ne_snd.symm) (vx := some (x_1 i1)) (vy := some (x_1 i0))] using hφsnd_xf)⟧ˢ = some Dsnd := by
                       simpa [SMT.RenamingContext.denote] using hDsnd
                     have hDfst_ty : Dfst.2.1 = .bool := by
-                      exact denote_type_eq_of_typing (typ_t := typ_fst!_spec_St₃) (hden := hDfst_raw)
+                      exact denote_type_eq_of_typing (typ_t := typ_fst!_spec_St₃) (hden := hDfst_raw) (hΔΓ := sorry)
                     have hDsnd_ty : Dsnd.2.1 = .bool := by
-                      exact denote_type_eq_of_typing (typ_t := typ_snd!_spec_St₄) (hden := hDsnd_raw)
+                      exact denote_type_eq_of_typing (typ_t := typ_snd!_spec_St₄) (hden := hDsnd_raw) (hΔΓ := sorry)
                     let Δgoal : SMT.RenamingContext.Context :=
                       Function.update (Function.update (Function.update «Δ» x! (some Y))
                         fst! (some (x_1 i0))) snd! (some (x_1 i1))
@@ -2220,9 +2220,9 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
                           (hxy := fst_ne_snd.symm) (vx := some (x_1 i1)) (vy := some (x_1 i0))] using hφsnd_xf)⟧ˢ = some Dsnd := by
                 simpa [SMT.RenamingContext.denote] using hDsnd
               have hDfst_ty : Dfst.2.1 = .bool := by
-                exact denote_type_eq_of_typing (typ_t := typ_fst!_spec_St₃) (hden := hDfst_raw)
+                exact denote_type_eq_of_typing (typ_t := typ_fst!_spec_St₃) (hden := hDfst_raw) (hΔΓ := sorry)
               have hDsnd_ty : Dsnd.2.1 = .bool := by
-                exact denote_type_eq_of_typing (typ_t := typ_snd!_spec_St₄) (hden := hDsnd_raw)
+                exact denote_type_eq_of_typing (typ_t := typ_snd!_spec_St₄) (hden := hDsnd_raw) (hΔΓ := sorry)
               let Δgoal : SMT.RenamingContext.Context :=
                 Function.update (Function.update (Function.update «Δ» x! (some Y))
                   fst! (some (x_1 i0))) snd! (some (x_1 i1))

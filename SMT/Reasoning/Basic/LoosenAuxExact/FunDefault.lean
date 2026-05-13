@@ -270,11 +270,11 @@ theorem defaultSpecMSpec.{u} :
         · refine ⟨hφ, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
           · simpa [SMT.Term.abstract, SMTType.defaultZFSet] using
               (denote_eq_eq_zftrue_of_fst_eq den_t hden_zero
-                (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)) hdef)
+                (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)) hdef)
           · intro
             rfl
         · obtain ⟨Φ, hdenΦ, hΦ_ty⟩ := denote_eq_some_of_some den_t hden_zero
-            (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+            (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           exact ⟨hφ, Φ, by simpa [SMT.Term.abstract] using hdenΦ, hΦ_ty, fun h => (hdef h).elim⟩
   | bool =>
       mintro pre ∀St₁
@@ -310,11 +310,11 @@ theorem defaultSpecMSpec.{u} :
         · refine ⟨hφ, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
           · simpa [SMT.Term.abstract, SMTType.defaultZFSet] using
               (denote_eq_eq_zftrue_of_fst_eq den_t hden_false
-                (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)) hdef)
+                (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)) hdef)
           · intro
             rfl
         · obtain ⟨Φ, hdenΦ, hΦ_ty⟩ := denote_eq_some_of_some den_t hden_false
-            (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+            (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           exact ⟨hφ, Φ, by simpa [SMT.Term.abstract] using hdenΦ, hΦ_ty, fun h => (hdef h).elim⟩
   | unit =>
       mintro pre ∀St₁
@@ -374,11 +374,11 @@ theorem defaultSpecMSpec.{u} :
         · refine ⟨hφ, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
           · simpa [SMT.Term.abstract] using
               (denote_eq_eq_zftrue_of_fst_eq den_t hden_none
-                (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)) hdef)
+                (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)) hdef)
           · intro
             rfl
         · obtain ⟨Φ, hdenΦ, hΦ_ty⟩ := denote_eq_some_of_some den_t hden_none
-            (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+            (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           exact ⟨hφ, Φ, by simpa [SMT.Term.abstract] using hdenΦ, hΦ_ty, fun h => (hdef h).elim⟩
   | pair α β ihα ihβ =>
       unfold defaultSpecM
@@ -514,7 +514,7 @@ theorem defaultSpecMSpec.{u} :
               intro v hv
               exact ht₀ v (by simpa [SMT.fv] using hv)
             have hY_ty : Y.snd.fst = α.pair β :=
-              denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+              denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
             have hY_mem : Y.fst ∈ ⟦α.pair β⟧ᶻ := by
               simpa [hY_ty] using Y.snd.snd
             have hY_prod : Y.fst ∈ ⟦α⟧ᶻ.prod ⟦β⟧ᶻ := by
@@ -754,7 +754,7 @@ theorem defaultSpecMSpec.{u} :
               intro hx_mem
               exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hx_mem)
             have hY_ty : Y.snd.fst = α.fun β :=
-              denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+              denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
             have hY_func : ZFSet.IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ Y.fst := by
               rw [←ZFSet.mem_funs]
               simpa [hY_ty] using Y.snd.snd
@@ -1157,7 +1157,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
               some ⟨ZFSet.ofInt 0, .int, ZFSet.mem_ofInt_Int 0⟩ := by
           rw [SMT.Term.abstract, SMT.denote, Option.pure_def]
         exact denote_eq_true_implies_fst_eq den_t hden_zero
-          (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+          (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           (by simpa [SMT.Term.abstract] using hdenΦ) htrue
   | bool =>
       mintro pre ∀St₁
@@ -1185,7 +1185,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
           rw [SMT.Term.abstract, SMT.denote, Option.pure_def]
           rfl
         exact denote_eq_true_implies_fst_eq den_t hden_false
-          (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+          (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           (by simpa [SMT.Term.abstract] using hdenΦ) htrue
   | unit =>
       mintro pre ∀St₁
@@ -1207,7 +1207,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
       · intro Δ₀ ht₀ Y den_t hφ Φ hdenΦ htrue
         obtain ⟨y, τ, hy⟩ := Y
         have hY_ty : τ = SMTType.unit :=
-          denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+          denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
         cases hY_ty
         rw [SMTType.defaultZFSet]
         rw [SMTType.toZFSet] at hy
@@ -1238,7 +1238,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 SMTType.mem_toZFSet_of_defaultZFSet⟩ := by
           simpa [noneCast, SMTType.defaultZFSet, SMT.Term.abstract, SMT.denote]
         exact denote_eq_true_implies_fst_eq den_t hden_none
-          (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+          (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           (by simpa [SMT.Term.abstract] using hdenΦ) htrue
   | pair α β ihα ihβ =>
       mintro pre ∀St₁
@@ -1424,7 +1424,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 intro v hv
                 exact ht₀ v (by simpa [SMT.fv] using hv)
               have hY_ty : Y.snd.fst = α.pair β :=
-                denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+                denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
               have hY_mem : Y.fst ∈ ⟦α.pair β⟧ᶻ := by
                 simpa [hY_ty] using Y.snd.snd
               have hY_prod : Y.fst ∈ ⟦α⟧ᶻ.prod ⟦β⟧ᶻ := by
@@ -1460,9 +1460,9 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 denoteAndTrueComponents
                   (fun hdenDfst =>
                     denote_type_eq_of_typing
-                      (typ_t := SMT.Typing.weakening (h := sub₃) typ_hfst) (hden := hdenDfst))
+                      (typ_t := SMT.Typing.weakening (h := sub₃) typ_hfst) (hden := hdenDfst) (hΔΓ := sorry))
                   (fun hdenDsnd =>
-                    denote_type_eq_of_typing (typ_t := typ_hsnd) (hden := hdenDsnd))
+                    denote_type_eq_of_typing (typ_t := typ_hsnd) (hden := hdenDsnd) (hΔΓ := sorry))
                   (p := hfst.abstract «Δ₀» hφfst)
                   (q := hsnd.abstract «Δ₀» hφsnd)
                   (hden := by simpa [SMT.Term.abstract] using hdenΦ)
@@ -1626,7 +1626,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
               intro hx_mem
               exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hx_mem)
             have hY_ty : Y.snd.fst = α.fun β :=
-              denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+              denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
             have hY_func : ZFSet.IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ Y.fst := by
               rw [←ZFSet.mem_funs]
               simpa [hY_ty] using Y.snd.snd

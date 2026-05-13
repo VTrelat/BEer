@@ -497,7 +497,8 @@ theorem encodeTerm_spec.𝔹.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (E : B.Env) 
 theorem encodeTerm_spec.var.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (v : B.𝒱) (E : B.Env) {α : BType}
   (typ_t : E.context ⊢ᴮ .var v : α) {«Δ» : B.𝒱 → Option B.Dom}
   (Δ_fv : ∀ v_1 ∈ B.fv (B.Term.var v), («Δ» v_1).isSome = true) {T : ZFSet.{u_1}} {hT : T ∈ ⟦α⟧ᶻ}
-  (den_t : ⟦(B.Term.var v).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, α, hT⟩) :
+  (den_t : ⟦(B.Term.var v).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, α, hT⟩)
+  (respects : SMT.RenamingContext.RespectsTypeContext (RenamingContext.toSMT «Δ») Λ) :
   ⦃fun ⟨E', Λ'⟩ ↦ ⌜Λ' = Λ ∧ E'.freshvarsc = n⌝⦄
     encodeTerm (.var v) E
   ⦃⇓? ⟨t', σ⟩ ⟨E', Γ'⟩ =>
@@ -535,8 +536,7 @@ theorem encodeTerm_spec.var.{u_1} {Λ : SMT.TypeContext} {n : ℕ} (v : B.𝒱) 
       have := @this _ _ _ ?_ den₁_def
       on_goal 2 =>
         use S.types.abstract (RenamingContext.toSMT «Δ»), PHOAS.WFTC.of_abstract, τ
-        apply SMT.PHOAS.Typing.of_abstract
-        exact SMT.Typing.var S.types v τ τ_lookup
+        exact @SMT.PHOAS.Typing.of_abstract _ _ S.types _ (by intro _ hv; apply hΔ; exact hv) respects (SMT.Typing.var S.types v τ τ_lookup)
       exact this
     · apply SMT.Typing.var
       exact τ_lookup
@@ -885,6 +885,7 @@ theorem encodeTerm_spec.var_case.{u} (v : B.𝒱) (E : B.Env) {Λ : SMT.TypeCont
   (den_t : ⟦(B.Term.var v).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩)
   (vars_used : ∀ v_1 ∈ (B.Term.var v).vars, v_1 ∈ used) (Λ_inv : ∀ v_1 ∈ (B.Term.var v).vars, v_1 ∈ Λ → v_1 ∈ E.context)
   (bv_nodup : (B.bv (B.Term.var v)).Nodup)
+  (respects : SMT.RenamingContext.RespectsTypeContext (RenamingContext.toSMT «Δ») Λ)
   {n : ℕ} :
   ⦃fun x =>
     match x with
@@ -966,8 +967,7 @@ theorem encodeTerm_spec.var_case.{u} (v : B.𝒱) (E : B.Env) {Λ : SMT.TypeCont
       have := @this _ _ _ ?_ den₁_def
       on_goal 2 =>
         use St.types.abstract (RenamingContext.toSMT «Δ»), PHOAS.WFTC.of_abstract, τ
-        apply SMT.PHOAS.Typing.of_abstract
-        exact SMT.Typing.var St.types v τ τ_lookup
+        exact @SMT.PHOAS.Typing.of_abstract _ _ St.types _ (by intro _ hv; apply hΔ; exact hv) respects (SMT.Typing.var St.types v τ τ_lookup)
       exact this
     · exact SMT.Typing.var St.types v τ τ_lookup
     · exact fun _ _ h _ => h

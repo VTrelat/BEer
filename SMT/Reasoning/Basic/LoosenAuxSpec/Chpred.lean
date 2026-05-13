@@ -424,7 +424,7 @@ private theorem chpredDenSpecSomeAt
     simpa [SMT.RenamingContext.denote] using hspec_isSome
   obtain ⟨Φ, hdenΦ⟩ := Option.isSome_iff_exists.mp hspec_some_goal
   refine ⟨hφ_goal, Φ, hdenΦ, ?_⟩
-  exact denote_type_eq_of_typing (typ_t := typ_z!_spec_body) (hden := hdenΦ)
+  exact denote_type_eq_of_typing (typ_t := typ_z!_spec_body) (hden := hdenΦ) (hΔΓ := sorry)
 
 private theorem chpredDenSpecTrueAtCast
     {Γ : TypeContext} {«Δ» : RenamingContext.Context} {z!_spec : Term}
@@ -492,7 +492,7 @@ private theorem chpredDenSpecTrueAtCast
   have hx₀_cast_dom : x₀.fst ∈ cast.Dom := by
     simpa [ZFSet.is_func_dom_eq hcast] using hx₀_mem
   have hX₀_ty : X₀!.snd.fst = α' :=
-    denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!)
+    denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!) (hΔΓ := sorry)
   have hX₀_val :
       X₀!.fst = (@ᶻcast ⟨x₀.fst, hx₀_cast_dom⟩) := by
     symm
@@ -740,7 +740,7 @@ private theorem chpredBodyTyOf
     rw [←hgo_exists Yfun x_1 hx_1]
     exact hden_body
   have hD0_ty : D0.snd.fst = SMTType.bool :=
-    denote_type_eq_of_typing (typ_t := typ_exists) (hden := hden_exists)
+    denote_type_eq_of_typing (typ_t := typ_exists) (hden := hden_exists) (hΔΓ := sorry)
   have hget_eq :
       (⟦(Term.abstract.go
           (Term.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec))
@@ -2173,7 +2173,8 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                                                                     hφY⟧ˢ.isSome =
                                                               true⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun SMTType.bool)
-  (hx : RenamingContext.CoversFV «Δ» x) :
+  (hx : RenamingContext.CoversFV «Δ» x)
+  (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ) :
   ⦃fun x =>
     match x with
     | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -3016,7 +3017,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                   exact hlen_pos (by simp)
               obtain ⟨Dlam, hDlam_raw⟩ := Option.isSome_iff_exists.mp hlam_some
               have hDlam_ty : Dlam.snd.fst = α'.fun SMTType.bool :=
-                denote_type_eq_of_typing (typ_t := typ_lambda) (hden := hDlam_raw)
+                denote_type_eq_of_typing (typ_t := typ_lambda) (hden := hDlam_raw) (hΔΓ := sorry)
               have hEq_ty : Y.snd.fst = Dlam.snd.fst := by
                 rw [hY, hDlam_ty]
               obtain ⟨Deq, hDeq_raw, hDeq_ty⟩ :=

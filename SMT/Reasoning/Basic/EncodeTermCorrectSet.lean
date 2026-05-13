@@ -496,7 +496,7 @@ private theorem pow_denotation_aux.{u}
         denote_not_isSome_of_some_bool hden_rhs hDrhs_ty
     obtain ⟨Dnot, hden_not⟩ := Option.isSome_iff_exists.mp hnot_rhs_isSome
     have hDnot_ty : Dnot.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_not_rhs) (hden := hden_not)
+      exact denote_type_eq_of_typing (typ_t := typ_not_rhs) (hden := hden_not) (hΔΓ := sorry)
     obtain ⟨Dbody, hden_body, hDbody_ty⟩ :=
       denote_and_some_bool_of_some_bool hden_lhs hDlhs_ty hden_not hDnot_ty
     simpa [hpred_def, SMT.Term.abstract, proof_irrel_heq] using
@@ -510,7 +510,7 @@ private theorem pow_denotation_aux.{u}
               (hcov_pred_upd F W)⟧ˢ = some D →
             D.snd.fst = SMTType.bool := by
     intro F W hF_ty hW_ty D hD
-    exact denote_type_eq_of_typing (typ_t := typ_pred) (hden := hD)
+    exact denote_type_eq_of_typing (typ_t := typ_pred) (hden := hD) (hΔΓ := sorry)
   have hforall_total :
       ∀ F : SMT.Dom,
         F.snd.fst = β.toSMTType.fun SMTType.bool →
@@ -598,8 +598,8 @@ private theorem pow_denotation_aux.{u}
           (den_t_isSome hx_1)).snd.fst = Dx.snd.fst := by
             exact congrArg (fun d : SMT.Dom => d.snd.fst)
               (Option.get_of_eq_some (den_t_isSome hx_1) hden_x)
-        _ = SMTType.bool := denote_type_eq_of_typing (typ_t := typ_forall) (hden := hDx)
-        _ = Dy.snd.fst := (denote_type_eq_of_typing (typ_t := typ_forall) (hden := hDy)).symm
+        _ = SMTType.bool := denote_type_eq_of_typing (typ_t := typ_forall) (hden := hDx) (hΔΓ := sorry)
+        _ = Dy.snd.fst := (denote_type_eq_of_typing (typ_t := typ_forall) (hden := hDy) (hΔΓ := sorry)).symm
         _ = (⟦(SMT.Term.abstract.go
             (Term.forall [x] [β.toSMTType] pred) [E] Δ_ctx hgo_cov_forall).uncurry y_1⟧ˢ.get
           (den_t_isSome hy_1)).snd.fst := by
@@ -630,7 +630,7 @@ private theorem pow_denotation_aux.{u}
     obtain ⟨D, hD⟩ := Option.isSome_iff_exists.mp hsome_tpow
     obtain ⟨a, τa, ha⟩ := D
     have hτa : τa = .fun (.fun β.toSMTType .bool) .bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_tpow) (hden := hD)
+      exact denote_type_eq_of_typing (typ_t := typ_tpow) (hden := hD) (hΔΓ := sorry)
     cases hτa
     exact ⟨a, ha, hD⟩
   rcases hden with ⟨a, h, hden⟩
@@ -856,7 +856,7 @@ private theorem pow_denotation_aux.{u}
             cases hiFin
             exact ⟨rfl, setDom_mem hY_mem⟩
           have hDforall_ty : Dforall.snd.fst = SMTType.bool := by
-            exact denote_type_eq_of_typing (typ_t := typ_forall) (hden := hden_forall)
+            exact denote_type_eq_of_typing (typ_t := typ_forall) (hden := hden_forall) (hΔΓ := sorry)
           have hγ_eq_Dforall_ty :
               ((⟦(SMT.Term.abstract.go
                   (Term.forall [x] [β.toSMTType] pred) [E] Δ_ctx
@@ -1169,7 +1169,7 @@ private theorem pow_denotation_aux.{u}
                         (hTy := hDrhs_ty))
                 obtain ⟨Dnot, hden_not⟩ := Option.isSome_iff_exists.mp hnot_isSome
                 have hDnot_ty : Dnot.snd.fst = SMTType.bool := by
-                  exact denote_type_eq_of_typing (typ_t := typ_not_rhs) (hden := hden_not)
+                  exact denote_type_eq_of_typing (typ_t := typ_not_rhs) (hden := hden_not) (hΔΓ := sorry)
                 have hden_body_false :
                     ⟦(((@ˢSMT.Term.var E) (SMT.Term.var x)) ∧ˢ
                           (¬ˢ ((@ˢS_enc) (SMT.Term.var x)))).abstract
@@ -2708,10 +2708,10 @@ private theorem cprod_case_denotation_aux.{u_1}
                           exact congrArg (fun d : SMT.Dom => d.snd.fst)
                             (Option.get_of_eq_some (den_t_isSome hx) hden_x)
                     _ = SMTType.bool := by
-                      exact denote_type_eq_of_typing (typ_t := typ_exists) (hden := hDx)
+                      exact denote_type_eq_of_typing (typ_t := typ_exists) (hden := hDx) (hΔΓ := sorry)
                     _ = Dy.snd.fst := by
                       exact (denote_type_eq_of_typing (typ_t := typ_exists)
-                        (hden := hDy)).symm
+                        (hden := hDy) (hΔΓ := sorry)).symm
                     _ =
                       (⟦(SMT.Term.abstract.go existsTerm [p] Δ'' hgo_cov_tcprod).uncurry y⟧ˢ.get
                         (den_t_isSome hy)).snd.fst := by
@@ -2737,7 +2737,7 @@ private theorem cprod_case_denotation_aux.{u_1}
                 obtain ⟨D, hD⟩ := Option.isSome_iff_exists.mp hsome_tcprod
                 rcases D with ⟨a, τa, ha⟩
                 have hτa : τa = pairTy.fun SMTType.bool := by
-                  exact denote_type_eq_of_typing (typ_t := typ_tcprod_ctx) (hden := hD)
+                  exact denote_type_eq_of_typing (typ_t := typ_tcprod_ctx) (hden := hD) (hΔΓ := sorry)
                 cases hτa
                 exact ⟨a, ha, hD⟩
               rcases hden with ⟨tcprodVal, ha, hden⟩
@@ -2828,7 +2828,7 @@ private theorem cprod_case_denotation_aux.{u_1}
                             (Option.get_of_eq_some (den_t_isSome hdefaultArg) hden_default)
                       _ = SMTType.bool := by
                         exact denote_type_eq_of_typing (typ_t := typ_exists)
-                          (hden := hDdefault)
+                          (hden := hDdefault) (hΔΓ := sorry)
                   have ha_eq :
                       ⟦pairTy⟧ᶻ.lambda ⟦γ⟧ᶻ bodyFun = tcprodVal := by
                     simpa [γ, bodyFun, defaultArg, SMTType.toZFSet] using hden'.1
@@ -4055,10 +4055,10 @@ private theorem cprod_case_denotation_aux.{u_1}
                             Δw hcov_right))
                         (typ_p_bool := by
                           intro Dp hDp
-                          exact denote_type_eq_of_typing (typ_t := typ_Sa_term) (hden := hDp))
+                          exact denote_type_eq_of_typing (typ_t := typ_Sa_term) (hden := hDp) (hΔΓ := sorry))
                         (typ_q_bool := by
                           intro Dq hDq
-                          exact denote_type_eq_of_typing (typ_t := typ_right_term) (hden := hDq))
+                          exact denote_type_eq_of_typing (typ_t := typ_right_term) (hden := hDq) (hΔΓ := sorry))
                         hden_body_split hDbody_true
                     have hden_right_split :
                         ⟦(((@ˢT_enc) (SMT.Term.var b)).abstract Δw hcov_Tb_Δw) ∧ˢ'
@@ -4073,10 +4073,10 @@ private theorem cprod_case_denotation_aux.{u_1}
                           Δw hcov_eq))
                         (typ_p_bool := by
                           intro Dp hDp
-                          exact denote_type_eq_of_typing (typ_t := typ_Tb_term) (hden := hDp))
+                          exact denote_type_eq_of_typing (typ_t := typ_Tb_term) (hden := hDp) (hΔΓ := sorry))
                         (typ_q_bool := by
                           intro Dq hDq
-                          exact denote_type_eq_of_typing (typ_t := typ_eq_term) (hden := hDq))
+                          exact denote_type_eq_of_typing (typ_t := typ_eq_term) (hden := hDq) (hΔΓ := sorry))
                         hden_right_split hDright_true
                     have hDSa_eq : DSa = DSa' := by
                       exact Option.some.inj (hden_Sa_true.symm.trans hden_Sa_from_body)

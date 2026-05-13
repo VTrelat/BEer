@@ -17,6 +17,7 @@ theorem encodeTerm_spec.{u} (fv_sub_typings : B.FvSubTypings)
   (vars_used : ∀ v ∈ t.vars, v ∈ used)
   (Λ_inv : ∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context)
   (bv_nodup : (B.bv t).Nodup)
+  (respects : SMT.RenamingContext.RespectsTypeContext (RenamingContext.toSMT «Δ») Λ)
   -- Path-A R3e: SPLIT existential witness into two finer-grained hypotheses:
   -- existence + RDom (sharing same `denT'`) and Δ-universal totality
   -- (independent of `denT'`). Each is parameterized over `vs`, `D`, `P` so
@@ -116,7 +117,7 @@ theorem encodeTerm_spec.{u} (fv_sub_typings : B.FvSubTypings)
   induction t generalizing E n α «Δ» T hT Λ Δ₀ used with
   | «ℤ»                      => exact encodeTerm_spec.ℤ_case E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
   | 𝔹                        => exact encodeTerm_spec.𝔹_case E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
-  | var v                    => exact encodeTerm_spec.var_case v E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | var v                    => exact encodeTerm_spec.var_case v E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup respects
   | int i                    => exact encodeTerm_spec.int_case i E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
   | bool b                   => exact encodeTerm_spec.bool_case b E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
   | maplet x y x_ih y_ih     => exact encodeTerm_spec.maplet_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup

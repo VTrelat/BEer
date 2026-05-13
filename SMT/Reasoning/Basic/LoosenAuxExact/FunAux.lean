@@ -1307,7 +1307,7 @@ theorem funVarSpecTrueAtCast.{u}
       x₀ hx₀_ty
   obtain ⟨htrue, hcast_X₀!⟩ := htrue_cast
   have hX₀_ty : X₀!.snd.fst = τ' := by
-    exact denote_type_eq_of_typing (typ_t := typ_var_z!) (hden := hden_var)
+    exact denote_type_eq_of_typing (typ_t := typ_var_z!) (hden := hden_var) (hΔΓ := sorry)
   exact funVarDenTrueAtCast
     («Δ» := Function.update «Δ» z (some x₀))
     (p := p)
@@ -2285,7 +2285,7 @@ theorem funUnaryForallEqZffalse.{u}
   obtain ⟨Φ, hden_forall⟩ := Option.isSome_iff_exists.mp hsome_forall
   have hΦ_ty :
       Φ.snd.fst = SMTType.bool := by
-    exact denote_type_eq_of_typing (typ_t := typ_forall) (hden := hden_forall)
+    exact denote_type_eq_of_typing (typ_t := typ_forall) (hden := hden_forall) (hΔΓ := sorry)
   have hΦ_false :
       Φ.fst = zffalse := by
     have hΦ_bool : Φ.fst ∈ 𝔹 := by
@@ -2943,9 +2943,9 @@ theorem funExistsABTotalAt.{u}
     obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
     obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
     have hDa_ty : Da.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a)
+      exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a) (hΔΓ := sorry)
     have hDb_ty : Db.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b)
+      exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b) (hΔΓ := sorry)
     have hcov_app_w :
         RenamingContext.CoversFV Δw ((@ˢx) (Term.var a)) := by
       have hcov_body_w := hcov_body_upd (w ⟨0, by simp⟩) (w ⟨1, by simp⟩)
@@ -3369,9 +3369,9 @@ theorem funExistsABTrueAtRange.{u}
     obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
     obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
     have hDa_ty : Da.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a)
+      exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a) (hΔΓ := sorry)
     have hDb_ty : Db.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b)
+      exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b) (hΔΓ := sorry)
     have hcov_app_w :
         RenamingContext.CoversFV Δw ((@ˢx) (Term.var a)) := by
       have hcov_body_w := hcov_body_upd (w ⟨0, by simp⟩) (w ⟨1, by simp⟩)
@@ -3514,9 +3514,9 @@ theorem funExistsABTrueAtRange.{u}
     obtain ⟨Dbody, hden_body, _hDbody_ty⟩ := den_body_some hw
     exact Option.isSome_of_eq_some hden_body
   have hΦa_ty : Φa.snd.fst = SMTType.bool := by
-    exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a0)
+    exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a0) (hΔΓ := sorry)
   have hΦb_ty : Φb.snd.fst = SMTType.bool := by
-    exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b0)
+    exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b0) (hΔΓ := sorry)
   let D : ZFSet := ⟦α⟧ᶻ.prod ⟦β⟧ᶻ
   let bodyF : ZFSet → ZFSet := fun y =>
     if hy : y.hasArity [a, b].length ∧
@@ -4280,9 +4280,9 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
       obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
       obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
       have hDa_ty : Da.snd.fst = SMTType.bool := by
-        exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a)
+        exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a) (hΔΓ := sorry)
       have hDb_ty : Db.snd.fst = SMTType.bool := by
-        exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b)
+        exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b) (hΔΓ := sorry)
       have hcov_app_w :
           RenamingContext.CoversFV Δw ((@ˢx) (Term.var a)) := by
         have hcov_body_w := hcov_body_upd (w ⟨0, by simp⟩) (w ⟨1, by simp⟩)
@@ -4588,10 +4588,10 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
         obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
         have hDa_ty : Da.snd.fst = SMTType.bool := by
           exact denote_type_eq_of_typing
-            (typ_t := typ_a_ctx) (hden := hden_a)
+            (typ_t := typ_a_ctx) (hden := hden_a) (hΔΓ := sorry)
         have hDb_ty : Db.snd.fst = SMTType.bool := by
           exact denote_type_eq_of_typing
-            (typ_t := typ_b_ctx) (hden := hden_b)
+            (typ_t := typ_b_ctx) (hden := hden_b) (hΔΓ := sorry)
         obtain ⟨Dspec, hden_specs, hDspec_ty⟩ :=
           denote_and_some_bool_of_some_bool hden_a hDa_ty hden_b hDb_ty
         obtain ⟨hcov_xa, Dxa, hDxa_ty, hDxa_val, hden_xa⟩ :=
@@ -4688,11 +4688,11 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
                     (typ_p_bool := by
                       intro D hden
                       exact denote_type_eq_of_typing
-                        (typ_t := typ_a_ctx) (hden := hden))
+                        (typ_t := typ_a_ctx) (hden := hden) (hΔΓ := sorry))
                     (typ_q_bool := by
                       intro D hden
                       exact denote_type_eq_of_typing
-                        (typ_t := typ_b_ctx) (hden := hden))
+                        (typ_t := typ_b_ctx) (hden := hden) (hΔΓ := sorry))
                     hden_specs hDspec_true
                 have hden_a_true_at :
                     ⟦a!_spec.abstract
@@ -5022,10 +5022,10 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
           obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
           have hDa_ty : Da.snd.fst = SMTType.bool := by
             exact denote_type_eq_of_typing
-              (typ_t := typ_a_ctx) (hden := hden_a)
+              (typ_t := typ_a_ctx) (hden := hden_a) (hΔΓ := sorry)
           have hDb_ty : Db.snd.fst = SMTType.bool := by
             exact denote_type_eq_of_typing
-              (typ_t := typ_b_ctx) (hden := hden_b)
+              (typ_t := typ_b_ctx) (hden := hden_b) (hΔΓ := sorry)
           obtain ⟨Dspec, hden_specs, hDspec_ty⟩ :=
             denote_and_some_bool_of_some_bool hden_a hDa_ty hden_b hDb_ty
           obtain ⟨hcov_xa, Dxa, hDxa_ty, hDxa_val, hden_xa⟩ :=
@@ -5122,11 +5122,11 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
                       (typ_p_bool := by
                         intro D hden
                         exact denote_type_eq_of_typing
-                          (typ_t := typ_a_ctx) (hden := hden))
+                          (typ_t := typ_a_ctx) (hden := hden) (hΔΓ := sorry))
                       (typ_q_bool := by
                         intro D hden
                         exact denote_type_eq_of_typing
-                          (typ_t := typ_b_ctx) (hden := hden))
+                          (typ_t := typ_b_ctx) (hden := hden) (hΔΓ := sorry))
                       hden_specs hDspec_true
                   have hden_a_true_at :
                       ⟦a!_spec.abstract
@@ -5735,7 +5735,7 @@ theorem funDenSpecTrueAtCast.{u}
             a_spec_total_at X! x₁ wy0 hx₁_ty hwy0_ty
         · intro x₁ hx₁_ty D hden_a'
           exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a')
+            (typ_t := typ_a!_spec_swap) (hden := hden_a') (hΔΓ := sorry)
         · simpa [hctx_swap wx₀, proof_irrel_heq, wx₀] using hden_a
         · exact hΦa_true
       have hφ_forall_b :
@@ -6184,7 +6184,7 @@ theorem funDenSpecTrueAtCast.{u}
           exact Option.isSome_of_eq_some hden_body
         · intro wy1 hwy1_ty D hden_body
           exact denote_type_eq_of_typing
-            (typ_t := typ_bBody_base') (hden := hden_body)
+            (typ_t := typ_bBody_base') (hden := hden_body) (hΔΓ := sorry)
         · intro wy1 hwy1_ty
           exact hbody_true_b_at wy1 hwy1_ty
       refine ⟨⟨zftrue, SMTType.bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl⟩
@@ -6284,7 +6284,7 @@ theorem funDenSpecTrueAtCast.{u}
             a_spec_total_at X! x₀ wy0 hx₀_ty hwy0_ty
         · intro x₀ hx₀_ty D hden_a
           exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a)
+            (typ_t := typ_a!_spec_swap) (hden := hden_a) (hΔΓ := sorry)
         · intro x₀ hx₀_ty D hden_a hDa_true
           have hφa :
               RenamingContext.CoversFV
@@ -6354,7 +6354,7 @@ theorem funDenSpecTrueAtCast.{u}
     obtain ⟨D, hden_body, _⟩ := hbody_true_at wy0 hwy0_ty
     exact Option.isSome_of_eq_some hden_body
   · intro wy0 hwy0_ty D hden_body
-    exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body)
+    exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body) (hΔΓ := sorry)
   · intro wy0 hwy0_ty
     exact hbody_true_at wy0 hwy0_ty
 
@@ -6924,7 +6924,7 @@ theorem funSpecTrueImpliesCastAt.{u}
                 some D →
                 D.snd.fst = SMTType.bool := by
     intro wy0 wy1 hwy0_ty hwy1_ty D hden_body
-    exact denote_type_eq_of_typing (typ_t := typ_bBody_base') (hden := hden_body)
+    exact denote_type_eq_of_typing (typ_t := typ_bBody_base') (hden := hden_body) (hΔΓ := sorry)
   have hbody_total_b_at :
       ∀ wy0 wy1 : SMT.Dom,
         wy0.snd.fst = α' →
@@ -7005,7 +7005,7 @@ theorem funSpecTrueImpliesCastAt.{u}
       exact hσ_bool
     have hDexists_ty : Dexists.snd.fst = SMTType.bool := by
       cases hσ_bool
-      exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists)
+      exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists) (hΔΓ := sorry)
     obtain ⟨Dout, hden_out, _⟩ :=
       denote_eq_some_of_some hden_eq hden_exists (by rw [hDeq_ty, hDexists_ty])
     exact Option.isSome_of_eq_some (by
@@ -7053,7 +7053,7 @@ theorem funSpecTrueImpliesCastAt.{u}
               a_spec_total_at Y x₁ wy0 hx₁_ty hwy0_ty
           · intro x₁ hx₁_ty D hden_a'
             exact denote_type_eq_of_typing
-              (typ_t := typ_a!_spec_swap) (hden := hden_a')
+              (typ_t := typ_a!_spec_swap) (hden := hden_a') (hΔΓ := sorry)
           · simpa [hctx_swap_at wy0 wx₀, proof_irrel_heq, wx₀] using hden_a
         have hden_forall_b_some :
             ⟦(Term.forall [b!] [β'] bBody).abstract
@@ -7105,7 +7105,7 @@ theorem funSpecTrueImpliesCastAt.{u}
               a_spec_total_at Y x₀ wy0 hx₀_ty hwy0_ty
           · intro x₀ hx₀_ty D hden_a
             exact denote_type_eq_of_typing
-              (typ_t := typ_a!_spec_swap) (hden := hden_a)
+              (typ_t := typ_a!_spec_swap) (hden := hden_a) (hΔΓ := sorry)
           · intro x₀ hx₀_ty D hden_a hDa_true
             have hφa :
                 RenamingContext.CoversFV
@@ -7149,7 +7149,7 @@ theorem funSpecTrueImpliesCastAt.{u}
             ⟦aBody.abstract (Function.update ΔY a! (some wy0)) (hcov_aBody_updY wy0)⟧ˢ = some D →
               D.snd.fst = SMTType.bool := by
       intro wy0 hwy0_ty D hden_body
-      exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body)
+      exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body) (hΔΓ := sorry)
     change
       @ᶻY.fst
         ⟨wy0.fst, by
@@ -7191,7 +7191,7 @@ theorem funSpecTrueImpliesCastAt.{u}
             a_spec_total_at Y x₁ wy0 hx₁_ty hwy0_ty
         · intro x₁ hx₁_ty D hden_a'
           exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a')
+            (typ_t := typ_a!_spec_swap) (hden := hden_a') (hΔΓ := sorry)
         · simpa [hctx_swap_at wy0 wx₀, proof_irrel_heq, wx₀] using hden_a
       obtain ⟨Dbody, hden_body, hDbody_true⟩ :=
         funUnaryForallTrueImpliesAt
@@ -7430,7 +7430,7 @@ theorem funSpecTrueImpliesCastAt.{u}
             a_spec_total_at Y x₀ wy0 hx₀_ty hwy0_ty
         · intro x₀ hx₀_ty D hden_a
           exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a)
+            (typ_t := typ_a!_spec_swap) (hden := hden_a) (hΔΓ := sorry)
         · intro x₀ hx₀_ty D hden_a hDa_true
           have hφa :
               RenamingContext.CoversFV
@@ -8018,7 +8018,7 @@ theorem funSpecTotalAt.{u}
       exact hσ_bool
     have hDexists_ty : Dexists.snd.fst = SMTType.bool := by
       cases hσ_bool
-      exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists)
+      exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists) (hΔΓ := sorry)
     obtain ⟨Dout, hden_out, _⟩ :=
       denote_eq_some_of_some hden_eq hden_exists (by rw [hDeq_ty, hDexists_ty])
     exact Option.isSome_of_eq_some (by
@@ -8060,7 +8060,7 @@ theorem funSpecTotalAt.{u}
             a_spec_total_at x₁ wy0 hx₁_ty hwy0_ty
         · intro x₁ hx₁_ty D hden_a'
           exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a')
+            (typ_t := typ_a!_spec_swap) (hden := hden_a') (hΔΓ := sorry)
         · simpa [hctx_swap_at wy0 wx₀, proof_irrel_heq, wx₀] using hden_a
       have hden_forall_b_some :
           ⟦(Term.forall [b!] [β'] bBody).abstract
@@ -8112,7 +8112,7 @@ theorem funSpecTotalAt.{u}
             a_spec_total_at x₀ wy0 hx₀_ty hwy0_ty
         · intro x₀ hx₀_ty D hden_a
           exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a)
+            (typ_t := typ_a!_spec_swap) (hden := hden_a) (hΔΓ := sorry)
         · intro x₀ hx₀_ty D hden_a hDa_true
           have hφa :
               RenamingContext.CoversFV
