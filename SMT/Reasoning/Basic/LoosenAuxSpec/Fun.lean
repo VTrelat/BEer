@@ -138,7 +138,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
   mpure pre
   mspec loosenAux_prf_exact
     (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-    (typ_x := typ_x) (𝕔 := castPath.fun hβ pα pβ) («Δ» := «Δ») hx
+    (typ_x := typ_x) (𝕔 := castPath.fun hβ pα pβ) («Δ» := «Δ») hx (respects := sorry)
   rename_i out
   obtain ⟨x!, x!_spec⟩ := out
   mrename_i pre

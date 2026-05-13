@@ -941,7 +941,8 @@ theorem castInter_spec
   {«Δ» : SMT.RenamingContext.Context}
   (hS : RenamingContext.CoversFV «Δ» S)
   (hT : RenamingContext.CoversFV «Δ» T)
-  (Δ_none_out : ∀ v ∉ used, «Δ» v = none) :
+  (Δ_none_out : ∀ v ∉ used, «Δ» v = none)
+  (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ) :
   ⦃ fun ⟨E, Λ'⟩ => ⌜ Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ⌝ ⦄
   castInter ⟨S, .fun γ .bool⟩ ⟨T, .fun γ .bool⟩
   ⦃ ⇓? ⟨t, τ⟩ ⟨E', Γ'⟩ =>
@@ -1079,9 +1080,9 @@ theorem castInter_spec
           · exact hT v hv_T
           · exact absurd rfl hv_ne_z
         have den_S_type : den_S.2.1 = .fun γ .bool :=
-          denote_type_eq_of_typing typ_S (hden := h_den_S)
+          denote_type_eq_of_typing typ_S (hden := h_den_S) (hΔΓ := respects)
         have den_T_type : den_T.2.1 = .fun γ .bool :=
-          denote_type_eq_of_typing typ_T (hden := h_den_T)
+          denote_type_eq_of_typing typ_T (hden := h_den_T) (hΔΓ := respects)
         exact castInter_denotation_direct hS hT h_den_S h_den_T
           den_S_type den_T_type z_not_fv_S z_not_fv_T hcov_lambda
 

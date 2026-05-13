@@ -95,21 +95,23 @@ theorem loosenAux_prf_spec
   induction 𝕔 generalizing x Λ n used name with
     | @refl α hα =>
       intro «Δ» hx pf
-      exact loosenAux_prf_spec.refl «Δ» hα typ_x hx pf
+      exact loosenAux_prf_spec.refl «Δ» hα typ_x hx pf sorry
     | @pair α β α' β' pα pβ pα_ih pβ_ih =>
       intro «Δ» hx pf
-      refine loosenAux_prf_spec.pair «Δ» pα pβ pf ?_ ?_ typ_x hx
+      refine loosenAux_prf_spec.pair «Δ» pα pβ pf ?_ ?_ typ_x hx sorry
       · exact fun a hx => pα_ih a «Δ» hx pf
       · exact fun a hx => pβ_ih a «Δ» hx pf
     | @opt α α' hα ih =>
       intro «Δ» hx pf
-      exact loosenAux_prf_spec.opt «Δ» pf hα ih typ_x hx
+      exact loosenAux_prf_spec.opt «Δ» pf hα ih typ_x hx sorry
     | @graph α β α' β' pα pβ pα_ih pβ_ih =>
       intro «Δ» hx pf
-      exact loosenAux_prf_spec.graph «Δ» pf pα pβ pα_ih pβ_ih typ_x hx
+      exact loosenAux_prf_spec.graph «Δ» pf pα pβ
+        (fun typ Δ' hx' _ pf' => pα_ih typ Δ' hx' pf')
+        (fun typ Δ' hx' _ pf' => pβ_ih typ Δ' hx' pf') typ_x hx
     | @chpred α α' p ih =>
       intro «Δ» hx pf
-      exact loosenAux_prf_spec.chpred «Δ» pf p ih typ_x hx
+      exact loosenAux_prf_spec.chpred «Δ» pf p ih typ_x hx sorry
     | @«fun» α β α' β' hβ pα pβ pα_ih pβ_ih =>
       intro «Δ» hx pf
       exact loosenAux_prf_spec.fun «Δ» pf hβ pα pβ pα_ih pβ_ih typ_x hx

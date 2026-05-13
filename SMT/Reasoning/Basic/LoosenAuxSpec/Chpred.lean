@@ -2412,7 +2412,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               · exact (hv_ne_z (by simpa [fv] using hvz)).elim
               · exact (hv_ne_z! (List.mem_singleton.mp hvz!)).elim
         · intro X denx
-          have hX_ty : X.snd.fst = α.fun SMTType.bool := denote_type_eq_of_typing typ_x denx
+          have hX_ty : X.snd.fst = α.fun SMTType.bool := denote_type_eq_of_typing typ_x denx (hΔΓ := respects)
           have hX_mem : X.fst ∈ ⟦α.fun SMTType.bool⟧ᶻ := by
             simpa [hX_ty] using X.snd.snd
           have x!_not_mem_fv_x : x! ∉ SMT.fv x := by
@@ -2537,7 +2537,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               simp [Function.update]
             have exact_var_z_x₀ := loosenAux_prf_exact
               (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ p Δx₀ hcov_var_z_x₀
+              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ p Δx₀ hcov_var_z_x₀ sorry
             have post_x₀ := exact_var_z_x₀ St₃ (by
               dsimp
               refine ⟨rfl, rfl, ?_, rfl⟩

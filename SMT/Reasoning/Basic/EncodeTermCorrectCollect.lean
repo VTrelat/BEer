@@ -1721,7 +1721,37 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                     i τs[i]
                     (by simp only [List.append_nil]; rw [List.getElem?_eq_getElem hi_τs])).2))
               (SMT.Typing.bool _ _)
-          exact denote_type_eq_of_typing (Γ := St₃.types.insert z τ.toSMTType) typ_ite_body hDb
+          have hcompat : SMT.RenamingContext.RespectsTypeContextOnFV
+              (Function.update Δ' z (some W)) (St₃.types.insert z τ.toSMTType) ite_body := by
+            intro v σ hv_fv hlookup
+            by_cases hvz : v = z
+            · subst hvz
+              rw [AList.lookup_insert] at hlookup; cases hlookup
+              exact ⟨W, by simp [Function.update], hW_ty⟩
+            · rw [AList.lookup_insert_ne hvz] at hlookup
+              rw [Function.update_of_ne hvz]
+              have hv_not_vs : v ∉ vs := by
+                rw [ite_body_def] at hv_fv
+                simp only [SMT.fv, List.mem_append, List.mem_singleton,
+                  List.not_mem_nil, or_false] at hv_fv
+                rcases hv_fv with (hv_D | rfl) | hv_subst
+                · intro hvs
+                  exact vs_disj_St₁ v hvs (SMT.Typing.mem_context_of_mem_fv typ_D_enc hv_D)
+                · exact (hvz rfl).elim
+                · exact fv_substList_disj_vs v hv_subst hvz
+              have hΔ'_v_isSome : (Δ' v).isSome = true := by
+                have := hcov_ite_upd W v hv_fv
+                rwa [Function.update_of_ne hvz] at this
+              obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp hΔ'_v_isSome
+              refine ⟨d, hd, ?_⟩
+              rw [Δ'_def] at hd
+              simp only [hv_not_vs, if_false] at hd
+              exact Δ_P_wt v d hd σ hlookup
+          obtain ⟨D', hD', htyp'⟩ :=
+            SMT.RenamingContext.denote_exists_of_typing_fv typ_ite_body hcompat (hcov_ite_upd W)
+          rw [hD'] at hDb
+          cases hDb
+          exact htyp'
         -- Step E: lambda isSome
         have hcov_ite_upd' : ∀ W : SMT.Dom,
             RenamingContext.CoversFV (Function.update Δ' z (some W)) ite_body :=
@@ -3476,7 +3506,7 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                       simp [SMT.Term.abstract, SMT.denote, hΔ'_alt_v, Option.pure_def]
                     have typ_var : St₃.types ⊢ˢ SMT.Term.var v : σ :=
                       SMT.Typing.var St₃.types v σ hlookup
-                    exact denote_type_eq_of_typing typ_var hden_var
+                    exact denote_type_eq_of_typing typ_var hden_var (hΔΓ := sorry)
                   | none =>
                     -- Δ₀_alt v = none: Δ'_alt v = Δ_D_alt v
                     -- v ∈ fv(lambda) since v ∈ fv(ite_body) \ {z}
@@ -3501,7 +3531,7 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                     have typ_var : St₃.types ⊢ˢ SMT.Term.var v : σ :=
                       SMT.Typing.var St₃.types v σ hlookup
                     have hdv_ty : dv.2.1 = σ :=
-                      denote_type_eq_of_typing typ_var hden_var
+                      denote_type_eq_of_typing typ_var hden_var (hΔΓ := sorry)
                     exact ⟨dv, hdv_unf, hdv_ty⟩
               obtain ⟨D_body, hD_body, _⟩ :=
                 SMT.RenamingContext.denote_exists_of_typing_fv
@@ -3513,7 +3543,7 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                 ⟦ite_body.abstract (Function.update Δ'_alt z (some W)) (hcov_ite_upd_alt W)⟧ˢ = some Db →
                 Db.snd.fst = .bool := by
               intro W hW_ty Db hDb
-              exact denote_type_eq_of_typing (Γ := St₃.types.insert z τ.toSMTType) typ_ite_body_alt hDb
+              exact denote_type_eq_of_typing (Γ := St₃.types.insert z τ.toSMTType) typ_ite_body_alt hDb (hΔΓ := sorry)
             -- Now replicate hsome_lambda proof structure with Δ'_alt
             have hcov_ite_upd_alt' : ∀ W : SMT.Dom,
                 RenamingContext.CoversFV (Function.update Δ'_alt z (some W)) ite_body :=

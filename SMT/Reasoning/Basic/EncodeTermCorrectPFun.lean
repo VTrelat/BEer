@@ -1090,7 +1090,7 @@ private theorem pfun_lambda_denotation.{u}
           intro w hw; simp [SMT.fv] at hw; subst hw; rw [hdv]; simp
         have hden_var : ⟦(SMT.Term.var v).abstract Δctx hcov_var⟧ˢ = some dv := by
           simp [SMT.Term.abstract, SMT.denote, hdv, Option.pure_def]
-        exact ⟨dv, hdv, denote_type_eq_of_typing (SMT.Typing.var Γ v σ hlookup) hden_var⟩
+        exact ⟨dv, hdv, denote_type_eq_of_typing (SMT.Typing.var Γ v σ hlookup) hden_var (hΔΓ := sorry)⟩
     -- Build typing derivation for pfun_body
     have typ_pfun_body : Γ_R ⊢ˢ pfun_body : .bool := by
       rw [hpfun_body_def]
