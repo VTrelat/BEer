@@ -13,8 +13,9 @@ abbrev FunExactIH.{u}
     {τ τ' : SMTType} (p : τ ⇝ τ') : Prop :=
   ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
     Λ ⊢ˢ x : τ →
-      ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x)
-        (pf₀ : FunPf «Δ₀»),
+      ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
+        SMT.RenamingContext.RespectsTypeContext «Δ₀» Λ →
+      ∀ (pf₀ : FunPf «Δ₀»),
         ⦃fun x =>
           match x with
           | { env := E, types := Λ' } =>
@@ -1130,7 +1131,7 @@ theorem funDenVarExactAt.{u}
     rfl
   have ih_var_z_x₀ := p_ih
     (Λ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
-    (name := name) (x := .var z) typ_var_z Δx₀ hcov_var_z_x₀ pf_var_z_x₀
+    (name := name) (x := .var z) typ_var_z Δx₀ hcov_var_z_x₀ sorry pf_var_z_x₀
   have post_x₀ := ih_var_z_x₀ St₁ (by exact ⟨rfl, rfl, sub, rfl⟩)
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post_x₀
   rw [hrun] at post_x₀

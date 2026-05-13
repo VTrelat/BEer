@@ -12,8 +12,9 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
   (pα_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
-        ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x)
-          (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
+        ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
+            SMT.RenamingContext.RespectsTypeContext «Δ» Λ →
+          ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
             | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -64,8 +65,9 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
   (pβ_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : β →
-        ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x)
-          (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
+        ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
+            SMT.RenamingContext.RespectsTypeContext «Δ» Λ →
+          ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
             | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -210,7 +212,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
         pα_ih_exact
           (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
           (name := s!"{name}_funFun_arg") (x := .var a)
-          typ_var_a_St₃ Δa hcov_var_a pf_var_a
+          typ_var_a_St₃ Δa hcov_var_a sorry pf_var_a
       mspec (Std.Do.Triple.and _
         (funRunVarSpec (p := pα) (name := s!"{name}_funFun_arg") (z := a) (St := St₃))
         ih_a)
@@ -255,7 +257,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
             pβ_ih_exact
               (Λ := St₅.types) (n := St₅.env.freshvarsc) (used := St₅.env.usedVars)
               (name := s!"{name}_funFun_ret") (x := .var b)
-              typ_var_b_St₅ Δb hcov_var_b pf_var_b
+              typ_var_b_St₅ Δb hcov_var_b sorry pf_var_b
           mspec (Std.Do.Triple.and _
             (funRunVarSpec (p := pβ) (name := s!"{name}_funFun_ret") (z := b) (St := St₅))
             ih_b)
