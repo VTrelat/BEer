@@ -6,6 +6,104 @@ open Batteries SMT
 def B.Term.vars (t : B.Term) : List B.𝒱 :=
   fv t ∪ bv t
 
+namespace B
+
+theorem Term.mem_vars_iff {v t} : v ∈ Term.vars t ↔ v ∈ fv t ∨ v ∈ bv t := by
+  simp [Term.vars, List.mem_union_iff]
+
+theorem Term.notMem_vars_iff {v t} : v ∉ Term.vars t ↔ v ∉ fv t ∧ v ∉ bv t := by
+  rw [Term.mem_vars_iff]; push_neg; rfl
+
+theorem Term.notMem_vars_and {v x y} :
+    v ∉ Term.vars (x ∧ᴮ y) ↔ v ∉ Term.vars x ∧ v ∉ Term.vars y := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_maplet {v x y} :
+    v ∉ Term.vars (x ↦ᴮ y) ↔ v ∉ Term.vars x ∧ v ∉ Term.vars y := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_add {v x y} :
+    v ∉ Term.vars (x +ᴮ y) ↔ v ∉ Term.vars x ∧ v ∉ Term.vars y := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_sub {v x y} :
+    v ∉ Term.vars (x -ᴮ y) ↔ v ∉ Term.vars x ∧ v ∉ Term.vars y := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_mul {v x y} :
+    v ∉ Term.vars (x *ᴮ y) ↔ v ∉ Term.vars x ∧ v ∉ Term.vars y := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_le {v x y} :
+    v ∉ Term.vars (x ≤ᴮ y) ↔ v ∉ Term.vars x ∧ v ∉ Term.vars y := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_eq {v x y} :
+    v ∉ Term.vars (x =ᴮ y) ↔ v ∉ Term.vars x ∧ v ∉ Term.vars y := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_mem {v x y} :
+    v ∉ Term.vars (x ∈ᴮ y) ↔ v ∉ Term.vars x ∧ v ∉ Term.vars y := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_not {v x} : v ∉ Term.vars (¬ᴮ x) ↔ v ∉ Term.vars x := by
+  simp only [Term.notMem_vars_iff, fv, bv]
+
+theorem Term.notMem_vars_pow {v S} : v ∉ Term.vars (𝒫ᴮ S) ↔ v ∉ Term.vars S := by
+  simp only [Term.notMem_vars_iff, fv, bv]
+
+theorem Term.notMem_vars_card {v S} : v ∉ Term.vars (|S|ᴮ) ↔ v ∉ Term.vars S := by
+  simp only [Term.notMem_vars_iff, fv, bv]
+
+theorem Term.notMem_vars_min {v S} : v ∉ Term.vars S.min ↔ v ∉ Term.vars S := by
+  simp only [Term.notMem_vars_iff, fv, bv]
+
+theorem Term.notMem_vars_max {v S} : v ∉ Term.vars S.max ↔ v ∉ Term.vars S := by
+  simp only [Term.notMem_vars_iff, fv, bv]
+
+theorem Term.notMem_vars_cprod {v S T} :
+    v ∉ Term.vars (S ⨯ᴮ T) ↔ v ∉ Term.vars S ∧ v ∉ Term.vars T := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_union {v S T} :
+    v ∉ Term.vars (S ∪ᴮ T) ↔ v ∉ Term.vars S ∧ v ∉ Term.vars T := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_inter {v S T} :
+    v ∉ Term.vars (S ∩ᴮ T) ↔ v ∉ Term.vars S ∧ v ∉ Term.vars T := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_pfun {v A C} :
+    v ∉ Term.vars (A ⇸ᴮ C) ↔ v ∉ Term.vars A ∧ v ∉ Term.vars C := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_app {v f x} :
+    v ∉ Term.vars ((@ᴮ f) x) ↔ v ∉ Term.vars f ∧ v ∉ Term.vars x := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, not_or]; tauto
+
+theorem Term.notMem_vars_collect {v vs D P} :
+    v ∉ Term.vars (.collect vs D P) ↔
+      v ∉ Term.vars D ∧ v ∉ Term.vars P ∧ v ∉ vs := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, List.mem_removeAll_iff, not_or,
+    not_and, not_not]
+  tauto
+
+theorem Term.notMem_vars_lambda {v vs D P} :
+    v ∉ Term.vars (.lambda vs D P) ↔
+      v ∉ Term.vars D ∧ v ∉ Term.vars P ∧ v ∉ vs := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, List.mem_removeAll_iff, not_or,
+    not_and, not_not]
+  tauto
+
+theorem Term.notMem_vars_all {v vs D P} :
+    v ∉ Term.vars (.all vs D P) ↔
+      v ∉ Term.vars D ∧ v ∉ Term.vars P ∧ v ∉ vs := by
+  simp only [Term.notMem_vars_iff, fv, bv, List.mem_append, List.mem_removeAll_iff, not_or,
+    not_and, not_not]
+  tauto
+
+end B
+
 def B.SimpleGoal.vars (g : B.SimpleGoal) : List B.𝒱 :=
   (g.hyps.map B.Term.vars).flatten ++ g.goal.vars
 

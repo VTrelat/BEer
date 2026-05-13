@@ -560,6 +560,92 @@ theorem Typing.typed_by_fv {Γ : TypeContext} {e : Term} {τ : BType} : Γ ⊢�
       have hP : v ∈ (vs.zipToAList αs ∪ Γ) := typP_ih hv.1
       exact AList.mem_union.mp hP |>.elim (absurd · (fun h => hv.2 (AList.mem_zipToAList h))) id
 
+/-- Bound variables of a well-typed term are not in the typing context. -/
+theorem Typing.bv_notMem_context {Γ : TypeContext} {e : Term} {τ : BType} :
+    Γ ⊢ᴮ e : τ → ∀ v ∈ bv e, v ∉ Γ.keys := by
+  intro h
+  induction h with
+  | var _ | int | bool | «ℤ» | 𝔹 =>
+    intro v hv; simp [bv] at hv
+  | @maplet Γ _ _ _ _ _ _ ihx ihy
+  | @add Γ _ _ _ _ ihx ihy
+  | @sub Γ _ _ _ _ ihx ihy
+  | @mul Γ _ _ _ _ ihx ihy
+  | @and Γ _ _ _ _ ihx ihy
+  | @eq Γ _ _ _ _ _ ihx ihy
+  | @le Γ _ _ _ _ ihx ihy
+  | @mem Γ _ _ _ _ _ ihx ihy
+  | @cprod Γ _ _ _ _ _ _ ihx ihy
+  | @union Γ _ _ _ _ _ ihx ihy
+  | @inter Γ _ _ _ _ _ ihx ihy
+  | @pfun Γ _ _ _ _ _ _ ihx ihy
+  | @app Γ _ _ _ _ _ _ ihx ihy =>
+    intro v hv; simp [bv, List.mem_append] at hv
+    exact hv.elim (ihx v ·) (ihy v ·)
+  | not _ ih
+  | pow _ ih
+  | card _ ih
+  | min _ ih
+  | max _ ih =>
+    intro v hv; exact ih v hv
+  | @collect Γ vs αs Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len ihD ihP typP ihD_ih ihP_ih =>
+    intro v hv; simp [bv, List.mem_append] at hv
+    rcases hv with hv_vs | hv_bvDs | hv_bvP
+    · exact vs_Γ_disj v hv_vs
+    · have : ∀ (acc : Term) (rest : List Term),
+          v ∈ bv (rest.foldl (· ⨯ᴮ ·) acc) → v ∈ bv acc ∨ ∃ D' ∈ rest, v ∈ bv D' := by
+        intro acc rest
+        induction rest generalizing acc with
+        | nil => intro h; exact Or.inl h
+        | cons D rest ih_inner =>
+          intro h; rcases ih_inner _ h with h | ⟨D', hD', hbv_D'⟩
+          · rw [bv, List.mem_append] at h
+            exact h.elim Or.inl (fun h => Or.inr ⟨D, List.mem_cons_self .., h⟩)
+          · exact Or.inr ⟨D', List.mem_cons_of_mem _ hD', hbv_D'⟩
+      rw [List.reduce] at hv_bvDs
+      rcases this _ _ hv_bvDs with hv_head | ⟨D', hD', hv_D'⟩
+      · have hne : 0 < Ds.length := List.length_pos_of_ne_nil
+            (by simpa [ihD, ← List.length_pos_iff] using vs_nemp)
+        rw [List.head_eq_getElem] at hv_head
+        exact ihD_ih 0 hne v hv_head
+      · obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem (List.mem_of_mem_tail hD')
+        exact ihD_ih i hi v hv_D'
+    · have hP := ihP_ih v hv_bvP
+      intro hΓ
+      exact hP (AList.mem_union.mpr (Or.inr hΓ))
+  | @all Γ vs αs Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len ihD ihP typP ihD_ih ihP_ih
+  | @lambda Γ vs αs _ Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len ihD ihP typP ihD_ih ihP_ih =>
+    intro v hv; simp [bv, List.mem_append] at hv
+    rcases hv with hv_vs | hv_bvDs | hv_bvP
+    · exact vs_Γ_disj v hv_vs
+    · have : ∀ (acc : Term) (rest : List Term),
+          v ∈ bv (rest.foldl (· ⨯ᴮ ·) acc) → v ∈ bv acc ∨ ∃ D' ∈ rest, v ∈ bv D' := by
+        intro acc rest
+        induction rest generalizing acc with
+        | nil => intro h; exact Or.inl h
+        | cons D rest ih_inner =>
+          intro h; rcases ih_inner _ h with h | ⟨D', hD', hbv_D'⟩
+          · rw [bv, List.mem_append] at h
+            exact h.elim Or.inl (fun h => Or.inr ⟨D, List.mem_cons_self .., h⟩)
+          · exact Or.inr ⟨D', List.mem_cons_of_mem _ hD', hbv_D'⟩
+      rw [List.reduce] at hv_bvDs
+      rcases this _ _ hv_bvDs with hv_head | ⟨D', hD', hv_D'⟩
+      · have hne : 0 < Ds.length := List.length_pos_of_ne_nil
+            (by simpa [ihD, ← List.length_pos_iff] using vs_nemp)
+        rw [List.head_eq_getElem] at hv_head
+        exact ihD_ih 0 hne v hv_head
+      · obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem (List.mem_of_mem_tail hD')
+        exact ihD_ih i hi v hv_D'
+    · have hP := ihP_ih v hv_bvP
+      intro hΓ
+      exact hP (AList.mem_union.mpr (Or.inr hΓ))
+
+/-- Bound variables of a well-typed term are not free variables. -/
+theorem Typing.bv_notMem_fv_of_typed {Γ : TypeContext} {e : Term} {τ : BType}
+    (h : Γ ⊢ᴮ e : τ) (v : 𝒱) (hbv : v ∈ bv e) : v ∉ fv e := by
+  intro hfv
+  exact h.bv_notMem_context v hbv (h.typed_by_fv hfv)
+
 /-
 
 theorem Typing.union_find?_iff {Γ Δ : TypeContext} {x : 𝒱} {τ : BType} : (Γ ∪ Δ).find? x = τ ↔ Γ.find? x = τ ∨ (x ∉ Γ ∧ Δ.find? x = τ) := by

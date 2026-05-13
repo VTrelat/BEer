@@ -16,6 +16,7 @@ theorem encodeTerm_spec.{u} (fv_sub_typings : B.FvSubTypings)
   {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ} (den_t : ⟦t.abstract «Δ» Δ_fv⟧ᴮ = Option.some ⟨T, α, hT⟩)
   (vars_used : ∀ v ∈ t.vars, v ∈ used)
   (Λ_inv : ∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context)
+  (bv_nodup : (B.bv t).Nodup)
   -- Path-A R3e: SPLIT existential witness into two finer-grained hypotheses:
   -- existence + RDom (sharing same `denT'`) and Δ-universal totality
   -- (independent of `denT'`). Each is parameterized over `vs`, `D`, `P` so
@@ -90,7 +91,7 @@ theorem encodeTerm_spec.{u} (fv_sub_typings : B.FvSubTypings)
     B.CoversUsedVars E'.usedVars t ∧
     σ = α.toSMTType ∧
     (Γ' ⊢ˢ t' : σ) ∧
-    (∀ v ∈ used, v ∉ Λ → v ∉ B.fv t → v ∉ Γ') ∧
+    (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars t → v ∉ Γ') ∧
     ∃ (Δ' : SMT.RenamingContext.Context),
       ∃ (Δ'_covers : RenamingContext.CoversFV Δ' t'),
         RenamingContext.Extends Δ' Δ₀ ∧
@@ -113,29 +114,29 @@ theorem encodeTerm_spec.{u} (fv_sub_typings : B.FvSubTypings)
           ⟦t'.abstract Δ'_alt hcov_alt⟧ˢ = some denT_alt ∧ ⟨T_alt, ⟨α, hT_alt⟩⟩ ≘ᶻ denT_alt ∧
           (∀ v, Δ'_alt v ≠ none → v ∈ Γ'))⌝⦄ := by
   induction t generalizing E n α «Δ» T hT Λ Δ₀ used with
-  | «ℤ»                      => exact encodeTerm_spec.ℤ_case E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | 𝔹                        => exact encodeTerm_spec.𝔹_case E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | var v                    => exact encodeTerm_spec.var_case v E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | int i                    => exact encodeTerm_spec.int_case i E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | bool b                   => exact encodeTerm_spec.bool_case b E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | maplet x y x_ih y_ih     => exact encodeTerm_spec.maplet_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | add x y x_ih y_ih        => exact encodeTerm_spec.add_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | sub x y x_ih y_ih        => exact encodeTerm_spec.sub_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | mul x y x_ih y_ih        => exact encodeTerm_spec.mul_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | le x y x_ih y_ih         => exact encodeTerm_spec.le_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | min S ih                 => exact encodeTerm_spec.min_case S ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | max S ih                 => exact encodeTerm_spec.max_case S ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | card S ih                => exact encodeTerm_spec.card_case S ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | and x y x_ih y_ih        => exact encodeTerm_spec.and_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | not x ih                 => exact encodeTerm_spec.not_case fv_sub_typings x ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | pow S ih                 => exact encodeTerm_spec.pow_case fv_sub_typings S ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | cprod A B A_ih B_ih      => exact encodeTerm_spec.cprod_case fv_sub_typings A B A_ih B_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | mem x S x_ih S_ih        => exact encodeTerm_spec.mem_case fv_sub_typings x S x_ih S_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | eq x y x_ih y_ih         => exact encodeTerm_spec.eq_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | union A B A_ih B_ih      => exact encodeTerm_spec.union_case fv_sub_typings A B A_ih B_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | inter A B A_ih B_ih      => exact encodeTerm_spec.inter_case fv_sub_typings A B A_ih B_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | pfun A B A_ih B_ih       => exact encodeTerm_spec.pfun_case fv_sub_typings A B A_ih B_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | app f x f_ih x_ih        => exact encodeTerm_spec.app_case fv_sub_typings f x f_ih x_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | collect vs D P D_ih P_ih => exact encodeTerm_spec.collect_case fv_sub_typings vs D P D_ih P_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
-  | all vs D P D_ih P_ih     => exact encodeTerm_spec.all_case fv_sub_typings vs D P D_ih P_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv (existence_rdom_witness_hasflag vs D P) (totality_witness_hasflag vs D P)
-  | lambda vs D P D_ih P_ih  => exact encodeTerm_spec.lambda_case fv_sub_typings vs D P D_ih P_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv
+  | «ℤ»                      => exact encodeTerm_spec.ℤ_case E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | 𝔹                        => exact encodeTerm_spec.𝔹_case E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | var v                    => exact encodeTerm_spec.var_case v E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | int i                    => exact encodeTerm_spec.int_case i E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | bool b                   => exact encodeTerm_spec.bool_case b E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | maplet x y x_ih y_ih     => exact encodeTerm_spec.maplet_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | add x y x_ih y_ih        => exact encodeTerm_spec.add_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | sub x y x_ih y_ih        => exact encodeTerm_spec.sub_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | mul x y x_ih y_ih        => exact encodeTerm_spec.mul_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | le x y x_ih y_ih         => exact encodeTerm_spec.le_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | min S ih                 => exact encodeTerm_spec.min_case S ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | max S ih                 => exact encodeTerm_spec.max_case S ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | card S ih                => exact encodeTerm_spec.card_case S ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | and x y x_ih y_ih        => exact encodeTerm_spec.and_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | not x ih                 => exact encodeTerm_spec.not_case fv_sub_typings x ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | pow S ih                 => exact encodeTerm_spec.pow_case fv_sub_typings S ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | cprod A B A_ih B_ih      => exact encodeTerm_spec.cprod_case fv_sub_typings A B A_ih B_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | mem x S x_ih S_ih        => exact encodeTerm_spec.mem_case fv_sub_typings x S x_ih S_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | eq x y x_ih y_ih         => exact encodeTerm_spec.eq_case fv_sub_typings x y x_ih y_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | union A B A_ih B_ih      => exact encodeTerm_spec.union_case fv_sub_typings A B A_ih B_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | inter A B A_ih B_ih      => exact encodeTerm_spec.inter_case fv_sub_typings A B A_ih B_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | pfun A B A_ih B_ih       => exact encodeTerm_spec.pfun_case fv_sub_typings A B A_ih B_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | app f x f_ih x_ih        => exact encodeTerm_spec.app_case fv_sub_typings f x f_ih x_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | collect vs D P D_ih P_ih => exact encodeTerm_spec.collect_case fv_sub_typings vs D P D_ih P_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+  | all vs D P D_ih P_ih     => exact encodeTerm_spec.all_case fv_sub_typings vs D P D_ih P_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup (existence_rdom_witness_hasflag vs D P) (totality_witness_hasflag vs D P)
+  | lambda vs D P D_ih P_ih  => exact encodeTerm_spec.lambda_case fv_sub_typings vs D P D_ih P_ih E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup

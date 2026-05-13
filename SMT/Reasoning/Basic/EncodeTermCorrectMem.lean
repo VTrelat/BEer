@@ -22,6 +22,7 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
                   ⟦x.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
                     (∀ v ∈ x.vars, v ∈ used) →
                       (∀ v ∈ x.vars, v ∈ Λ → v ∈ E.context) →
+                      ((B.bv x).Nodup) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -38,7 +39,7 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
                                           CoversUsedVars E'.usedVars x ∧
                                             σ = α.toSMTType ∧
                                               Γ' ⊢ˢ t' : σ ∧
-                                                (∀ v ∈ used, v ∉ Λ → v ∉ B.fv x → v ∉ Γ') ∧
+                                                (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars x → v ∉ Γ') ∧
                                                   ∃ Δ',
                                                     ∃ (Δ'_covers : RenamingContext.CoversFV Δ' t'),
                                                       RenamingContext.Extends Δ' Δ₀ ∧
@@ -81,6 +82,7 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
                   ⟦S.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
                     (∀ v ∈ S.vars, v ∈ used) →
                       (∀ v ∈ S.vars, v ∈ Λ → v ∈ E.context) →
+                      ((B.bv S).Nodup) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -97,7 +99,7 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
                                           CoversUsedVars E'.usedVars S ∧
                                             σ = α.toSMTType ∧
                                               Γ' ⊢ˢ t' : σ ∧
-                                                (∀ v ∈ used, v ∉ Λ → v ∉ B.fv S → v ∉ Γ') ∧
+                                                (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars S → v ∉ Γ') ∧
                                                   ∃ Δ',
                                                     ∃ (Δ'_covers : RenamingContext.CoversFV Δ' t'),
                                                       RenamingContext.Extends Δ' Δ₀ ∧
@@ -133,7 +135,8 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
   (Δ₀_ext : RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» (x ∈ᴮ S)) {used : List SMT.𝒱}
   (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none) {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(x ∈ᴮ S).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) (vars_used : ∀ v ∈ (x ∈ᴮ S).vars, v ∈ used)
-  (Λ_inv : ∀ v ∈ (x ∈ᴮ S).vars, v ∈ Λ → v ∈ E.context) {n : ℕ} :
+  (Λ_inv : ∀ v ∈ (x ∈ᴮ S).vars, v ∈ Λ → v ∈ E.context)
+  (bv_nodup : (B.bv (x ∈ᴮ S)).Nodup) {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -148,7 +151,7 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
                   CoversUsedVars E'.usedVars (x ∈ᴮ S) ∧
                     σ = α.toSMTType ∧
                       Γ' ⊢ˢ t' : σ ∧
-                        (∀ v ∈ used, v ∉ Λ → v ∉ B.fv (x ∈ᴮ S) → v ∉ Γ') ∧
+                        (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars (x ∈ᴮ S) → v ∉ Γ') ∧
                           ∃ Δ',
                             ∃ (Δ'_covers : RenamingContext.CoversFV Δ' t'),
                               RenamingContext.Extends Δ' Δ₀ ∧
@@ -217,12 +220,19 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
     exact RenamingContext.extendsOnSourceFV_of_fv_subset
       (hsub := B.fv_subset_mem_right x S) Δ₀_ext
 
+  have hx_bv_nodup : (B.bv x).Nodup := by
+    have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
+  have hS_bv_nodup : (B.bv S).Nodup := by
+    have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+  have hxS_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv S, a ≠ b := by
+    have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
   mspec x_ih (E := E) (Λ := St.types) (α := α) typ_x
     («Δ» := «Δ») (Δ_fv := fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
     (Δ₀ := Δ₀) Δ₀_ext_x (used := used) Δ₀_none_out (T := X) (hT := hX)
     den_x
     (fun v hv => vars_used v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
     (fun v hv => Λ_inv v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
+    hx_bv_nodup
     (n := St.env.freshvarsc)
   clear x_ih
   rename_i out_x
@@ -249,10 +259,17 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
         rcases hv with h | h <;> [left; right] <;> exact .inr h
       by_cases hv_St : v ∈ St.types
       · exact Λ_inv v hv_mem hv_St
-      · have hv_fv_x : v ∈ B.fv x := by
+      · have hv_vars_x : v ∈ B.Term.vars x := by
           by_contra h_neg
           exact absurd hΛ (x_preserves v (vars_used v hv_mem) hv_St h_neg)
-        exact _root_.B.Typing.typed_by_fv typ_x hv_fv_x)
+        rcases B.Term.mem_vars_iff.mp hv_vars_x with h | h
+        · exact _root_.B.Typing.typed_by_fv typ_x h
+        · rcases B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
+          · exact absurd (_root_.B.Typing.typed_by_fv typ_S hy_fv)
+              (_root_.B.Typing.bv_notMem_context typ_x v h)
+          · -- v ∈ B.bv x ∩ B.bv S impossible by bv_nodup
+            exact absurd rfl (hxS_bv_disj v h v hy_bv))
+    hS_bv_nodup
     (n := St'.env.freshvarsc)
   clear S_ih
   rename_i out_S
@@ -317,12 +334,15 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
     exact SMT.Typing.app _ _ _ _ _ typ_S_enc typ_x_enc_final
   · -- preserves_types
     intro v hv h1 h2
-    rw [B.fv, List.mem_append] at h2; push_neg at h2
+    simp only [B.Term.vars, B.fv, B.bv, List.mem_union_iff, List.mem_append, not_or] at h2
+    obtain ⟨⟨hfx, hfS⟩, ⟨hbx, hbS⟩⟩ := h2
+    have h2_x : v ∉ B.Term.vars x := B.Term.notMem_vars_iff.mpr ⟨hfx, hbx⟩
+    have h2_S : v ∉ B.Term.vars S := B.Term.notMem_vars_iff.mpr ⟨hfS, hbS⟩
     exact S_preserves v (St_used_sub_St' (by simpa [St_used_eq] using hv))
       (fun h_in => h1 (by
         by_contra h_not
-        exact absurd h_in (x_preserves v (by simpa [St_used_eq] using hv) h_not h2.1)))
-      h2.2
+        exact absurd h_in (x_preserves v (by simpa [St_used_eq] using hv) h_not h2_x)))
+      h2_S
   · -- ∃ Δ', ...
     refine ⟨ΔSMT, ?_, ?_⟩
     · -- CoversFV ΔSMT ((@ˢS_enc) x_enc)

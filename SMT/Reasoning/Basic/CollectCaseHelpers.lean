@@ -168,7 +168,7 @@ theorem toDestPair_typing_gen (Γ : SMT.TypeContext) :
         simp only [List.singleton_append, List.getElem?_cons_succ] at hget
         have hj' : j' < acc.length := by
           by_contra h; push_neg at h
-          rw [List.getElem?_eq_none (by omega)] at hget; exact Option.noConfusion hget
+          rw [List.getElem?_eq_none (by omega)] at hget; nomatch hget
         have hj'_t : j' < σs_acc.length := by omega
         refine ⟨by simp; omega, ?_⟩
         rw [List.getElem?_eq_getElem hj'_t] at hget

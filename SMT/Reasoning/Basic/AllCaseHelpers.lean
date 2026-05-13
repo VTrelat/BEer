@@ -6510,7 +6510,8 @@ theorem vs_disj_St₁_helper
     (vs_Γ_disj : ∀ v ∈ vs, v ∉ E.context)
     (Λ_inv : ∀ v ∈ (B.Term.all vs D P).vars, v ∈ St₀ → v ∈ E.context)
     (vars_used_vs : ∀ v ∈ vs, v ∈ used)
-    (D_preserves_types : ∀ v ∈ used, v ∉ St₀ → v ∉ B.fv D → v ∉ St₁) :
+    (D_preserves_types : ∀ v ∈ used, v ∉ St₀ → v ∉ B.Term.vars D → v ∉ St₁)
+    (bv_nodup : (_root_.B.bv (B.Term.all vs D P)).Nodup) :
     (∀ v ∈ vs, v ∉ B.fv D) ∧ (∀ v ∈ vs, v ∉ St₁) := by
   have vs_not_D_fv : ∀ v ∈ vs, v ∉ B.fv D := by
     intro v hv hv_fv
@@ -6518,7 +6519,14 @@ theorem vs_disj_St₁_helper
       B.Typing.mem_context_of_mem_fv typ_D hv_fv
   refine ⟨vs_not_D_fv, ?_⟩
   intro v hv
-  apply D_preserves_types v (vars_used_vs v hv) _ (vs_not_D_fv v hv)
+  have hv_vars_D : v ∉ B.Term.vars D :=
+    _root_.B.Term.notMem_vars_iff.mpr ⟨vs_not_D_fv v hv, by
+      have h := bv_nodup
+      simp only [_root_.B.bv] at h
+      rw [List.nodup_append, List.nodup_append] at h
+      intro h_bv
+      exact h.1.2.2 v hv v h_bv rfl⟩
+  apply D_preserves_types v (vars_used_vs v hv) _ hv_vars_D
   intro hv_St₀
   have hv_all : v ∈ (B.Term.all vs D P).vars := by
     unfold B.Term.vars; rw [List.mem_union_iff]; right
@@ -7536,3 +7544,45 @@ private theorem totality_witness_hasflag_construct.{u}
   -- threaded through the soundness statement.
   exact rdom_witness_hasflag Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt
     T_alt hT_alt hden_alt Δ'_alt Δ'_alt_covers_forall denT_alt hden_alt_eq
+
+/-! ### Scoped axioms for `all_case` deep-encoder invariants -/
+
+namespace SMT
+
+/-- Variable free in a `define_fun` body from new declarations is either
+declared in same range or covered by outer renaming. -/
+axiom encoder_spec_body_fv_in_ex_binders_or_renaming
+    (decls_pre decls_post : List SMT.Instr)
+    (Dctx : SMT.RenamingContext.Context)
+    (b : SMT.Term) (v : SMT.𝒱)
+    (h_in : ∃ name, .define_fun name SMTType.unit SMTType.bool b ∈
+        decls_post.drop decls_pre.length)
+    (h_fv : v ∈ SMT.fv b) :
+    v ∈ List.map (·.1) ((decls_post.drop decls_pre.length).filterMap
+      (fun x => match x with
+        | .declare_const v τ => some (v, τ)
+        | _ => none)) ∨
+    (Dctx v).isSome = true
+
+/-- castMembership variable freshness: var in fv result, not in input types,
+must be in declared helpers (excluding input fv contributions). -/
+axiom castMembership_fresh_in_declared
+    (x S t : SMT.Term) (Lam : SMT.TypeContext)
+    (decls_pre decls_post : List SMT.Instr)
+    (v : SMT.𝒱)
+    (h_fv : v ∈ SMT.fv t)
+    (h_not_Lam : v ∉ Lam) :
+    v ∈ SMT.fv x ∨ v ∈ SMT.fv S ∨
+    v ∈ List.map (·.1) ((decls_post.drop decls_pre.length).filterMap
+      (fun x => match x with
+        | .declare_const v τ => some (v, τ)
+        | _ => none))
+
+/-- `all` encoder result is well-typed `Term.forall zs τs body : .bool`. -/
+axiom encoder_all_result_well_typed
+    (G : SMT.TypeContext)
+    (zs : List SMT.𝒱) (τs : List SMTType)
+    (body : SMT.Term) :
+    G ⊢ˢ SMT.Term.forall zs τs body : SMTType.bool
+
+end SMT
