@@ -621,4 +621,3 @@ theorem SMT_Typing_substList {Γ : SMT.TypeContext} (xs : List SMT.𝒱) (ts : L
       · exact fun t ht => hbvs t (List.mem_cons_of_mem _ ht)
       · intro i hi_x hi_t hx
         exact hpairs (i + 1) (Nat.succ_lt_succ hi_x) (Nat.succ_lt_succ hi_t) hx
-

@@ -7,7 +7,8 @@ open Std.Do SMT ZFSet Classical
 theorem loosenAux_prf_spec.refl («Δ» : RenamingContext.Context) {α : SMTType}
   (hα : α = SMTType.int ∨ α = SMTType.bool ∨ α = SMTType.unit) {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String}
   {x : Term} (typ_x : Λ ⊢ˢ x : α) (hx : RenamingContext.CoversFV «Δ» x)
-  (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true) :
+  (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true)
+  (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ) :
   ⦃fun x =>
     match x with
     | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -155,8 +156,7 @@ theorem loosenAux_prf_spec.refl («Δ» : RenamingContext.Context) {α : SMTType
                   ?_
                 on_goal 2 =>
                   use SMT.TypeContext.abstract («Δ» := «Δ») ?_, PHOAS.WFTC.of_abstract, α
-                  · apply PHOAS.Typing.of_abstract
-                    exact typ_x
+                  · exact @PHOAS.Typing.of_abstract _ _ St₁.types _ hx respects typ_x
                 dsimp at hXτ'
                 exact hXτ'
               have hpair : X.1.pair X.1 ∈ 𝟙⟦α⟧ᶻ := by
@@ -171,8 +171,7 @@ theorem loosenAux_prf_spec.refl («Δ» : RenamingContext.Context) {α : SMTType
               ?_
             on_goal 2 =>
               use SMT.TypeContext.abstract («Δ» := «Δ») ?_, PHOAS.WFTC.of_abstract, α
-              · apply PHOAS.Typing.of_abstract
-                exact typ_x
+              · exact @PHOAS.Typing.of_abstract _ _ St₁.types _ hx respects typ_x
             have hXτ : α = X.2.1 := by
               dsimp at hXτ'
               exact hXτ'
