@@ -451,7 +451,16 @@ theorem Typing.of_abstract
   | mem _ _ x_ih S_ih =>
     unfold Term.abstract
     exact PHOAS.Typing.mem (x_ih _) (S_ih _)
-  | collect vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
+  | collect vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih =>
+    -- BLOCKED: `B.Term.abstract` on `collect` builds `.collect (D.abstract ..)
+    -- ((go P vs «Δ» ..).uncurry)`; matching it against `PHOAS.Typing.collect`
+    -- requires (a) bridging `List.reduce (· ⨯ᴮ ·)` (B side) with the Fin-indexed
+    -- `Fin.foldl (· ⨯ᴮ' ·)` of the PHOAS rule, and (b) a lemma that
+    -- `(vs.zipToAList αs ∪ Γ).abstract = (Γ.abstract).update ..` so that the body
+    -- typing transfers. Neither bridging lemma exists in the project (the `var`
+    -- case of this very theorem is also still `admit`-ed). Genuinely hard, not a
+    -- proof-body fill.
+    sorry
   | pow _ ih =>
     unfold Term.abstract
     exact PHOAS.Typing.pow (ih _)
@@ -467,8 +476,18 @@ theorem Typing.of_abstract
   | pfun _ _ A_ih B_ih =>
     unfold Term.abstract
     exact PHOAS.Typing.pfun (A_ih _) (B_ih _)
-  | all vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
-  | lambda vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
+  | all vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih =>
+    -- BLOCKED: same obstacle as the `collect` case — the abstracted `all` uses
+    -- `go`/`uncurry`, and matching `PHOAS.Typing.all` needs the `List.reduce` ↔
+    -- `Fin.foldl` bridge plus a `TypeContext.abstract` / `TypeContext.update`
+    -- commutation lemma, neither of which exists in the project.
+    sorry
+  | lambda vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih =>
+    -- BLOCKED: same obstacle as the `collect` case — the abstracted `lambda`
+    -- uses `go`/`uncurry`, and matching `PHOAS.Typing.lambda` needs the
+    -- `List.reduce` ↔ `Fin.foldl` bridge plus a `TypeContext.abstract` /
+    -- `TypeContext.update` commutation lemma, neither of which exists.
+    sorry
   | app _ _ f_ih x_ih =>
     unfold Term.abstract
     exact PHOAS.Typing.app (f_ih _) (x_ih _)
