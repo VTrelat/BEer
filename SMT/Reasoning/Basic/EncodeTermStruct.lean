@@ -5,18 +5,19 @@ import SMT.Reasoning.Axioms
 # `encodeTerm` structural specification
 
 `encodeTerm_struct` captures the *structural* postcondition of `encodeTerm`:
-state monotonicity, SMT well-typedness of the encoded term, source-variable
+state monotonicity, free-variable coverage of the encoded term, source-variable
 coverage/preservation, and the existence of a covering renaming context.
 
-Unlike `encodeTerm_spec`, it does **not** require the `respects` hypothesis and
-does **not** assert `σ = α.toSMTType` or any denotational fact — precisely the
-parts that are unavailable (indeed false) for a flagged binder. It is consumed
-by the HAS-FLAG branch of `encodeTerm_spec.all_case`, which needs structural
-facts about the encoding of the binder body `P` without a (false) `respects`.
+Unlike `encodeTerm_spec`, it requires neither the `respects` hypothesis nor any
+`B`-typing, and asserts neither `σ = α.toSMTType` nor any denotational fact —
+precisely the parts unavailable (indeed false) for a flagged binder. It is
+consumed by the HAS-FLAG branch of `encodeTerm_spec.all_case`, which needs
+structural facts about the encoding of the binder body `P` without a (false)
+`respects`.
 
-The renaming witness is discharged generically (`renaming_witness`): a term
-typed by the final context `Γ'` has all free variables in `Γ' ⊆ usedVars`, so
-`Δ₀` padded over `Γ'` covers it.
+The renaming witness is discharged generically (`renaming_witness`): the
+encoded term's free variables all live in the final context `Γ' ⊆ usedVars`,
+so `Δ₀` padded over `Γ'` covers it.
 -/
 
 open Std.Do B SMT ZFSet
@@ -34,16 +35,16 @@ noncomputable def padWith (Δ₀ : Context) (Γ' : SMT.TypeContext) : Context :=
 end SMT.RenamingContext
 
 /-- The structural `∃ Δ'` clause of `encodeTerm_struct`, discharged generically
-from the SMT typing of the encoded term plus key-coverage of the final context. -/
+from free-variable coverage of the encoded term by the final context. -/
 theorem encodeTerm_struct.renaming_witness
     {Δ₀ : SMT.RenamingContext.Context} {«Δ» : B.RenamingContext.Context}
-    {t : B.Term} {Γ' : SMT.TypeContext} {t' : SMT.Term} {σ : SMTType}
+    {t : B.Term} {Γ' : SMT.TypeContext} {t' : SMT.Term}
     {usedVars' used : List SMT.𝒱}
     (Δ₀_ext : SMT.RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» t)
     (Δ₀_none : ∀ v ∉ used, Δ₀ v = none)
     (used_sub : used ⊆ usedVars')
     (keys_sub : AList.keys Γ' ⊆ usedVars')
-    (typ : Γ' ⊢ˢ t' : σ) :
+    (fv_sub : SMT.fv t' ⊆ AList.keys Γ') :
     ∃ (Δ' : SMT.RenamingContext.Context)
       (_ : SMT.RenamingContext.CoversFV Δ' t'),
       SMT.RenamingContext.Extends Δ' Δ₀ ∧
@@ -52,7 +53,7 @@ theorem encodeTerm_struct.renaming_witness
   refine ⟨SMT.RenamingContext.padWith Δ₀ Γ', ?_, ?_, ?_, ?_⟩
   · -- CoversFV
     intro v hv
-    have hvΓ : v ∈ Γ' := SMT.Typing.mem_context_of_mem_fv typ hv
+    have hvΓ : v ∈ Γ' := AList.mem_keys.mp (fv_sub hv)
     obtain ⟨τv, hτv⟩ := Option.isSome_iff_exists.mp ((AList.lookup_isSome).2 hvΓ)
     simp only [SMT.RenamingContext.padWith]
     cases h : Δ₀ v with
@@ -69,7 +70,7 @@ theorem encodeTerm_struct.renaming_witness
     intro v hv
     have hvu : v ∉ used := fun hu => hv (used_sub hu)
     have h0 : Δ₀ v = none := Δ₀_none v hvu
-    have hvΓ : v ∉ Γ' := fun hg => hv (keys_sub hg)
+    have hvΓ : v ∉ Γ' := fun hg => hv (keys_sub (AList.mem_keys.mpr hg))
     have hlk : AList.lookup v Γ' = none := by
       rcases hl : AList.lookup v Γ' with _ | τ
       · rfl
@@ -78,27 +79,25 @@ theorem encodeTerm_struct.renaming_witness
 
 set_option maxHeartbeats 4000000 in
 /-- Structural postcondition of `encodeTerm` (no `«Δ»`, no `respects`, no
-denotation): state monotonicity, key coverage, source-FV coverage, SMT typing
-of the encoded term, and variable preservation. -/
+`B`-typing, no denotation): state monotonicity, key coverage, source-FV
+coverage, encoded-term FV coverage, and variable preservation. -/
 theorem encodeTerm_state
-    (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term} {α : B.BType}
-    (typ_t : E.context ⊢ᴮ t : α)
+    (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term}
     {used : List SMT.𝒱}
     (vars_used : ∀ v ∈ t.vars, v ∈ used)
-    (Λ_inv : ∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context)
     (bv_nodup : (B.bv t).Nodup)
     {n : ℕ} :
     ⦃ fun (⟨E0, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝ ⦄
     encodeTerm t E
-    ⦃ ⇓? (⟨t', σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       used ⊆ E'.usedVars ∧
       Λ ⊆ Γ' ∧
       AList.keys Γ' ⊆ E'.usedVars ∧
       B.CoversUsedVars E'.usedVars t ∧
-      (Γ' ⊢ˢ t' : σ) ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∧
       (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars t → v ∉ Γ') ⌝⦄ := by
-  induction t generalizing E n α used Λ with
+  induction t generalizing E n used Λ with
   | int i =>
     mstart
     mintro pre ∀St
@@ -112,7 +111,7 @@ theorem encodeTerm_state
     · intro v hv; simpa using hv
     · intro v hv; simpa [St_used_eq] using St_sub hv
     · intro v hv; simp [B.fv] at hv
-    · apply SMT.Typing.int
+    · intro v hv; simp [SMT.fv] at hv
     · exact fun _ _ h _ => h
   | bool b =>
     mstart
@@ -127,7 +126,7 @@ theorem encodeTerm_state
     · intro v hv; simpa using hv
     · intro v hv; simpa [St_used_eq] using St_sub hv
     · intro v hv; simp [B.fv] at hv
-    · apply SMT.Typing.bool
+    · intro v hv; simp [SMT.fv] at hv
     · exact fun _ _ h _ => h
   | var v =>
     mstart
@@ -137,6 +136,8 @@ theorem encodeTerm_state
     rw [encodeTerm]
     mvcgen
     case vc1 τ τ_lookup =>
+      have hv_in_types : v ∈ St.types :=
+        AList.lookup_isSome.1 (Option.isSome_of_eq_some τ_lookup)
       and_intros
       · intro x hx; simpa [St_used_eq] using hx
       · intro x hx; simpa using hx
@@ -144,10 +145,11 @@ theorem encodeTerm_state
       · intro x hx
         rw [B.fv, List.mem_singleton] at hx
         subst x
-        have hv_in_types : v ∈ St.types :=
-          AList.lookup_isSome.1 (Option.isSome_of_eq_some τ_lookup)
-        simpa [St_used_eq] using (St_sub hv_in_types)
-      · exact SMT.Typing.var St.types v τ τ_lookup
+        simpa [St_used_eq] using (St_sub (AList.mem_keys.mpr hv_in_types))
+      · intro x hx
+        rw [SMT.fv, List.mem_singleton] at hx
+        subst x
+        exact AList.mem_keys.mpr hv_in_types
       · exact fun _ _ h _ => h
   | «ℤ» =>
     mstart
@@ -170,13 +172,7 @@ theorem encodeTerm_state
       · exact fun _ => id
       · rw [used_eq]; intro x hx; exact List.mem_cons_of_mem _ (St_sub hx)
       · intro x hx; rw [B.fv] at hx; contradiction
-      · apply SMT.Typing.lambda
-        · intro _ h; rw [List.mem_singleton] at h; obtain ⟨⟩ := h; exact 𝓋_notMem
-        · simp only [List.mem_cons, List.not_mem_nil, or_false, SMT.bv, not_false_eq_true,
-            implies_true]
-        · apply Nat.zero_lt_succ
-        · apply SMT.Typing.bool
-        · rfl
+      · intro x hx; simp only [SMT.fv, List.mem_removeAll_iff] at hx; nomatch hx.1
       · exact fun _ _ h _ => h
   | 𝔹 =>
     mstart
@@ -199,19 +195,123 @@ theorem encodeTerm_state
       · exact fun _ => id
       · rw [used_eq]; intro x hx; exact List.mem_cons_of_mem _ (St_sub hx)
       · intro x hx; rw [B.fv] at hx; contradiction
-      · apply SMT.Typing.lambda
-        · intro _ h; rw [List.mem_singleton] at h; obtain ⟨⟩ := h; exact 𝓋_notMem
-        · simp only [List.mem_cons, List.not_mem_nil, or_false, SMT.bv, not_false_eq_true,
-            implies_true]
-        · apply Nat.zero_lt_succ
-        · apply SMT.Typing.bool
-        · rfl
+      · intro x hx; simp only [SMT.fv, List.mem_removeAll_iff] at hx; nomatch hx.1
       · exact fun _ _ h _ => h
-  | maplet x y x_ih y_ih => sorry
+  | maplet x y x_ih y_ih =>
+    mstart
+    mintro pre ∀σ
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+    rw [encodeTerm]
+    have hx_bv_nodup : (B.bv x).Nodup := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
+    have hy_bv_nodup : (B.bv y).Nodup := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    have vars_used_y : ∀ v ∈ y.vars, v ∈ used := fun v hv => vars_used v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inr h)
+    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    clear x_ih
+    rename_i out_x
+    obtain ⟨x_enc, σx⟩ := out_x
+    mrename_i pre
+    mintro ∀σ_x
+    mpure pre
+    obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := pre
+    mspec y_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
+      (fun v hv => x_used_sub (vars_used_y v hv)) hy_bv_nodup
+    clear y_ih
+    rename_i out_y
+    obtain ⟨y_enc, σy⟩ := out_y
+    mrename_i pre
+    mintro ∀σ_y
+    mpure pre
+    obtain ⟨y_used_sub, y_Λ_sub, y_keys_sub, y_cov, y_fv_sub, y_preserves⟩ := pre
+    mpure_intro
+    and_intros
+    · exact fun v hv => y_used_sub (x_used_sub hv)
+    · exact AList.subset_trans x_Λ_sub y_Λ_sub
+    · exact y_keys_sub
+    · intro v hv
+      rw [B.fv, List.mem_append] at hv
+      rcases hv with hv | hv
+      · exact y_used_sub (x_cov v hv)
+      · exact y_cov v hv
+    · intro v hv
+      rw [SMT.fv, List.mem_append] at hv
+      rcases hv with hv | hv
+      · exact AList.mem_keys.mpr (AList.mem_of_subset y_Λ_sub (AList.mem_keys.mp (x_fv_sub hv)))
+      · exact y_fv_sub hv
+    · intro v hv hΛ hvars
+      have hvx : v ∉ B.Term.vars x := fun h => hvars (by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
+        rcases h with h | h <;> [left; right] <;> exact .inl h)
+      have hvy : v ∉ B.Term.vars y := fun h => hvars (by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
+        rcases h with h | h <;> [left; right] <;> exact .inr h)
+      exact y_preserves v (x_used_sub hv) (x_preserves v hv hΛ hvx) hvy
   | add x y x_ih y_ih => sorry
   | sub x y x_ih y_ih => sorry
   | mul x y x_ih y_ih => sorry
-  | le x y x_ih y_ih => sorry
+  | le x y x_ih y_ih =>
+    mstart
+    mintro pre ∀σ
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+    rw [encodeTerm]
+    have hx_bv_nodup : (B.bv x).Nodup := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
+    have hy_bv_nodup : (B.bv y).Nodup := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    have vars_used_y : ∀ v ∈ y.vars, v ∈ used := fun v hv => vars_used v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inr h)
+    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    clear x_ih
+    rename_i out_x
+    obtain ⟨x_enc, σx⟩ := out_x
+    mrename_i pre
+    mintro ∀σ_x
+    mpure pre
+    obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := pre
+    mspec y_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
+      (fun v hv => x_used_sub (vars_used_y v hv)) hy_bv_nodup
+    clear y_ih
+    rename_i out_y
+    obtain ⟨y_enc, σy⟩ := out_y
+    mrename_i pre
+    mintro ∀σ_y
+    mpure pre
+    obtain ⟨y_used_sub, y_Λ_sub, y_keys_sub, y_cov, y_fv_sub, y_preserves⟩ := pre
+    mpure_intro
+    and_intros
+    · exact fun v hv => y_used_sub (x_used_sub hv)
+    · exact AList.subset_trans x_Λ_sub y_Λ_sub
+    · exact y_keys_sub
+    · intro v hv
+      rw [B.fv, List.mem_append] at hv
+      rcases hv with hv | hv
+      · exact y_used_sub (x_cov v hv)
+      · exact y_cov v hv
+    · intro v hv
+      rw [SMT.fv, List.mem_append] at hv
+      rcases hv with hv | hv
+      · exact AList.mem_keys.mpr (AList.mem_of_subset y_Λ_sub (AList.mem_keys.mp (x_fv_sub hv)))
+      · exact y_fv_sub hv
+    · intro v hv hΛ hvars
+      have hvx : v ∉ B.Term.vars x := fun h => hvars (by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
+        rcases h with h | h <;> [left; right] <;> exact .inl h)
+      have hvy : v ∉ B.Term.vars y := fun h => hvars (by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
+        rcases h with h | h <;> [left; right] <;> exact .inr h)
+      exact y_preserves v (x_used_sub hv) (x_preserves v hv hΛ hvx) hvy
   | min S ih => sorry
   | max S ih => sorry
   | card S ih => sorry
@@ -233,26 +333,24 @@ set_option maxHeartbeats 4000000 in
 /-- Structural specification of `encodeTerm`: `encodeTerm_state` together with a
 covering renaming witness. Consumed by the HAS-FLAG branch of `all_case`. -/
 theorem encodeTerm_struct
-    (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term} {α : B.BType}
-    (typ_t : E.context ⊢ᴮ t : α)
+    (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term}
     {«Δ» : B.RenamingContext.Context}
     {Δ₀ : SMT.RenamingContext.Context}
     (Δ₀_ext : SMT.RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» t)
     {used : List SMT.𝒱}
     (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
     (vars_used : ∀ v ∈ t.vars, v ∈ used)
-    (Λ_inv : ∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context)
     (bv_nodup : (B.bv t).Nodup)
     {n : ℕ} :
     ⦃ fun (⟨E0, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝ ⦄
     encodeTerm t E
-    ⦃ ⇓? (⟨t', σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       used ⊆ E'.usedVars ∧
       Λ ⊆ Γ' ∧
       AList.keys Γ' ⊆ E'.usedVars ∧
       B.CoversUsedVars E'.usedVars t ∧
-      (Γ' ⊢ˢ t' : σ) ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∧
       (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars t → v ∉ Γ') ∧
       ∃ (Δ' : SMT.RenamingContext.Context)
         (_ : SMT.RenamingContext.CoversFV Δ' t'),
@@ -260,7 +358,9 @@ theorem encodeTerm_struct
           SMT.RenamingContext.ExtendsOnSourceFV Δ' «Δ» t ∧
           (∀ v ∉ E'.usedVars, Δ' v = none) ⌝⦄ := by
   mintro hpre ∀S
-  mspec (encodeTerm_state E typ_t vars_used Λ_inv bv_nodup (n := n))
+  mpure hpre
+  obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := hpre
+  mspec (encodeTerm_state E vars_used bv_nodup)
   mrename_i hpost
   mintro ∀S'
   mpure hpost
