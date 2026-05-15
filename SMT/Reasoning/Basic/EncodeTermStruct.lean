@@ -23,6 +23,24 @@ so `Δ₀` padded over `Γ'` covers it.
 open Std.Do B SMT ZFSet
 set_option mvcgen.warning false
 
+/-- Any computation `m` followed by an unconditional `throw` satisfies every
+`mayThrow` postcondition: the overall computation always throws, and `mayThrow`
+imposes no obligation on thrown outcomes. Used to discharge the (statically
+non-eliminable) throw branches of `encodeTerm_state`'s compound cases, whose
+throw messages re-invoke `encodeTerm` on a subterm. -/
+theorem wp_bind_throw {α : Type}
+    (m : Encoder α) (msg : α → String)
+    (Q : (SMT.Term × SMTType) →
+      Assertion (PostShape.arg EncoderState (PostShape.except String PostShape.pure)))
+    (s : EncoderState) :
+    ⊢ₛ wp⟦do let r ← m; throw (msg r) : Encoder (SMT.Term × SMTType)⟧
+      (PostCond.mayThrow Q) s := by
+  simp only [wp, bind, StateT.bind, Except.bind, throw, throwThe,
+    MonadExceptOf.throw, PredTrans.pushArg, PredTrans.pushExcept,
+    PredTrans.pure, Id.run, PostCond.mayThrow, ExceptConds.true,
+    ExceptConds.const]
+  cases m s <;> trivial
+
 namespace SMT.RenamingContext
 
 /-- Generic structural renaming witness: `Δ₀`, left-biased over the canonical
@@ -1753,9 +1771,11 @@ set_option maxHeartbeats 4000000 in
 `B`-typing, no denotation): state monotonicity, key coverage, source-FV
 coverage, encoded-term FV coverage, and variable preservation. -/
 theorem encodeTerm_state
-    (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term}
+    (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term} {α : B.BType}
+    (typ_t : E.context ⊢ᴮ t : α)
     {used : List SMT.𝒱}
     (vars_used : ∀ v ∈ t.vars, v ∈ used)
+    (Λ_inv : ∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context)
     (bv_nodup : (B.bv t).Nodup)
     {n : ℕ} :
     ⦃ fun (⟨E0, Λ'⟩ : EncoderState) ↦
@@ -1768,7 +1788,7 @@ theorem encodeTerm_state
       B.CoversUsedVars E'.usedVars t ∧
       SMT.fv t' ⊆ AList.keys Γ' ∧
       (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars t → v ∉ Γ') ⌝⦄ := by
-  induction t generalizing E n used Λ with
+  induction t generalizing E n used Λ α with
   | int i =>
     mstart
     mintro pre ∀St
@@ -1874,17 +1894,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨αx, βx, rfl, typ_x, typ_y⟩ := B.Typing.mapletE typ_t
     have hx_bv_nodup : (B.bv x).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hy_bv_nodup : (B.bv y).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hxy_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv y, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_y : ∀ v ∈ y.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec x_ih (E := E) (Λ := σ.types) typ_x vars_used_x Λ_inv_x hx_bv_nodup
     clear x_ih
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
@@ -1893,7 +1919,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := pre
     mspec y_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-      (fun v hv => x_used_sub (vars_used_y v hv)) hy_bv_nodup
+      typ_y (fun v hv => x_used_sub (vars_used_y v hv))
+      (fun v hv hΛ => by
+        have hv_par : v ∈ (x ↦ᴮ y).vars := by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact .inr h
+        by_cases hv_St : v ∈ σ.types
+        · exact Λ_inv v hv_par hv_St
+        · have hv_vars_x : v ∈ B.Term.vars x := by
+            by_contra h_neg
+            exact absurd hΛ (x_preserves v (vars_used v hv_par) hv_St h_neg)
+          rcases B.Term.mem_vars_iff.mp hv_vars_x with h | h
+          · exact _root_.B.Typing.typed_by_fv typ_x h
+          · rcases B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
+            · exact absurd (_root_.B.Typing.typed_by_fv typ_y hy_fv)
+                (_root_.B.Typing.bv_notMem_context typ_x v h)
+            · exact absurd rfl (hxy_bv_disj v h v hy_bv))
+      hy_bv_nodup
     clear y_ih
     rename_i out_y
     obtain ⟨y_enc, σy⟩ := out_y
@@ -1930,30 +1972,51 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨rfl, typ_x, typ_y⟩ := B.Typing.addE typ_t
     have hx_bv_nodup : (B.bv x).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hy_bv_nodup : (B.bv y).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hxy_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv y, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_y : ∀ v ∈ y.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec x_ih (E := E) (Λ := σ.types) typ_x vars_used_x Λ_inv_x hx_bv_nodup
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
     mrename_i prex
     mintro ∀σ_x
     mpure prex
     obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := prex
+    have Λ_inv_y : ∀ v ∈ y.vars, v ∈ σ_x.types → v ∈ E.context := fun v hv hΛ => by
+      have hv_par : v ∈ (x +ᴮ y).vars := by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact .inr h
+      by_cases hv_St : v ∈ σ.types
+      · exact Λ_inv v hv_par hv_St
+      · have hv_vars_x : v ∈ B.Term.vars x := by
+          by_contra h_neg
+          exact absurd hΛ (x_preserves v (vars_used v hv_par) hv_St h_neg)
+        rcases B.Term.mem_vars_iff.mp hv_vars_x with h | h
+        · exact _root_.B.Typing.typed_by_fv typ_x h
+        · rcases B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
+          · exact absurd (_root_.B.Typing.typed_by_fv typ_y hy_fv)
+              (_root_.B.Typing.bv_notMem_context typ_x v h)
+          · exact absurd rfl (hxy_bv_disj v h v hy_bv)
     split
     · rename_i heq
       injection heq with hxe hσe
       subst hσe
       subst hxe
       mspec y_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-        (fun v hv => x_used_sub (vars_used_y v hv)) hy_bv_nodup
+        typ_y (fun v hv => x_used_sub (vars_used_y v hv)) Λ_inv_y hy_bv_nodup
       rename_i out_y
       obtain ⟨y_enc, σy⟩ := out_y
       mrename_i prey
@@ -1990,42 +2053,59 @@ theorem encodeTerm_state
             simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
             rcases h with h | h <;> [left; right] <;> exact .inr h)
           exact y_preserves v (x_used_sub hv) (x_preserves v hv hΛ hvx) hvy
-      · mspec y_ih (E := E) (Λ := σ_y.types) (used := σ_y.env.usedVars)
-          (fun v hv => y_used_sub (x_used_sub (vars_used_y v hv))) hy_bv_nodup
-        mvcgen
-    · mspec x_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-        (fun v hv => x_used_sub (vars_used_x v hv)) hx_bv_nodup
-      mvcgen
+      · exact wp_bind_throw _ _ _ _
+    · exact wp_bind_throw _ _ _ _
   | sub x y x_ih y_ih =>
     mstart
     mintro pre ∀σ
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨rfl, typ_x, typ_y⟩ := B.Typing.subE typ_t
     have hx_bv_nodup : (B.bv x).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hy_bv_nodup : (B.bv y).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hxy_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv y, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_y : ∀ v ∈ y.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec x_ih (E := E) (Λ := σ.types) typ_x vars_used_x Λ_inv_x hx_bv_nodup
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
     mrename_i prex
     mintro ∀σ_x
     mpure prex
     obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := prex
+    have Λ_inv_y : ∀ v ∈ y.vars, v ∈ σ_x.types → v ∈ E.context := fun v hv hΛ => by
+      have hv_par : v ∈ (x -ᴮ y).vars := by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact .inr h
+      by_cases hv_St : v ∈ σ.types
+      · exact Λ_inv v hv_par hv_St
+      · have hv_vars_x : v ∈ B.Term.vars x := by
+          by_contra h_neg
+          exact absurd hΛ (x_preserves v (vars_used v hv_par) hv_St h_neg)
+        rcases B.Term.mem_vars_iff.mp hv_vars_x with h | h
+        · exact _root_.B.Typing.typed_by_fv typ_x h
+        · rcases B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
+          · exact absurd (_root_.B.Typing.typed_by_fv typ_y hy_fv)
+              (_root_.B.Typing.bv_notMem_context typ_x v h)
+          · exact absurd rfl (hxy_bv_disj v h v hy_bv)
     split
     · rename_i heq
       injection heq with hxe hσe
       subst hσe
       subst hxe
       mspec y_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-        (fun v hv => x_used_sub (vars_used_y v hv)) hy_bv_nodup
+        typ_y (fun v hv => x_used_sub (vars_used_y v hv)) Λ_inv_y hy_bv_nodup
       rename_i out_y
       obtain ⟨y_enc, σy⟩ := out_y
       mrename_i prey
@@ -2062,42 +2142,59 @@ theorem encodeTerm_state
             simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
             rcases h with h | h <;> [left; right] <;> exact .inr h)
           exact y_preserves v (x_used_sub hv) (x_preserves v hv hΛ hvx) hvy
-      · mspec y_ih (E := E) (Λ := σ_y.types) (used := σ_y.env.usedVars)
-          (fun v hv => y_used_sub (x_used_sub (vars_used_y v hv))) hy_bv_nodup
-        mvcgen
-    · mspec x_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-        (fun v hv => x_used_sub (vars_used_x v hv)) hx_bv_nodup
-      mvcgen
+      · exact wp_bind_throw _ _ _ _
+    · exact wp_bind_throw _ _ _ _
   | mul x y x_ih y_ih =>
     mstart
     mintro pre ∀σ
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨rfl, typ_x, typ_y⟩ := B.Typing.mulE typ_t
     have hx_bv_nodup : (B.bv x).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hy_bv_nodup : (B.bv y).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hxy_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv y, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_y : ∀ v ∈ y.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec x_ih (E := E) (Λ := σ.types) typ_x vars_used_x Λ_inv_x hx_bv_nodup
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
     mrename_i prex
     mintro ∀σ_x
     mpure prex
     obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := prex
+    have Λ_inv_y : ∀ v ∈ y.vars, v ∈ σ_x.types → v ∈ E.context := fun v hv hΛ => by
+      have hv_par : v ∈ (x *ᴮ y).vars := by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact .inr h
+      by_cases hv_St : v ∈ σ.types
+      · exact Λ_inv v hv_par hv_St
+      · have hv_vars_x : v ∈ B.Term.vars x := by
+          by_contra h_neg
+          exact absurd hΛ (x_preserves v (vars_used v hv_par) hv_St h_neg)
+        rcases B.Term.mem_vars_iff.mp hv_vars_x with h | h
+        · exact _root_.B.Typing.typed_by_fv typ_x h
+        · rcases B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
+          · exact absurd (_root_.B.Typing.typed_by_fv typ_y hy_fv)
+              (_root_.B.Typing.bv_notMem_context typ_x v h)
+          · exact absurd rfl (hxy_bv_disj v h v hy_bv)
     split
     · rename_i heq
       injection heq with hxe hσe
       subst hσe
       subst hxe
       mspec y_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-        (fun v hv => x_used_sub (vars_used_y v hv)) hy_bv_nodup
+        typ_y (fun v hv => x_used_sub (vars_used_y v hv)) Λ_inv_y hy_bv_nodup
       rename_i out_y
       obtain ⟨y_enc, σy⟩ := out_y
       mrename_i prey
@@ -2134,29 +2231,31 @@ theorem encodeTerm_state
             simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
             rcases h with h | h <;> [left; right] <;> exact .inr h)
           exact y_preserves v (x_used_sub hv) (x_preserves v hv hΛ hvx) hvy
-      · mspec y_ih (E := E) (Λ := σ_y.types) (used := σ_y.env.usedVars)
-          (fun v hv => y_used_sub (x_used_sub (vars_used_y v hv))) hy_bv_nodup
-        mvcgen
-    · mspec x_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-        (fun v hv => x_used_sub (vars_used_x v hv)) hx_bv_nodup
-      mvcgen
+      · exact wp_bind_throw _ _ _ _
+    · exact wp_bind_throw _ _ _ _
   | le x y x_ih y_ih =>
     mstart
     mintro pre ∀σ
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨rfl, typ_x, typ_y⟩ := B.Typing.leE typ_t
     have hx_bv_nodup : (B.bv x).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hy_bv_nodup : (B.bv y).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hxy_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv y, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_y : ∀ v ∈ y.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec x_ih (E := E) (Λ := σ.types) typ_x vars_used_x Λ_inv_x hx_bv_nodup
     clear x_ih
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
@@ -2165,7 +2264,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := pre
     mspec y_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-      (fun v hv => x_used_sub (vars_used_y v hv)) hy_bv_nodup
+      typ_y (fun v hv => x_used_sub (vars_used_y v hv))
+      (fun v hv hΛ => by
+        have hv_par : v ∈ (x ≤ᴮ y).vars := by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact .inr h
+        by_cases hv_St : v ∈ σ.types
+        · exact Λ_inv v hv_par hv_St
+        · have hv_vars_x : v ∈ B.Term.vars x := by
+            by_contra h_neg
+            exact absurd hΛ (x_preserves v (vars_used v hv_par) hv_St h_neg)
+          rcases B.Term.mem_vars_iff.mp hv_vars_x with h | h
+          · exact _root_.B.Typing.typed_by_fv typ_x h
+          · rcases B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
+            · exact absurd (_root_.B.Typing.typed_by_fv typ_y hy_fv)
+                (_root_.B.Typing.bv_notMem_context typ_x v h)
+            · exact absurd rfl (hxy_bv_disj v h v hy_bv))
+      hy_bv_nodup
     clear y_ih
     rename_i out_y
     obtain ⟨y_enc, σy⟩ := out_y
@@ -2220,30 +2335,51 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨rfl, typ_x, typ_y⟩ := B.Typing.andE typ_t
     have hx_bv_nodup : (B.bv x).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hy_bv_nodup : (B.bv y).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hxy_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv y, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_y : ∀ v ∈ y.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec x_ih (E := E) (Λ := σ.types) typ_x vars_used_x Λ_inv_x hx_bv_nodup
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
     mrename_i prex
     mintro ∀σ_x
     mpure prex
     obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := prex
+    have Λ_inv_y : ∀ v ∈ y.vars, v ∈ σ_x.types → v ∈ E.context := fun v hv hΛ => by
+      have hv_par : v ∈ (x ∧ᴮ y).vars := by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact .inr h
+      by_cases hv_St : v ∈ σ.types
+      · exact Λ_inv v hv_par hv_St
+      · have hv_vars_x : v ∈ B.Term.vars x := by
+          by_contra h_neg
+          exact absurd hΛ (x_preserves v (vars_used v hv_par) hv_St h_neg)
+        rcases B.Term.mem_vars_iff.mp hv_vars_x with h | h
+        · exact _root_.B.Typing.typed_by_fv typ_x h
+        · rcases B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
+          · exact absurd (_root_.B.Typing.typed_by_fv typ_y hy_fv)
+              (_root_.B.Typing.bv_notMem_context typ_x v h)
+          · exact absurd rfl (hxy_bv_disj v h v hy_bv)
     split
     · rename_i heq
       injection heq with hxe hσe
       subst hσe
       subst hxe
       mspec y_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-        (fun v hv => x_used_sub (vars_used_y v hv)) hy_bv_nodup
+        typ_y (fun v hv => x_used_sub (vars_used_y v hv)) Λ_inv_y hy_bv_nodup
       rename_i out_y
       obtain ⟨y_enc, σy⟩ := out_y
       mrename_i prey
@@ -2280,22 +2416,21 @@ theorem encodeTerm_state
             simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
             rcases h with h | h <;> [left; right] <;> exact .inr h)
           exact y_preserves v (x_used_sub hv) (x_preserves v hv hΛ hvx) hvy
-      · mspec y_ih (E := E) (Λ := σ_y.types) (used := σ_y.env.usedVars)
-          (fun v hv => y_used_sub (x_used_sub (vars_used_y v hv))) hy_bv_nodup
-        mvcgen
-    · mspec x_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-        (fun v hv => x_used_sub (vars_used_x v hv)) hx_bv_nodup
-      mvcgen
+      · exact wp_bind_throw _ _ _ _
+    · exact wp_bind_throw _ _ _ _
   | not x ih =>
     mstart
     mintro pre ∀σ
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨rfl, typ_x⟩ := B.Typing.notE typ_t
     have hx_bv_nodup : (B.bv x).Nodup := by simpa [B.bv] using bv_nodup
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simpa [B.Term.vars, B.fv, B.bv] using hv)
-    mspec ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simpa [B.Term.vars, B.fv, B.bv] using hv)
+    mspec ih (E := E) (Λ := σ.types) typ_x vars_used_x Λ_inv_x hx_bv_nodup
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
     mrename_i prex
@@ -2318,19 +2453,20 @@ theorem encodeTerm_state
       · intro v hv hΛ hvars
         exact x_preserves v hv hΛ (fun h => hvars (by
           simpa [B.Term.vars, B.fv, B.bv] using h))
-    · mspec ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-        (fun v hv => x_used_sub (vars_used_x v hv)) hx_bv_nodup
-      mvcgen
+    · exact wp_bind_throw _ _ _ _
   | pow S ih =>
     mstart
     mintro pre ∀σ
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨β, rfl, typ_S⟩ := B.Typing.powE typ_t
     have hS_bv_nodup : (B.bv S).Nodup := by simpa [B.bv] using bv_nodup
     have vars_used_S : ∀ v ∈ S.vars, v ∈ used := fun v hv => vars_used v (by
       simpa [B.Term.vars, B.fv, B.bv] using hv)
-    mspec ih (E := E) (Λ := σ.types) vars_used_S hS_bv_nodup
+    have Λ_inv_S : ∀ v ∈ S.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simpa [B.Term.vars, B.fv, B.bv] using hv)
+    mspec ih (E := E) (Λ := σ.types) typ_S vars_used_S Λ_inv_S hS_bv_nodup
     rename_i out_S
     obtain ⟨S_enc, σS⟩ := out_S
     mrename_i preS
@@ -2442,30 +2578,51 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨αA, βC, rfl, typ_A, typ_C⟩ := B.Typing.cprodE typ_t
     have hA_bv_nodup : (B.bv A).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hC_bv_nodup : (B.bv C).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hAC_bv_disj : ∀ a ∈ B.bv A, ∀ b ∈ B.bv C, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_A : ∀ v ∈ A.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_C : ∀ v ∈ C.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec A_ih (E := E) (Λ := σ.types) vars_used_A hA_bv_nodup
+    have Λ_inv_A : ∀ v ∈ A.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec A_ih (E := E) (Λ := σ.types) typ_A vars_used_A Λ_inv_A hA_bv_nodup
     rename_i out_A
     obtain ⟨A_enc, σA⟩ := out_A
     mrename_i preA
     mintro ∀σ_A
     mpure preA
     obtain ⟨A_used_sub, A_Λ_sub, A_keys_sub, A_cov, A_fv_sub, A_preserves⟩ := preA
+    have Λ_inv_C : ∀ v ∈ C.vars, v ∈ σ_A.types → v ∈ E.context := fun v hv hΛ => by
+      have hv_par : v ∈ (A ⨯ᴮ C).vars := by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact .inr h
+      by_cases hv_St : v ∈ σ.types
+      · exact Λ_inv v hv_par hv_St
+      · have hv_vars_A : v ∈ B.Term.vars A := by
+          by_contra h_neg
+          exact absurd hΛ (A_preserves v (vars_used v hv_par) hv_St h_neg)
+        rcases B.Term.mem_vars_iff.mp hv_vars_A with h | h
+        · exact _root_.B.Typing.typed_by_fv typ_A h
+        · rcases B.Term.mem_vars_iff.mp hv with hC_fv | hC_bv
+          · exact absurd (_root_.B.Typing.typed_by_fv typ_C hC_fv)
+              (_root_.B.Typing.bv_notMem_context typ_A v h)
+          · exact absurd rfl (hAC_bv_disj v h v hC_bv)
     split
     · rename_i heq
       injection heq with hAe hσe
       subst hσe
       subst hAe
       mspec C_ih (E := E) (Λ := σ_A.types) (used := σ_A.env.usedVars)
-        (fun v hv => A_used_sub (vars_used_C v hv)) hC_bv_nodup
+        typ_C (fun v hv => A_used_sub (vars_used_C v hv)) Λ_inv_C hC_bv_nodup
       rename_i out_C
       obtain ⟨C_enc, σC⟩ := out_C
       mrename_i preC
@@ -2569,29 +2726,31 @@ theorem encodeTerm_state
                     exact List.mem_cons_of_mem _ (C_used_sub (A_used_sub hv)))
                 · exact p_not_used (C_used_sub (A_used_sub hv))
                 · exact hv_not_ctx hv_in
-      · mspec C_ih (E := E) (Λ := σ_C.types) (used := σ_C.env.usedVars)
-          (fun v hv => C_used_sub (A_used_sub (vars_used_C v hv))) hC_bv_nodup
-        mvcgen
-    · mspec A_ih (E := E) (Λ := σ_A.types) (used := σ_A.env.usedVars)
-        (fun v hv => A_used_sub (vars_used_A v hv)) hA_bv_nodup
-      mvcgen
+      · exact wp_bind_throw _ _ _ _
+    · exact wp_bind_throw _ _ _ _
   | mem x S x_ih S_ih =>
     mstart
     mintro pre ∀σ
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨rfl, αx, typ_x, typ_S⟩ := B.Typing.memE typ_t
     have hx_bv_nodup : (B.bv x).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hS_bv_nodup : (B.bv S).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hxS_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv S, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_S : ∀ v ∈ S.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec x_ih (E := E) (Λ := σ.types) typ_x vars_used_x Λ_inv_x hx_bv_nodup
     clear x_ih
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
@@ -2600,7 +2759,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := pre
     mspec S_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-      (fun v hv => x_used_sub (vars_used_S v hv)) hS_bv_nodup
+      typ_S (fun v hv => x_used_sub (vars_used_S v hv))
+      (fun v hv hΛ => by
+        have hv_par : v ∈ (x ∈ᴮ S).vars := by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact .inr h
+        by_cases hv_St : v ∈ σ.types
+        · exact Λ_inv v hv_par hv_St
+        · have hv_vars_x : v ∈ B.Term.vars x := by
+            by_contra h_neg
+            exact absurd hΛ (x_preserves v (vars_used v hv_par) hv_St h_neg)
+          rcases B.Term.mem_vars_iff.mp hv_vars_x with h | h
+          · exact _root_.B.Typing.typed_by_fv typ_x h
+          · rcases B.Term.mem_vars_iff.mp hv with hS_fv | hS_bv
+            · exact absurd (_root_.B.Typing.typed_by_fv typ_S hS_fv)
+                (_root_.B.Typing.bv_notMem_context typ_x v h)
+            · exact absurd rfl (hxS_bv_disj v h v hS_bv))
+      hS_bv_nodup
     clear S_ih
     rename_i out_S
     obtain ⟨S_enc, σS⟩ := out_S
@@ -3009,17 +3184,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨rfl, αx, typ_x, typ_y⟩ := B.Typing.eqE typ_t
     have hx_bv_nodup : (B.bv x).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hy_bv_nodup : (B.bv y).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hxy_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv y, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_y : ∀ v ∈ y.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec x_ih (E := E) (Λ := σ.types) vars_used_x hx_bv_nodup
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec x_ih (E := E) (Λ := σ.types) typ_x vars_used_x Λ_inv_x hx_bv_nodup
     clear x_ih
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
@@ -3028,7 +3209,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := pre
     mspec y_ih (E := E) (Λ := σ_x.types) (used := σ_x.env.usedVars)
-      (fun v hv => x_used_sub (vars_used_y v hv)) hy_bv_nodup
+      typ_y (fun v hv => x_used_sub (vars_used_y v hv))
+      (fun v hv hΛ => by
+        have hv_par : v ∈ (x =ᴮ y).vars := by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact .inr h
+        by_cases hv_St : v ∈ σ.types
+        · exact Λ_inv v hv_par hv_St
+        · have hv_vars_x : v ∈ B.Term.vars x := by
+            by_contra h_neg
+            exact absurd hΛ (x_preserves v (vars_used v hv_par) hv_St h_neg)
+          rcases B.Term.mem_vars_iff.mp hv_vars_x with h | h
+          · exact _root_.B.Typing.typed_by_fv typ_x h
+          · rcases B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
+            · exact absurd (_root_.B.Typing.typed_by_fv typ_y hy_fv)
+                (_root_.B.Typing.bv_notMem_context typ_x v h)
+            · exact absurd rfl (hxy_bv_disj v h v hy_bv))
+      hy_bv_nodup
     clear y_ih
     rename_i out_y
     obtain ⟨y_enc, σy⟩ := out_y
@@ -3171,17 +3368,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨αA, rfl, typ_A, typ_C⟩ := B.Typing.unionE typ_t
     have hA_bv_nodup : (B.bv A).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hC_bv_nodup : (B.bv C).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hAC_bv_disj : ∀ a ∈ B.bv A, ∀ b ∈ B.bv C, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_A : ∀ v ∈ A.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_C : ∀ v ∈ C.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec A_ih (E := E) (Λ := σ.types) vars_used_A hA_bv_nodup
+    have Λ_inv_A : ∀ v ∈ A.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec A_ih (E := E) (Λ := σ.types) typ_A vars_used_A Λ_inv_A hA_bv_nodup
     clear A_ih
     rename_i out_A
     obtain ⟨A_enc, σA⟩ := out_A
@@ -3190,7 +3393,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨A_used_sub, A_Λ_sub, A_keys_sub, A_cov, A_fv_sub, A_preserves⟩ := pre
     mspec C_ih (E := E) (Λ := σ_A.types) (used := σ_A.env.usedVars)
-      (fun v hv => A_used_sub (vars_used_C v hv)) hC_bv_nodup
+      typ_C (fun v hv => A_used_sub (vars_used_C v hv))
+      (fun v hv hΛ => by
+        have hv_par : v ∈ (A ∪ᴮ C).vars := by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact .inr h
+        by_cases hv_St : v ∈ σ.types
+        · exact Λ_inv v hv_par hv_St
+        · have hv_vars_A : v ∈ B.Term.vars A := by
+            by_contra h_neg
+            exact absurd hΛ (A_preserves v (vars_used v hv_par) hv_St h_neg)
+          rcases B.Term.mem_vars_iff.mp hv_vars_A with h | h
+          · exact _root_.B.Typing.typed_by_fv typ_A h
+          · rcases B.Term.mem_vars_iff.mp hv with hC_fv | hC_bv
+            · exact absurd (_root_.B.Typing.typed_by_fv typ_C hC_fv)
+                (_root_.B.Typing.bv_notMem_context typ_A v h)
+            · exact absurd rfl (hAC_bv_disj v h v hC_bv))
+      hC_bv_nodup
     clear C_ih
     rename_i out_C
     obtain ⟨C_enc, σC⟩ := out_C
@@ -3339,17 +3558,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨αA, rfl, typ_A, typ_C⟩ := B.Typing.interE typ_t
     have hA_bv_nodup : (B.bv A).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hC_bv_nodup : (B.bv C).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hAC_bv_disj : ∀ a ∈ B.bv A, ∀ b ∈ B.bv C, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_A : ∀ v ∈ A.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_C : ∀ v ∈ C.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec A_ih (E := E) (Λ := σ.types) vars_used_A hA_bv_nodup
+    have Λ_inv_A : ∀ v ∈ A.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec A_ih (E := E) (Λ := σ.types) typ_A vars_used_A Λ_inv_A hA_bv_nodup
     clear A_ih
     rename_i out_A
     obtain ⟨A_enc, σA⟩ := out_A
@@ -3358,7 +3583,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨A_used_sub, A_Λ_sub, A_keys_sub, A_cov, A_fv_sub, A_preserves⟩ := pre
     mspec C_ih (E := E) (Λ := σ_A.types) (used := σ_A.env.usedVars)
-      (fun v hv => A_used_sub (vars_used_C v hv)) hC_bv_nodup
+      typ_C (fun v hv => A_used_sub (vars_used_C v hv))
+      (fun v hv hΛ => by
+        have hv_par : v ∈ (A ∩ᴮ C).vars := by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact .inr h
+        by_cases hv_St : v ∈ σ.types
+        · exact Λ_inv v hv_par hv_St
+        · have hv_vars_A : v ∈ B.Term.vars A := by
+            by_contra h_neg
+            exact absurd hΛ (A_preserves v (vars_used v hv_par) hv_St h_neg)
+          rcases B.Term.mem_vars_iff.mp hv_vars_A with h | h
+          · exact _root_.B.Typing.typed_by_fv typ_A h
+          · rcases B.Term.mem_vars_iff.mp hv with hC_fv | hC_bv
+            · exact absurd (_root_.B.Typing.typed_by_fv typ_C hC_fv)
+                (_root_.B.Typing.bv_notMem_context typ_A v h)
+            · exact absurd rfl (hAC_bv_disj v h v hC_bv))
+      hC_bv_nodup
     clear C_ih
     rename_i out_C
     obtain ⟨C_enc, σC⟩ := out_C
@@ -3507,30 +3748,51 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨αA, βC, rfl, typ_A, typ_C⟩ := B.Typing.pfunE typ_t
     have hA_bv_nodup : (B.bv A).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hC_bv_nodup : (B.bv C).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hAC_bv_disj : ∀ a ∈ B.bv A, ∀ b ∈ B.bv C, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_A : ∀ v ∈ A.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_C : ∀ v ∈ C.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec A_ih (E := E) (Λ := σ.types) vars_used_A hA_bv_nodup
+    have Λ_inv_A : ∀ v ∈ A.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec A_ih (E := E) (Λ := σ.types) typ_A vars_used_A Λ_inv_A hA_bv_nodup
     rename_i out_A
     obtain ⟨A_enc, σA⟩ := out_A
     mrename_i preA
     mintro ∀σ_A
     mpure preA
     obtain ⟨A_used_sub, A_Λ_sub, A_keys_sub, A_cov, A_fv_sub, A_preserves⟩ := preA
+    have Λ_inv_C : ∀ v ∈ C.vars, v ∈ σ_A.types → v ∈ E.context := fun v hv hΛ => by
+      have hv_par : v ∈ (A ⇸ᴮ C).vars := by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact .inr h
+      by_cases hv_St : v ∈ σ.types
+      · exact Λ_inv v hv_par hv_St
+      · have hv_vars_A : v ∈ B.Term.vars A := by
+          by_contra h_neg
+          exact absurd hΛ (A_preserves v (vars_used v hv_par) hv_St h_neg)
+        rcases B.Term.mem_vars_iff.mp hv_vars_A with h | h
+        · exact _root_.B.Typing.typed_by_fv typ_A h
+        · rcases B.Term.mem_vars_iff.mp hv with hC_fv | hC_bv
+          · exact absurd (_root_.B.Typing.typed_by_fv typ_C hC_fv)
+              (_root_.B.Typing.bv_notMem_context typ_A v h)
+          · exact absurd rfl (hAC_bv_disj v h v hC_bv)
     split
     · rename_i heq
       injection heq with hAe hσe
       subst hσe
       subst hAe
       mspec C_ih (E := E) (Λ := σ_A.types) (used := σ_A.env.usedVars)
-        (fun v hv => A_used_sub (vars_used_C v hv)) hC_bv_nodup
+        typ_C (fun v hv => A_used_sub (vars_used_C v hv)) Λ_inv_C hC_bv_nodup
       rename_i out_C
       obtain ⟨C_enc, σC⟩ := out_C
       mrename_i preC
@@ -3670,17 +3932,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
     rw [encodeTerm]
+    obtain ⟨αx, typ_f, typ_x⟩ := B.Typing.appE typ_t
     have hf_bv_nodup : (B.bv f).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
     have hx_bv_nodup : (B.bv x).Nodup := by
       have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hfx_bv_disj : ∀ a ∈ B.bv f, ∀ b ∈ B.bv x, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
     have vars_used_f : ∀ v ∈ f.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h)
     have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inr h)
-    mspec f_ih (E := E) (Λ := σ.types) vars_used_f hf_bv_nodup
+    have Λ_inv_f : ∀ v ∈ f.vars, v ∈ σ.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec f_ih (E := E) (Λ := σ.types) typ_f vars_used_f Λ_inv_f hf_bv_nodup
     clear f_ih
     rename_i out_f
     obtain ⟨f_enc, σf⟩ := out_f
@@ -3689,7 +3957,23 @@ theorem encodeTerm_state
     mpure pre
     obtain ⟨f_used_sub, f_Λ_sub, f_keys_sub, f_cov, f_fv_sub, f_preserves⟩ := pre
     mspec x_ih (E := E) (Λ := σ_f.types) (used := σ_f.env.usedVars)
-      (fun v hv => f_used_sub (vars_used_x v hv)) hx_bv_nodup
+      typ_x (fun v hv => f_used_sub (vars_used_x v hv))
+      (fun v hv hΛ => by
+        have hv_par : v ∈ (B.Term.app f x).vars := by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact .inr h
+        by_cases hv_St : v ∈ σ.types
+        · exact Λ_inv v hv_par hv_St
+        · have hv_vars_f : v ∈ B.Term.vars f := by
+            by_contra h_neg
+            exact absurd hΛ (f_preserves v (vars_used v hv_par) hv_St h_neg)
+          rcases B.Term.mem_vars_iff.mp hv_vars_f with h | h
+          · exact _root_.B.Typing.typed_by_fv typ_f h
+          · rcases B.Term.mem_vars_iff.mp hv with hx_fv | hx_bv
+            · exact absurd (_root_.B.Typing.typed_by_fv typ_x hx_fv)
+                (_root_.B.Typing.bv_notMem_context typ_f v h)
+            · exact absurd rfl (hfx_bv_disj v h v hx_bv))
+      hx_bv_nodup
     clear x_ih
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
@@ -3739,13 +4023,15 @@ set_option maxHeartbeats 4000000 in
 /-- Structural specification of `encodeTerm`: `encodeTerm_state` together with a
 covering renaming witness. Consumed by the HAS-FLAG branch of `all_case`. -/
 theorem encodeTerm_struct
-    (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term}
+    (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term} {α : B.BType}
+    (typ_t : E.context ⊢ᴮ t : α)
     {«Δ» : B.RenamingContext.Context}
     {Δ₀ : SMT.RenamingContext.Context}
     (Δ₀_ext : SMT.RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» t)
     {used : List SMT.𝒱}
     (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
     (vars_used : ∀ v ∈ t.vars, v ∈ used)
+    (Λ_inv : ∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context)
     (bv_nodup : (B.bv t).Nodup)
     {n : ℕ} :
     ⦃ fun (⟨E0, Λ'⟩ : EncoderState) ↦
@@ -3766,7 +4052,7 @@ theorem encodeTerm_struct
   mintro hpre ∀S
   mpure hpre
   obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := hpre
-  mspec (encodeTerm_state E vars_used bv_nodup)
+  mspec (encodeTerm_state E typ_t vars_used Λ_inv bv_nodup)
   mrename_i hpost
   mintro ∀S'
   mpure hpost
