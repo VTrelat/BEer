@@ -633,6 +633,8 @@ theorem encodeTerm_spec.maplet_case.{u} (fv_sub_typings : B.FvSubTypings) (x y :
                     (∀ v ∈ x.vars, v ∈ used) →
                       (∀ v ∈ x.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv x).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ x →
+                        (∀ v ∈ B.fv x, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -693,6 +695,8 @@ theorem encodeTerm_spec.maplet_case.{u} (fv_sub_typings : B.FvSubTypings) (x y :
                     (∀ v ∈ y.vars, v ∈ used) →
                       (∀ v ∈ y.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv y).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ y →
+                        (∀ v ∈ B.fv y, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -746,7 +750,10 @@ theorem encodeTerm_spec.maplet_case.{u} (fv_sub_typings : B.FvSubTypings) (x y :
   (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none) {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(x ↦ᴮ y).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) (vars_used : ∀ v ∈ (x ↦ᴮ y).vars, v ∈ used)
   (Λ_inv : ∀ v ∈ (x ↦ᴮ y).vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv (x ↦ᴮ y)).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv (x ↦ᴮ y)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((x ↦ᴮ y)))
+  (fv_in_Λ : ∀ v ∈ B.fv ((x ↦ᴮ y)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -837,6 +844,8 @@ theorem encodeTerm_spec.maplet_case.{u} (fv_sub_typings : B.FvSubTypings) (x y :
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h))
     hx_bv_nodup
+    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
     (n := σ.env.freshvarsc)
   clear x_ih
   rename_i out_x
@@ -885,6 +894,8 @@ theorem encodeTerm_spec.maplet_case.{u} (fv_sub_typings : B.FvSubTypings) (x y :
 
           · exact absurd rfl (hxy_bv_disj v h v hy_bv))
     hy_bv_nodup
+    (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_St' (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+    (fun v hv => AList.mem_of_subset St_eq_St' (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
     (n := σ_x.env.freshvarsc)
   clear y_ih
   rename_i out_y
@@ -1175,6 +1186,8 @@ theorem encodeTerm_spec.add_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
                     (∀ v ∈ x.vars, v ∈ used) →
                       (∀ v ∈ x.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv x).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ x →
+                        (∀ v ∈ B.fv x, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -1235,6 +1248,8 @@ theorem encodeTerm_spec.add_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
                     (∀ v ∈ y.vars, v ∈ used) →
                       (∀ v ∈ y.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv y).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ y →
+                        (∀ v ∈ B.fv y, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -1288,7 +1303,10 @@ theorem encodeTerm_spec.add_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
   (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none) {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(x +ᴮ y).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) (vars_used : ∀ v ∈ (x +ᴮ y).vars, v ∈ used)
   (Λ_inv : ∀ v ∈ (x +ᴮ y).vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv (x +ᴮ y)).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv (x +ᴮ y)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((x +ᴮ y)))
+  (fv_in_Λ : ∀ v ∈ B.fv ((x +ᴮ y)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -1367,6 +1385,8 @@ theorem encodeTerm_spec.add_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
     den_x (fun v hv => vars_used v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
     (fun v hv => Λ_inv v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
     hx_bv_nodup
+    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
     (n := σ.env.freshvarsc)
   clear x_ih
   rename_i out_x
@@ -1404,6 +1424,8 @@ theorem encodeTerm_spec.add_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
               (_root_.B.Typing.bv_notMem_context typ_x v h)
           · exact absurd rfl (hxy_bv_disj v h v hy_bv))
     hy_bv_nodup
+    (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_St' (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+    (fun v hv => AList.mem_of_subset St_eq_St' (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
     (n := σ_x.env.freshvarsc)
   clear y_ih
   rename_i out_y
@@ -1687,6 +1709,8 @@ theorem encodeTerm_spec.sub_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
                     (∀ v ∈ x.vars, v ∈ used) →
                       (∀ v ∈ x.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv x).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ x →
+                        (∀ v ∈ B.fv x, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -1747,6 +1771,8 @@ theorem encodeTerm_spec.sub_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
                     (∀ v ∈ y.vars, v ∈ used) →
                       (∀ v ∈ y.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv y).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ y →
+                        (∀ v ∈ B.fv y, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -1800,7 +1826,10 @@ theorem encodeTerm_spec.sub_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
   (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none) {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(x -ᴮ y).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) (vars_used : ∀ v ∈ (x -ᴮ y).vars, v ∈ used)
   (Λ_inv : ∀ v ∈ (x -ᴮ y).vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv (x -ᴮ y)).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv (x -ᴮ y)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((x -ᴮ y)))
+  (fv_in_Λ : ∀ v ∈ B.fv ((x -ᴮ y)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -1879,6 +1908,8 @@ theorem encodeTerm_spec.sub_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
     den_x (fun v hv => vars_used v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
     (fun v hv => Λ_inv v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
     hx_bv_nodup
+    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
     (n := σ.env.freshvarsc)
   clear x_ih
   rename_i out_x
@@ -1916,6 +1947,8 @@ theorem encodeTerm_spec.sub_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
               (_root_.B.Typing.bv_notMem_context typ_x v h)
           · exact absurd rfl (hxy_bv_disj v h v hy_bv))
     hy_bv_nodup
+    (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_St' (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+    (fun v hv => AList.mem_of_subset St_eq_St' (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
     (n := σ_x.env.freshvarsc)
   clear y_ih
   rename_i out_y
@@ -2199,6 +2232,8 @@ theorem encodeTerm_spec.mul_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
                     (∀ v ∈ x.vars, v ∈ used) →
                       (∀ v ∈ x.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv x).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ x →
+                        (∀ v ∈ B.fv x, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -2259,6 +2294,8 @@ theorem encodeTerm_spec.mul_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
                     (∀ v ∈ y.vars, v ∈ used) →
                       (∀ v ∈ y.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv y).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ y →
+                        (∀ v ∈ B.fv y, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -2312,7 +2349,10 @@ theorem encodeTerm_spec.mul_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
   (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none) {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(x *ᴮ y).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) (vars_used : ∀ v ∈ (x *ᴮ y).vars, v ∈ used)
   (Λ_inv : ∀ v ∈ (x *ᴮ y).vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv (x *ᴮ y)).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv (x *ᴮ y)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((x *ᴮ y)))
+  (fv_in_Λ : ∀ v ∈ B.fv ((x *ᴮ y)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -2391,6 +2431,8 @@ theorem encodeTerm_spec.mul_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
     den_x (fun v hv => vars_used v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
     (fun v hv => Λ_inv v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
     hx_bv_nodup
+    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
     (n := σ.env.freshvarsc)
   clear x_ih
   rename_i out_x
@@ -2428,6 +2470,8 @@ theorem encodeTerm_spec.mul_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
               (_root_.B.Typing.bv_notMem_context typ_x v h)
           · exact absurd rfl (hxy_bv_disj v h v hy_bv))
     hy_bv_nodup
+    (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_St' (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+    (fun v hv => AList.mem_of_subset St_eq_St' (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
     (n := σ_x.env.freshvarsc)
   clear y_ih
   rename_i out_y
@@ -2711,6 +2755,8 @@ theorem encodeTerm_spec.le_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.T
                     (∀ v ∈ x.vars, v ∈ used) →
                       (∀ v ∈ x.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv x).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ x →
+                        (∀ v ∈ B.fv x, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -2771,6 +2817,8 @@ theorem encodeTerm_spec.le_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.T
                     (∀ v ∈ y.vars, v ∈ used) →
                       (∀ v ∈ y.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv y).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ y →
+                        (∀ v ∈ B.fv y, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -2824,7 +2872,10 @@ theorem encodeTerm_spec.le_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.T
   (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none) {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(x ≤ᴮ y).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) (vars_used : ∀ v ∈ (x ≤ᴮ y).vars, v ∈ used)
   (Λ_inv : ∀ v ∈ (x ≤ᴮ y).vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv (x ≤ᴮ y)).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv (x ≤ᴮ y)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((x ≤ᴮ y)))
+  (fv_in_Λ : ∀ v ∈ B.fv ((x ≤ᴮ y)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -2903,6 +2954,8 @@ theorem encodeTerm_spec.le_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.T
     den_x (fun v hv => vars_used v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
     (fun v hv => Λ_inv v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
     hx_bv_nodup
+    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
     (n := σ.env.freshvarsc)
   clear x_ih
   rename_i out_x
@@ -2940,6 +2993,8 @@ theorem encodeTerm_spec.le_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.T
               (_root_.B.Typing.bv_notMem_context typ_x v h)
           · exact absurd rfl (hxy_bv_disj v h v hy_bv))
     hy_bv_nodup
+    (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_St' (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+    (fun v hv => AList.mem_of_subset St_eq_St' (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
     (n := σ_x.env.freshvarsc)
   clear y_ih
   rename_i out_y
@@ -3225,6 +3280,8 @@ theorem encodeTerm_spec.min_case.{u} (S : B.Term)
                     (∀ v ∈ S.vars, v ∈ used) →
                       (∀ v ∈ S.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv S).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ S →
+                        (∀ v ∈ B.fv S, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -3277,7 +3334,10 @@ theorem encodeTerm_spec.min_case.{u} (S : B.Term)
   (Δ₀_ext : RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» S.min) {used : List SMT.𝒱} (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
   {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ} (den_t : ⟦S.min.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩)
   (vars_used : ∀ v ∈ S.min.vars, v ∈ used) (Λ_inv : ∀ v ∈ S.min.vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv S.min).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv S.min).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ (S.min))
+  (fv_in_Λ : ∀ v ∈ B.fv (S.min), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -3334,6 +3394,8 @@ theorem encodeTerm_spec.max_case.{u} (S : B.Term)
                     (∀ v ∈ S.vars, v ∈ used) →
                       (∀ v ∈ S.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv S).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ S →
+                        (∀ v ∈ B.fv S, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -3386,7 +3448,10 @@ theorem encodeTerm_spec.max_case.{u} (S : B.Term)
   (Δ₀_ext : RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» S.max) {used : List SMT.𝒱} (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
   {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ} (den_t : ⟦S.max.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩)
   (vars_used : ∀ v ∈ S.max.vars, v ∈ used) (Λ_inv : ∀ v ∈ S.max.vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv S.max).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv S.max).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ (S.max))
+  (fv_in_Λ : ∀ v ∈ B.fv (S.max), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -3443,6 +3508,8 @@ theorem encodeTerm_spec.card_case.{u} (S : B.Term)
                     (∀ v ∈ S.vars, v ∈ used) →
                       (∀ v ∈ S.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv S).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ S →
+                        (∀ v ∈ B.fv S, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -3495,7 +3562,10 @@ theorem encodeTerm_spec.card_case.{u} (S : B.Term)
   (Δ₀_ext : RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» (|S|ᴮ)) {used : List SMT.𝒱} (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
   {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ} (den_t : ⟦|S|ᴮ.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩)
   (vars_used : ∀ v ∈ |S|ᴮ.vars, v ∈ used) (Λ_inv : ∀ v ∈ |S|ᴮ.vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv (|S|ᴮ)).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv (|S|ᴮ)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((|S|ᴮ)))
+  (fv_in_Λ : ∀ v ∈ B.fv ((|S|ᴮ)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄

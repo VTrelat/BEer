@@ -245,6 +245,7 @@ private theorem pow_denotation_aux.{u}
     (hE_not_ctx : E ∉ ctx) (hx_not_ctx : x ∉ ctx)
     -- Generic renaming context
     {Δ_ctx : SMT.RenamingContext.Context}
+    (Δctx_wt : ∀ v (d : SMT.Dom), Δ_ctx v = some d → ∀ τ, ctx.lookup v = some τ → d.snd.fst = τ)
     (hΔ_covers_S : RenamingContext.CoversFV Δ_ctx S_enc)
     (hΔ_covers_tpow : RenamingContext.CoversFV Δ_ctx tpow)
     -- S_enc denotation under Δ_ctx
@@ -496,7 +497,32 @@ private theorem pow_denotation_aux.{u}
         denote_not_isSome_of_some_bool hden_rhs hDrhs_ty
     obtain ⟨Dnot, hden_not⟩ := Option.isSome_iff_exists.mp hnot_rhs_isSome
     have hDnot_ty : Dnot.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_not_rhs) (hden := hden_not) (hΔΓ := sorry)
+      have hcov_not_rhs : SMT.RenamingContext.CoversFV
+          (Function.update (Function.update Δ_ctx E (some F)) x (some W))
+          (¬ˢ ((@ˢS_enc) (SMT.Term.var x))) := by
+        intro v hv
+        have hv' : v ∈ SMT.fv ((@ˢS_enc) (SMT.Term.var x)) := by simpa [SMT.fv] using hv
+        have hv'' : v ∈ SMT.fv S_enc ∨ v = x := by simpa [SMT.fv] using hv'
+        exact hcov_pred_upd F W v (by
+          rw [hpred_def]; simp only [SMT.fv, List.mem_append, List.mem_singleton]
+          exact Or.inr hv'')
+      apply SMT.RenamingContext.denote_type_of_typing_fv typ_not_rhs _ hcov_not_rhs hden_not
+      intro v σ hv hlk
+      have hv_S_or_x : v ∈ SMT.fv S_enc ∨ v = x := by
+        have hv' : v ∈ SMT.fv ((@ˢS_enc) (SMT.Term.var x)) := by simpa [SMT.fv] using hv
+        simpa [SMT.fv] using hv'
+      by_cases hvx : v = x
+      · subst hvx
+        rw [AList.lookup_insert] at hlk
+        cases hlk
+        exact ⟨W, by rw [Function.update_self], hW_ty⟩
+      · rw [AList.lookup_insert_ne hvx] at hlk
+        have hv_S : v ∈ SMT.fv S_enc := hv_S_or_x.resolve_right hvx
+        have hvE : v ≠ E := fun h => hE_not_mem_fv_S_enc (h ▸ hv_S)
+        rw [AList.lookup_insert_ne hvE] at hlk
+        obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
+        refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+        rw [Function.update_of_ne hvx, Function.update_of_ne hvE]; exact hd
     obtain ⟨Dbody, hden_body, hDbody_ty⟩ :=
       denote_and_some_bool_of_some_bool hden_lhs hDlhs_ty hden_not hDnot_ty
     simpa [hpred_def, SMT.Term.abstract, proof_irrel_heq] using
@@ -510,7 +536,39 @@ private theorem pow_denotation_aux.{u}
               (hcov_pred_upd F W)⟧ˢ = some D →
             D.snd.fst = SMTType.bool := by
     intro F W hF_ty hW_ty D hD
-    exact denote_type_eq_of_typing (typ_t := typ_pred) (hden := hD) (hΔΓ := sorry)
+    apply SMT.RenamingContext.denote_type_of_typing_fv typ_pred _ (hcov_pred_upd F W) hD
+    intro v σ hv hlk
+    -- v ∈ SMT.fv pred = SMT.fv (((@ˢE) x) ⇒ˢ ((@ˢS_enc) x))
+    -- = {E, x} ∪ (SMT.fv S_enc ∪ {x}) = {E, x} ∪ SMT.fv S_enc
+    have hv_cases : v = E ∨ v = x ∨ v ∈ SMT.fv S_enc := by
+      rw [hpred_def] at hv
+      simp only [SMT.fv, List.mem_append, List.mem_singleton, List.mem_cons,
+        List.mem_nil_iff, or_false] at hv
+      rcases hv with ((hE | hx) | hvS | hx)
+      · exact Or.inl hE
+      · exact Or.inr (Or.inl hx)
+      · exact Or.inr (Or.inr hvS)
+      · exact Or.inr (Or.inl hx)
+    by_cases hvx : v = x
+    · subst hvx
+      rw [AList.lookup_insert] at hlk
+      cases hlk
+      exact ⟨W, by rw [Function.update_self], hW_ty⟩
+    · rw [AList.lookup_insert_ne hvx] at hlk
+      by_cases hvE : v = E
+      · subst hvE
+        rw [AList.lookup_insert] at hlk
+        cases hlk
+        exact ⟨F, by rw [Function.update_of_ne hvx, Function.update_self], hF_ty⟩
+      · rw [AList.lookup_insert_ne hvE] at hlk
+        have hv_S : v ∈ SMT.fv S_enc := by
+          rcases hv_cases with hE | hx | hvS
+          · exact absurd hE hvE
+          · exact absurd hx hvx
+          · exact hvS
+        obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
+        refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+        rw [Function.update_of_ne hvx, Function.update_of_ne hvE]; exact hd
   have hforall_total :
       ∀ F : SMT.Dom,
         F.snd.fst = β.toSMTType.fun SMTType.bool →
@@ -598,8 +656,53 @@ private theorem pow_denotation_aux.{u}
           (den_t_isSome hx_1)).snd.fst = Dx.snd.fst := by
             exact congrArg (fun d : SMT.Dom => d.snd.fst)
               (Option.get_of_eq_some (den_t_isSome hx_1) hden_x)
-        _ = SMTType.bool := denote_type_eq_of_typing (typ_t := typ_forall) (hden := hDx) (hΔΓ := sorry)
-        _ = Dy.snd.fst := (denote_type_eq_of_typing (typ_t := typ_forall) (hden := hDy) (hΔΓ := sorry)).symm
+        _ = SMTType.bool := by
+            apply SMT.RenamingContext.denote_type_of_typing_fv typ_forall _ (hcov_forall_upd Fx) hDx
+            intro v σ hv hlk
+            have hv_cases : v = E ∨ v ∈ SMT.fv S_enc := by
+              rw [hpred_def] at hv
+              simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_singleton,
+                List.mem_cons, List.mem_nil_iff, or_false] at hv
+              obtain ⟨hv_inner, hv_ne_x⟩ := hv
+              rcases hv_inner with ((hE | hx) | hvS | hx)
+              · exact Or.inl hE
+              · exact absurd hx hv_ne_x
+              · exact Or.inr hvS
+              · exact absurd hx hv_ne_x
+            by_cases hvE : v = E
+            · subst hvE
+              rw [AList.lookup_insert] at hlk
+              cases hlk
+              exact ⟨Fx, by rw [Function.update_self], hFx_ty⟩
+            · rw [AList.lookup_insert_ne hvE] at hlk
+              have hv_S : v ∈ SMT.fv S_enc := hv_cases.resolve_left hvE
+              obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
+              refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+              rw [Function.update_of_ne hvE]; exact hd
+        _ = Dy.snd.fst := by
+            symm
+            apply SMT.RenamingContext.denote_type_of_typing_fv typ_forall _ (hcov_forall_upd Fy) hDy
+            intro v σ hv hlk
+            have hv_cases : v = E ∨ v ∈ SMT.fv S_enc := by
+              rw [hpred_def] at hv
+              simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_singleton,
+                List.mem_cons, List.mem_nil_iff, or_false] at hv
+              obtain ⟨hv_inner, hv_ne_x⟩ := hv
+              rcases hv_inner with ((hE | hx) | hvS | hx)
+              · exact Or.inl hE
+              · exact absurd hx hv_ne_x
+              · exact Or.inr hvS
+              · exact absurd hx hv_ne_x
+            by_cases hvE : v = E
+            · subst hvE
+              rw [AList.lookup_insert] at hlk
+              cases hlk
+              exact ⟨Fy, by rw [Function.update_self], hFy_ty⟩
+            · rw [AList.lookup_insert_ne hvE] at hlk
+              have hv_S : v ∈ SMT.fv S_enc := hv_cases.resolve_left hvE
+              obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
+              refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+              rw [Function.update_of_ne hvE]; exact hd
         _ = (⟦(SMT.Term.abstract.go
             (Term.forall [x] [β.toSMTType] pred) [E] Δ_ctx hgo_cov_forall).uncurry y_1⟧ˢ.get
           (den_t_isSome hy_1)).snd.fst := by
@@ -630,7 +733,20 @@ private theorem pow_denotation_aux.{u}
     obtain ⟨D, hD⟩ := Option.isSome_iff_exists.mp hsome_tpow
     obtain ⟨a, τa, ha⟩ := D
     have hτa : τa = .fun (.fun β.toSMTType .bool) .bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_tpow) (hden := hD) (hΔΓ := sorry)
+      apply SMT.RenamingContext.denote_type_of_typing_fv typ_tpow _ hΔ_covers_tpow hD
+      intro v σ hv hlk
+      have hv_S : v ∈ SMT.fv S_enc := by
+        rw [htpow_def, hpred_def] at hv
+        simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_singleton,
+          List.mem_cons, List.mem_nil_iff, or_false, List.not_mem_nil] at hv
+        obtain ⟨⟨hv_inner, hv_ne_x⟩, hv_ne_E⟩ := hv
+        rcases hv_inner with ((hvE | hvx) | hvS | hvx)
+        · exact absurd hvE hv_ne_E
+        · exact absurd hvx hv_ne_x
+        · exact hvS
+        · exact absurd hvx hv_ne_x
+      obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
+      exact ⟨d, hd, Δctx_wt v d hd σ hlk⟩
     cases hτa
     exact ⟨a, ha, hD⟩
   rcases hden with ⟨a, h, hden⟩
@@ -856,7 +972,23 @@ private theorem pow_denotation_aux.{u}
             cases hiFin
             exact ⟨rfl, setDom_mem hY_mem⟩
           have hDforall_ty : Dforall.snd.fst = SMTType.bool := by
-            exact denote_type_eq_of_typing (typ_t := typ_forall) (hden := hden_forall) (hΔΓ := sorry)
+            apply SMT.RenamingContext.denote_type_of_typing_fv typ_forall _
+              (hcov_forall_upd FY) hden_forall
+            apply SMT.RenamingContext.respects_update_of_wt (setDom_ty hY_mem) Δctx_wt
+            intro w hw hwE
+            -- w ∈ SMT.fv (Term.forall [x] [β.toSMTType] pred), w ≠ E
+            -- = fv(pred) \ {x}, so w ≠ x; fv(pred) = {E, x} ∪ fv(S_enc); with w ≠ E, w ≠ x: w ∈ fv(S_enc)
+            have hw_S : w ∈ SMT.fv S_enc := by
+              rw [hpred_def] at hw
+              simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_singleton,
+                List.mem_cons, List.mem_nil_iff, or_false] at hw
+              obtain ⟨hw_inner, hw_ne_x⟩ := hw
+              rcases hw_inner with ((hE | hx) | hwS | hx)
+              · exact absurd hE hwE
+              · exact absurd hx hw_ne_x
+              · exact hwS
+              · exact absurd hx hw_ne_x
+            exact hΔ_covers_S w hw_S
           have hγ_eq_Dforall_ty :
               ((⟦(SMT.Term.abstract.go
                   (Term.forall [x] [β.toSMTType] pred) [E] Δ_ctx
@@ -1169,7 +1301,32 @@ private theorem pow_denotation_aux.{u}
                         (hTy := hDrhs_ty))
                 obtain ⟨Dnot, hden_not⟩ := Option.isSome_iff_exists.mp hnot_isSome
                 have hDnot_ty : Dnot.snd.fst = SMTType.bool := by
-                  exact denote_type_eq_of_typing (typ_t := typ_not_rhs) (hden := hden_not) (hΔΓ := sorry)
+                  have hcov_not_rhs : SMT.RenamingContext.CoversFV
+                      (Function.update (Function.update Δ_ctx E (some (setDom hY_mem))) x (some W))
+                      (¬ˢ ((@ˢS_enc) (SMT.Term.var x))) := by
+                    intro v hv
+                    have hv' : v ∈ SMT.fv ((@ˢS_enc) (SMT.Term.var x)) := by simpa [SMT.fv] using hv
+                    have hv'' : v ∈ SMT.fv S_enc ∨ v = x := by simpa [SMT.fv] using hv'
+                    exact hcov_pred_upd (setDom hY_mem) W v (by
+                      rw [hpred_def]; simp only [SMT.fv, List.mem_append, List.mem_singleton]
+                      exact Or.inr hv'')
+                  apply SMT.RenamingContext.denote_type_of_typing_fv typ_not_rhs _ hcov_not_rhs hden_not
+                  intro v σ hv hlk
+                  have hv_S_or_x : v ∈ SMT.fv S_enc ∨ v = x := by
+                    have hv' : v ∈ SMT.fv ((@ˢS_enc) (SMT.Term.var x)) := by simpa [SMT.fv] using hv
+                    simpa [SMT.fv] using hv'
+                  by_cases hvx : v = x
+                  · subst hvx
+                    rw [AList.lookup_insert] at hlk
+                    cases hlk
+                    exact ⟨W, by rw [Function.update_self], hW_ty⟩
+                  · rw [AList.lookup_insert_ne hvx] at hlk
+                    have hv_S : v ∈ SMT.fv S_enc := hv_S_or_x.resolve_right hvx
+                    have hvE : v ≠ E := fun h => hE_not_mem_fv_S_enc (h ▸ hv_S)
+                    rw [AList.lookup_insert_ne hvE] at hlk
+                    obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
+                    refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+                    rw [Function.update_of_ne hvx, Function.update_of_ne hvE]; exact hd
                 have hden_body_false :
                     ⟦(((@ˢSMT.Term.var E) (SMT.Term.var x)) ∧ˢ
                           (¬ˢ ((@ˢS_enc) (SMT.Term.var x)))).abstract
@@ -1417,6 +1574,8 @@ theorem encodeTerm_spec.pow_case.{u} (fv_sub_typings : B.FvSubTypings) (S : B.Te
                     (∀ v ∈ S.vars, v ∈ used) →
                       (∀ v ∈ S.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv S).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ S →
+                        (∀ v ∈ B.fv S, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -1470,7 +1629,10 @@ theorem encodeTerm_spec.pow_case.{u} (fv_sub_typings : B.FvSubTypings) (S : B.Te
   (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none) {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦( 𝒫ᴮ S).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) (vars_used : ∀ v ∈ ( 𝒫ᴮ S).vars, v ∈ used)
   (Λ_inv : ∀ v ∈ ( 𝒫ᴮ S).vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv ( 𝒫ᴮ S)).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv ( 𝒫ᴮ S)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ (( 𝒫ᴮ S)))
+  (fv_in_Λ : ∀ v ∈ B.fv (( 𝒫ᴮ S)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -1550,6 +1712,8 @@ theorem encodeTerm_spec.pow_case.{u} (fv_sub_typings : B.FvSubTypings) (S : B.Te
     den_S (fun v hv => vars_used v (show v ∈ (𝒫ᴮ S).vars by simpa [B.Term.vars] using hv))
     (fun v hv => Λ_inv v (show v ∈ (𝒫ᴮ S).vars by simpa [B.Term.vars] using hv))
     (show (B.bv S).Nodup from bv_nodup)
+    (respects.mono_fv (fun v hv => by simpa [B.fv] using hv))
+    (fun v hv => fv_in_Λ v (by simpa [B.fv] using hv))
     (n := St.env.freshvarsc)
   clear ih
   rename_i out_S
@@ -1764,6 +1928,7 @@ theorem encodeTerm_spec.pow_case.{u} (fv_sub_typings : B.FvSubTypings) (S : B.Te
                               hE_not_mem_fv_S_enc hx_not_mem_fv_S_enc
                               hE_not_bv_S_enc hx_not_bv_S_enc
                               typ_S_enc hE_not_ctx hx_not_ctx
+                              (Δctx_wt := SMT.RenamingContext.ExtendsOnSourceFV.wt Δ'_ext_S typ_S_enc)
                               Δ'_covers_S hpow_cov hSenc den_S_enc
                               hX retract_Senc_eq_X hT
                           refine ⟨a, a_1, h, hden, hRDom, ?_⟩
@@ -1857,6 +2022,13 @@ theorem encodeTerm_spec.pow_case.{u} (fv_sub_typings : B.FvSubTypings) (S : B.Te
                                 hE_not_mem_fv_S_enc hx_not_mem_fv_S_enc
                                 hE_not_bv_S_enc hx_not_bv_S_enc
                                 typ_S_enc hE_not_ctx hx_not_ctx
+                                (Δctx_wt := fun v d hv τ hτ => by
+                                  simp only [Δ'_alt] at hv
+                                  cases hΔ : Δ₀_alt v with
+                                  | some d' => simp [hΔ] at hv; subst hv; exact Δ₀_alt_wt v d' hΔ τ hτ
+                                  | none =>
+                                    simp [hΔ] at hv
+                                    exact Δ'_alt_S_wt_out v d hv τ hτ)
                                 hcov_S_alt hcov_tpow_alt hSval_alt den_S_alt_final
                                 hX_alt hRDom_retract hT_alt
                             refine ⟨Δ'_alt, hext_alt, ?_, ?_, hcov_tpow_alt,
@@ -1895,6 +2067,7 @@ private theorem cprod_case_denotation_aux.{u_1}
     {Δ'' : SMT.RenamingContext.Context}
     (typ_T_enc : ctx ⊢ˢ T_enc : βx.set.toSMTType)
     (typ_S_enc_T : ctx ⊢ˢ S_enc : αx.set.toSMTType)
+    (Δctx_wt : ∀ v (d : SMT.Dom), Δ'' v = some d → ∀ τ, ctx.lookup v = some τ → d.snd.fst = τ)
     (p a b : SMT.𝒱)
     (p_fresh : p ∉ ctx)
     (a_fresh : a ∉ ctx.insert p (αx.toSMTType.pair βx.toSMTType))
@@ -2708,10 +2881,24 @@ private theorem cprod_case_denotation_aux.{u_1}
                           exact congrArg (fun d : SMT.Dom => d.snd.fst)
                             (Option.get_of_eq_some (den_t_isSome hx) hden_x)
                     _ = SMTType.bool := by
-                      exact denote_type_eq_of_typing (typ_t := typ_exists) (hden := hDx) (hΔΓ := sorry)
+                      apply SMT.RenamingContext.denote_type_of_typing_fv typ_exists _ (hcov_exists_upd Wx) hDx
+                      apply SMT.RenamingContext.respects_update_of_wt hWx_ty Δctx_wt
+                      intro w hw hwp
+                      have hw_tcprod : w ∈ SMT.fv tcprod := by
+                        change w ∈ SMT.fv ((λˢ [p]) _ existsTerm)
+                        simp only [SMT.fv, List.mem_removeAll_iff, List.mem_singleton]
+                        exact ⟨hw, hwp⟩
+                      exact hcov_tcprod w hw_tcprod
                     _ = Dy.snd.fst := by
-                      exact (denote_type_eq_of_typing (typ_t := typ_exists)
-                        (hden := hDy) (hΔΓ := sorry)).symm
+                      symm
+                      apply SMT.RenamingContext.denote_type_of_typing_fv typ_exists _ (hcov_exists_upd Wy) hDy
+                      apply SMT.RenamingContext.respects_update_of_wt hWy_ty Δctx_wt
+                      intro w hw hwp
+                      have hw_tcprod : w ∈ SMT.fv tcprod := by
+                        change w ∈ SMT.fv ((λˢ [p]) _ existsTerm)
+                        simp only [SMT.fv, List.mem_removeAll_iff, List.mem_singleton]
+                        exact ⟨hw, hwp⟩
+                      exact hcov_tcprod w hw_tcprod
                     _ =
                       (⟦(SMT.Term.abstract.go existsTerm [p] Δ'' hgo_cov_tcprod).uncurry y⟧ˢ.get
                         (den_t_isSome hy)).snd.fst := by
@@ -2737,7 +2924,10 @@ private theorem cprod_case_denotation_aux.{u_1}
                 obtain ⟨D, hD⟩ := Option.isSome_iff_exists.mp hsome_tcprod
                 rcases D with ⟨a, τa, ha⟩
                 have hτa : τa = pairTy.fun SMTType.bool := by
-                  exact denote_type_eq_of_typing (typ_t := typ_tcprod_ctx) (hden := hD) (hΔΓ := sorry)
+                  apply SMT.RenamingContext.denote_type_of_typing_fv typ_tcprod_ctx _ hcov_tcprod hD
+                  intro v σ hv hlk
+                  obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hcov_tcprod v hv)
+                  exact ⟨d, hd, Δctx_wt v d hd σ hlk⟩
                 cases hτa
                 exact ⟨a, ha, hD⟩
               rcases hden with ⟨tcprodVal, ha, hden⟩
@@ -2827,8 +3017,15 @@ private theorem cprod_case_denotation_aux.{u_1}
                           exact congrArg (fun d : SMT.Dom => d.snd.fst)
                             (Option.get_of_eq_some (den_t_isSome hdefaultArg) hden_default)
                       _ = SMTType.bool := by
-                        exact denote_type_eq_of_typing (typ_t := typ_exists)
-                          (hden := hDdefault) (hΔΓ := sorry)
+                        apply SMT.RenamingContext.denote_type_of_typing_fv typ_exists _
+                          (hcov_exists_upd Wdefault) hDdefault
+                        apply SMT.RenamingContext.respects_update_of_wt hWdefault_ty Δctx_wt
+                        intro w hw hwp
+                        have hw_tcprod : w ∈ SMT.fv tcprod := by
+                          change w ∈ SMT.fv ((λˢ [p]) _ existsTerm)
+                          simp only [SMT.fv, List.mem_removeAll_iff, List.mem_singleton]
+                          exact ⟨hw, hwp⟩
+                        exact hcov_tcprod w hw_tcprod
                   have ha_eq :
                       ⟦pairTy⟧ᶻ.lambda ⟦γ⟧ᶻ bodyFun = tcprodVal := by
                     simpa [γ, bodyFun, defaultArg, SMTType.toZFSet] using hden'.1
@@ -4055,10 +4252,33 @@ private theorem cprod_case_denotation_aux.{u_1}
                             Δw hcov_right))
                         (typ_p_bool := by
                           intro Dp hDp
-                          exact denote_type_eq_of_typing (typ_t := typ_Sa_term) (hden := hDp) (hΔΓ := sorry))
+                          apply SMT.RenamingContext.denote_type_of_typing_fv typ_Sa_term _ hcov_Sa_Δw hDp
+                          apply SMT.RenamingContext.respects_update3_of_wt
+                            (hd1_ty := rfl) (hd2_ty := rfl) (hd3_ty := rfl)
+                            hp_ne_a hp_ne_b hb_ne_a.symm Δctx_wt
+                          intro w hw hwp hwa hwb
+                          have hw_S : w ∈ SMT.fv S_enc := by
+                            simp only [SMT.fv, List.mem_append, List.mem_singleton] at hw
+                            exact hw.resolve_right hwa
+                          exact hΔ_S_final w hw_S)
                         (typ_q_bool := by
                           intro Dq hDq
-                          exact denote_type_eq_of_typing (typ_t := typ_right_term) (hden := hDq) (hΔΓ := sorry))
+                          apply SMT.RenamingContext.denote_type_of_typing_fv typ_right_term _ hcov_right hDq
+                          apply SMT.RenamingContext.respects_update3_of_wt
+                            (hd1_ty := rfl) (hd2_ty := rfl) (hd3_ty := rfl)
+                            hp_ne_a hp_ne_b hb_ne_a.symm Δctx_wt
+                          intro w hw hwp hwa hwb
+                          -- right_term = T_enc @ b ∧ (var p = var a, var b); fv ⊆ fv(T_enc) ∪ {a, b, p}
+                          -- With w ≠ p, w ≠ a, w ≠ b: w ∈ fv(T_enc)
+                          simp only [SMT.fv, List.mem_append, List.mem_singleton, List.mem_cons,
+                            List.mem_nil_iff, or_false] at hw
+                          rcases hw with (hwT | hwb') | hwP | hwAB
+                          · exact Δ''_covers_T w hwT
+                          · exact absurd hwb' hwb
+                          · exact absurd hwP hwp
+                          · rcases hwAB with hwa' | hwb'
+                            · exact absurd hwa' hwa
+                            · exact absurd hwb' hwb)
                         hden_body_split hDbody_true
                     have hden_right_split :
                         ⟦(((@ˢT_enc) (SMT.Term.var b)).abstract Δw hcov_Tb_Δw) ∧ˢ'
@@ -4073,10 +4293,30 @@ private theorem cprod_case_denotation_aux.{u_1}
                           Δw hcov_eq))
                         (typ_p_bool := by
                           intro Dp hDp
-                          exact denote_type_eq_of_typing (typ_t := typ_Tb_term) (hden := hDp) (hΔΓ := sorry))
+                          apply SMT.RenamingContext.denote_type_of_typing_fv typ_Tb_term _ hcov_Tb_Δw hDp
+                          apply SMT.RenamingContext.respects_update3_of_wt
+                            (hd1_ty := rfl) (hd2_ty := rfl) (hd3_ty := rfl)
+                            hp_ne_a hp_ne_b hb_ne_a.symm Δctx_wt
+                          intro w hw hwp hwa hwb
+                          have hw_T : w ∈ SMT.fv T_enc := by
+                            simp only [SMT.fv, List.mem_append, List.mem_singleton] at hw
+                            exact hw.resolve_right hwb
+                          exact Δ''_covers_T w hw_T)
                         (typ_q_bool := by
                           intro Dq hDq
-                          exact denote_type_eq_of_typing (typ_t := typ_eq_term) (hden := hDq) (hΔΓ := sorry))
+                          apply SMT.RenamingContext.denote_type_of_typing_fv typ_eq_term _ hcov_eq hDq
+                          apply SMT.RenamingContext.respects_update3_of_wt
+                            (hd1_ty := rfl) (hd2_ty := rfl) (hd3_ty := rfl)
+                            hp_ne_a hp_ne_b hb_ne_a.symm Δctx_wt
+                          intro w hw hwp hwa hwb
+                          -- eq_term = var p = var a, var b; fv ⊆ {p, a, b}
+                          simp only [SMT.fv, List.mem_append, List.mem_singleton, List.mem_cons,
+                            List.mem_nil_iff, or_false] at hw
+                          rcases hw with hwP | hwAB
+                          · exact absurd hwP hwp
+                          · rcases hwAB with hwa' | hwb'
+                            · exact absurd hwa' hwa
+                            · exact absurd hwb' hwb)
                         hden_right_split hDright_true
                     have hDSa_eq : DSa = DSa' := by
                       exact Option.some.inj (hden_Sa_true.symm.trans hden_Sa_from_body)
@@ -4203,6 +4443,8 @@ theorem encodeTerm_spec.cprod_case.{u} (fv_sub_typings : B.FvSubTypings) (S T_1 
                     (∀ v ∈ S.vars, v ∈ used) →
                       (∀ v ∈ S.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv S).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ S →
+                        (∀ v ∈ B.fv S, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -4263,6 +4505,8 @@ theorem encodeTerm_spec.cprod_case.{u} (fv_sub_typings : B.FvSubTypings) (S T_1 
                     (∀ v ∈ T_1.vars, v ∈ used) →
                       (∀ v ∈ T_1.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv T_1).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ T_1 →
+                        (∀ v ∈ B.fv T_1, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -4316,7 +4560,10 @@ theorem encodeTerm_spec.cprod_case.{u} (fv_sub_typings : B.FvSubTypings) (S T_1 
   (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none) {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(S ⨯ᴮ T_1).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) (vars_used : ∀ v ∈ (S ⨯ᴮ T_1).vars, v ∈ used)
   (Λ_inv : ∀ v ∈ (S ⨯ᴮ T_1).vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv (S ⨯ᴮ T_1)).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv (S ⨯ᴮ T_1)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((S ⨯ᴮ T_1)))
+  (fv_in_Λ : ∀ v ∈ B.fv ((S ⨯ᴮ T_1)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -4425,6 +4672,8 @@ theorem encodeTerm_spec.cprod_case.{u} (fv_sub_typings : B.FvSubTypings) (S T_1 
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h))
     hS_bv_nodup
+    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
     (n := St.env.freshvarsc)
   clear S_ih
   rename_i out_S
@@ -4463,6 +4712,8 @@ theorem encodeTerm_spec.cprod_case.{u} (fv_sub_typings : B.FvSubTypings) (S T_1 
               (_root_.B.Typing.bv_notMem_context typ_S v h)
           · exact absurd rfl (hST_bv_disj v h v hy_bv))
     hT_bv_nodup
+    (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_StS (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+    (fun v hv => AList.mem_of_subset St_eq_StS (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
     (n := StS.env.freshvarsc)
   clear T_ih
   rename_i out_T
@@ -4848,6 +5099,7 @@ theorem encodeTerm_spec.cprod_case.{u} (fv_sub_typings : B.FvSubTypings) (S T_1 
                 (ctx := ctx) (S_enc := S_enc) (T_enc := T_enc) (Δ'' := Δ'')
                 (Senc := Senc) (Tenc := Tenc)
                 (typ_T_enc := typ_T_enc) (typ_S_enc_T := typ_S_enc_T)
+                (Δctx_wt := SMT.RenamingContext.ExtendsOnSourceFV.wt Δ''_ext_T typ_T_enc)
                 (p := p) (a := a) (b := b)
                 (p_fresh := p_fresh) (a_fresh := a_fresh) (b_fresh := b_fresh)
                 (hSenc := hSenc) (hTenc := hTenc)
@@ -5150,6 +5402,23 @@ theorem encodeTerm_spec.cprod_case.{u} (fv_sub_typings : B.FvSubTypings) (S T_1 
                 (ctx := ctx) (S_enc := S_enc) (T_enc := T_enc) (Δ'' := Δ'_alt)
                 (Senc := Senc_alt) (Tenc := Tenc_alt)
                 (typ_T_enc := typ_T_enc) (typ_S_enc_T := typ_S_enc_T)
+                (Δctx_wt := fun v d hv τ hτ => by
+                  simp only [Δ'_alt_def] at hv
+                  match h : Δ₀_alt v with
+                  | some d' =>
+                    rw [h] at hv
+                    have hd_eq : some d' = some d := hv
+                    injection hd_eq with hd'
+                    exact hd' ▸ Δ₀_alt_wt v d' h τ (by
+                      rw [St₃_types_eq]
+                      exact AList.mem_lookup_iff.mpr
+                        (SMT.TypeContext.entries_subset_insert_of_notMem b_fresh
+                          (SMT.TypeContext.entries_subset_insert_of_notMem a_fresh
+                            (SMT.TypeContext.entries_subset_insert_of_notMem p_fresh
+                              (AList.mem_lookup_iff.mp hτ)))))
+                  | none =>
+                    rw [h] at hv
+                    exact Δ'_alt_T_wt_out v d hv τ hτ)
                 (p := p) (a := a) (b := b)
                 (p_fresh := p_fresh) (a_fresh := a_fresh) (b_fresh := b_fresh)
                 (hSenc := hSenc_alt) (hTenc := hTenc_alt)

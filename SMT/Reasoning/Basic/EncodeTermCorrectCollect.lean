@@ -18,6 +18,8 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                     (∀ v ∈ D.vars, v ∈ used) →
                       (∀ v ∈ D.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv D).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ D →
+                        (∀ v ∈ B.fv D, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -78,6 +80,8 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                     (∀ v ∈ P.vars, v ∈ used) →
                       (∀ v ∈ P.vars, v ∈ Λ → v ∈ E.context) →
                       ((B.bv P).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ P →
+                        (∀ v ∈ B.fv P, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -133,7 +137,10 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
   (den_t : ⟦(Term.collect vs D P).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩)
   (vars_used : ∀ v ∈ (Term.collect vs D P).vars, v ∈ used)
   (Λ_inv : ∀ v ∈ (Term.collect vs D P).vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (B.bv (Term.collect vs D P)).Nodup) {n : ℕ} :
+  (bv_nodup : (B.bv (Term.collect vs D P)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((Term.collect vs D P)))
+  (fv_in_Λ : ∀ v ∈ B.fv ((Term.collect vs D P)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -265,6 +272,8 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
       den_D vars_used_D (n := St₀.env.freshvarsc)
       St₀_types_sub_E_ctx_on_D_vars
       hD_bv_nodup
+      (respects.mono_fv (fun v hv => by rw [B.fv]; exact List.mem_append_left _ hv))
+      (fun v hv => fv_in_Λ v (by rw [B.fv]; exact List.mem_append_left _ hv))
   clear D_ih
   rename_i out_D
   obtain ⟨D_enc, τD⟩ := out_D
@@ -470,6 +479,71 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
     (T := TP) (hT := hTP) den_P vars_used_P_St₂ (n := St₂.env.freshvarsc)
     St₂_types_sub_E_ctx_on_P_vars
     hP_bv_nodup
+    (by
+      intro v σ_v hv hτ_v
+      by_cases hvs : v ∈ vs
+      · have hv_idx : vs.idxOf v < vs.length := List.idxOf_lt_length_of_mem hvs
+        have hv_eq : vs[vs.idxOf v] = v := List.getElem_idxOf hv_idx
+        have hΔ_ext_v : Δ_ext v = some (f ⟨vs.idxOf v, hv_idx⟩) := by
+          rw [Δ_ext_def, Function.updates_eq_if (by rw [List.length_ofFn]) vs_nodup, dif_pos hvs]
+          simp only [List.getElem_ofFn]
+        have hToSMT_isSome : (B.RenamingContext.toSMT Δ_ext v).isSome = true := by
+          unfold B.RenamingContext.toSMT
+          rw [hΔ_ext_v]; simp
+        obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp hToSMT_isSome
+        refine ⟨d, hd, ?_⟩
+        have hd' := hd
+        rw [B.RenamingContext.toSMT, Option.pure_def, Option.bind_eq_bind,
+          hΔ_ext_v, Option.bind_some] at hd'
+        have hd_inj := Option.some_injective _ hd'
+        have hd_ty : d.snd.fst = (τ.get vs.length ⟨vs.idxOf v, hv_idx⟩).toSMTType := by
+          rw [← hd_inj]
+        set τs := τ.toSMTType.fromProdl (vs.length - 1) with τs_def
+        have hτs_len : τs.length = vs.length := fromProdl_length_of_hasArity τ_hasArity
+        have hv_idx_τ : vs.idxOf v < τs.length := hτs_len ▸ hv_idx
+        have h_St₂ : St₂.types.lookup v = some τs[vs.idxOf v] := by
+          have h := foldl_insert_lookup_zip (Γ := St₁.types) vs_nodup hv_idx hv_idx_τ
+          rwa [← St₂_types, List.getElem_idxOf hv_idx] at h
+        rw [h_St₂] at hτ_v
+        cases hτ_v
+        rw [hd_ty]
+        exact toSMTType_get_eq_fromProdl_getElem τ_hasArity hv_idx
+      · have hv_collect : v ∈ B.fv (Term.collect vs D P) := by
+          rw [B.fv]; rw [List.mem_append]; right
+          rw [List.mem_removeAll_iff]; exact ⟨hv, hvs⟩
+        have hΔ_ext_eq : Δ_ext v = «Δ» v := by
+          rw [Δ_ext_def, Function.updates_eq_if (by rw [List.length_ofFn]) vs_nodup, dif_neg hvs]
+        have hToSMT_eq : (B.RenamingContext.toSMT Δ_ext) v
+            = (B.RenamingContext.toSMT «Δ») v := by
+          unfold B.RenamingContext.toSMT
+          rw [hΔ_ext_eq]
+        have hv_Λ : v ∈ St₀.types := fv_in_Λ v hv_collect
+        obtain ⟨τ', hτ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_Λ)
+        have hτ'_St₁ : St₁.types.lookup v = some τ' :=
+          AList.lookup_of_subset St₀_sub_St₁ hτ'
+        have hτ'_St₂ : St₂.types.lookup v = some τ' := by
+          rw [St₂_types]
+          apply foldl_insert_preserves_lookup hτ'_St₁
+          intro p hp heq
+          exact hvs (heq ▸ (List.of_mem_zip hp).1)
+        have hσ_v_eq : τ' = σ_v :=
+          Option.some_inj.mp (hτ'_St₂.symm.trans hτ_v)
+        rw [hσ_v_eq] at hτ'
+        rw [hToSMT_eq]
+        exact respects hv_collect hτ')
+    (by
+      intro v hv
+      by_cases hvs : v ∈ vs
+      · rw [St₂_types]
+        exact foldl_insert_zip_mem vs (τ.toSMTType.fromProdl (vs.length - 1)) St₁.types v
+          (by rw [fromProdl_length_of_hasArity τ_hasArity]) hvs
+      · have hv_collect : v ∈ B.fv (Term.collect vs D P) := by
+          rw [B.fv]; rw [List.mem_append]; right
+          rw [List.mem_removeAll_iff]; exact ⟨hv, hvs⟩
+        have hv_Λ : v ∈ St₀.types := fv_in_Λ v hv_collect
+        have hv_St₁ : v ∈ St₁.types := AList.mem_of_subset St₀_sub_St₁ hv_Λ
+        rw [St₂_types]
+        exact foldl_insert_mem _ St₁.types v hv_St₁)
   rename_i out_P
   obtain ⟨P_enc, σP⟩ := out_P
   mrename_i pre
@@ -3437,113 +3511,92 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                 (SMT.Typing.bool _ _)
             -- Build RespectsTypeContextOnFV for body under Δ'_alt[z↦W]
             -- For body totality, use denote_exists_of_typing_fv on ite_body
+            have hcompat_alt_fn : ∀ (W : SMT.Dom), W.snd.fst = τ.toSMTType →
+                SMT.RenamingContext.RespectsTypeContextOnFV
+                  (Function.update Δ'_alt z (some W)) (St₃.types.insert z τ.toSMTType) ite_body := by
+              intro W hW_ty
+              intro v σ hv_fv hlookup
+              by_cases hvz : v = z
+              · subst hvz
+                rw [AList.lookup_insert] at hlookup; cases hlookup
+                exact ⟨W, by simp [Function.update], hW_ty⟩
+              · rw [Function.update_of_ne hvz]
+                rw [AList.lookup_insert_ne hvz] at hlookup
+                simp only [Δ'_alt]
+                cases h_Δ₀ : Δ₀_alt v with
+                | some d =>
+                  simp only [h_Δ₀]
+                  refine ⟨d, rfl, ?_⟩
+                  have hτ_St₆ : St₆.types.lookup v = some σ := by
+                    rw [St₆_types, St₄_types, AList.lookup_erase_ne hvz,
+                      AList.lookup_insert_ne hvz]
+                    exact hlookup
+                  exact hwt_alt v d h_Δ₀ σ hτ_St₆
+                | none =>
+                  have hv_lambda : v ∈ SMT.fv ((λˢ [z]) [τ.toSMTType] ite_body) := by
+                    simp only [SMT.fv, List.mem_removeAll_iff]
+                    exact ⟨ite_body_def ▸ hv_fv, List.mem_singleton.not.mpr hvz⟩
+                  have hΔ'_alt_v_isSome := hcov_lambda_alt v hv_lambda
+                  obtain ⟨dv, hdv⟩ := Option.isSome_iff_exists.mp hΔ'_alt_v_isSome
+                  have hdv_unf : (match Δ_D_alt v with | some d => some d | none => Δ' v) = some dv := by
+                    have : Δ'_alt v = (match Δ_D_alt v with | some d => some d | none => Δ' v) := by
+                      show (match Δ₀_alt v with | some d => some d | none => match Δ_D_alt v with | some d => some d | none => Δ' v) = _
+                      rw [h_Δ₀]
+                    rwa [← this]
+                  have hτ_St₆ : St₆.types.lookup v = some σ := by
+                    rw [St₆_types, St₄_types, AList.lookup_erase_ne hvz,
+                      AList.lookup_insert_ne hvz]
+                    exact hlookup
+                  have hdv_ty : dv.2.1 = σ := by
+                    cases hΔD : Δ_D_alt v with
+                    | some d' =>
+                      rw [hΔD] at hdv_unf
+                      simp only [Option.some.injEq] at hdv_unf
+                      subst hdv_unf
+                      have hv_St₁ : v ∈ St₁.types :=
+                        Δ_D_alt_dom v (by rw [hΔD]; simp)
+                      obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp
+                        (AList.lookup_isSome.mpr hv_St₁)
+                      have St₁_sub_St₆_local : St₁.types ⊆ St₆.types := by
+                        rw [St₆_types, St₄_types]
+                        intro ⟨k, σ_k⟩ hk_St₁
+                        have hk_St₃ := St₁_sub_St₃_types hk_St₁
+                        have hk_ne_z : k ≠ z := by
+                          intro rfl
+                          exact z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used (St₁_keys_sub
+                            (AList.mem_keys.mpr (List.mem_map.mpr ⟨⟨k, σ_k⟩, hk_St₁, rfl⟩)))))
+                        have hk_ins : ⟨k, σ_k⟩ ∈ (AList.insert z τ.toSMTType St₃.types).entries := by
+                          rw [AList.entries_insert_of_notMem z_fresh, List.mem_cons]
+                          exact Or.inr hk_St₃
+                        exact List.mem_kerase_of_ne_key hk_ne_z hk_ins
+                      have h_St₆_σ' : St₆.types.lookup v = some σ' :=
+                        AList.lookup_of_subset St₁_sub_St₆_local hσ'
+                      rw [hτ_St₆] at h_St₆_σ'
+                      cases h_St₆_σ'
+                      exact Δ_D_alt_wt_out v d' hΔD σ hσ'
+                    | none =>
+                      rw [hΔD] at hdv_unf
+                      simp only at hdv_unf
+                      exact Δ'_wt v dv hdv_unf σ hτ_St₆
+                  exact ⟨dv, hdv_unf, hdv_ty⟩
             have hbody_total_alt : ∀ (W : SMT.Dom), W.snd.fst = τ.toSMTType →
                 ⟦ite_body.abstract (Function.update Δ'_alt z (some W)) (hcov_ite_upd_alt W)⟧ˢ.isSome = true := by
               intro W hW_ty
-              -- Build RespectsTypeContextOnFV on fv(ite_body)
-              have hcompat_alt : SMT.RenamingContext.RespectsTypeContextOnFV
-                  (Function.update Δ'_alt z (some W)) (St₃.types.insert z τ.toSMTType) ite_body := by
-                intro v σ hv_fv hlookup
-                by_cases hvz : v = z
-                · subst hvz
-                  rw [AList.lookup_insert] at hlookup; cases hlookup
-                  exact ⟨W, by simp [Function.update], hW_ty⟩
-                · rw [Function.update_of_ne hvz]
-                  rw [AList.lookup_insert_ne hvz] at hlookup
-                  -- v ∈ fv(ite_body) and v ≠ z
-                  -- fv(ite_body) = fv(D_enc) ∪ (fv(P_enc) \ vs) ∪ {z}
-                  -- Since v ≠ z, v ∈ fv(D_enc) ∪ (fv(P_enc) \ vs)
-                  -- All such v are in fv(collect vs D P) (source free variables)
-                  -- v ∉ vs (from fv_substList_disj_vs or vs_disj_St₁)
-                  -- From hext_alt, Δ₀_alt v = toSMT Δ_alt v for v ∈ fv(collect)
-                  -- So Δ'_alt v = Δ₀_alt v = toSMT Δ_alt v, with type τ_b.toSMTType
-                  -- And from the encoding, St₃.types.lookup v = τ_b.toSMTType
-                  -- For now, case split on Δ'_alt structure
-                  simp only [Δ'_alt]
-                  cases h_Δ₀ : Δ₀_alt v with
-                  | some d =>
-                    simp only [h_Δ₀]
-                    refine ⟨d, rfl, ?_⟩
-                    -- d.2.1 = σ. Use: hext_alt forces d to come from toSMT Δ_alt v.
-                    -- Decompose hv_fv: v ∈ fv(ite_body), v ≠ z
-                    rw [ite_body_def] at hv_fv
-                    simp only [SMT.fv, List.mem_append, List.mem_singleton,
-                      List.not_mem_nil, or_false] at hv_fv
-                    -- v ∈ fv(D_enc @ˢ z) ∨ v ∈ fv(substList ...) (excluding v = z)
-                    have hv_not_vs : v ∉ vs := by
-                      rcases hv_fv with (hv_D | rfl) | hv_subst
-                      · -- hv_D : v ∈ fv(D_enc) (already decomposed by outer simp)
-                        intro hvs
-                        exact vs_disj_St₁ v hvs (SMT.Typing.mem_context_of_mem_fv typ_D_enc hv_D)
-                      · nomatch hvz
-                      · exact fv_substList_disj_vs v hv_subst hvz
-                    -- Δ'_extends_Δ₀ : Extends Δ' Δ₀
-                    -- Δ₀_ext : ExtendsOnSourceFV Δ₀ Δ (collect vs D P)
-                    -- hext_alt : ExtendsOnSourceFV Δ₀_alt Δ_alt (collect vs D P)
-                    -- = Extends Δ₀_alt (toSMTOnFV Δ_alt (collect vs D P))
-                    -- If v ∈ fv(collect), toSMTOnFV Δ_alt collect v = toSMT Δ_alt v = some d'
-                    -- Then Extends gives Δ₀_alt v = some d', so d = d'
-                    -- And d'.2.1 = (BType of v).toSMTType = σ
-                    -- If v ∉ fv(collect), toSMTOnFV = none, unconstrained.
-                    -- But then v is encoding-internal: v ∉ E.context,
-                    -- v was added by the encoder to usedVars but NOT to types.
-                    -- So v ∉ St₀.types. D encoding doesn't add v to types if v ∉ B.fv D.
-                    -- P encoding similarly. So v ∉ St₃.types, contradicting hlookup.
-                    -- Therefore v ∈ fv(collect).
-                    --
-                    -- Actually: the simplest path is to use the `none` case's
-                    -- Δ' v which already has the right type. Since Δ₀ extends toSMTOnFV Δ collect,
-                    -- and Δ' extends Δ₀, Δ' v has the same type structure.
-                    -- But we have Δ₀_alt v = some d, not Δ' v.
-                    -- Use Extends directly.
-                    -- Use denote_type_eq_of_typing on (var v) under Δ'_alt
-                    -- Since Δ₀_alt v = some d, Δ'_alt v = some d by definition
-                    have hΔ'_alt_v : Δ'_alt v = some d := by simp [Δ'_alt, h_Δ₀]
-                    have hcov_var_v : SMT.RenamingContext.CoversFV Δ'_alt (.var v) := by
-                      intro w hw; simp [SMT.fv] at hw; subst hw; rw [hΔ'_alt_v]; simp
-                    have hden_var : ⟦(SMT.Term.var v).abstract Δ'_alt hcov_var_v⟧ˢ =
-                        some d := by
-                      simp [SMT.Term.abstract, SMT.denote, hΔ'_alt_v, Option.pure_def]
-                    have typ_var : St₃.types ⊢ˢ SMT.Term.var v : σ :=
-                      SMT.Typing.var St₃.types v σ hlookup
-                    exact denote_type_eq_of_typing typ_var hden_var (hΔΓ := sorry)
-                  | none =>
-                    -- Δ₀_alt v = none: Δ'_alt v = Δ_D_alt v
-                    -- v ∈ fv(lambda) since v ∈ fv(ite_body) \ {z}
-                    have hv_lambda : v ∈ SMT.fv ((λˢ [z]) [τ.toSMTType] ite_body) := by
-                      simp only [SMT.fv, List.mem_removeAll_iff]
-                      exact ⟨ite_body_def ▸ hv_fv, List.mem_singleton.not.mpr hvz⟩
-                    -- Δ'_alt v is some by coverage
-                    have hΔ'_alt_v_isSome := hcov_lambda_alt v hv_lambda
-                    obtain ⟨dv, hdv⟩ := Option.isSome_iff_exists.mp hΔ'_alt_v_isSome
-                    -- hdv : Δ'_alt v = some dv. Convert to unfolded form.
-                    have hdv_unf : (match Δ_D_alt v with | some d => some d | none => Δ' v) = some dv := by
-                      have : Δ'_alt v = (match Δ_D_alt v with | some d => some d | none => Δ' v) := by
-                        show (match Δ₀_alt v with | some d => some d | none => match Δ_D_alt v with | some d => some d | none => Δ' v) = _
-                        rw [h_Δ₀]
-                      rwa [← this]
-                    -- Type of dv matches St₃.types via denote_type_eq_of_typing on (var v)
-                    have hcov_var_v : SMT.RenamingContext.CoversFV Δ'_alt (.var v) := by
-                      intro w hw; simp [SMT.fv] at hw; subst hw; rw [hdv]; simp
-                    have hden_var : ⟦(SMT.Term.var v).abstract Δ'_alt hcov_var_v⟧ˢ =
-                        some dv := by
-                      simp [SMT.Term.abstract, SMT.denote, hdv, Option.pure_def]
-                    have typ_var : St₃.types ⊢ˢ SMT.Term.var v : σ :=
-                      SMT.Typing.var St₃.types v σ hlookup
-                    have hdv_ty : dv.2.1 = σ :=
-                      denote_type_eq_of_typing typ_var hden_var (hΔΓ := sorry)
-                    exact ⟨dv, hdv_unf, hdv_ty⟩
               obtain ⟨D_body, hD_body, _⟩ :=
                 SMT.RenamingContext.denote_exists_of_typing_fv
-                  typ_ite_body_alt hcompat_alt (hcov_ite_upd_alt W)
+                  typ_ite_body_alt (hcompat_alt_fn W hW_ty) (hcov_ite_upd_alt W)
               exact Option.isSome_iff_exists.mpr ⟨D_body, hD_body⟩
-            -- Body type determinacy
             have hbody_ty_alt : ∀ (W : SMT.Dom) (_ : W.snd.fst = τ.toSMTType)
                 (Db : SMT.Dom),
                 ⟦ite_body.abstract (Function.update Δ'_alt z (some W)) (hcov_ite_upd_alt W)⟧ˢ = some Db →
                 Db.snd.fst = .bool := by
               intro W hW_ty Db hDb
-              exact denote_type_eq_of_typing (Γ := St₃.types.insert z τ.toSMTType) typ_ite_body_alt hDb (hΔΓ := sorry)
+              obtain ⟨D_body, hD_body, hty_body⟩ :=
+                SMT.RenamingContext.denote_exists_of_typing_fv
+                  typ_ite_body_alt (hcompat_alt_fn W hW_ty) (hcov_ite_upd_alt W)
+              rw [hD_body] at hDb
+              cases hDb
+              exact hty_body
             -- Now replicate hsome_lambda proof structure with Δ'_alt
             have hcov_ite_upd_alt' : ∀ W : SMT.Dom,
                 RenamingContext.CoversFV (Function.update Δ'_alt z (some W)) ite_body :=

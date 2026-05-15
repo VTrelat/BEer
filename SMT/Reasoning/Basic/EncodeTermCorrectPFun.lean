@@ -765,6 +765,7 @@ private theorem pfun_lambda_denotation.{u}
     {Γ : SMT.TypeContext}
     (htyp_A : Γ ⊢ˢ A_enc : SMTType.fun αx.toSMTType .bool)
     (htyp_B : Γ ⊢ˢ B_enc : SMTType.fun βx.toSMTType .bool)
+    (Δctx_wt : ∀ v (d : SMT.Dom), Δctx v = some d → ∀ τ, Γ.lookup v = some τ → d.snd.fst = τ)
     (R_not_in_Γ : R ∉ Γ) (x_not_in_Γ : x ∉ Γ) (y_not_in_Γ : y ∉ Γ) (y'_not_in_Γ : y' ∉ Γ)
     (hcov : RenamingContext.CoversFV Δctx
       (Term.lambda [R] [SMTType.fun (SMTType.pair αx.toSMTType βx.toSMTType) .bool]
@@ -1090,7 +1091,7 @@ private theorem pfun_lambda_denotation.{u}
           intro w hw; simp [SMT.fv] at hw; subst hw; rw [hdv]; simp
         have hden_var : ⟦(SMT.Term.var v).abstract Δctx hcov_var⟧ˢ = some dv := by
           simp [SMT.Term.abstract, SMT.denote, hdv, Option.pure_def]
-        exact ⟨dv, hdv, denote_type_eq_of_typing (SMT.Typing.var Γ v σ hlookup) hden_var (hΔΓ := sorry)⟩
+        exact ⟨dv, hdv, Δctx_wt v dv hdv σ hlookup⟩
     -- Build typing derivation for pfun_body
     have typ_pfun_body : Γ_R ⊢ˢ pfun_body : .bool := by
       rw [hpfun_body_def]
@@ -2548,6 +2549,8 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                     (∀ v ∈ A.vars, v ∈ used) →
                       (∀ v ∈ A.vars, v ∈ Λ → v ∈ E.context) →
                       ((_root_.B.bv A).Nodup) →
+                        _root_.B.RenamingContext.RespectsTypeContextOnFV (_root_.B.RenamingContext.toSMT «Δ») Λ A →
+                        (∀ v ∈ _root_.B.fv A, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -2609,6 +2612,8 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                     (∀ v ∈ B.vars, v ∈ used) →
                       (∀ v ∈ B.vars, v ∈ Λ → v ∈ E.context) →
                       ((_root_.B.bv B).Nodup) →
+                        _root_.B.RenamingContext.RespectsTypeContextOnFV (_root_.B.RenamingContext.toSMT «Δ») Λ B →
+                        (∀ v ∈ _root_.B.fv B, v ∈ Λ) →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -2663,7 +2668,10 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
   (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none) {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(A ⇸ᴮ B).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩) (vars_used : ∀ v ∈ (A ⇸ᴮ B).vars, v ∈ used)
   (Λ_inv : ∀ v ∈ (A ⇸ᴮ B).vars, v ∈ Λ → v ∈ E.context)
-  (bv_nodup : (_root_.B.bv (A ⇸ᴮ B)).Nodup) {n : ℕ} :
+  (bv_nodup : (_root_.B.bv (A ⇸ᴮ B)).Nodup)
+  (respects : _root_.B.RenamingContext.RespectsTypeContextOnFV (_root_.B.RenamingContext.toSMT «Δ») Λ ((A ⇸ᴮ B)))
+  (fv_in_Λ : ∀ v ∈ _root_.B.fv ((A ⇸ᴮ B)), v ∈ Λ)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -2772,6 +2780,8 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
       simp only [_root_.B.Term.vars, List.mem_union_iff, _root_.B.fv, _root_.B.bv, List.mem_append] at hv ⊢
       rcases hv with h | h <;> [left; right] <;> exact .inl h))
     hA_bv_nodup
+    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
     (n := St.env.freshvarsc)
   clear A_ih
   rename_i out_A
@@ -2810,6 +2820,8 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
               (_root_.B.Typing.bv_notMem_context typ_A v h)
           · exact absurd rfl (hAB_bv_disj v h v hy_bv))
     hB_bv_nodup
+    (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_StA (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+    (fun v hv => AList.mem_of_subset St_eq_StA (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
     (n := StA.env.freshvarsc)
   clear B_ih
   rename_i out_B
@@ -3319,6 +3331,7 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                   y_not_fv_A y_not_fv_B y'_not_fv_A y'_not_fv_B
                   hR_ne_x hR_ne_y hR_ne_y' hx_ne_y hx_ne_y' hy_ne_y'
                   (htyp_A := typ_A_enc_B) (htyp_B := typ_B_enc)
+                  (Δctx_wt := SMT.RenamingContext.ExtendsOnSourceFV.wt Δ''_ext_B typ_B_enc)
                   (R_not_in_Γ := R_fresh)
                   (x_not_in_Γ := fun h => x_fresh (by rw [AList.mem_insert]; exact Or.inr h))
                   (y_not_in_Γ := fun h => y_fresh (by rw [AList.mem_insert]; exact Or.inr (by rw [AList.mem_insert]; exact Or.inr h)))
@@ -3607,6 +3620,24 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                   y_not_fv_A y_not_fv_B y'_not_fv_A y'_not_fv_B
                   hR_ne_x hR_ne_y hR_ne_y' hx_ne_y hx_ne_y' hy_ne_y'
                   (htyp_A := typ_A_enc_B) (htyp_B := typ_B_enc)
+                  (Δctx_wt := fun v d hv τ hτ => by
+                    simp only [Δ'_alt_def] at hv
+                    match h : Δ₀_alt v with
+                    | some d' =>
+                      rw [h] at hv
+                      have hd_eq : some d' = some d := hv
+                      injection hd_eq with hd'
+                      exact hd' ▸ Δ₀_alt_wt v d' h τ (by
+                        rw [St₄_types_eq]
+                        exact AList.mem_lookup_iff.mpr
+                          (SMT.TypeContext.entries_subset_insert_of_notMem y'_fresh
+                            (SMT.TypeContext.entries_subset_insert_of_notMem y_fresh
+                              (SMT.TypeContext.entries_subset_insert_of_notMem x_fresh
+                                (SMT.TypeContext.entries_subset_insert_of_notMem R_fresh
+                                  (AList.mem_lookup_iff.mp hτ))))))
+                    | none =>
+                      rw [h] at hv
+                      exact Δ'_alt_B_wt_out v d hv τ hτ)
                   (R_not_in_Γ := R_fresh)
                   (x_not_in_Γ := fun h => x_fresh (by rw [AList.mem_insert]; exact Or.inr h))
                   (y_not_in_Γ := fun h => y_fresh (by rw [AList.mem_insert]; exact Or.inr (by rw [AList.mem_insert]; exact Or.inr h)))
