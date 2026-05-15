@@ -1,6 +1,7 @@
 import SMT.Reasoning.Basic.CollectCaseHelpers
 import SMT.Reasoning.Basic.AllCaseHelpers
 import SMT.Reasoning.Basic.CastMembershipSpec
+import SMT.Reasoning.Basic.EncodeTermStruct
 import SMT.Reasoning.Axioms
 import B.Reasoning.DenotationTotality
 
@@ -532,45 +533,22 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       mspec Std.Do.Spec.get_StateT
       mspec Std.Do.Spec.get_StateT
       mspec Std.Do.Spec.get_StateT
-      mspec P_ih (E := E') (Λ := St₃.types) (α := .bool) typP
-        («Δ» := Δ_ext) Δ_fv_P
-        (Δ₀ := Δ_D_ext) Δ₀_ext_P (used := St₃.env.usedVars) Δ_D_ext_none_St₃
-        (T := P_val) (hT := hP_val) hP_den vars_used_P_St₃ (n := St₃.env.freshvarsc)
-        St₃_types_sub_E'_ctx_on_P_vars
-        hP_bv_nodup
-        sorry
-        (by
-          intro v hv
-          by_cases hvs : v ∈ vs
-          · have hv_idx : vs.idxOf v < vs.length := List.idxOf_lt_length_of_mem hvs
-            have hv_idx_τ : vs.idxOf v < τs.length := vs_τs_len ▸ hv_idx
-            have h_St₃ : St₃.types.lookup v = some τs[vs.idxOf v] := by
-              have h := foldl_insert_lookup_zip (Γ := St₂.types) vs_nodup hv_idx hv_idx_τ
-              rwa [← St₃_types, List.getElem_idxOf hv_idx] at h
-            exact AList.lookup_isSome.mp (Option.isSome_of_mem h_St₃)
-          · have hv_all : v ∈ B.fv (Term.all vs D P) := by
-              rw [B.fv]; rw [List.mem_append]; right
-              rw [List.mem_removeAll_iff]; exact ⟨hv, hvs⟩
-            have hv_Λ : v ∈ St₀.types := fv_in_Λ v hv_all
-            have hv_St₁ : v ∈ St₁.types := AList.mem_of_subset St₀_sub_St₁ hv_Λ
-            obtain ⟨τ', hτ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_St₁)
-            have hτ'_St₂ : St₂.types.lookup v = some τ' := by
-              rw [St₂_types]; exact hτ'
-            have hτ'_St₃ : St₃.types.lookup v = some τ' := by
-              rw [St₃_types]
-              apply foldl_insert_preserves_lookup hτ'_St₂
-              intro p hp heq
-              exact hvs (heq ▸ (List.of_mem_zip hp).1)
-            exact AList.lookup_isSome.mp (Option.isSome_of_mem hτ'_St₃))
+      mspec encodeTerm_struct (E := E') (Λ := St₃.types) («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
+        Δ₀_ext_P (used := St₃.env.usedVars) Δ_D_ext_none_St₃ vars_used_P_St₃ hP_bv_nodup
+        (n := St₃.env.freshvarsc)
       rename_i out_P
       obtain ⟨P_enc, σP⟩ := out_P
       mrename_i pre
       mintro ∀St₄
       mpure pre
-      obtain ⟨St₃_sub_St₄, St₃_sub_St₄_types, St₄_keys_sub, covers_P, rfl, typ_P_enc,
+      obtain ⟨St₃_sub_St₄, St₃_sub_St₄_types, St₄_keys_sub, covers_P, P_fv_sub,
         P_preserves_types,
-        Δ_P, Δ_P_covers, Δ_P_extends, Δ_P_src_ext, Δ_P_none, denP', den_P_enc, P_RDom,
-        P_enc_total⟩ := pre
+        Δ_P, Δ_P_covers, Δ_P_extends, Δ_P_src_ext, Δ_P_none⟩ := pre
+      split
+      rename_i heq
+      injection heq with hPe hσe
+      subst hσe
+      subst hPe
       simp only [BType.toSMTType] at *
       mspec SMT.freshVarList_spec τs
       rename_i zs
@@ -871,6 +849,12 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
           exact totality_witness_hasflag (used' := St₈.env.usedVars) (Λ' := St₈.types) hcov
             Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
+      -- non-`.bool` arm of `let ⟨P', .bool⟩ ← encodeTerm P E' | throw`
+      mspec encodeTerm_struct (E := E) (Λ := St₄.types) («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
+        Δ₀_ext_P (used := St₄.env.usedVars)
+        (fun v hv => Δ_D_ext_none_St₃ v (fun h => hv (St₃_sub_St₄ h)))
+        (fun v hv => St₃_sub_St₄ (vars_used_P_St₃ v hv)) hP_bv_nodup
+        (n := St₄.env.freshvarsc) <;> mvcgen
     · -- has-flag EMPTY case
       have h𝒟_eq : 𝒟 = 𝒟' := by
         have := den_D_eq ▸ den_D
@@ -904,45 +888,22 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
         mspec Std.Do.Spec.get_StateT
         mspec Std.Do.Spec.get_StateT
         mspec Std.Do.Spec.get_StateT
-        mspec P_ih (E := E') (Λ := St₃.types) (α := .bool) typP
-          («Δ» := Δ_ext) Δ_fv_P
-          (Δ₀ := Δ_D_ext) Δ₀_ext_P (used := St₃.env.usedVars) Δ_D_ext_none_St₃
-          (T := P_val) (hT := hP_val) hP_den vars_used_P_St₃ (n := St₃.env.freshvarsc)
-          St₃_types_sub_E'_ctx_on_P_vars
-          hP_bv_nodup
-          sorry
-          (by
-            intro v hv
-            by_cases hvs : v ∈ vs
-            · have hv_idx : vs.idxOf v < vs.length := List.idxOf_lt_length_of_mem hvs
-              have hv_idx_τ : vs.idxOf v < τs.length := vs_τs_len ▸ hv_idx
-              have h_St₃ : St₃.types.lookup v = some τs[vs.idxOf v] := by
-                have h := foldl_insert_lookup_zip (Γ := St₂.types) vs_nodup hv_idx hv_idx_τ
-                rwa [← St₃_types, List.getElem_idxOf hv_idx] at h
-              exact AList.lookup_isSome.mp (Option.isSome_of_mem h_St₃)
-            · have hv_all : v ∈ B.fv (Term.all vs D P) := by
-                rw [B.fv]; rw [List.mem_append]; right
-                rw [List.mem_removeAll_iff]; exact ⟨hv, hvs⟩
-              have hv_Λ : v ∈ St₀.types := fv_in_Λ v hv_all
-              have hv_St₁ : v ∈ St₁.types := AList.mem_of_subset St₀_sub_St₁ hv_Λ
-              obtain ⟨τ', hτ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_St₁)
-              have hτ'_St₂ : St₂.types.lookup v = some τ' := by
-                rw [St₂_types]; exact hτ'
-              have hτ'_St₃ : St₃.types.lookup v = some τ' := by
-                rw [St₃_types]
-                apply foldl_insert_preserves_lookup hτ'_St₂
-                intro p hp heq
-                exact hvs (heq ▸ (List.of_mem_zip hp).1)
-              exact AList.lookup_isSome.mp (Option.isSome_of_mem hτ'_St₃))
+        mspec encodeTerm_struct (E := E') (Λ := St₃.types) («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
+          Δ₀_ext_P (used := St₃.env.usedVars) Δ_D_ext_none_St₃ vars_used_P_St₃ hP_bv_nodup
+          (n := St₃.env.freshvarsc)
         rename_i out_P
         obtain ⟨P_enc, σP⟩ := out_P
         mrename_i pre
         mintro ∀St₄
         mpure pre
-        obtain ⟨St₃_sub_St₄, St₃_sub_St₄_types, St₄_keys_sub, covers_P, rfl, typ_P_enc,
+        obtain ⟨St₃_sub_St₄, St₃_sub_St₄_types, St₄_keys_sub, covers_P, P_fv_sub,
           P_preserves_types,
-          Δ_P, Δ_P_covers, Δ_P_extends, Δ_P_src_ext, Δ_P_none, denP', den_P_enc, P_RDom,
-          P_enc_total⟩ := pre
+          Δ_P, Δ_P_covers, Δ_P_extends, Δ_P_src_ext, Δ_P_none⟩ := pre
+        split
+        rename_i heq
+        injection heq with hPe hσe
+        subst hσe
+        subst hPe
         simp only [BType.toSMTType] at *
         mspec SMT.freshVarList_spec τs
         rename_i zs
@@ -1228,6 +1189,12 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
             intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
             exact totality_witness_hasflag (used' := St₈.env.usedVars) (Λ' := St₈.types) hcov
               Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
+        -- non-`.bool` arm of `let ⟨P', .bool⟩ ← encodeTerm P E' | throw`
+        mspec encodeTerm_struct (E := E) (Λ := St₄.types) («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
+          Δ₀_ext_P (used := St₄.env.usedVars)
+          (fun v hv => Δ_D_ext_none_St₃ v (fun h => hv (St₃_sub_St₄ h)))
+          (fun v hv => St₃_sub_St₄ (vars_used_P_St₃ v hv)) hP_bv_nodup
+          (n := St₄.env.freshvarsc) <;> mvcgen
       · exfalso
         apply hP_den_cond
         exact B.denote_exists_of_typing typP Δ_ext Δ_fv_P (@WFTC.wf _ WFTC.of_abstract)
