@@ -19,21 +19,12 @@ jobs:
       # Build BEer with Lean on each OS.
       # `build: false` skips the action's default `lake build` (which would
       # only build `defaultTargets`, i.e. the libraries used for doc generation);
-      # we then build the `BEer` executable explicitly below. We force the
-      # subsequent step to use `bash` (Git Bash on Windows runners) and prepend
-      # `~/.elan/bin` to PATH manually because lean-action's installer doesn't
-      # propagate PATH via `$GITHUB_PATH` on Windows (PowerShell, the default
-      # Windows shell, then can't find `lake`).
+      # we then build the `BEer` executable explicitly below.
       - uses: leanprover/lean-action@v1
         with:
           use-github-cache: true
-          build: false
-
-      - name: Build BEer executable
-        shell: bash
-        run: |
-          export PATH="$HOME/.elan/bin:$PATH"
-          lake build BEer
+          build: true
+          build-args: "BEer"
 
       # Upload artifacts per-OS
       - name: Upload BEer artifact (Linux/macOS)
