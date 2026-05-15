@@ -412,31 +412,75 @@ theorem Typing.of_abstract
     rw [Option.get_some]
     apply PHOAS.Typing.var
     admit
-  | int => sorry
-  | bool => sorry
-  | maplet _ _ _ _ => sorry
-  | add _ _ _ _ => sorry
-  | sub _ _ _ _ => sorry
-  | mul _ _ _ _ => sorry
-  | and _ _ _ _ => sorry
-  | not _ _ => sorry
-  | eq _ _ _ _ => sorry
-  | le _ _ _ _ => sorry
-  | «ℤ» => sorry
-  | 𝔹 => sorry
-  | mem _ _ _ _ => sorry
+  | int =>
+    unfold Term.abstract
+    exact PHOAS.Typing.int
+  | bool =>
+    unfold Term.abstract
+    exact PHOAS.Typing.bool
+  | maplet _ _ x_ih y_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.maplet (x_ih _) (y_ih _)
+  | add _ _ x_ih y_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.add (x_ih _) (y_ih _)
+  | sub _ _ x_ih y_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.sub (x_ih _) (y_ih _)
+  | mul _ _ x_ih y_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.mul (x_ih _) (y_ih _)
+  | and _ _ x_ih y_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.and (x_ih _) (y_ih _)
+  | not _ ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.not (ih _)
+  | eq _ _ x_ih y_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.eq (x_ih _) (y_ih _)
+  | le _ _ x_ih y_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.le (x_ih _) (y_ih _)
+  | «ℤ» =>
+    unfold Term.abstract
+    exact PHOAS.Typing.ℤ
+  | 𝔹 =>
+    unfold Term.abstract
+    exact PHOAS.Typing.𝔹
+  | mem _ _ x_ih S_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.mem (x_ih _) (S_ih _)
   | collect vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
-  | pow _ _ => sorry
-  | cprod _ _ _ _ => sorry
-  | union _ _ _ _ => sorry
-  | inter _ _ _ _ => sorry
-  | pfun _ _ _ _ => sorry
+  | pow _ ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.pow (ih _)
+  | cprod _ _ S_ih T_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.cprod (S_ih _) (T_ih _)
+  | union _ _ S_ih T_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.union (S_ih _) (T_ih _)
+  | inter _ _ S_ih T_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.inter (S_ih _) (T_ih _)
+  | pfun _ _ A_ih B_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.pfun (A_ih _) (B_ih _)
   | all vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
   | lambda vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
-  | app _ _ _ _ => sorry
-  | card _ _ => sorry
-  | min _ _ => sorry
-  | max _ _ => sorry
+  | app _ _ f_ih x_ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.app (f_ih _) (x_ih _)
+  | card _ ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.card (ih _)
+  | min _ ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.min (ih _)
+  | max _ ih =>
+    unfold Term.abstract
+    exact PHOAS.Typing.max (ih _)
 
 theorem B.Term.WF.simplifier {x} (wf : x.WF) : (simplifier x).WF := by
   induction x with
