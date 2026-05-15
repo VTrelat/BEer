@@ -533,8 +533,10 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       mspec Std.Do.Spec.get_StateT
       mspec Std.Do.Spec.get_StateT
       mspec Std.Do.Spec.get_StateT
-      mspec encodeTerm_struct (E := E') (Λ := St₃.types) («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
-        Δ₀_ext_P (used := St₃.env.usedVars) Δ_D_ext_none_St₃ vars_used_P_St₃ hP_bv_nodup
+      mspec encodeTerm_struct (E := E') (Λ := St₃.types) (α := .bool) typP
+        («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
+        Δ₀_ext_P (used := St₃.env.usedVars) Δ_D_ext_none_St₃ vars_used_P_St₃
+        St₃_types_sub_E'_ctx_on_P_vars hP_bv_nodup
         (n := St₃.env.freshvarsc)
       rename_i out_P
       obtain ⟨P_enc, σP⟩ := out_P
@@ -850,11 +852,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           exact totality_witness_hasflag (used' := St₈.env.usedVars) (Λ' := St₈.types) hcov
             Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
       -- non-`.bool` arm of `let ⟨P', .bool⟩ ← encodeTerm P E' | throw`
-      mspec encodeTerm_struct (E := E) (Λ := St₄.types) («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
-        Δ₀_ext_P (used := St₄.env.usedVars)
-        (fun v hv => Δ_D_ext_none_St₃ v (fun h => hv (St₃_sub_St₄ h)))
-        (fun v hv => St₃_sub_St₄ (vars_used_P_St₃ v hv)) hP_bv_nodup
-        (n := St₄.env.freshvarsc) <;> mvcgen
+      exact wp_bind_throw _ _ _ _
     · -- has-flag EMPTY case
       have h𝒟_eq : 𝒟 = 𝒟' := by
         have := den_D_eq ▸ den_D
@@ -888,8 +886,10 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
         mspec Std.Do.Spec.get_StateT
         mspec Std.Do.Spec.get_StateT
         mspec Std.Do.Spec.get_StateT
-        mspec encodeTerm_struct (E := E') (Λ := St₃.types) («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
-          Δ₀_ext_P (used := St₃.env.usedVars) Δ_D_ext_none_St₃ vars_used_P_St₃ hP_bv_nodup
+        mspec encodeTerm_struct (E := E') (Λ := St₃.types) (α := .bool) typP
+          («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
+          Δ₀_ext_P (used := St₃.env.usedVars) Δ_D_ext_none_St₃ vars_used_P_St₃
+          St₃_types_sub_E'_ctx_on_P_vars hP_bv_nodup
           (n := St₃.env.freshvarsc)
         rename_i out_P
         obtain ⟨P_enc, σP⟩ := out_P
@@ -1190,11 +1190,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
             exact totality_witness_hasflag (used' := St₈.env.usedVars) (Λ' := St₈.types) hcov
               Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
         -- non-`.bool` arm of `let ⟨P', .bool⟩ ← encodeTerm P E' | throw`
-        mspec encodeTerm_struct (E := E) (Λ := St₄.types) («Δ» := Δ_ext) (Δ₀ := Δ_D_ext)
-          Δ₀_ext_P (used := St₄.env.usedVars)
-          (fun v hv => Δ_D_ext_none_St₃ v (fun h => hv (St₃_sub_St₄ h)))
-          (fun v hv => St₃_sub_St₄ (vars_used_P_St₃ v hv)) hP_bv_nodup
-          (n := St₄.env.freshvarsc) <;> mvcgen
+        exact wp_bind_throw _ _ _ _
       · exfalso
         apply hP_den_cond
         exact B.denote_exists_of_typing typP Δ_ext Δ_fv_P (@WFTC.wf _ WFTC.of_abstract)
