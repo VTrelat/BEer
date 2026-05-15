@@ -888,24 +888,29 @@ theorem updates_eq_some_of_mem {α β} [DecidableEq α] (xs : List α) (ys : Lis
     (hlen : xs.length = ys.length) (f : α → _root_.Option β) (v : α) (hmem : v ∈ xs) :
     ∃ k : Fin xs.length, xs[k.1] = v ∧
       Function.updates f xs (ys.map _root_.Option.some) v =
-        _root_.Option.some (ys[k.1]'(by rw [←hlen]; exact k.2)) := by
+        _root_.Option.some (ys[k.1]'(by rw [←hlen]; exact k.2)) ∧
+      (∀ j : Fin xs.length, k.1 < j.1 → xs[j.1] ≠ v) := by
   induction xs, ys, hlen using List.reverse_induction₂ generalizing f with
   | nil_nil => exact absurd hmem List.not_mem_nil
   | cons_cons x xs' y ys' hlen' ih =>
     simp only [List.concat_eq_append] at hmem ⊢
     by_cases hvx : v = x
-    · refine ⟨⟨xs'.length, by simp⟩, ?_, ?_⟩
+    · refine ⟨⟨xs'.length, by simp⟩, ?_, ?_, ?_⟩
       · simp [hvx]
       · rw [updates_append_singleton f xs' ys' x y hlen']
         rw [Function.update_apply, if_pos hvx]
         congr 1
         simp [hlen']
+      · intro j hj
+        have hj_lt : j.1 < xs'.length + 1 := by have := j.2; simp at this; omega
+        simp at hj
+        omega
     · have hv_xs' : v ∈ xs' := by
         rcases List.mem_append.mp hmem with h | h
         · exact h
         · exact absurd (List.mem_singleton.mp h) hvx
-      obtain ⟨k, hk_vs, hk_Δ⟩ := ih f hv_xs'
-      refine ⟨⟨k.1, by simp; omega⟩, ?_, ?_⟩
+      obtain ⟨k, hk_vs, hk_Δ, hk_lat⟩ := ih f hv_xs'
+      refine ⟨⟨k.1, by simp; omega⟩, ?_, ?_, ?_⟩
       · show (xs' ++ [x])[k.1]'_ = v
         rw [List.getElem_append_left k.2]
         exact hk_vs
@@ -914,6 +919,19 @@ theorem updates_eq_some_of_mem {α β} [DecidableEq α] (xs : List α) (ys : Lis
         show updates f xs' (List.map some ys') v = some ((ys' ++ [y])[k.1]'_)
         rw [List.getElem_append_left (by rw [←hlen']; exact k.2)]
         exact hk_Δ
+      · intro j hj
+        show (xs' ++ [x])[j.1]'_ ≠ v
+        by_cases hj_lt_xs : j.1 < xs'.length
+        · rw [List.getElem_append_left hj_lt_xs]
+          exact hk_lat ⟨j.1, hj_lt_xs⟩ hj
+        · push_neg at hj_lt_xs
+          rcases j with ⟨jv, jh⟩
+          have jh' : jv < xs'.length + 1 := by simp at jh; exact jh
+          have hj_eq : jv = xs'.length := Nat.le_antisymm (Nat.lt_succ_iff.mp jh') hj_lt_xs
+          subst hj_eq
+          rw [List.getElem_append_right (Nat.le_refl _)]
+          simp only [Nat.sub_self, List.getElem_cons_zero]
+          exact fun h => hvx h.symm
 end Function
 
 def MCH2POG (mchPath : String) : IO System.FilePath := do
