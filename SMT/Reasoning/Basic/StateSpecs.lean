@@ -154,7 +154,8 @@ theorem denote_type_eq_of_typing
     (typ_t : Γ ⊢ˢ t : τ)
     {hcov : SMT.RenamingContext.CoversFV «Δ» t}
     {D : SMT.Dom}
-    (hden : ⟦t.abstract «Δ» hcov⟧ˢ = some D) :
+    (hden : ⟦t.abstract «Δ» hcov⟧ˢ = some D)
+    (hΔΓ : SMT.RenamingContext.RespectsTypeContext «Δ» Γ) :
     D.2.1 = τ := by
   have hτ' := SMT.PHOAS.denote_welltyped_eq
     (den_t := hden)
@@ -162,8 +163,7 @@ theorem denote_type_eq_of_typing
     ?_
   on_goal 2 =>
     use SMT.TypeContext.abstract (Γ := Γ) («Δ» := «Δ»), PHOAS.WFTC.of_abstract, τ
-    · apply PHOAS.Typing.of_abstract
-      exact typ_t
+    · exact PHOAS.Typing.of_abstract _ hΔΓ typ_t
   dsimp at hτ'
   exact hτ'.symm
 

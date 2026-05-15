@@ -655,4 +655,70 @@ theorem denote_type_of_typing
   obtain ⟨D', hD', htyp'⟩ := denote_exists_of_typing htyp hcompat hcov
   rw [hD'] at hden; cases hden; exact htyp'
 
+/-- FV-restricted denotation type equality. Only requires type compatibility on `fv t`. -/
+theorem denote_type_of_typing_fv
+    {Γ : SMT.TypeContext} {t : SMT.Term} {τ : SMTType}
+    (htyp : Γ ⊢ˢ t : τ)
+    {Dc : Context}
+    (hcompat : RespectsTypeContextOnFV Dc Γ t)
+    (hcov : CoversFV Dc t)
+    {D : SMT.Dom}
+    (hden : ⟦t.abstract Dc hcov⟧ˢ = some D) :
+    D.2.1 = τ := by
+  obtain ⟨D', hD', htyp'⟩ := denote_exists_of_typing_fv htyp hcompat hcov
+  have : D' = D := Option.some.inj (hD'.symm.trans hden)
+  exact this ▸ htyp'
+
+/-- Lift a wt-relation across a single `Function.update` / `AList.insert` step. -/
+theorem respects_update_of_wt
+    {Dc : Context} {Γ : SMT.TypeContext} {t : SMT.Term} {v : SMT.𝒱} {τ_v : SMTType} {d : SMT.Dom}
+    (hd_ty : d.snd.fst = τ_v)
+    (Dc_wt : ∀ w (d' : SMT.Dom), Dc w = some d' → ∀ τ, Γ.lookup w = some τ → d'.snd.fst = τ)
+    (hΔ_covers : ∀ w ∈ SMT.fv t, w ≠ v → (Dc w).isSome = true) :
+    RespectsTypeContextOnFV (Function.update Dc v (some d)) (Γ.insert v τ_v) t := by
+  intro w σ hw hlk
+  by_cases hwv : w = v
+  · subst hwv
+    rw [AList.lookup_insert] at hlk
+    cases hlk
+    exact ⟨d, Function.update_self _ _ _, hd_ty⟩
+  · rw [AList.lookup_insert_ne hwv] at hlk
+    obtain ⟨d', hd'⟩ := Option.isSome_iff_exists.mp (hΔ_covers w hw hwv)
+    refine ⟨d', ?_, Dc_wt w d' hd' σ hlk⟩
+    rw [Function.update_of_ne hwv]; exact hd'
+
+/-- Lift a wt-relation across three `Function.update` / `AList.insert` steps. -/
+theorem respects_update3_of_wt
+    {Dc : Context} {Γ : SMT.TypeContext} {t : SMT.Term}
+    {v1 v2 v3 : SMT.𝒱} {τ1 τ2 τ3 : SMTType} {d1 d2 d3 : SMT.Dom}
+    (hd1_ty : d1.snd.fst = τ1) (hd2_ty : d2.snd.fst = τ2) (hd3_ty : d3.snd.fst = τ3)
+    (hv12 : v1 ≠ v2) (hv13 : v1 ≠ v3) (hv23 : v2 ≠ v3)
+    (Dc_wt : ∀ w (d' : SMT.Dom), Dc w = some d' → ∀ τ, Γ.lookup w = some τ → d'.snd.fst = τ)
+    (hΔ_covers : ∀ w ∈ SMT.fv t, w ≠ v1 → w ≠ v2 → w ≠ v3 → (Dc w).isSome = true) :
+    RespectsTypeContextOnFV
+      (Function.update (Function.update (Function.update Dc v1 (some d1)) v2 (some d2)) v3 (some d3))
+      (((Γ.insert v1 τ1).insert v2 τ2).insert v3 τ3) t := by
+  intro w σ hw hlk
+  by_cases hwv3 : w = v3
+  · subst hwv3
+    rw [AList.lookup_insert] at hlk; cases hlk
+    exact ⟨d3, Function.update_self _ _ _, hd3_ty⟩
+  rw [AList.lookup_insert_ne hwv3] at hlk
+  by_cases hwv2 : w = v2
+  · subst hwv2
+    rw [AList.lookup_insert] at hlk; cases hlk
+    refine ⟨d2, ?_, hd2_ty⟩
+    rw [Function.update_of_ne hwv3, Function.update_self]
+  rw [AList.lookup_insert_ne hwv2] at hlk
+  by_cases hwv1 : w = v1
+  · subst hwv1
+    rw [AList.lookup_insert] at hlk; cases hlk
+    refine ⟨d1, ?_, hd1_ty⟩
+    rw [Function.update_of_ne hwv3, Function.update_of_ne hwv2, Function.update_self]
+  rw [AList.lookup_insert_ne hwv1] at hlk
+  obtain ⟨d', hd'⟩ := Option.isSome_iff_exists.mp (hΔ_covers w hw hwv1 hwv2 hwv3)
+  refine ⟨d', ?_, Dc_wt w d' hd' σ hlk⟩
+  rw [Function.update_of_ne hwv3, Function.update_of_ne hwv2, Function.update_of_ne hwv1]
+  exact hd'
+
 end SMT.RenamingContext

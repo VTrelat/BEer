@@ -606,14 +606,6 @@ def RValuation (Ξ : B.𝒱 → Option B.Dom) (Θ : SMT.𝒱 → Option SMT.Dom)
   | some d, some d' => d ≘ᶻ d'
   | _, _ => False
 
-
--- theorem BType_iso_prod_of_iso {α β : BType} : ⟦α⟧ᶻ.funs ⟦β⟧ᶻ ≅ᶻ ⟦α.toSMTType⟧ᶻ.funs ⟦β.toSMTType⟧ᶻ := by
---   have ⟨ζ, ζ_isfunc, ζ_bij⟩ := BType_iso_SMTType α
---   have ⟨ξ, ξ_isfunc, ξ_bij⟩ := BType_iso_SMTType β
---   obtain ⟨Φ_isfunc, Φ_bij⟩ := ZFSet.composition_fprod_Image_bijective (A := ⟦α⟧ᶻ) (B := ⟦β⟧ᶻ) (φ_bij := ζ_bij) (ψ_bij := ξ_bij)
---   exists ?_
---   admit
-
 /--
 Given a renaming context for B variables `Δ : B.𝒱 → Option B.Dom`, a renaming context for SMT
 variables can be constructed isomorphically, so that variables themselves are mapped to isomorphic
@@ -1577,3 +1569,70 @@ theorem denote_update_of_notMem {«Δ» : Context} {t : SMT.Term} {x : SMT.𝒱}
     (h2 := coversFV_update_of_notMem (x := x) (d := d) hx h) hag
 
 end SMT.RenamingContext
+
+namespace B.RenamingContext
+
+/-- FV-restricted type compatibility between a SMT-side context and SMT-side type context,
+indexed by a B-side term's free variables. -/
+abbrev RespectsTypeContextOnFV
+    (Dc : SMT.RenamingContext.Context) (Γ : SMT.TypeContext) (t : B.Term) : Prop :=
+  ∀ ⦃v : SMT.𝒱⦄ ⦃τ : SMTType⦄, v ∈ B.fv t → Γ.lookup v = some τ →
+    ∃ d : SMT.Dom, Dc v = some d ∧ d.2.1 = τ
+
+/-- Transport a full respects on a base type-context across a subset extension,
+restricted to FV of a term whose source-FV is covered by the base context. -/
+theorem RespectsTypeContextOnFV.of_subset_fv_in_base
+    {«Δ» : SMT.RenamingContext.Context} {Λ Λ' : SMT.TypeContext} {t : B.Term}
+    (full : SMT.RenamingContext.RespectsTypeContext «Δ» Λ)
+    (sub : Λ ⊆ Λ')
+    (fv_in : ∀ v ∈ B.fv t, v ∈ Λ) :
+    RespectsTypeContextOnFV «Δ» Λ' t := by
+  intro v σ hv hlk
+  have hv_Λ : v ∈ Λ := fv_in v hv
+  obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_Λ)
+  have hσ'_ext : Λ'.lookup v = some σ' := AList.lookup_of_subset sub hσ'
+  rw [hσ'_ext] at hlk
+  cases hlk
+  exact full hσ'
+
+/-- Restrict FV-respects to a subterm. -/
+theorem RespectsTypeContextOnFV.mono_fv
+    {Dc : SMT.RenamingContext.Context} {Γ : SMT.TypeContext} {t s : B.Term}
+    (resp : RespectsTypeContextOnFV Dc Γ t)
+    (sub_fv : ∀ v ∈ B.fv s, v ∈ B.fv t) :
+    RespectsTypeContextOnFV Dc Γ s := fun _ _ hv hlk => resp (sub_fv _ hv) hlk
+
+/-- Transport FV-respects across a subset extension when FVs of subterm sit in base context. -/
+theorem RespectsTypeContextOnFV.transport_fv
+    {Dc : SMT.RenamingContext.Context} {Γ Γ' : SMT.TypeContext} {t s : B.Term}
+    (resp : RespectsTypeContextOnFV Dc Γ t)
+    (sub_fv : ∀ v ∈ B.fv s, v ∈ B.fv t)
+    (Γ_sub : Γ ⊆ Γ')
+    (fv_in_Γ : ∀ v ∈ B.fv s, v ∈ Γ) :
+    RespectsTypeContextOnFV Dc Γ' s := by
+  intro v σ hv hlk
+  have hv_Γ : v ∈ Γ := fv_in_Γ v hv
+  obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_Γ)
+  have hσ'_Γ' : Γ'.lookup v = some σ' := AList.lookup_of_subset Γ_sub hσ'
+  rw [hσ'_Γ'] at hlk
+  cases hlk
+  exact resp (sub_fv _ hv) hσ'
+
+/-- Inverse of `foldl_insert_preserves_lookup`: if a key is not in the pairs and the folded
+lookup equals `some v`, then so does the base lookup. -/
+theorem foldl_insert_lookup_outside {Γ : SMT.TypeContext} {k : SMT.𝒱} {v : SMTType}
+    {pairs : List (SMT.𝒱 × SMTType)}
+    (hk : ∀ p ∈ pairs, p.1 ≠ k)
+    (hext : (pairs.foldl (fun Γ (p : SMT.𝒱 × SMTType) => AList.insert p.1 p.2 Γ) Γ).lookup k
+      = some v) :
+    Γ.lookup k = some v := by
+  induction pairs generalizing Γ with
+  | nil => exact hext
+  | cons p ps ih =>
+    simp only [List.foldl_cons] at hext
+    have hk_p : p.1 ≠ k := hk p (List.mem_cons_self ..)
+    have h_ins := ih (fun q hq => hk q (List.mem_cons_of_mem _ hq)) hext
+    rw [AList.lookup_insert_ne hk_p.symm] at h_ins
+    exact h_ins
+
+end B.RenamingContext
