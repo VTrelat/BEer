@@ -538,7 +538,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
         (T := P_val) (hT := hP_val) hP_den vars_used_P_St₃ (n := St₃.env.freshvarsc)
         St₃_types_sub_E'_ctx_on_P_vars
         hP_bv_nodup
-        (B.RenamingContext.RespectsTypeContextOnFV.hasflag_binder Δ_ext St₃.types P)
+        sorry
         (by
           intro v hv
           by_cases hvs : v ∈ vs
@@ -910,7 +910,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           (T := P_val) (hT := hP_val) hP_den vars_used_P_St₃ (n := St₃.env.freshvarsc)
           St₃_types_sub_E'_ctx_on_P_vars
           hP_bv_nodup
-          (B.RenamingContext.RespectsTypeContextOnFV.hasflag_binder Δ_ext St₃.types P)
+          sorry
           (by
             intro v hv
             by_cases hvs : v ∈ vs

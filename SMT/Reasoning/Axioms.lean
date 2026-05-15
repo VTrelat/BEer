@@ -128,16 +128,3 @@ axiom SMT.RenamingContext.ExtendsOnSourceFV.wt
   (_ : SMT.RenamingContext.ExtendsOnSourceFV Δ₀ Δ_B t)
   {Γ : SMT.TypeContext} {t' : SMT.Term} {σ : SMT.SMTType} (_ : Γ ⊢ˢ t' : σ) :
   ∀ v (d : SMT.Dom), Δ₀ v = some d → ∀ τ, Γ.lookup v = some τ → d.snd.fst = τ
-
-/-- **Axiom (HAS-FLAG design gap)**: For the HAS-FLAG branch of `all`/`lambda`
-encoding, the binder values supplied through `Function.updates` carry their
-*unflagged* SMT type `(τ.get vs.length i).toSMTType`, while the encoder's type
-context stores the *flagged* SMT type `τs[i]` related to the unflagged type by
-`SMTFlagTypeRel true`. These two SMT types are not equal as expected by
-`RespectsTypeContextOnFV`, so the IH-needed respects predicate cannot be
-proven directly. This axiom witnesses respects-on-`P` for the HAS-FLAG branch,
-encoding the design invariant that the SMT loosening preserves enough type
-agreement at vs-binders for the subsequent `mspec P_ih` to be sound. -/
-axiom B.RenamingContext.RespectsTypeContextOnFV.hasflag_binder
-  («Δ» : B.RenamingContext.Context) (Λ : SMT.TypeContext) (P : B.Term) :
-  B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ P
