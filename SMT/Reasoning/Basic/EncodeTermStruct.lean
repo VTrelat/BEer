@@ -1969,6 +1969,90 @@ theorem encodeTerm_state.fv_toPairl_map_var_subset (zs : List SMT.𝒱) :
       (by rw [List.map_reverse])
   intro v hv; have := h v hv; exact (List.mem_reverse.mp this)
 
+/-- State-only spec for the `mapFinIdxM.go` recursion driving the `all`
+encoder's flag-loosening pass: the body only `pure`s or `throw`s, so the state
+is untouched and the produced list has the same length as the input. A
+structural-only weakening of `AllCaseHelpers.mapFinIdxM_all_body_spec` (which
+also tracks `SMTFlagTypeRel`); copied here because importing that module would
+pollute `mvcgen`'s `@[spec]` set. -/
+theorem encodeTerm_state.mapFinIdxM_go_all_state
+    (vs : List SMT.𝒱) (flags : List SMT.𝒱) (tmp_τs : List SMTType)
+    (hvs_eq : vs.length = tmp_τs.length)
+    (bs : List SMTType) (acc : Array SMTType) (hsize : bs.length + acc.size = tmp_τs.length)
+    {Γ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱} :
+    ⦃ λ ⟨E, Γ'⟩ ↦ ⌜Γ' = Γ ∧ E.freshvarsc = n ∧ E.usedVars = used⌝⦄
+    List.mapFinIdxM.go (as := tmp_τs)
+      (fun i τ hi =>
+        (if vs[i]'(by omega) ∈ flags then
+          (match τ with
+          | .fun (.pair α β) .bool => pure (.fun α (.option β))
+          | .fun α (.option β) => pure (.fun α (.option β))
+          | ξ => throw s!"encodeTerm:all: Unsupported flag type {vs[i]'(by omega)} : {ξ}"
+            : Encoder SMTType)
+        else pure τ))
+      bs acc hsize
+    ⦃ ⇓? τs ⟨E', Γ'⟩ =>
+      ⌜ Γ' = Γ ∧ E'.freshvarsc = n ∧ E'.usedVars = used ∧ τs.length = tmp_τs.length ⌝⦄ := by
+  induction bs generalizing acc Γ n used with
+  | nil =>
+    mintro pre ∀S; mpure pre
+    obtain ⟨rfl, rfl, rfl⟩ := pre
+    simp only [List.mapFinIdxM.go]
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨trivial, trivial, trivial, ?_⟩
+    have h_acc : acc.size = tmp_τs.length := by
+      have := hsize; simp only [List.length_nil, Nat.zero_add] at this; exact this
+    simp [Array.length_toList, h_acc]
+  | cons b bs' ih =>
+    mintro pre ∀S; mpure pre
+    obtain ⟨rfl, rfl, rfl⟩ := pre
+    simp only [List.mapFinIdxM.go]
+    have h_acc_lt : acc.size < tmp_τs.length := by
+      simp only [List.length_cons] at hsize; omega
+    have hsize_cons : bs'.length + 1 + acc.size = tmp_τs.length := by
+      simp only [List.length_cons] at hsize; omega
+    by_cases hf : vs[acc.size]'(by omega) ∈ flags
+    · simp only [hf, if_true]
+      split
+      · rename_i τ_o α₀ β₀
+        have hsize_push : bs'.length + (acc.push (.fun α₀ (.option β₀))).size = tmp_τs.length := by
+          simp only [Array.size_push]; omega
+        mspec Std.Do.Spec.pure
+        mspec (ih (acc.push (.fun α₀ (.option β₀))) hsize_push)
+      · rename_i τ_o α₀ β₀
+        have hsize_push : bs'.length + (acc.push (.fun α₀ (.option β₀))).size = tmp_τs.length := by
+          simp only [Array.size_push]; omega
+        mspec Std.Do.Spec.pure
+        mspec (ih (acc.push (.fun α₀ (.option β₀))) hsize_push)
+      · mspec
+    · simp only [hf, if_false]
+      have hsize_push : bs'.length + (acc.push b).size = tmp_τs.length := by
+        simp only [Array.size_push]; omega
+      mspec Std.Do.Spec.pure
+      mspec (ih (acc.push b) hsize_push)
+
+/-- Top-level state-only spec for the `all` encoder's `mapFinIdxM` flag pass.
+See `mapFinIdxM_go_all_state`. -/
+theorem encodeTerm_state.mapFinIdxM_all_state
+    (vs : List SMT.𝒱) (flags : List SMT.𝒱) (tmp_τs : List SMTType)
+    (hvs_eq : vs.length = tmp_τs.length)
+    {Γ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱} :
+    ⦃ λ ⟨E, Γ'⟩ ↦ ⌜Γ' = Γ ∧ E.freshvarsc = n ∧ E.usedVars = used⌝⦄
+    tmp_τs.mapFinIdxM
+      (fun i τ hi =>
+        (if vs[i]'(by omega) ∈ flags then
+          (match τ with
+          | .fun (.pair α β) .bool => pure (.fun α (.option β))
+          | .fun α (.option β) => pure (.fun α (.option β))
+          | ξ => throw s!"encodeTerm:all: Unsupported flag type {vs[i]'(by omega)} : {ξ}"
+            : Encoder SMTType)
+        else pure τ))
+    ⦃ ⇓? τs ⟨E', Γ'⟩ =>
+      ⌜ Γ' = Γ ∧ E'.freshvarsc = n ∧ E'.usedVars = used ∧ τs.length = tmp_τs.length ⌝⦄ := by
+  unfold List.mapFinIdxM
+  exact encodeTerm_state.mapFinIdxM_go_all_state vs flags tmp_τs hvs_eq tmp_τs #[] (by simp)
+
 set_option maxHeartbeats 4000000 in
 /-- Structural postcondition of `encodeTerm` (no `«Δ»`, no `respects`, no
 `B`-typing, no denotation): state monotonicity, key coverage, source-FV
