@@ -1304,6 +1304,451 @@ theorem castInterAux_state
     mvcgen
 
 set_option maxHeartbeats 4000000 in
+/-- Purely structural specification of `castApp` (no `B`-typing, no `respects`,
+no denotation): given that the free variables of both inputs `f` and `x`
+already live in the type context `Λ`, the application encoding advances
+`freshvarsc`, only grows `usedVars`, keeps `keys ⊆ usedVars`, preserves source
+variables, and the encoded term's free variables stay within the final context.
+Proved by cases on the function/argument types. -/
+theorem castApp_state
+    (f x : SMT.Term) (σf σx : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} :
+    ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
+        ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
+          SMT.fv f ⊆ AList.keys Λ ∧ SMT.fv x ⊆ AList.keys Λ⌝ ⦄
+    castApp (f, σf) (x, σx)
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
+      n ≤ E'.freshvarsc ∧
+      Λ ⊆ Γ' ∧
+      used ⊆ E'.usedVars ∧
+      AList.keys Γ' ⊆ E'.usedVars ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∧
+      (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ⌝⦄ := by
+  unfold castApp
+  mvcgen
+  case vc3.h_2.isTrue =>
+    rename_i hxeq hfeq _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i fpair
+    obtain ⟨fv1, fv1_spec⟩ := fpair
+    mpure pre
+    obtain ⟨fv1_le, fv1_Λ_sub, fv1_fresh, fv1_not_used, fv1_used_sub,
+      fv1_keys_sub, fv1_preserves, fv1_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨_, _, hs_fvc, hs_used, hs_types⟩ := pres
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hs_types, hd_types, hs_used, hd_used, hs_fvc, hd_fvc]
+    have fv1_in : fv1 ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact fv1_le
+    · exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem fv1_fresh) fv1_Λ_sub
+    · exact fv1_used_sub
+    · exact fv1_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with hvfv1 | hvx
+      · exact hvfv1 ▸ fv1_in
+      · exact AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
+    · exact fv1_preserves
+  case vc4.h_2.isFalse.isTrue =>
+    rename_i hxeq hfeq _ _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i xpair
+    obtain ⟨xv1, xv1_spec⟩ := xpair
+    mpure pre
+    obtain ⟨xv1_le, xv1_Λ_sub, xv1_fresh, xv1_not_used, xv1_used_sub,
+      xv1_keys_sub, xv1_preserves, xv1_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨_, _, hs_fvc, hs_used, hs_types⟩ := pres
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hs_types, hd_types, hs_used, hd_used, hs_fvc, hd_fvc]
+    have xv1_in : xv1 ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset xv1_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact xv1_le
+    · exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem xv1_fresh) xv1_Λ_sub
+    · exact xv1_used_sub
+    · exact xv1_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with hvf | hvxv1
+      · exact AList.mem_keys.mp (AList.mem_of_subset xv1_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hf_fv hvf)))))
+      · exact hvxv1 ▸ xv1_in
+    · exact xv1_preserves
+  case vc5.h_3.isTrue =>
+    rename_i hxeq hfeq _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i fpair
+    obtain ⟨fv1, fv1_spec⟩ := fpair
+    mpure pre
+    obtain ⟨fv1_le, fv1_Λ_sub, fv1_fresh, fv1_not_used, fv1_used_sub,
+      fv1_keys_sub, fv1_preserves, fv1_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨_, _, hs_fvc, hs_used, hs_types⟩ := pres
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hs_types, hd_types, hs_used, hd_used, hs_fvc, hd_fvc]
+    have fv1_in : fv1 ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact fv1_le
+    · exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem fv1_fresh) fv1_Λ_sub
+    · exact fv1_used_sub
+    · exact fv1_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with hvfv1 | hvx
+      · exact hvfv1 ▸ fv1_in
+      · exact AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
+    · exact fv1_preserves
+  case vc6.h_3.isFalse.isTrue =>
+    rename_i hxeq hfeq _ _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i xpair
+    obtain ⟨xv1, xv1_spec⟩ := xpair
+    mpure pre
+    obtain ⟨xv1_le, xv1_Λ_sub, xv1_fresh, xv1_not_used, xv1_used_sub,
+      xv1_keys_sub, xv1_preserves, xv1_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨_, _, hs_fvc, hs_used, hs_types⟩ := pres
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hs_types, hd_types, hs_used, hd_used, hs_fvc, hd_fvc]
+    have xv1_in : xv1 ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset xv1_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact xv1_le
+    · exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem xv1_fresh) xv1_Λ_sub
+    · exact xv1_used_sub
+    · exact xv1_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with hvf | hvxv1
+      · exact AList.mem_keys.mp (AList.mem_of_subset xv1_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hf_fv hvf)))))
+      · exact hvxv1 ▸ xv1_in
+    · exact xv1_preserves
+  case vc1.h_1.isTrue =>
+    rename_i hxeq hfeq _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i fpair
+    obtain ⟨fv1, fv1_spec⟩ := fpair
+    mpure pre
+    obtain ⟨fv1_le, fv1_Λ_sub, fv1_fresh, fv1_not_used, fv1_used_sub,
+      fv1_keys_sub, fv1_preserves, fv1_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨_, _, hs_fvc, hs_used, hs_types⟩ := pres
+    mspec SMT.freshVar_spec
+    mrename_i pre2
+    mintro ∀St₂
+    rename_i ff
+    mpure pre2
+    obtain ⟨St₂_types_eq, ff_fresh, St₂_fvc, St₂_used_eq, ff_not_used⟩ := pre2
+    rw [hs_types, hd_types] at St₂_types_eq ff_fresh
+    rw [hs_used, hd_used] at St₂_used_eq ff_not_used
+    rw [hs_fvc, hd_fvc] at St₂_fvc
+    mspec SMT.declareConst_spec
+    mrename_i pred2
+    mintro ∀St₂d
+    mpure pred2
+    obtain ⟨_, _, hd2_fvc, hd2_used, hd2_types⟩ := pred2
+    mspec SMT.freshVar_spec
+    mrename_i pre3
+    mintro ∀St₃
+    rename_i u_var
+    mpure pre3
+    obtain ⟨St₃_types_eq, u_fresh, St₃_fvc, St₃_used_eq, u_not_used⟩ := pre3
+    rw [hd2_types] at St₃_types_eq u_fresh
+    rw [hd2_used] at St₃_used_eq u_not_used
+    rw [hd2_fvc] at St₃_fvc
+    mspec SMT.freshVar_spec
+    mrename_i pre4
+    mintro ∀St₄
+    rename_i v_var
+    mpure pre4
+    obtain ⟨St₄_types_eq, v_fresh, St₄_fvc, St₄_used_eq, v_not_used⟩ := pre4
+    mspec SMT.addSpec_spec
+    mrename_i pres2
+    mintro ∀St₄s
+    mpure pres2
+    obtain ⟨_, _, hs2_fvc, hs2_used, hs2_types⟩ := pres2
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    -- Membership of the freshly-declared `ff` in each state's types.
+    have ff_in_St₂ : ff ∈ AList.keys St₂.types := by
+      rw [St₂_types_eq]
+      exact AList.mem_keys.mp (AList.mem_insert _ |>.mpr (Or.inl rfl))
+    have St₂_into_St₃ : AList.keys St₂.types ⊆ AList.keys St₃.types := by
+      intro w hw
+      rw [← AList.mem_keys, St₃_types_eq, AList.mem_insert]
+      exact Or.inr (AList.mem_keys.mp hw)
+    have St₃_into_St₄ : AList.keys St₃.types ⊆ AList.keys St₄.types := by
+      intro w hw
+      rw [← AList.mem_keys, St₄_types_eq, AList.mem_insert]
+      exact Or.inr (AList.mem_keys.mp hw)
+    have ff_in_St₄ : ff ∈ AList.keys St₄.types :=
+      St₃_into_St₄ (St₂_into_St₃ ff_in_St₂)
+    and_intros
+    · rw [hs2_fvc, St₄_fvc, St₃_fvc, St₂_fvc]
+      exact le_trans fv1_le (Nat.le_succ_of_le (Nat.le_succ_of_le (Nat.le_succ _)))
+    · rw [hs2_types]
+      have h12 : St₁.types ⊆ St₂.types :=
+        St₂_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem ff_fresh
+      have h23 : St₂.types ⊆ St₃.types :=
+        St₃_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem u_fresh
+      have h34 : St₃.types ⊆ St₄.types :=
+        St₄_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem v_fresh
+      exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem fv1_fresh)
+        (AList.subset_trans fv1_Λ_sub
+          (AList.subset_trans h12 (AList.subset_trans h23 h34)))
+    · rw [hs2_used, St₄_used_eq, St₃_used_eq, St₂_used_eq]
+      intro w hw
+      exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+        (List.mem_cons_of_mem _ (fv1_used_sub hw)))
+    · rw [hs2_types, hs2_used, St₄_types_eq, St₄_used_eq, St₃_types_eq, St₃_used_eq,
+        St₂_types_eq, St₂_used_eq]
+      exact keys_insert_subset_cons (keys_insert_subset_cons
+        (keys_insert_subset_cons fv1_keys_sub))
+    · rw [hs2_types]
+      intro w hw
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
+      rcases hw with hwff | hwx
+      · exact hwff ▸ ff_in_St₄
+      · have hx_in_St₁ : w ∈ AList.keys St₁.types :=
+          AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hwx)))))
+        have hx_in_St₂ : w ∈ AList.keys St₂.types := by
+          rw [← AList.mem_keys, St₂_types_eq, AList.mem_insert]
+          exact Or.inr (AList.mem_keys.mp hx_in_St₁)
+        exact St₃_into_St₄ (St₂_into_St₃ hx_in_St₂)
+    · rw [hs2_types]
+      intro w hw hΛ
+      have hw_St₁ : w ∉ St₁.types := fv1_preserves w hw hΛ
+      have hw_St₂used : w ∈ St₂.env.usedVars :=
+        St₂_used_eq ▸ List.mem_cons_of_mem ff (fv1_used_sub hw)
+      have hw_St₃used : w ∈ St₃.env.usedVars :=
+        St₃_used_eq ▸ List.mem_cons_of_mem u_var hw_St₂used
+      have hw_ne_ff : w ≠ ff := fun h => ff_not_used (h ▸ fv1_used_sub hw)
+      have hw_ne_u : w ≠ u_var := fun h => u_not_used (h ▸ hw_St₂used)
+      have hw_ne_v : w ≠ v_var := fun h => v_not_used (h ▸ hw_St₃used)
+      intro hw_in
+      rw [St₄_types_eq, AList.mem_insert] at hw_in
+      rcases hw_in with rfl | hw_in
+      · exact hw_ne_v rfl
+      · rw [St₃_types_eq, AList.mem_insert] at hw_in
+        rcases hw_in with rfl | hw_in
+        · exact hw_ne_u rfl
+        · rw [St₂_types_eq, AList.mem_insert] at hw_in
+          rcases hw_in with rfl | hw_in
+          · exact hw_ne_ff rfl
+          · exact hw_St₁ hw_in
+  case vc2.h_1.isFalse.isTrue =>
+    rename_i hxeq hfeq _ _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i xpair
+    obtain ⟨fv1, fv1_spec⟩ := xpair
+    mpure pre
+    obtain ⟨fv1_le, fv1_Λ_sub, fv1_fresh, fv1_not_used, fv1_used_sub,
+      fv1_keys_sub, fv1_preserves, fv1_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨_, _, hs_fvc, hs_used, hs_types⟩ := pres
+    mspec SMT.freshVar_spec
+    mrename_i pre2
+    mintro ∀St₂
+    rename_i ff
+    mpure pre2
+    obtain ⟨St₂_types_eq, ff_fresh, St₂_fvc, St₂_used_eq, ff_not_used⟩ := pre2
+    rw [hs_types, hd_types] at St₂_types_eq ff_fresh
+    rw [hs_used, hd_used] at St₂_used_eq ff_not_used
+    rw [hs_fvc, hd_fvc] at St₂_fvc
+    mspec SMT.declareConst_spec
+    mrename_i pred2
+    mintro ∀St₂d
+    mpure pred2
+    obtain ⟨_, _, hd2_fvc, hd2_used, hd2_types⟩ := pred2
+    mspec SMT.freshVar_spec
+    mrename_i pre3
+    mintro ∀St₃
+    rename_i u_var
+    mpure pre3
+    obtain ⟨St₃_types_eq, u_fresh, St₃_fvc, St₃_used_eq, u_not_used⟩ := pre3
+    rw [hd2_types] at St₃_types_eq u_fresh
+    rw [hd2_used] at St₃_used_eq u_not_used
+    rw [hd2_fvc] at St₃_fvc
+    mspec SMT.freshVar_spec
+    mrename_i pre4
+    mintro ∀St₄
+    rename_i v_var
+    mpure pre4
+    obtain ⟨St₄_types_eq, v_fresh, St₄_fvc, St₄_used_eq, v_not_used⟩ := pre4
+    mspec SMT.addSpec_spec
+    mrename_i pres2
+    mintro ∀St₄s
+    mpure pres2
+    obtain ⟨_, _, hs2_fvc, hs2_used, hs2_types⟩ := pres2
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    have fv1_in_St₁ : fv1 ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    have ff_in_St₂ : ff ∈ AList.keys St₂.types := by
+      rw [St₂_types_eq]
+      exact AList.mem_keys.mp (AList.mem_insert _ |>.mpr (Or.inl rfl))
+    have St₁_into_St₂ : AList.keys St₁.types ⊆ AList.keys St₂.types := by
+      intro w hw
+      rw [← AList.mem_keys, St₂_types_eq, AList.mem_insert]
+      exact Or.inr (AList.mem_keys.mp hw)
+    have St₂_into_St₃ : AList.keys St₂.types ⊆ AList.keys St₃.types := by
+      intro w hw
+      rw [← AList.mem_keys, St₃_types_eq, AList.mem_insert]
+      exact Or.inr (AList.mem_keys.mp hw)
+    have St₃_into_St₄ : AList.keys St₃.types ⊆ AList.keys St₄.types := by
+      intro w hw
+      rw [← AList.mem_keys, St₄_types_eq, AList.mem_insert]
+      exact Or.inr (AList.mem_keys.mp hw)
+    have fv1_in_St₄ : fv1 ∈ AList.keys St₄.types :=
+      St₃_into_St₄ (St₂_into_St₃ (St₁_into_St₂ fv1_in_St₁))
+    have ff_in_St₄ : ff ∈ AList.keys St₄.types :=
+      St₃_into_St₄ (St₂_into_St₃ ff_in_St₂)
+    and_intros
+    · rw [hs2_fvc, St₄_fvc, St₃_fvc, St₂_fvc]
+      exact le_trans fv1_le (Nat.le_succ_of_le (Nat.le_succ_of_le (Nat.le_succ _)))
+    · rw [hs2_types]
+      have h12 : St₁.types ⊆ St₂.types :=
+        St₂_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem ff_fresh
+      have h23 : St₂.types ⊆ St₃.types :=
+        St₃_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem u_fresh
+      have h34 : St₃.types ⊆ St₄.types :=
+        St₄_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem v_fresh
+      exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem fv1_fresh)
+        (AList.subset_trans fv1_Λ_sub
+          (AList.subset_trans h12 (AList.subset_trans h23 h34)))
+    · rw [hs2_used, St₄_used_eq, St₃_used_eq, St₂_used_eq]
+      intro w hw
+      exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+        (List.mem_cons_of_mem _ (fv1_used_sub hw)))
+    · rw [hs2_types, hs2_used, St₄_types_eq, St₄_used_eq, St₃_types_eq, St₃_used_eq,
+        St₂_types_eq, St₂_used_eq]
+      exact keys_insert_subset_cons (keys_insert_subset_cons
+        (keys_insert_subset_cons fv1_keys_sub))
+    · rw [hs2_types]
+      intro w hw
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
+      rcases hw with hwff | hwfv1
+      · exact hwff ▸ ff_in_St₄
+      · exact hwfv1 ▸ fv1_in_St₄
+    · rw [hs2_types]
+      intro w hw hΛ
+      have hw_St₁ : w ∉ St₁.types := fv1_preserves w hw hΛ
+      have hw_St₂used : w ∈ St₂.env.usedVars :=
+        St₂_used_eq ▸ List.mem_cons_of_mem ff (fv1_used_sub hw)
+      have hw_St₃used : w ∈ St₃.env.usedVars :=
+        St₃_used_eq ▸ List.mem_cons_of_mem u_var hw_St₂used
+      have hw_ne_ff : w ≠ ff := fun h => ff_not_used (h ▸ fv1_used_sub hw)
+      have hw_ne_u : w ≠ u_var := fun h => u_not_used (h ▸ hw_St₂used)
+      have hw_ne_v : w ≠ v_var := fun h => v_not_used (h ▸ hw_St₃used)
+      intro hw_in
+      rw [St₄_types_eq, AList.mem_insert] at hw_in
+      rcases hw_in with rfl | hw_in
+      · exact hw_ne_v rfl
+      · rw [St₃_types_eq, AList.mem_insert] at hw_in
+        rcases hw_in with rfl | hw_in
+        · exact hw_ne_u rfl
+        · rw [St₂_types_eq, AList.mem_insert] at hw_in
+          rcases hw_in with rfl | hw_in
+          · exact hw_ne_ff rfl
+          · exact hw_St₁ hw_in
+
+set_option maxHeartbeats 4000000 in
 /-- Structural postcondition of `encodeTerm` (no `«Δ»`, no `respects`, no
 `B`-typing, no denotation): state monotonicity, key coverage, source-FV
 coverage, encoded-term FV coverage, and variable preservation. -/
@@ -3219,7 +3664,73 @@ theorem encodeTerm_state
                   · exact hv_not_ctx hv_in
       · mvcgen
     · mvcgen
-  | app f x f_ih x_ih => sorry
+  | app f x f_ih x_ih =>
+    mstart
+    mintro pre ∀σ
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+    rw [encodeTerm]
+    have hf_bv_nodup : (B.bv f).Nodup := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
+    have hx_bv_nodup : (B.bv x).Nodup := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have vars_used_f : ∀ v ∈ f.vars, v ∈ used := fun v hv => vars_used v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inr h)
+    mspec f_ih (E := E) (Λ := σ.types) vars_used_f hf_bv_nodup
+    clear f_ih
+    rename_i out_f
+    obtain ⟨f_enc, σf⟩ := out_f
+    mrename_i pre
+    mintro ∀σ_f
+    mpure pre
+    obtain ⟨f_used_sub, f_Λ_sub, f_keys_sub, f_cov, f_fv_sub, f_preserves⟩ := pre
+    mspec x_ih (E := E) (Λ := σ_f.types) (used := σ_f.env.usedVars)
+      (fun v hv => f_used_sub (vars_used_x v hv)) hx_bv_nodup
+    clear x_ih
+    rename_i out_x
+    obtain ⟨x_enc, σx⟩ := out_x
+    mrename_i pre
+    mintro ∀σ_x
+    mpure pre
+    obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := pre
+    mspec castApp_state
+    case pre =>
+      mpure_intro
+      refine ⟨trivial, trivial, x_keys_sub, rfl, ?_, ?_⟩
+      · intro v hv
+        exact AList.mem_keys.mp (AList.mem_of_subset x_Λ_sub
+          (AList.mem_keys.mpr (f_fv_sub hv)))
+      · intro v hv
+        exact x_fv_sub hv
+    case post.success =>
+      mrename_i hpost
+      mintro ∀σ'
+      mpure hpost
+      obtain ⟨h_le, h_Λ_sub, h_used_sub, h_keys_sub, h_fv_sub, h_preserves⟩ := hpost
+      mpure_intro
+      and_intros
+      · exact fun v hv => h_used_sub (x_used_sub (f_used_sub hv))
+      · exact AList.subset_trans (AList.subset_trans f_Λ_sub x_Λ_sub) h_Λ_sub
+      · exact h_keys_sub
+      · intro v hv
+        rw [B.fv, List.mem_append] at hv
+        rcases hv with hv | hv
+        · exact h_used_sub (x_used_sub (f_cov v hv))
+        · exact h_used_sub (x_cov v hv)
+      · exact h_fv_sub
+      · intro v hv hΛ hvars
+        have hvf : v ∉ B.Term.vars f := fun h => hvars (by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
+          rcases h with h | h <;> [left; right] <;> exact .inl h)
+        have hvx : v ∉ B.Term.vars x := fun h => hvars (by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
+          rcases h with h | h <;> [left; right] <;> exact .inr h)
+        exact h_preserves v (x_used_sub (f_used_sub hv))
+          (x_preserves v (f_used_sub hv) (f_preserves v hv hΛ hvf) hvx)
   | collect vs D P D_ih P_ih => sorry
   | all vs D P D_ih P_ih => sorry
   | lambda vs D P D_ih P_ih => sorry
