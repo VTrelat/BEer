@@ -37,7 +37,7 @@ theorem default_type_correct {𝒱} [DecidableEq 𝒱] {Γ : PHOAS.TypeContext �
   | bool => apply PHOAS.Typing.bool
   | int => apply PHOAS.Typing.int
   | unit => apply PHOAS.Typing.«()»
-  | «fun» τ σ τ_ih σ_ih => apply PHOAS.Typing.lambda _ _ _ _ (fun _ _ _ ↦ σ_ih) Nat.one_pos
+  | «fun» τ σ τ_ih σ_ih => apply PHOAS.Typing.lambda _ _ _ _ (fun _ _ ↦ σ_ih) Nat.one_pos
   | option τ ih => apply PHOAS.Typing.none
   | pair α β α_ih β_ih => apply PHOAS.Typing.pair _ _ _ _ _ α_ih β_ih
 
@@ -105,6 +105,17 @@ set_option hygiene false
 local notation "⟦" t "⟧ˢ" => denote t
 
 abbrev Dom := Σ' (x : ZFSet) (τ : SMTType), x ∈ τ.toZFSet
+
+instance instHasTypeDom : SMT.PHOAS.HasType Dom where
+  type := (·.2.1)
+
+@[simp]
+theorem PHOAS.HasType.type_Dom (d : Dom) : SMT.PHOAS.HasType.type d = d.2.1 := rfl
+
+instance instRichHasTypeDom : SMT.PHOAS.RichHasType Dom where
+  rep τ := ⟨τ.defaultZFSet, τ, SMTType.mem_toZFSet_of_defaultZFSet⟩
+  rep_type _ := rfl
+
 instance : Inhabited Dom := ⟨ZFSet.ofInt 0, .int, ZFSet.mem_ofInt_Int 0⟩
 
 open Classical SMT.PHOAS in
