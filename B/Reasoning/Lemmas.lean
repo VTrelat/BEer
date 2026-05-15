@@ -1272,6 +1272,21 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
           exact Typing.all vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_Ds_len typ_Dᵢ typP
 
 
+theorem B.simplifier_reduce_cprod (D : List B.Term) (hD : D ≠ []) :
+  B.simplifier (List.reduce (· ⨯ᴮ ·) D hD) =
+    List.reduce (· ⨯ᴮ ·) (D.map B.simplifier) (by simpa using hD) := by
+  obtain ⟨D₀, D, rfl⟩ := List.ne_nil_iff_exists_cons.mp hD
+  induction D generalizing D₀ with
+  | nil =>
+    simp only [List.reduce, List.map_cons, List.map_nil, List.head_cons, List.tail_cons,
+      List.foldl_nil]
+  | cons D₁ D ih =>
+    simp only [List.reduce, List.map_cons, List.head_cons, List.tail_cons, List.foldl_cons]
+    have := ih (D₀ ⨯ᴮ D₁) (List.cons_ne_nil _ _)
+    simp only [List.reduce, List.map_cons, List.head_cons, List.tail_cons] at this
+    rw [this]
+    rfl
+
 theorem B.Typing.simplifier {Γ : B.TypeContext} {x : B.Term} {τ : BType} (h : Γ ⊢ᴮ x : τ) :
   Γ ⊢ᴮ simplifier x : τ := by
   induction h with
@@ -1505,9 +1520,17 @@ theorem B.Typing.simplifier {Γ : B.TypeContext} {x : B.Term} {τ : BType} (h : 
 
       admit -- induction D
     · admit -- induction vs
-  | all vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
-  | lambda vs_nemp vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
-  | app _ _ _ _ => sorry
+  | all vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
+  | lambda vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih =>
+    unfold B.simplifier
+    rw [B.simplifier_reduce_cprod]
+    apply B.Typing.lambda vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rw [List.length_map]; exact vs_D_len) _ typP_ih
+    intro i h
+    simp only [List.get_eq_getElem, List.getElem_map]
+    exact typD_ih i (by rwa [List.length_map] at h)
+  | app _ _ f_ih x_ih =>
+    unfold B.simplifier
+    exact B.Typing.app f_ih x_ih
 
 theorem Term.abstract.go.alt_def (vs : List 𝒱) (P : B.Term) {«Δ» : 𝒱 → Option B.Dom}
   (Δ_isSome : ∀ v ∈ fv P, v ∉ vs → («Δ» v).isSome = true) {ys : List Dom}
