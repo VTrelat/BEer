@@ -2130,6 +2130,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
         ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x)
+          (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x)
           (pf₀ : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ₀» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
@@ -2174,7 +2175,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                                                               true⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun SMTType.bool)
   (hx : RenamingContext.CoversFV «Δ» x)
-  (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ) :
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃fun x =>
     match x with
     | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -2243,8 +2244,19 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
         rw [fv, List.mem_singleton] at hv
         subst hv
         simp [Function.update]
+      have respects_var_z :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δz St₃.types (.var z) := by
+        intro v σ hv hlk
+        rw [SMT.fv, List.mem_singleton] at hv
+        subst hv
+        cases typ_var_z_St₃ with
+        | var _ _ _ h_lookup_z =>
+          rw [hlk] at h_lookup_z
+          cases h_lookup_z
+          refine ⟨⟨α.defaultZFSet, α, SMTType.mem_toZFSet_of_defaultZFSet⟩, ?_, rfl⟩
+          simp [Δz]
       have ih_var_z := ih (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-        (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δz hcov_var_z pf_var_z
+        (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δz hcov_var_z respects_var_z pf_var_z
       have run_var_z_spec :
           ⦃fun st => ⌜st = St₃⌝⦄
             loosenAux_prf s!"{name}_char_pred" p (.var z)
@@ -2412,7 +2424,8 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               · exact (hv_ne_z (by simpa [fv] using hvz)).elim
               · exact (hv_ne_z! (List.mem_singleton.mp hvz!)).elim
         · intro X denx
-          have hX_ty : X.snd.fst = α.fun SMTType.bool := denote_type_eq_of_typing typ_x denx (hΔΓ := respects)
+          have hX_ty : X.snd.fst = α.fun SMTType.bool :=
+            SMT.RenamingContext.denote_type_of_typing_fv typ_x respects hx denx
           have hX_mem : X.fst ∈ ⟦α.fun SMTType.bool⟧ᶻ := by
             simpa [hX_ty] using X.snd.snd
           have x!_not_mem_fv_x : x! ∉ SMT.fv x := by
@@ -2477,8 +2490,18 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               rw [fv, List.mem_singleton] at hv
               subst hv
               simp [Function.update]
+            have respects_var_z_x₀ :
+                SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ St₃.types (.var z) := by
+              intro v σ hv hlk
+              rw [SMT.fv, List.mem_singleton] at hv
+              subst hv
+              cases typ_var_z_St₃ with
+              | var _ _ _ h_lookup_z =>
+                rw [hlk] at h_lookup_z
+                cases h_lookup_z
+                exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
             have ih_var_z_x₀ := ih (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δx₀ hcov_var_z_x₀ pf_var_z_x₀
+              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δx₀ hcov_var_z_x₀ respects_var_z_x₀ pf_var_z_x₀
             have post_x₀ := ih_var_z_x₀ St₃ (by
               dsimp
               refine ⟨rfl, rfl, ?_, rfl⟩
@@ -2535,9 +2558,20 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               rw [fv, List.mem_singleton] at hv
               subst hv
               simp [Function.update]
+            have respects_var_z_x₀ :
+                SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ St₃.types (.var z) := by
+              intro v σ hv hlk
+              rw [SMT.fv, List.mem_singleton] at hv
+              subst hv
+              cases typ_var_z_St₃ with
+              | var _ _ _ h_lookup_z =>
+                rw [hlk] at h_lookup_z
+                cases h_lookup_z
+                exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
             have exact_var_z_x₀ := loosenAux_prf_exact
               (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ p Δx₀ hcov_var_z_x₀ sorry
+              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ p Δx₀ hcov_var_z_x₀
+              respects_var_z_x₀
             have post_x₀ := exact_var_z_x₀ St₃ (by
               dsimp
               refine ⟨rfl, rfl, ?_, rfl⟩

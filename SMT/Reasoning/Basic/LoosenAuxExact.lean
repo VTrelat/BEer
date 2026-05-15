@@ -18,7 +18,7 @@ theorem loosenAux_prf_exact
   (typ_x : Λ ⊢ˢ x : α) (𝕔 : α ~> β)
   («Δ» : RenamingContext.Context)
   (hx : RenamingContext.CoversFV «Δ» x)
-  (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ) :
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃ fun ⟨E, Λ'⟩ => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ Λ'.keys ⊆ E.usedVars ∧ E.usedVars = used⌝ ⦄
     loosenAux_prf name 𝕔 x
   ⦃ ⇓? ⟨x!, x!_spec⟩ ⟨E', Γ'⟩ =>
@@ -57,7 +57,9 @@ theorem loosenAux_prf_exact
       exact loosenAux_prf_exact.refl «Δ» hα typ_x hx pf respects
   | @pair α β α' β' pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
-      exact loosenAux_prf_exact.pair «Δ» pα pβ pf (fun ht hx' => pα_ih ht «Δ» hx' sorry pf) (fun ht hx' => pβ_ih ht «Δ» hx' sorry pf) typ_x hx respects
+      exact loosenAux_prf_exact.pair «Δ» pα pβ pf
+        (fun ht hx' hresp => pα_ih ht «Δ» hx' hresp pf)
+        (fun ht hx' hresp => pβ_ih ht «Δ» hx' hresp pf) typ_x hx respects
   | @opt α α' hα ih =>
       intro «Δ» hx respects pf
       exact loosenAux_prf_exact.opt «Δ» pf hα ih typ_x hx respects
@@ -66,7 +68,7 @@ theorem loosenAux_prf_exact
       exact loosenAux_prf_exact.chpred «Δ» pf p ih typ_x hx respects
   | @graph α β α' β' pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
-      apply loosenAux_prf_exact.graph pα pβ pα_ih pβ_ih typ_x
+      apply loosenAux_prf_exact.graph pα pβ pα_ih pβ_ih typ_x «Δ» hx respects pf
   | @«fun» α β α' β' hβ pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
       exact loosenAux_prf_exact.fun hβ pα pβ pα_ih pβ_ih typ_x «Δ» hx pf

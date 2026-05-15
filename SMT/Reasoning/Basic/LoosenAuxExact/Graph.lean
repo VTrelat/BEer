@@ -185,7 +185,7 @@ private abbrev GraphOuterIH.{u}
   ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
     Λ ⊢ˢ x : τ →
       ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
-        SMT.RenamingContext.RespectsTypeContext «Δ₀» Λ →
+        SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x →
       ∀ (pf₀ : GraphPf «Δ₀»),
         ⦃fun x =>
           match x with
@@ -243,7 +243,7 @@ private abbrev GraphExactOuterIH.{u}
   ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
     Λ ⊢ˢ x : τ →
       ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
-        SMT.RenamingContext.RespectsTypeContext «Δ₀» Λ →
+        SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x →
       ∀ (pf₀ : GraphPf «Δ₀»),
         ⦃fun x =>
           match x with
@@ -365,12 +365,12 @@ private theorem graphWeakenExactIH.{u}
     {τ τ' : SMTType} {p : τ ⇝ τ'}
     (p_ih : GraphExactOuterIH.{u} p) :
     GraphOuterIH.{u} p := by
-  intro Λ n used name x htyp Δ₀ hx _respects pf₀
+  intro Λ n used name x htyp Δ₀ hx hresp pf₀
   mintro pre ∀st
   mpure pre
   mspec (p_ih
     (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-    htyp Δ₀ hx sorry pf₀)
+    htyp Δ₀ hx hresp pf₀)
   rename_i out
   obtain ⟨x!, x!_spec⟩ := out
   mrename_i pre
@@ -2749,12 +2749,23 @@ private theorem graphDenZAt.{u}
     subst hv
     rw [Function.update_self]
     rfl
+  have respects_var_z_x₀ :
+      SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ St₃.types (.var z) := by
+    intro v σ hv hlk
+    rw [SMT.fv, List.mem_singleton] at hv
+    subst hv
+    cases typ_var_z_St₃ with
+    | var _ _ _ h_lookup_z =>
+      rw [hlk] at h_lookup_z
+      cases h_lookup_z
+      exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
   have ih_pair_z_x₀ := loosenAux_prf_spec.pair
     (Δx₀) (pα := pα) (pβ := pβ) pf_var_z_x₀
-    (fun {Λ} {n} {used} {name} {x} htyp hx' => pα_ih htyp Δx₀ hx' sorry pf_var_z_x₀)
-    (fun {Λ} {n} {used} {name} {x} htyp hx' => pβ_ih htyp Δx₀ hx' sorry pf_var_z_x₀)
+    (fun {Λ} {n} {used} {name} {x} htyp hx' hresp => pα_ih htyp Δx₀ hx' hresp pf_var_z_x₀)
+    (fun {Λ} {n} {used} {name} {x} htyp hx' hresp => pβ_ih htyp Δx₀ hx' hresp pf_var_z_x₀)
     (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀ sorry
+    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀
+    respects_var_z_x₀
   have post_x₀ := ih_pair_z_x₀ St₃ <|
     graphPairVarPre sub St₂_types_eq St₂_used_eq St₃_types_eq St₃_used_eq
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post_x₀
@@ -2819,7 +2830,8 @@ private theorem graphDenZExactAt.{u}
   have pα_ih_x₀ :
       ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
         Λ ⊢ˢ x : α →
-          ∀ (hx : RenamingContext.CoversFV Δx₀ x),
+          ∀ (hx : RenamingContext.CoversFV Δx₀ x)
+            (_ : SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ Λ x),
             ⦃fun x =>
               match x with
               | { env := E, types := Λ' } =>
@@ -2879,14 +2891,15 @@ private theorem graphDenZExactAt.{u}
                                                                   ΦY.fst = zftrue →
                                                                     X.fst.pair Y.fst ∈
                                                                       (castZF_of_path pα).1⌝⦄ := by
-    intro Λ n used name x htyp hx
+    intro Λ n used name x htyp hx hresp
     exact pα_ih
       (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-      htyp Δx₀ hx sorry pf_var_z_x₀
+      htyp Δx₀ hx hresp pf_var_z_x₀
   have pβ_ih_x₀ :
       ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
         Λ ⊢ˢ x : β →
-          ∀ (hx : RenamingContext.CoversFV Δx₀ x),
+          ∀ (hx : RenamingContext.CoversFV Δx₀ x)
+            (_ : SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ Λ x),
             ⦃fun x =>
               match x with
               | { env := E, types := Λ' } =>
@@ -2946,14 +2959,25 @@ private theorem graphDenZExactAt.{u}
                                                                   ΦY.fst = zftrue →
                                                                     X.fst.pair Y.fst ∈
                                                                       (castZF_of_path pβ).1⌝⦄ := by
-    intro Λ n used name x htyp hx
+    intro Λ n used name x htyp hx hresp
     exact pβ_ih
       (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-      htyp Δx₀ hx sorry pf_var_z_x₀
+      htyp Δx₀ hx hresp pf_var_z_x₀
+  have respects_var_z_x₀ :
+      SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ St₃.types (.var z) := by
+    intro v σ hv hlk
+    rw [SMT.fv, List.mem_singleton] at hv
+    subst hv
+    cases typ_var_z_St₃ with
+    | var _ _ _ h_lookup_z =>
+      rw [hlk] at h_lookup_z
+      cases h_lookup_z
+      exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
   have exact_var_z_x₀ := loosenAux_prf_exact.pair
     (Δx₀) (pα := pα) (pβ := pβ) pf_var_z_x₀ pα_ih_x₀ pβ_ih_x₀
     (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀ sorry
+    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀
+    respects_var_z_x₀
   have post_x₀ := exact_var_z_x₀ St₃ <|
     graphPairVarPre sub St₂_types_eq St₂_used_eq St₃_types_eq St₃_used_eq
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post_x₀
@@ -4161,7 +4185,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
         ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
-          SMT.RenamingContext.RespectsTypeContext «Δ» Λ →
+          SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
         ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
@@ -4214,7 +4238,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : β →
         ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
-          SMT.RenamingContext.RespectsTypeContext «Δ» Λ →
+          SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
         ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
@@ -4265,6 +4289,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
                                                                     X.fst.pair Y.fst ∈ ↑(castZF_of_path pβ).1⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun β.option)
   («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x)
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x)
   (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true) :
   ⦃fun x =>
     match x with
@@ -4352,18 +4377,30 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
         subst hv
         rw [Function.update_self]
         rfl
+      have respects_var_z :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δz St₃.types (.var z) := by
+        intro v σ hv hlk
+        rw [SMT.fv, List.mem_singleton] at hv
+        subst hv
+        cases typ_var_z_St₃ with
+        | var _ _ _ h_lookup_z =>
+          rw [hlk] at h_lookup_z
+          cases h_lookup_z
+          refine ⟨⟨α.defaultZFSet.pair β.defaultZFSet, α.pair β, hdefault_pair⟩, ?_, rfl⟩
+          simp [Δz]
       have ih_pair_z := loosenAux_prf_spec.pair
         (Δz) (pα := pα) (pβ := pβ) pf_var_z
-        (fun {Λ} {n} {used} {name} {x} htyp hx =>
+        (fun {Λ} {n} {used} {name} {x} htyp hx hresp =>
           pα_ih_spec
             (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-            htyp Δz hx sorry pf_var_z)
-        (fun {Λ} {n} {used} {name} {x} htyp hx =>
+            htyp Δz hx hresp pf_var_z)
+        (fun {Λ} {n} {used} {name} {x} htyp hx hresp =>
           pβ_ih_spec
             (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-            htyp Δz hx sorry pf_var_z)
+            htyp Δz hx hresp pf_var_z)
         (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-        (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z sorry
+        (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z
+        respects_var_z
       mspec (Std.Do.Triple.and _
         (graphRunPairVarSpec (pα := pα) (pβ := pβ) (name := name) (z := z) (St₃ := St₃))
         ih_pair_z)
@@ -4528,7 +4565,8 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
                 exact (hv_ne_z hvz).elim
               · exact (hv_ne_z! (List.mem_singleton.mp hvz!)).elim
         · intro X denx
-          have hX_ty : X.snd.fst = α.fun β.option := denote_type_eq_of_typing typ_x denx sorry
+          have hX_ty : X.snd.fst = α.fun β.option :=
+            SMT.RenamingContext.denote_type_of_typing_fv typ_x respects hx denx
           have hX_mem : X.fst ∈ ⟦α.fun β.option⟧ᶻ := by
             rw [← hX_ty]
             exact X.snd.snd

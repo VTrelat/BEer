@@ -61,7 +61,8 @@ theorem loosenAux_prf_spec
   {x : SMT.Term} {α β : SMTType}
   (typ_x : Λ ⊢ˢ x : α) (𝕔 : α ~> β)
   («Δ» : RenamingContext.Context)
-  (hx  : RenamingContext.CoversFV «Δ» x) :
+  (hx  : RenamingContext.CoversFV «Δ» x)
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃ fun ⟨E, Λ'⟩ => ⌜ Λ' = Λ ∧ E.freshvarsc = n ∧ Λ'.keys ⊆ E.usedVars ∧ E.usedVars = used⌝ ⦄
     loosenAux_prf name 𝕔 x
   ⦃ ⇓? ⟨x!, x!_spec⟩ ⟨E', Γ'⟩ =>
@@ -91,30 +92,34 @@ theorem loosenAux_prf_spec
               (hφY : RenamingContext.CoversFV (Function.update «Δ» x! (some Y)) x!_spec),
               (⟦x!_spec.abstract (Function.update «Δ» x! (some Y)) hφY⟧ˢ).isSome = true) ⌝ ⦄ := by
   generalize_proofs pf
-  revert «Δ» hx pf
+  revert «Δ» hx respects pf
   induction 𝕔 generalizing x Λ n used name with
     | @refl α hα =>
-      intro «Δ» hx pf
-      exact loosenAux_prf_spec.refl «Δ» hα typ_x hx pf sorry
+      intro «Δ» hx respects pf
+      exact loosenAux_prf_spec.refl «Δ» hα typ_x hx pf respects
     | @pair α β α' β' pα pβ pα_ih pβ_ih =>
-      intro «Δ» hx pf
-      refine loosenAux_prf_spec.pair «Δ» pα pβ pf ?_ ?_ typ_x hx sorry
-      · exact fun a hx => pα_ih a «Δ» hx pf
-      · exact fun a hx => pβ_ih a «Δ» hx pf
+      intro «Δ» hx respects pf
+      refine loosenAux_prf_spec.pair «Δ» pα pβ pf ?_ ?_ typ_x hx respects
+      · exact fun a hx hresp => pα_ih a «Δ» hx hresp pf
+      · exact fun a hx hresp => pβ_ih a «Δ» hx hresp pf
     | @opt α α' hα ih =>
-      intro «Δ» hx pf
-      exact loosenAux_prf_spec.opt «Δ» pf hα ih typ_x hx sorry
+      intro «Δ» hx respects pf
+      exact loosenAux_prf_spec.opt «Δ» pf hα
+        (fun typ Δ' hx' hresp' pf' => ih typ Δ' hx' hresp' pf') typ_x hx respects
     | @graph α β α' β' pα pβ pα_ih pβ_ih =>
-      intro «Δ» hx pf
+      intro «Δ» hx respects pf
       exact loosenAux_prf_spec.graph «Δ» pf pα pβ
-        (fun typ Δ' hx' _ pf' => pα_ih typ Δ' hx' pf')
-        (fun typ Δ' hx' _ pf' => pβ_ih typ Δ' hx' pf') typ_x hx
+        (fun typ Δ' hx' respects' pf' => pα_ih typ Δ' hx' respects' pf')
+        (fun typ Δ' hx' respects' pf' => pβ_ih typ Δ' hx' respects' pf') typ_x hx respects
     | @chpred α α' p ih =>
-      intro «Δ» hx pf
-      exact loosenAux_prf_spec.chpred «Δ» pf p ih typ_x hx sorry
+      intro «Δ» hx respects pf
+      exact loosenAux_prf_spec.chpred «Δ» pf p
+        (fun typ Δ' hx' hresp' pf' => ih typ Δ' hx' hresp' pf') typ_x hx respects
     | @«fun» α β α' β' hβ pα pβ pα_ih pβ_ih =>
-      intro «Δ» hx pf
-      exact loosenAux_prf_spec.fun «Δ» pf hβ pα pβ pα_ih pβ_ih typ_x hx
+      intro «Δ» hx respects pf
+      exact loosenAux_prf_spec.fun «Δ» pf hβ pα pβ
+        (fun typ Δ' hx' hresp' pf' => pα_ih typ Δ' hx' hresp' pf')
+        (fun typ Δ' hx' hresp' pf' => pβ_ih typ Δ' hx' hresp' pf') typ_x hx respects
 
 /--
 Δ-universal version of `loosenAux_prf_spec`: the adequacy clause is universally
@@ -147,6 +152,7 @@ theorem loosenAux_prf_spec_univ
        -- Δ-universal denotation adequacy clause.
        ∀ («Δ» : RenamingContext.Context)
          (hx : RenamingContext.CoversFV «Δ» x)
+         (_respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x)
          (pf : ∀ (x_! : SMT.𝒱) (X! : SMT.Dom),
            ∀ v ∈ SMT.fv (Term.var x_!),
              (Function.update «Δ» x_! (some X!) v).isSome = true),
@@ -178,7 +184,8 @@ theorem loosenAux_prf_spec_univ
     cases (loosenAux_prf name 𝕔 x st : Except _ _) <;> rfl
   -- The Δ-instances of loosenAux_prf_spec.
   have hi : ∀ («Δ» : RenamingContext.Context)
-              (hx : RenamingContext.CoversFV «Δ» x),
+              (hx : RenamingContext.CoversFV «Δ» x)
+              (_respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x),
               (wp⟦loosenAux_prf name 𝕔 x⟧
                 (PostCond.mayThrow fun ⟨x_!, x_!_spec⟩ ⟨E', Γ'⟩ =>
                   ⌜n ≤ E'.freshvarsc ∧
@@ -205,10 +212,10 @@ theorem loosenAux_prf_spec_univ
                          (hφY : RenamingContext.CoversFV (Function.update «Δ» x_! (some Y)) x_!_spec),
                          (⟦x_!_spec.abstract (Function.update «Δ» x_! (some Y)) hφY⟧ˢ).isSome = true)⌝)
                 st).down :=
-    fun «Δ» hx => loosenAux_prf_spec (Λ := Λ) (n := n) (used := used) (name := name)
-      typ_x 𝕔 «Δ» hx st pst
+    fun «Δ» hx hresp => loosenAux_prf_spec (Λ := Λ) (n := n) (used := used) (name := name)
+      typ_x 𝕔 «Δ» hx hresp st pst
   -- Reduce hi via key.
-  conv at hi => intro «Δ» hx; rw [key]
+  conv at hi => intro «Δ» hx hresp; rw [key]
   -- Reduce the Goal via key.
   show (wp⟦loosenAux_prf name 𝕔 x⟧ _ st).down
   rw [key]
@@ -216,20 +223,21 @@ theorem loosenAux_prf_spec_univ
   cases hxst : (loosenAux_prf name 𝕔 x st : Except _ _) with
   | ok r =>
     obtain ⟨⟨x!, x!_spec⟩, ⟨E', Γ'⟩⟩ := r
-    -- Use a dummy Δ to obtain the structural facts.
-    let Δdummy : RenamingContext.Context :=
-      (fun _ => some ⟨ZFSet.zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩)
-    have hcov_dummy : RenamingContext.CoversFV Δdummy x := by
-      intro v hv
-      show (some _).isSome = true
-      simp
-    have hd := hi Δdummy hcov_dummy
+    -- Use ofTypeContext Λ for structural extraction; it respects Λ by construction.
+    let Δdummy : RenamingContext.Context := SMT.RenamingContext.ofTypeContext Λ
+    have hresp_dummy : SMT.RenamingContext.RespectsTypeContext Δdummy Λ :=
+      SMT.RenamingContext.respectsTypeContext_of_ofTypeContext Λ
+    have hcov_dummy : RenamingContext.CoversFV Δdummy x :=
+      SMT.RenamingContext.coversFV_of_typing_and_respects typ_x hresp_dummy
+    have hresp_dummy_fv : SMT.RenamingContext.RespectsTypeContextOnFV Δdummy Λ x :=
+      fun _ _ _ hlk => hresp_dummy hlk
+    have hd := hi Δdummy hcov_dummy hresp_dummy_fv
     rw [hxst] at hd
     obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, _⟩ := hd
     refine ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, ?_⟩
     -- Δ-universal adequacy.
-    intro «Δ» hx pf X hX_den
-    have hΔ := hi «Δ» hx
+    intro «Δ» hx hresp pf X hX_den
+    have hΔ := hi «Δ» hx hresp
     rw [hxst] at hΔ
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hadq⟩ := hΔ
     obtain ⟨Φ, X!, h_var, hφ, h_spec, h_typeΦ, h_castmem, htotalY⟩ := hadq X hX_den

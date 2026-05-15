@@ -1,6 +1,7 @@
 import SMT.Reasoning.Defs
 import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
+import SMT.Reasoning.Basic.DenotationTotality
 
 open Std.Do SMT ZFSet Classical
 
@@ -11,7 +12,8 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
   (pα_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
-        ∀ (hx : RenamingContext.CoversFV «Δ» x),
+        ∀ (hx : RenamingContext.CoversFV «Δ» x)
+          (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x),
           ⦃fun x =>
             match x with
             | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -63,7 +65,8 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
   (pβ_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : β →
-        ∀ (hx : RenamingContext.CoversFV «Δ» x),
+        ∀ (hx : RenamingContext.CoversFV «Δ» x)
+          (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x),
           ⦃fun x =>
             match x with
             | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -114,7 +117,7 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
                                                                     (castZF_of_path pβ).1⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.pair β)
   (hx : RenamingContext.CoversFV «Δ» x)
-  (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ) :
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃fun x =>
     match x with
     | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -177,8 +180,16 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
   have hx_fst : RenamingContext.CoversFV «Δ» (.fst x) := by
     intro v hv
     exact hx v (by simpa [fv] using hv)
+  have respects_fst :
+      SMT.RenamingContext.RespectsTypeContextOnFV «Δ» St₂.types (.fst x) := by
+    intro v σ hv hlk
+    have hv_x : v ∈ SMT.fv x := by simpa [fv] using hv
+    have hv_ne : v ≠ x! := fun h_eq =>
+      x!_fresh (h_eq ▸ SMT.Typing.mem_context_of_mem_fv typ_x hv_x)
+    rw [St₂_types_eq, AList.lookup_insert_ne hv_ne] at hlk
+    exact respects hv_x hlk
   mspec pα_ih (x := .fst x) (Λ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-    typ_fst_x_St₂ hx_fst
+    typ_fst_x_St₂ hx_fst respects_fst
   · mpure_intro
     and_intros
     · trivial
@@ -202,8 +213,28 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
     have hx_snd : RenamingContext.CoversFV «Δ» (.snd x) := by
       intro v hv
       exact hx v (by rwa [fv] at hv)
+    have respects_snd :
+        SMT.RenamingContext.RespectsTypeContextOnFV «Δ» St₃.types (.snd x) := by
+      intro v σ hv hlk
+      have hv_x : v ∈ SMT.fv x := by rwa [fv] at hv
+      have hv_St₁ : v ∈ St₁.types :=
+        SMT.Typing.mem_context_of_mem_fv typ_x hv_x
+      obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_St₁)
+      have hv_ne_x! : v ≠ x! := fun h => x!_fresh (h ▸ hv_St₁)
+      have hv_St₂ : v ∈ St₂.types := by
+        rw [St₂_types_eq, AList.mem_insert]; exact Or.inr hv_St₁
+      have hv_ne_fst! : v ≠ fst! := fun h => fst!_fresh (h ▸ hv_St₂)
+      have hσ'_St₂_ins : (St₂.types.insert fst! α').lookup v = some σ' := by
+        rw [AList.lookup_insert_ne hv_ne_fst!]
+        rw [St₂_types_eq, AList.lookup_insert_ne hv_ne_x!]
+        exact hσ'
+      have hσ'_St₃ : St₃.types.lookup v = some σ' :=
+        AList.lookup_of_subset St₃_types_eq hσ'_St₂_ins
+      rw [hσ'_St₃] at hlk
+      cases hlk
+      exact respects hv_x hσ'
     mspec pβ_ih (x := .snd x) (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-      typ_snd_x_St₃ hx_snd
+      typ_snd_x_St₃ hx_snd respects_snd
     · rename_i out_snd
       obtain ⟨snd!, snd!_spec⟩ := out_snd
       mrename_i pre
@@ -429,7 +460,7 @@ theorem loosenAux_prf_exact.pair («Δ» : RenamingContext.Context) {α β α' �
           ?_
         on_goal 2 =>
           use SMT.TypeContext.abstract («Δ» := «Δ») ?_, PHOAS.WFTC.of_abstract, (.pair α β)
-          · exact @PHOAS.Typing.of_abstract _ _ St₁.types _ hx respects typ_x
+          · exact @PHOAS.Typing.of_abstract_fv _ _ St₁.types _ hx respects typ_x
         obtain ⟨Xv, τX, hXpair_mem⟩ := X
         obtain rfl : τX = .pair α β := by
           dsimp at hXτ'

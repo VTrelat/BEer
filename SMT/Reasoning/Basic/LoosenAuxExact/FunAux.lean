@@ -1,6 +1,7 @@
 import SMT.Reasoning.Defs
 import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
+import SMT.Reasoning.Basic.DenotationTotality
 import SMT.Reasoning.Basic.LoosenAuxExact.FunDefault
 
 open Std.Do SMT ZFSet Classical
@@ -14,7 +15,7 @@ abbrev FunExactIH.{u}
   ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
     Λ ⊢ˢ x : τ →
       ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
-        SMT.RenamingContext.RespectsTypeContext «Δ₀» Λ →
+        SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x →
       ∀ (pf₀ : FunPf «Δ₀»),
         ⦃fun x =>
           match x with
@@ -1129,9 +1130,19 @@ theorem funDenVarExactAt.{u}
     subst hv
     rw [Function.update_self]
     rfl
+  have respects_var_z_x₀ :
+      SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ St₁.types (.var z) := by
+    intro v σ hv hlk
+    rw [SMT.fv, List.mem_singleton] at hv
+    subst hv
+    cases typ_var_z with
+    | var _ _ _ h_lookup_z =>
+      rw [hlk] at h_lookup_z
+      cases h_lookup_z
+      exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
   have ih_var_z_x₀ := p_ih
     (Λ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
-    (name := name) (x := .var z) typ_var_z Δx₀ hcov_var_z_x₀ sorry pf_var_z_x₀
+    (name := name) (x := .var z) typ_var_z Δx₀ hcov_var_z_x₀ respects_var_z_x₀ pf_var_z_x₀
   have post_x₀ := ih_var_z_x₀ St₁ (by exact ⟨rfl, rfl, sub, rfl⟩)
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post_x₀
   rw [hrun] at post_x₀

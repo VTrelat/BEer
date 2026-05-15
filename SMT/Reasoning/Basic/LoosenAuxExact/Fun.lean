@@ -1,6 +1,7 @@
 import SMT.Reasoning.Defs
 import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
+import SMT.Reasoning.Basic.DenotationTotality
 import SMT.Reasoning.Basic.LoosenAuxExact.FunDefault
 import SMT.Reasoning.Basic.LoosenAuxExact.FunAux
 
@@ -13,7 +14,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
         ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
-            SMT.RenamingContext.RespectsTypeContext «Δ» Λ →
+            SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
           ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
@@ -66,7 +67,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : β →
         ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
-            SMT.RenamingContext.RespectsTypeContext «Δ» Λ →
+            SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
           ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
@@ -208,11 +209,22 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
         subst hv
         erw [Function.update_self]
         rfl
+      have respects_var_a :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δa St₃.types (.var a) := by
+        intro v σ hv hlk
+        rw [SMT.fv, List.mem_singleton] at hv
+        subst hv
+        cases typ_var_a_St₃ with
+        | var _ _ _ h_lookup_a =>
+          rw [hlk] at h_lookup_a
+          cases h_lookup_a
+          refine ⟨⟨α.defaultZFSet, α, SMTType.mem_toZFSet_of_defaultZFSet⟩, ?_, rfl⟩
+          simp [Δa]
       have ih_a :=
         pα_ih_exact
           (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
           (name := s!"{name}_funFun_arg") (x := .var a)
-          typ_var_a_St₃ Δa hcov_var_a sorry pf_var_a
+          typ_var_a_St₃ Δa hcov_var_a respects_var_a pf_var_a
       mspec (Std.Do.Triple.and _
         (funRunVarSpec (p := pα) (name := s!"{name}_funFun_arg") (z := a) (St := St₃))
         ih_a)
@@ -253,11 +265,22 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
             rcases hv with rfl | hv
             · exact Or.inl rfl
             · exact Or.inr (keys₄ (List.mem_of_mem_erase hv))
+          have respects_var_b :
+              SMT.RenamingContext.RespectsTypeContextOnFV Δb St₅.types (.var b) := by
+            intro v σ hv hlk
+            rw [SMT.fv, List.mem_singleton] at hv
+            subst hv
+            cases typ_var_b_St₅ with
+            | var _ _ _ h_lookup_b =>
+              rw [hlk] at h_lookup_b
+              cases h_lookup_b
+              refine ⟨⟨β.defaultZFSet, β, SMTType.mem_toZFSet_of_defaultZFSet⟩, ?_, rfl⟩
+              simp [Δb]
           have ih_b :=
             pβ_ih_exact
               (Λ := St₅.types) (n := St₅.env.freshvarsc) (used := St₅.env.usedVars)
               (name := s!"{name}_funFun_ret") (x := .var b)
-              typ_var_b_St₅ Δb hcov_var_b sorry pf_var_b
+              typ_var_b_St₅ Δb hcov_var_b respects_var_b pf_var_b
           mspec (Std.Do.Triple.and _
             (funRunVarSpec (p := pβ) (name := s!"{name}_funFun_ret") (z := b) (St := St₅))
             ih_b)

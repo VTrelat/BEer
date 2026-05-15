@@ -1,6 +1,7 @@
 import SMT.Reasoning.Defs
 import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
+import SMT.Reasoning.Basic.DenotationTotality
 
 open Std.Do SMT ZFSet Classical
 
@@ -12,7 +13,7 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
         ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
-          SMT.RenamingContext.RespectsTypeContext «Δ₀» Λ →
+          SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x →
         ∀ (pf₀ : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ₀» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
@@ -64,7 +65,7 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                                                                     (castZF_of_path hα).1⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.option)
   (hx : RenamingContext.CoversFV «Δ» x)
-  (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ) :
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃fun x =>
     match x with
     | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -114,7 +115,8 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
   have ih_on_Δ :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
-        ∀ (hx : RenamingContext.CoversFV «Δ» x),
+        ∀ (hx : RenamingContext.CoversFV «Δ» x)
+          (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x),
           ⦃fun x =>
             match x with
             | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -162,7 +164,7 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                                                                   some ΦY →
                                                                 ΦY.fst = zftrue →
                                                                   X.fst.pair Y.fst ∈
-                                                                    (castZF_of_path hα).1⌝⦄ := fun htyp hx => ih htyp «Δ» hx sorry pf
+                                                                    (castZF_of_path hα).1⌝⦄ := fun htyp hx hresp => ih htyp «Δ» hx hresp pf
   unfold loosenAux_prf
   mspec SMT.freshVar_spec (Γ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
   next x! =>
@@ -187,8 +189,17 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
         have hx_t : RenamingContext.CoversFV «Δ» t := by
           intro v hv
           exact hx v (by simpa [fv] using hv)
+        have respects_t :
+            SMT.RenamingContext.RespectsTypeContextOnFV «Δ» St₂.types t := by
+          intro v σ hv hlk
+          have hv_x : v ∈ SMT.fv (.some t) := by simpa [fv] using hv
+          have hv_Λ : v ∈ St₁.types :=
+            SMT.Typing.mem_context_of_mem_fv typ_x hv_x
+          have hv_ne : v ≠ x! := fun h => x!_fresh (h ▸ hv_Λ)
+          rw [St₂_types_eq, AList.lookup_insert_ne hv_ne] at hlk
+          exact respects hv_x hlk
         mspec ih_on_Δ (x := t) (Λ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-          typ_t_St₂ hx_t
+          typ_t_St₂ hx_t respects_t
         · mpure_intro
           and_intros
           · trivial
@@ -1381,8 +1392,17 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
         have hx_the : RenamingContext.CoversFV «Δ» (.the x) := by
           intro v hv
           exact hx v (by simpa [fv] using hv)
+        have respects_the :
+            SMT.RenamingContext.RespectsTypeContextOnFV «Δ» St₂.types (.the x) := by
+          intro v σ hv hlk
+          have hv_x : v ∈ SMT.fv x := by simpa [fv] using hv
+          have hv_Λ : v ∈ St₁.types :=
+            SMT.Typing.mem_context_of_mem_fv typ_x hv_x
+          have hv_ne : v ≠ x! := fun h => x!_fresh (h ▸ hv_Λ)
+          rw [St₂_types_eq, AList.lookup_insert_ne hv_ne] at hlk
+          exact respects hv_x hlk
         mspec ih_on_Δ (x := .the x) (Λ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-          typ_the_x_St₂ hx_the
+          typ_the_x_St₂ hx_the respects_the
         · mpure_intro
           and_intros
           · trivial
