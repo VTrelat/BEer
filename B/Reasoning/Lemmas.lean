@@ -1520,7 +1520,23 @@ theorem B.Typing.simplifier {Γ : B.TypeContext} {x : B.Term} {τ : BType} (h : 
 
       admit -- induction D
     · admit -- induction vs
-  | all vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih => sorry
+  | all vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih =>
+    unfold B.simplifier simplifier_aux_all
+    split
+    · rename B.simplifier _ = _ => heq
+      split_ifs with hcond hPfalse
+      · exact B.Typing.bool
+      · sorry
+      · rw [← heq, B.simplifier_reduce_cprod]
+        apply B.Typing.all vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rw [List.length_map]; exact vs_D_len) _ typP_ih
+        intro i h
+        simp only [List.get_eq_getElem, List.getElem_map]
+        exact typD_ih i (by rwa [List.length_map] at h)
+    · rw [B.simplifier_reduce_cprod]
+      apply B.Typing.all vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rw [List.length_map]; exact vs_D_len) _ typP_ih
+      intro i h
+      simp only [List.get_eq_getElem, List.getElem_map]
+      exact typD_ih i (by rwa [List.length_map] at h)
   | lambda vs_nemp vs_nodup vs_Γ_disj vs_αs_len vs_D_len typD typP typD_ih typP_ih =>
     unfold B.simplifier
     rw [B.simplifier_reduce_cprod]
