@@ -449,24 +449,140 @@ theorem B.Term.WF.simplifier {x} (wf : x.WF) : (simplifier x).WF := by
   | union x y x_ih y_ih
   | inter x y x_ih y_ih =>
     exact ⟨x_ih wf.1, y_ih wf.2⟩
-  | add x y x_ih y_ih => sorry
-  | sub x y x_ih y_ih => sorry
-  | mul x y x_ih y_ih => sorry
-  | and x y x_ih y_ih => sorry
-  | eq x y x_ih y_ih => sorry
-  | not x ih => sorry
-  | «ℤ» => sorry
-  | 𝔹 => sorry
-  | mem x S x_ih S_ih => sorry
-  | collect vs D P D_ih P_ih => sorry
-  | pow S ih => sorry
-  | card S ih => sorry
-  | app f x f_ih x_ih => sorry
-  | lambda vs D P D_ih P_ih => sorry
-  | pfun A B A_ih B_ih => sorry
-  | min S ih => sorry
-  | max S ih => sorry
-  | all vs D P D_ih P_ih => sorry
+  | «ℤ» | 𝔹 => exact wf
+  | add x y x_ih y_ih =>
+    unfold B.simplifier simplifier_aux_add
+    rw [Term.WF] at wf
+    split <;> try (first | exact x_ih wf.1 | exact y_ih wf.2)
+    · rename B.simplifier x = _ => x_eq
+      rw [x_eq] at x_ih
+      rw [Term.WF]
+      exact trivial
+    · rw [‹B.simplifier x = _›] at x_ih
+      specialize x_ih wf.1
+      simp only [Term.WF] at x_ih y_ih ⊢
+      exact x_ih
+    · exact ⟨x_ih wf.1, y_ih wf.2⟩
+  | sub x y x_ih y_ih =>
+    unfold B.simplifier
+    unfold Term.WF at wf ⊢
+    exact ⟨x_ih wf.1, y_ih wf.2⟩
+  | mul x y x_ih y_ih =>
+    unfold B.simplifier simplifier_aux_mul
+    split <;> try first | exact trivial | exact x_ih wf.1 | exact y_ih wf.2
+    · and_intros
+      · rw [‹B.simplifier x = _›] at x_ih
+        exact x_ih wf.1 |>.1
+      · trivial
+    · exact ⟨x_ih wf.1, y_ih wf.2⟩
+  | and x y x_ih y_ih =>
+    unfold B.simplifier simplifier_aux_and
+    split <;> try first | exact trivial | exact x_ih wf.1 | exact y_ih wf.2
+    exact ⟨x_ih wf.1, y_ih wf.2⟩
+  | eq x y x_ih y_ih =>
+    unfold B.simplifier simplifier_aux_eq
+    split <;> try first | exact trivial | exact x_ih wf.1 | exact y_ih wf.2
+    · split_ifs <;> trivial
+    · exact ⟨trivial, x_ih wf.1⟩
+    · split_ifs
+      · trivial
+      · exact ⟨x_ih wf.1, y_ih wf.2⟩
+  | not x ih =>
+    specialize ih wf
+    unfold B.simplifier simplifier_aux_not
+    split <;> try first | exact trivial | exact ih
+    · rename _ = _ => eq
+      rw [eq] at ih
+      exact ih
+  | mem x S x_ih S_ih =>
+    unfold B.simplifier simplifier_aux_mem
+    rw [Term.WF] at wf
+    split <;> try rw [‹B.simplifier S = _›] at S_ih
+    · split_ifs with h h'
+      specialize S_ih wf.2
+      unfold Term.WF at S_ih
+      extract_lets xs
+      split_ifs with h''
+      · simp_rw [Term.WF]
+        and_intros
+        · exact x_ih wf.1
+        · exact S_ih.1
+        · obtain ⟨v, rfl⟩ := List.length_eq_one_iff.mp h'
+          rw [List.head!, not_mem_fv_subst <| h''.2 v (List.mem_singleton.mpr rfl)]
+          exact S_ih.2.1
+      · simp_rw [Term.WF]
+        exact ⟨x_ih wf.1, S_ih⟩
+      · extract_lets xs
+        split_ifs with h''
+        · simp_rw [Term.WF]
+          and_intros
+          · exact x_ih wf.1
+          · exact S_ih wf.2 |>.1
+          · rw [not_mem_fv_substList h''.2]
+            exact S_ih wf.2 |>.2.1
+        · simp_rw [Term.WF]
+          exact ⟨x_ih wf.1, S_ih wf.2⟩
+      · simp_rw [Term.WF]
+        exact ⟨x_ih wf.1, S_ih wf.2⟩
+    · extract_lets xs
+      split_ifs with h
+      · rw [not_mem_fv_substList h.2.1]
+        exact ⟨S_ih wf.2 |>.2.1, ‹B.simplifier x = _› ▸ x_ih wf.1 |>.2⟩
+      · simp_rw [Term.WF] at S_ih ⊢
+        rw [‹B.simplifier x = _›] at x_ih
+        exact ⟨⟨S_ih wf.2, x_ih wf.1 |>.1⟩, x_ih wf.1 |>.2⟩
+    · exact ⟨x_ih wf.1, S_ih wf.2⟩
+  | collect vs D P D_ih P_ih =>
+    unfold B.simplifier simplifier_aux_collect
+    split using xs _ _ _ _ | xs _ _ _ _
+    · exact D_ih wf.1
+    · unfold Term.WF at wf
+      exact ⟨D_ih wf.1, P_ih wf.2.1, wf.2.2.1, (not_mem_fv_simplifier <| wf.2.2.2 · ·)⟩
+  | pow S ih
+  | card S ih
+  | min S ih
+  | max S ih =>
+    unfold B.simplifier
+    unfold Term.WF at wf ⊢
+    exact ih wf
+  | app f x f_ih x_ih => exact ⟨f_ih wf.1, x_ih wf.2⟩
+  | pfun A B A_ih B_ih => exact ⟨A_ih wf.1, B_ih wf.2⟩
+  | lambda vs D P D_ih P_ih =>
+    unfold B.simplifier
+    and_intros
+    · exact D_ih wf.1
+    · exact P_ih wf.2.1
+    · exact wf.2.2.1
+    · exact (not_mem_fv_simplifier <| wf.2.2.2 · ·)
+  | all vs D P D_ih P_ih =>
+    unfold B.simplifier simplifier_aux_all
+    split using _ _ _ v vs xs D' P' D_eq | xs _ _ _ _
+    · specialize D_ih wf.1
+      rw [D_eq] at D_ih
+      obtain ⟨_, _, _, _⟩ := D_ih
+      obtain ⟨_, _, _, _⟩ := wf
+      split_ifs with h_if₁ h_if₂
+      · trivial
+      · obtain ⟨_, _, _⟩ := h_if₁
+        and_intros <;> try assumption
+        · exact WF_foldl_maplet trivial
+        · apply P_ih
+          assumption
+        · exact (‹∀ x ∈ _, x ∉ fv D'› · <| List.mem_append_left xs ·)
+      · and_intros <;> try assumption
+        · apply P_ih
+          assumption
+        · simp_rw [not_and_or, not_forall, not_not] at h_if₁
+          intro x hx
+          rw [List.mem_cons] at hx
+          simp_rw [fv, List.mem_append, List.mem_removeAll_iff, not_or, not_and_or, not_not]
+          rcases h_if₁ with dup | ⟨z, z_vs, hz⟩ | ⟨z, z_vs, hz⟩ <;>
+          · rcases hx with rfl | hx
+            · have := not_mem_fv_simplifier <| ‹∀ v ∈ _::vs, v ∉ fv D› _ List.mem_cons_self
+              rwa [D_eq, fv, List.mem_append, List.mem_removeAll_iff, not_or, not_and_or, not_not] at this
+            · have := not_mem_fv_simplifier <| ‹∀ v ∈ _::vs, v ∉ fv D› x (List.mem_cons_of_mem v hx)
+              rwa [D_eq, fv, List.mem_append, List.mem_removeAll_iff, not_or, not_and_or, not_not] at this
+    · exact ⟨D_ih wf.1, P_ih wf.2.1, wf.2.2.1, (not_mem_fv_simplifier <| wf.2.2.2 · ·)⟩
 
 theorem overloadBinOp_Int.zero_add {x} (hx : x ∈ ZFSet.Int) :
   overloadBinOp_Int (fun x1 x2 => x1 + x2) (ofInt 0) x = x := by
