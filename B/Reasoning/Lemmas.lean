@@ -1526,7 +1526,13 @@ theorem B.Typing.simplifier {Γ : B.TypeContext} {x : B.Term} {τ : BType} (h : 
     · rename B.simplifier _ = _ => heq
       split_ifs with hcond hPfalse
       · exact B.Typing.bool
-      · sorry
+      · -- BLOCKED: simplifier_aux_all flattens `∀ binders ∈ collect, Q` into
+        -- `∀ binders ∈ D, (tuple ∈ᴮ collect ⇒ᴮ Q)`. Typing the rebuilt body needs
+        -- the `collect`'s typing (established in `Γ`) lifted into the extended
+        -- context `(v::vs).zipToAList αs ∪ Γ`, i.e. `Typing.context_weakening'`,
+        -- which is itself `admit`-ed in B/Typing/Rules.lean (its binder cases are
+        -- unsolved). Cannot be discharged without that lemma.
+        sorry
       · rw [← heq, B.simplifier_reduce_cprod]
         apply B.Typing.all vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rw [List.length_map]; exact vs_D_len) _ typP_ih
         intro i h
