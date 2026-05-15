@@ -651,12 +651,12 @@ theorem encodeTerm_state
         (fun v hv => x_used_sub (vars_used_x v hv)) hx_bv_nodup
       mvcgen
   | pow S ih => sorry
-  | cprod A B A_ih B_ih => sorry
+  | cprod A C A_ih C_ih => sorry
   | mem x S x_ih S_ih => sorry
   | eq x y x_ih y_ih => sorry
-  | union A B A_ih B_ih => sorry
-  | inter A B A_ih B_ih => sorry
-  | pfun A B A_ih B_ih => sorry
+  | union A C A_ih C_ih => sorry
+  | inter A C A_ih C_ih => sorry
+  | pfun A C A_ih C_ih => sorry
   | app f x f_ih x_ih => sorry
   | collect vs D P D_ih P_ih => sorry
   | all vs D P D_ih P_ih => sorry
