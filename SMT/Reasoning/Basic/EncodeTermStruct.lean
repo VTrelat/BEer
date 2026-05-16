@@ -6908,13 +6908,33 @@ theorem SMT.freshVarList_decls (τs : List SMTType) {decl : SMT.Chunk} :
     mpure_intro
     simp_all
 
+/-- Monotonicity helper for the `encodeTerm_decl` `specBodies` clause: weakens a
+membership in `A ∪ D ∪ Bv` by enlarging each of the three components. -/
+private theorem specBodies_fv_mono {b : SMT.Term} {A A' D D' Bv Bv' : List SMT.𝒱}
+    (h : SMT.fv b ⊆ A ∪ D ∪ Bv) (hA : A ⊆ A') (hD : D ⊆ D') (hB : Bv ⊆ Bv') :
+    SMT.fv b ⊆ A' ∪ D' ∪ Bv' := fun v hv => by
+  rcases List.mem_union_iff.mp (h hv) with h' | h'
+  · rcases List.mem_union_iff.mp h' with h'' | h''
+    · exact List.mem_union_iff.mpr (.inl (List.mem_union_iff.mpr (.inl (hA h''))))
+    · exact List.mem_union_iff.mpr (.inl (List.mem_union_iff.mpr (.inr (hD h''))))
+  · exact List.mem_union_iff.mpr (.inr (hB h'))
+
+/-- Weaken an old-style `specBodies` membership `SMT.fv b ⊆ A ∪ D` to the
+bound-variable-padded `A ∪ D ∪ Bv`. -/
+private theorem specBodies_fv_weaken_bv {b : SMT.Term} {A D Bv : List SMT.𝒱}
+    (h : SMT.fv b ⊆ A ∪ D) : SMT.fv b ⊆ A ∪ D ∪ Bv :=
+  fun v hv => List.mem_union_iff.mpr (.inl (h hv))
+
 set_option maxHeartbeats 4000000 in
 /-- The `declarations`-delta invariant `C8''` of `encodeTerm`: encoding `t`
 appends a chunk `Δ` to `declarations`, every spec-body in `Δ` has free variables
-within `B.fv t ∪ declVars Δ`, and the encoded term `t'` likewise has free
-variables within `B.fv t ∪ declVars Δ`. Proved by a 26-case induction on `t`;
-the `keys`-context preconditions of the Stage-1 cast delta-specs are supplied
-for sub-terms by pairing `encodeTerm_state` with the induction hypothesis. -/
+within `B.fv t ∪ declVars Δ ∪ B.bv t`, and the encoded term `t'` has free
+variables within `B.fv t ∪ declVars Δ`. The bound-variable slack `∪ B.bv t` is
+needed because the binder encoders (`collect`/`lambda`) do not revert the
+`declarations` emitted while encoding the body, so a body spec-body may mention
+a bound variable. Proved by a 26-case induction on `t`; the `keys`-context
+preconditions of the Stage-1 cast delta-specs are supplied for sub-terms by
+pairing `encodeTerm_state` with the induction hypothesis. -/
 theorem encodeTerm_decl
     (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term} {α : B.BType}
     (typ_t : E.context ⊢ᴮ t : α)
@@ -6930,7 +6950,7 @@ theorem encodeTerm_decl
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       ∃ Dlt : SMT.Chunk,
         E'.declarations = decl ++ Dlt ∧
-        (∀ b ∈ specBodies Dlt, SMT.fv b ⊆ B.fv t ∪ declVars Dlt) ∧
+        (∀ b ∈ specBodies Dlt, SMT.fv b ⊆ B.fv t ∪ declVars Dlt ∪ B.bv t) ∧
         SMT.fv t' ⊆ B.fv t ∪ declVars Dlt ⌝⦄ := by
   induction t generalizing E n used Λ α decl with
   | int i =>
@@ -7068,16 +7088,12 @@ theorem encodeTerm_decl
     refine ⟨Δx ++ Δy, by rw [y_decl_eq, List.append_assoc], ?_, ?_⟩
     · intro b hb
       rw [specBodies_append, List.mem_append] at hb
-      rw [B.fv, declVars_append]
+      rw [B.fv, B.bv, declVars_append]
       rcases hb with hb | hb
-      · intro v hv
-        rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-      · intro v hv
-        rcases List.mem_union_iff.mp (y_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+      · exact specBodies_fv_mono (x_spec_sub b hb) (List.subset_append_left _ _)
+          (List.subset_append_left _ _) (List.subset_append_left _ _)
+      · exact specBodies_fv_mono (y_spec_sub b hb) (List.subset_append_right _ _)
+          (List.subset_append_right _ _) (List.subset_append_right _ _)
     · intro v hv
       simp only [SMT.fv, List.mem_append] at hv
       rw [B.fv, declVars_append]
@@ -7165,16 +7181,12 @@ theorem encodeTerm_decl
         refine ⟨Δx ++ Δy, by rw [y_decl_eq, List.append_assoc], ?_, ?_⟩
         · intro b hb
           rw [specBodies_append, List.mem_append] at hb
-          rw [B.fv, declVars_append]
+          rw [B.fv, B.bv, declVars_append]
           rcases hb with hb | hb
-          · intro v hv
-            rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-          · intro v hv
-            rcases List.mem_union_iff.mp (y_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+          · exact specBodies_fv_mono (x_spec_sub b hb) (List.subset_append_left _ _)
+              (List.subset_append_left _ _) (List.subset_append_left _ _)
+          · exact specBodies_fv_mono (y_spec_sub b hb) (List.subset_append_right _ _)
+              (List.subset_append_right _ _) (List.subset_append_right _ _)
         · intro v hv
           simp only [SMT.fv, List.mem_append] at hv
           rw [B.fv, declVars_append]
@@ -7264,16 +7276,12 @@ theorem encodeTerm_decl
         refine ⟨Δx ++ Δy, by rw [y_decl_eq, List.append_assoc], ?_, ?_⟩
         · intro b hb
           rw [specBodies_append, List.mem_append] at hb
-          rw [B.fv, declVars_append]
+          rw [B.fv, B.bv, declVars_append]
           rcases hb with hb | hb
-          · intro v hv
-            rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-          · intro v hv
-            rcases List.mem_union_iff.mp (y_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+          · exact specBodies_fv_mono (x_spec_sub b hb) (List.subset_append_left _ _)
+              (List.subset_append_left _ _) (List.subset_append_left _ _)
+          · exact specBodies_fv_mono (y_spec_sub b hb) (List.subset_append_right _ _)
+              (List.subset_append_right _ _) (List.subset_append_right _ _)
         · intro v hv
           simp only [SMT.fv, List.mem_append] at hv
           rw [B.fv, declVars_append]
@@ -7363,16 +7371,12 @@ theorem encodeTerm_decl
         refine ⟨Δx ++ Δy, by rw [y_decl_eq, List.append_assoc], ?_, ?_⟩
         · intro b hb
           rw [specBodies_append, List.mem_append] at hb
-          rw [B.fv, declVars_append]
+          rw [B.fv, B.bv, declVars_append]
           rcases hb with hb | hb
-          · intro v hv
-            rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-          · intro v hv
-            rcases List.mem_union_iff.mp (y_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+          · exact specBodies_fv_mono (x_spec_sub b hb) (List.subset_append_left _ _)
+              (List.subset_append_left _ _) (List.subset_append_left _ _)
+          · exact specBodies_fv_mono (y_spec_sub b hb) (List.subset_append_right _ _)
+              (List.subset_append_right _ _) (List.subset_append_right _ _)
         · intro v hv
           simp only [SMT.fv, List.mem_append] at hv
           rw [B.fv, declVars_append]
@@ -7451,16 +7455,12 @@ theorem encodeTerm_decl
     refine ⟨Δx ++ Δy, by rw [y_decl_eq, List.append_assoc], ?_, ?_⟩
     · intro b hb
       rw [specBodies_append, List.mem_append] at hb
-      rw [B.fv, declVars_append]
+      rw [B.fv, B.bv, declVars_append]
       rcases hb with hb | hb
-      · intro v hv
-        rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-      · intro v hv
-        rcases List.mem_union_iff.mp (y_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+      · exact specBodies_fv_mono (x_spec_sub b hb) (List.subset_append_left _ _)
+          (List.subset_append_left _ _) (List.subset_append_left _ _)
+      · exact specBodies_fv_mono (y_spec_sub b hb) (List.subset_append_right _ _)
+          (List.subset_append_right _ _) (List.subset_append_right _ _)
     · intro v hv
       simp only [SMT.fv, List.mem_append] at hv
       rw [B.fv, declVars_append]
@@ -7563,16 +7563,12 @@ theorem encodeTerm_decl
         refine ⟨Δx ++ Δy, by rw [y_decl_eq, List.append_assoc], ?_, ?_⟩
         · intro b hb
           rw [specBodies_append, List.mem_append] at hb
-          rw [B.fv, declVars_append]
+          rw [B.fv, B.bv, declVars_append]
           rcases hb with hb | hb
-          · intro v hv
-            rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-          · intro v hv
-            rcases List.mem_union_iff.mp (y_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+          · exact specBodies_fv_mono (x_spec_sub b hb) (List.subset_append_left _ _)
+              (List.subset_append_left _ _) (List.subset_append_left _ _)
+          · exact specBodies_fv_mono (y_spec_sub b hb) (List.subset_append_right _ _)
+              (List.subset_append_right _ _) (List.subset_append_right _ _)
         · intro v hv
           simp only [SMT.fv, List.mem_append] at hv
           rw [B.fv, declVars_append]
@@ -7613,7 +7609,7 @@ theorem encodeTerm_decl
       mpure_intro
       refine ⟨Δx, x_decl_eq, ?_, ?_⟩
       · intro b hb v hv
-        simp only [B.fv]
+        simp only [B.fv, B.bv]
         exact x_spec_sub b hb hv
       · intro v hv
         simp only [SMT.fv] at hv
@@ -7658,7 +7654,7 @@ theorem encodeTerm_decl
       mpure_intro
       refine ⟨ΔS, by rw [pre2, pre, S_decl_eq], ?_, ?_⟩
       · intro b hb v hv
-        simp only [B.fv]
+        simp only [B.fv, B.bv]
         exact S_spec_sub b hb hv
       · intro v hv
         simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append,
@@ -7693,7 +7689,7 @@ theorem encodeTerm_decl
       mpure_intro
       refine ⟨ΔS, by rw [pre3, pre2, pre, S_decl_eq], ?_, ?_⟩
       · intro b hb v hv
-        simp only [B.fv]
+        simp only [B.fv, B.bv]
         exact S_spec_sub b hb hv
       · intro v hv
         simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append,
@@ -7800,16 +7796,12 @@ theorem encodeTerm_decl
         refine ⟨ΔA ++ ΔC, by rw [pre3, pre2, pre, C_decl_eq, List.append_assoc], ?_, ?_⟩
         · intro b hb
           rw [specBodies_append, List.mem_append] at hb
-          rw [B.fv, declVars_append]
+          rw [B.fv, B.bv, declVars_append]
           rcases hb with hb | hb
-          · intro v hv
-            rcases List.mem_union_iff.mp (A_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-          · intro v hv
-            rcases List.mem_union_iff.mp (C_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+          · exact specBodies_fv_mono (A_spec_sub b hb) (List.subset_append_left _ _)
+              (List.subset_append_left _ _) (List.subset_append_left _ _)
+          · exact specBodies_fv_mono (C_spec_sub b hb) (List.subset_append_right _ _)
+              (List.subset_append_right _ _) (List.subset_append_right _ _)
         · intro v hv
           simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append,
             List.mem_cons, List.not_mem_nil, or_false] at hv
@@ -7908,18 +7900,14 @@ theorem encodeTerm_decl
     · intro b hb
       rw [specBodies_append, specBodies_append, cm_spec_nil, List.append_nil,
         List.mem_append] at hb
-      rw [B.fv, declVars_append, declVars_append]
+      rw [B.fv, B.bv, declVars_append, declVars_append]
       rcases hb with hb | hb
-      · intro v hv
-        rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-            (List.mem_append_left _ h)))
-      · intro v hv
-        rcases List.mem_union_iff.mp (S_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-            (List.mem_append_right _ h)))
+      · exact specBodies_fv_mono (x_spec_sub b hb) (List.subset_append_left _ _)
+          ((List.subset_append_left _ _).trans (List.subset_append_left _ _))
+          (List.subset_append_left _ _)
+      · exact specBodies_fv_mono (S_spec_sub b hb) (List.subset_append_right _ _)
+          ((List.subset_append_right _ _).trans (List.subset_append_left _ _))
+          (List.subset_append_right _ _)
     · intro v hv
       have hv' := cm_fv_sub hv
       rw [B.fv, declVars_append, declVars_append]
@@ -8013,18 +8001,14 @@ theorem encodeTerm_decl
     · intro b hb
       rw [specBodies_append, specBodies_append, ce_spec_nil, List.append_nil,
         List.mem_append] at hb
-      rw [B.fv, declVars_append, declVars_append]
+      rw [B.fv, B.bv, declVars_append, declVars_append]
       rcases hb with hb | hb
-      · intro v hv
-        rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-            (List.mem_append_left _ h)))
-      · intro v hv
-        rcases List.mem_union_iff.mp (y_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-            (List.mem_append_right _ h)))
+      · exact specBodies_fv_mono (x_spec_sub b hb) (List.subset_append_left _ _)
+          ((List.subset_append_left _ _).trans (List.subset_append_left _ _))
+          (List.subset_append_left _ _)
+      · exact specBodies_fv_mono (y_spec_sub b hb) (List.subset_append_right _ _)
+          ((List.subset_append_right _ _).trans (List.subset_append_left _ _))
+          (List.subset_append_right _ _)
     · intro v hv
       have hv' := ce_fv_sub hv
       rw [B.fv, declVars_append, declVars_append]
@@ -8118,16 +8102,12 @@ theorem encodeTerm_decl
       refine ⟨ΔA ++ ΔC, by rw [pref, C_decl_eq, List.append_assoc], ?_, ?_⟩
       · intro b hb
         rw [specBodies_append, List.mem_append] at hb
-        rw [B.fv, declVars_append]
+        rw [B.fv, B.bv, declVars_append]
         rcases hb with hb | hb
-        · intro v hv
-          rcases List.mem_union_iff.mp (A_spec_sub b hb hv) with h | h
-          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-        · intro v hv
-          rcases List.mem_union_iff.mp (C_spec_sub b hb hv) with h | h
-          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+        · exact specBodies_fv_mono (A_spec_sub b hb) (List.subset_append_left _ _)
+            (List.subset_append_left _ _) (List.subset_append_left _ _)
+        · exact specBodies_fv_mono (C_spec_sub b hb) (List.subset_append_right _ _)
+            (List.subset_append_right _ _) (List.subset_append_right _ _)
       · intro v hv
         simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
           List.not_mem_nil, or_false] at hv
@@ -8156,19 +8136,16 @@ theorem encodeTerm_decl
         by rw [cu_decl_eq, C_decl_eq]; simp only [List.append_assoc], ?_, ?_⟩
       · intro b hb
         rw [specBodies_append, specBodies_append, List.mem_append, List.mem_append] at hb
-        rw [B.fv, declVars_append, declVars_append]
+        rw [B.fv, B.bv, declVars_append, declVars_append]
         rcases hb with (hb | hb) | hb
-        · intro v hv
-          rcases List.mem_union_iff.mp (A_spec_sub b hb hv) with h | h
-          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-              (List.mem_append_left _ h)))
-        · intro v hv
-          rcases List.mem_union_iff.mp (C_spec_sub b hb hv) with h | h
-          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-              (List.mem_append_right _ h)))
-        · intro v hv
+        · exact specBodies_fv_mono (A_spec_sub b hb) (List.subset_append_left _ _)
+            ((List.subset_append_left _ _).trans (List.subset_append_left _ _))
+            (List.subset_append_left _ _)
+        · exact specBodies_fv_mono (C_spec_sub b hb) (List.subset_append_right _ _)
+            ((List.subset_append_right _ _).trans (List.subset_append_left _ _))
+            (List.subset_append_right _ _)
+        · refine specBodies_fv_weaken_bv ?_
+          intro v hv
           rcases List.mem_union_iff.mp (cu_spec_sub b hb hv) with h | h
           · rcases List.mem_union_iff.mp h with h | h
             · rcases List.mem_union_iff.mp (A_enc_fv_sub h) with h | h
@@ -8208,19 +8185,16 @@ theorem encodeTerm_decl
           by rw [cu_decl_eq, C_decl_eq]; simp only [List.append_assoc], ?_, ?_⟩
         · intro b hb
           rw [specBodies_append, specBodies_append, List.mem_append, List.mem_append] at hb
-          rw [B.fv, declVars_append, declVars_append]
+          rw [B.fv, B.bv, declVars_append, declVars_append]
           rcases hb with (hb | hb) | hb
-          · intro v hv
-            rcases List.mem_union_iff.mp (A_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-                (List.mem_append_left _ h)))
-          · intro v hv
-            rcases List.mem_union_iff.mp (C_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-                (List.mem_append_right _ h)))
-          · intro v hv
+          · exact specBodies_fv_mono (A_spec_sub b hb) (List.subset_append_left _ _)
+              ((List.subset_append_left _ _).trans (List.subset_append_left _ _))
+              (List.subset_append_left _ _)
+          · exact specBodies_fv_mono (C_spec_sub b hb) (List.subset_append_right _ _)
+              ((List.subset_append_right _ _).trans (List.subset_append_left _ _))
+              (List.subset_append_right _ _)
+          · refine specBodies_fv_weaken_bv ?_
+            intro v hv
             rcases List.mem_union_iff.mp (cu_spec_sub b hb hv) with h | h
             · rcases List.mem_union_iff.mp h with h | h
               · rcases List.mem_union_iff.mp (C_enc_fv_sub h) with h | h
@@ -8326,16 +8300,12 @@ theorem encodeTerm_decl
       refine ⟨ΔA ++ ΔC, by rw [pref, C_decl_eq, List.append_assoc], ?_, ?_⟩
       · intro b hb
         rw [specBodies_append, List.mem_append] at hb
-        rw [B.fv, declVars_append]
+        rw [B.fv, B.bv, declVars_append]
         rcases hb with hb | hb
-        · intro v hv
-          rcases List.mem_union_iff.mp (A_spec_sub b hb hv) with h | h
-          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-        · intro v hv
-          rcases List.mem_union_iff.mp (C_spec_sub b hb hv) with h | h
-          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+        · exact specBodies_fv_mono (A_spec_sub b hb) (List.subset_append_left _ _)
+            (List.subset_append_left _ _) (List.subset_append_left _ _)
+        · exact specBodies_fv_mono (C_spec_sub b hb) (List.subset_append_right _ _)
+            (List.subset_append_right _ _) (List.subset_append_right _ _)
       · intro v hv
         simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
           List.not_mem_nil, or_false] at hv
@@ -8364,19 +8334,16 @@ theorem encodeTerm_decl
         by rw [ci_decl_eq, C_decl_eq]; simp only [List.append_assoc], ?_, ?_⟩
       · intro b hb
         rw [specBodies_append, specBodies_append, List.mem_append, List.mem_append] at hb
-        rw [B.fv, declVars_append, declVars_append]
+        rw [B.fv, B.bv, declVars_append, declVars_append]
         rcases hb with (hb | hb) | hb
-        · intro v hv
-          rcases List.mem_union_iff.mp (A_spec_sub b hb hv) with h | h
-          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-              (List.mem_append_left _ h)))
-        · intro v hv
-          rcases List.mem_union_iff.mp (C_spec_sub b hb hv) with h | h
-          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-              (List.mem_append_right _ h)))
-        · intro v hv
+        · exact specBodies_fv_mono (A_spec_sub b hb) (List.subset_append_left _ _)
+            ((List.subset_append_left _ _).trans (List.subset_append_left _ _))
+            (List.subset_append_left _ _)
+        · exact specBodies_fv_mono (C_spec_sub b hb) (List.subset_append_right _ _)
+            ((List.subset_append_right _ _).trans (List.subset_append_left _ _))
+            (List.subset_append_right _ _)
+        · refine specBodies_fv_weaken_bv ?_
+          intro v hv
           rcases List.mem_union_iff.mp (ci_spec_sub b hb hv) with h | h
           · rcases List.mem_union_iff.mp h with h | h
             · rcases List.mem_union_iff.mp (A_enc_fv_sub h) with h | h
@@ -8416,19 +8383,16 @@ theorem encodeTerm_decl
           by rw [ci_decl_eq, C_decl_eq]; simp only [List.append_assoc], ?_, ?_⟩
         · intro b hb
           rw [specBodies_append, specBodies_append, List.mem_append, List.mem_append] at hb
-          rw [B.fv, declVars_append, declVars_append]
+          rw [B.fv, B.bv, declVars_append, declVars_append]
           rcases hb with (hb | hb) | hb
-          · intro v hv
-            rcases List.mem_union_iff.mp (A_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-                (List.mem_append_left _ h)))
-          · intro v hv
-            rcases List.mem_union_iff.mp (C_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-                (List.mem_append_right _ h)))
-          · intro v hv
+          · exact specBodies_fv_mono (A_spec_sub b hb) (List.subset_append_left _ _)
+              ((List.subset_append_left _ _).trans (List.subset_append_left _ _))
+              (List.subset_append_left _ _)
+          · exact specBodies_fv_mono (C_spec_sub b hb) (List.subset_append_right _ _)
+              ((List.subset_append_right _ _).trans (List.subset_append_left _ _))
+              (List.subset_append_right _ _)
+          · refine specBodies_fv_weaken_bv ?_
+            intro v hv
             rcases List.mem_union_iff.mp (ci_spec_sub b hb hv) with h | h
             · rcases List.mem_union_iff.mp h with h | h
               · rcases List.mem_union_iff.mp (C_enc_fv_sub h) with h | h
@@ -8553,16 +8517,12 @@ theorem encodeTerm_decl
           by rw [pre4, pre3, pre2, pre, C_decl_eq, List.append_assoc], ?_, ?_⟩
         · intro b hb
           rw [specBodies_append, List.mem_append] at hb
-          rw [B.fv, declVars_append]
+          rw [B.fv, B.bv, declVars_append]
           rcases hb with hb | hb
-          · intro v hv
-            rcases List.mem_union_iff.mp (A_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _ h))
-          · intro v hv
-            rcases List.mem_union_iff.mp (C_spec_sub b hb hv) with h | h
-            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+          · exact specBodies_fv_mono (A_spec_sub b hb) (List.subset_append_left _ _)
+              (List.subset_append_left _ _) (List.subset_append_left _ _)
+          · exact specBodies_fv_mono (C_spec_sub b hb) (List.subset_append_right _ _)
+              (List.subset_append_right _ _) (List.subset_append_right _ _)
         · intro v hv
           simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append,
             List.mem_cons, List.not_mem_nil, or_false] at hv
@@ -8670,19 +8630,16 @@ theorem encodeTerm_decl
     · rw [ca_decl_eq]; simp only [List.append_assoc]
     · intro b hb
       rw [specBodies_append, specBodies_append, List.mem_append, List.mem_append] at hb
-      rw [B.fv, declVars_append, declVars_append]
+      rw [B.fv, B.bv, declVars_append, declVars_append]
       rcases hb with (hb | hb) | hb
-      · intro v hv
-        rcases List.mem_union_iff.mp (f_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-            (List.mem_append_left _ h)))
-      · intro v hv
-        rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
-        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
-        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
-            (List.mem_append_right _ h)))
-      · intro v hv
+      · exact specBodies_fv_mono (f_spec_sub b hb) (List.subset_append_left _ _)
+          ((List.subset_append_left _ _).trans (List.subset_append_left _ _))
+          (List.subset_append_left _ _)
+      · exact specBodies_fv_mono (x_spec_sub b hb) (List.subset_append_right _ _)
+          ((List.subset_append_right _ _).trans (List.subset_append_left _ _))
+          (List.subset_append_right _ _)
+      · refine specBodies_fv_weaken_bv ?_
+        intro v hv
         have hb' := ca_spec_sub b hb hv
         rcases List.mem_union_iff.mp hb' with h | h
         · rcases List.mem_union_iff.mp h with h | h
