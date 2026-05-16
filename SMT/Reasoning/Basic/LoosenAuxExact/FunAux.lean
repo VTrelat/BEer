@@ -551,6 +551,39 @@ theorem funSpecTermFvSubset
     · rw [fv, List.mem_singleton] at hv_a!
       exact False.elim (hv_not_a! hv_a!)
 
+/-- FV-restricted type compatibility for a unary loosening spec term `a!_spec`,
+denoted under a renaming context that binds the argument variable `a` and the
+loosened variable `a!`. The spec term's free variables are confined to `{a, a!}`
+(by `fv_spec`), so the type tags of the two bound values (`hx_ty`, `hw_ty`)
+suffice; nothing about the base context is needed. -/
+theorem funUnarySpecRespectsFV.{u}
+    {a!_spec : Term} {a a! x! : 𝒱} {α α' γ : SMTType}
+    {Δbase : RenamingContext.Context.{u}} {x₀ w : SMT.Dom.{u}}
+    {Γ : TypeContext}
+    (fv_spec : fv a!_spec ⊆ fv (Term.var a) ∪ {a!})
+    (a_ne_a! : a ≠ a!)
+    (hx_ty : x₀.snd.fst = α)
+    (hw_ty : w.snd.fst = α') :
+    SMT.RenamingContext.RespectsTypeContextOnFV
+      (Function.update (Function.update Δbase a! (some w)) a (some x₀))
+      (AList.insert a α (AList.insert a! α' (AList.insert x! γ Γ)))
+      a!_spec := by
+  intro v σ hv hlk
+  have hv' := fv_spec hv
+  rw [List.mem_union_iff] at hv'
+  rcases hv' with hva | hva!
+  · have hv_eq : v = a := by rwa [fv, List.mem_singleton] at hva
+    subst hv_eq
+    rw [AList.lookup_insert] at hlk
+    cases hlk
+    exact ⟨x₀, Function.update_self _ _ _, hx_ty⟩
+  · have hv_eq : v = a! := by simpa [Singleton.singleton] using hva!
+    subst hv_eq
+    rw [AList.lookup_insert_ne a_ne_a!.symm, AList.lookup_insert] at hlk
+    cases hlk
+    refine ⟨w, ?_, hw_ty⟩
+    rw [Function.update_of_ne a_ne_a!.symm, Function.update_self]
+
 theorem funSpecTermCoversUpdate.{u}
     {«Δ» : RenamingContext.Context.{u}}
     {x a!_spec b!_spec hdefault : Term}
@@ -5756,8 +5789,9 @@ theorem funDenSpecTrueAtCast.{u}
           simpa [hctx_swap x₁, proof_irrel_heq] using
             a_spec_total_at X! x₁ wy0 hx₁_ty hwy0_ty
         · intro x₁ hx₁_ty D hden_a'
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a') (hΔΓ := sorry)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a')
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₁_ty hwy0_ty)
         · simpa [hctx_swap wx₀, proof_irrel_heq, wx₀] using hden_a
         · exact hΦa_true
       have hφ_forall_b :
@@ -6305,8 +6339,9 @@ theorem funDenSpecTrueAtCast.{u}
           simpa [hctx_swap x₀, proof_irrel_heq] using
             a_spec_total_at X! x₀ wy0 hx₀_ty hwy0_ty
         · intro x₀ hx₀_ty D hden_a
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a) (hΔΓ := sorry)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a)
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
         · intro x₀ hx₀_ty D hden_a hDa_true
           have hφa :
               RenamingContext.CoversFV
@@ -7074,8 +7109,9 @@ theorem funSpecTrueImpliesCastAt.{u}
             simpa [hctx_swap_at wy0 x₁, proof_irrel_heq] using
               a_spec_total_at Y x₁ wy0 hx₁_ty hwy0_ty
           · intro x₁ hx₁_ty D hden_a'
-            exact denote_type_eq_of_typing
-              (typ_t := typ_a!_spec_swap) (hden := hden_a') (hΔΓ := sorry)
+            exact SMT.RenamingContext.denote_type_of_typing_fv
+              (htyp := typ_a!_spec_swap) (hden := hden_a')
+              (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₁_ty hwy0_ty)
           · simpa [hctx_swap_at wy0 wx₀, proof_irrel_heq, wx₀] using hden_a
         have hden_forall_b_some :
             ⟦(Term.forall [b!] [β'] bBody).abstract
@@ -7126,8 +7162,9 @@ theorem funSpecTrueImpliesCastAt.{u}
             simpa [hctx_swap_at wy0 x₀, proof_irrel_heq] using
               a_spec_total_at Y x₀ wy0 hx₀_ty hwy0_ty
           · intro x₀ hx₀_ty D hden_a
-            exact denote_type_eq_of_typing
-              (typ_t := typ_a!_spec_swap) (hden := hden_a) (hΔΓ := sorry)
+            exact SMT.RenamingContext.denote_type_of_typing_fv
+              (htyp := typ_a!_spec_swap) (hden := hden_a)
+              (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
           · intro x₀ hx₀_ty D hden_a hDa_true
             have hφa :
                 RenamingContext.CoversFV
@@ -7212,8 +7249,9 @@ theorem funSpecTrueImpliesCastAt.{u}
           simpa [hctx_swap_at wy0 x₁, proof_irrel_heq] using
             a_spec_total_at Y x₁ wy0 hx₁_ty hwy0_ty
         · intro x₁ hx₁_ty D hden_a'
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a') (hΔΓ := sorry)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a')
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₁_ty hwy0_ty)
         · simpa [hctx_swap_at wy0 wx₀, proof_irrel_heq, wx₀] using hden_a
       obtain ⟨Dbody, hden_body, hDbody_true⟩ :=
         funUnaryForallTrueImpliesAt
@@ -7451,8 +7489,9 @@ theorem funSpecTrueImpliesCastAt.{u}
           simpa [hctx_swap_at wy0 x₀, proof_irrel_heq] using
             a_spec_total_at Y x₀ wy0 hx₀_ty hwy0_ty
         · intro x₀ hx₀_ty D hden_a
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a) (hΔΓ := sorry)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a)
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
         · intro x₀ hx₀_ty D hden_a hDa_true
           have hφa :
               RenamingContext.CoversFV
@@ -8081,8 +8120,9 @@ theorem funSpecTotalAt.{u}
           simpa [hctx_swap_at wy0 x₁, proof_irrel_heq] using
             a_spec_total_at x₁ wy0 hx₁_ty hwy0_ty
         · intro x₁ hx₁_ty D hden_a'
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a') (hΔΓ := sorry)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a')
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₁_ty hwy0_ty)
         · simpa [hctx_swap_at wy0 wx₀, proof_irrel_heq, wx₀] using hden_a
       have hden_forall_b_some :
           ⟦(Term.forall [b!] [β'] bBody).abstract
@@ -8133,8 +8173,9 @@ theorem funSpecTotalAt.{u}
           simpa [hctx_swap_at wy0 x₀, proof_irrel_heq] using
             a_spec_total_at x₀ wy0 hx₀_ty hwy0_ty
         · intro x₀ hx₀_ty D hden_a
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a) (hΔΓ := sorry)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a)
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
         · intro x₀ hx₀_ty D hden_a hDa_true
           have hφa :
               RenamingContext.CoversFV
