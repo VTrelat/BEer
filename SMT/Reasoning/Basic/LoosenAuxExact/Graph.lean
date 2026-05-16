@@ -731,7 +731,22 @@ private theorem graphDenSpecSomeAt
     simpa [SMT.RenamingContext.denote] using hspec_isSome
   obtain ⟨Φ, hdenΦ⟩ := Option.isSome_iff_exists.mp hspec_some_goal
   refine ⟨hφ_goal, Φ, hdenΦ, ?_⟩
-  exact denote_type_eq_of_typing (typ_t := typ_z!_spec_body) (hden := hdenΦ) (hΔΓ := sorry)
+  exact SMT.RenamingContext.denote_type_of_typing_fv (htyp := typ_z!_spec_body) (hden := hdenΦ) (hcompat := by
+    intro v τ hv hlk
+    have hv' := fv_z!_spec hv
+    rw [List.mem_union_iff] at hv'
+    rcases hv' with hvz | hvz!
+    · have hvz_eq : v = z := by simpa [fv] using hvz
+      subst v
+      rw [AList.lookup_insert] at hlk; cases hlk
+      refine ⟨x₀, ?_, hx₀_ty⟩
+      simp [Δgoal]
+    · have hvz!_eq : v = z! := List.mem_singleton.mp hvz!
+      subst v
+      rw [AList.lookup_insert_ne z_ne_z!.symm, AList.lookup_insert] at hlk; cases hlk
+      refine ⟨wy0, ?_, hwy0_ty⟩
+      show Function.update (Function.update (Function.update «Δ» x! (some Yfun)) z! (some wy0)) z (some x₀) z! = some wy0
+      rw [Function.update_of_ne z_ne_z!.symm, Function.update_self])
 
 private theorem graphDenSomeSndAt
     {«Δ» : RenamingContext.Context} {x! z z! : 𝒱}
@@ -871,6 +886,7 @@ private theorem graphDenSpecTrueAtCast
     ZFSet.is_func_is_pfunc hcast
   have hx₀_cast_dom : x₀.fst ∈ cast.Dom := by
     simpa [ZFSet.is_func_dom_eq hcast] using hx₀_mem
+  -- TODO: blocked on loosenAux_prf_spec postcondition (adequacy clause)
   have hX₀_ty : X₀!.snd.fst = σ' :=
     denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!) (hΔΓ := sorry)
   have hX₀_val :

@@ -2297,7 +2297,12 @@ theorem funUnaryForallEqZffalse.{u}
   obtain ⟨Φ, hden_forall⟩ := Option.isSome_iff_exists.mp hsome_forall
   have hΦ_ty :
       Φ.snd.fst = SMTType.bool := by
-    exact denote_type_eq_of_typing (typ_t := typ_forall) (hden := hden_forall) (hΔΓ := sorry)
+    -- The denotation of a `forall` node is always boolean, independent of the
+    -- typing context: unfold `abstract`/`denote` and read off the tag.
+    rw [SMT.Term.abstract] at hden_forall; split_ifs at hden_forall with hlen
+    · simp only [SMT.denote] at hden_forall; split_ifs at hden_forall
+      · simp only [Option.pure_def, Option.some_inj] at hden_forall; cases hden_forall; rfl
+    · simp at hlen
   have hΦ_false :
       Φ.fst = zffalse := by
     have hΦ_bool : Φ.fst ∈ 𝔹 := by
