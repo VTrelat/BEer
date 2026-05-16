@@ -190,6 +190,12 @@ private theorem chpredBodyGetTypeOf
     (typ_exists' :
       (AList.insert z! α' Γ) ⊢ˢ
         (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec)) : SMTType.bool)
+    (respects_exists :
+      ∀ (Yfun W : SMT.Dom), W.snd.fst = α' →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update «Δ» x! (some Yfun)) z! (some W))
+          (AList.insert z! α' Γ)
+          (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec)))
     (hgo_cov :
       ∀ (Yfun : SMT.Dom),
         ∀ v ∈ SMT.fv (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec)), v ∉ [z!] →
@@ -239,8 +245,12 @@ private theorem chpredBodyGetTypeOf
         some D0 := by
     rw [←hgo_exists Yfun x_1 hx_1]
     exact hden_body
+  have hW_ty : (x_1 ⟨0, by simp⟩).snd.fst = α' := by
+    simpa using (hx_1 ⟨0, by simp⟩).1
   have hD0_ty : D0.snd.fst = SMTType.bool :=
-    denote_type_eq_of_typing (typ_t := typ_exists') (hden := hden_exists) (hΔΓ := sorry)
+    SMT.RenamingContext.denote_type_of_typing_fv typ_exists'
+      (respects_exists Yfun (x_1 ⟨0, by simp⟩) hW_ty)
+      (hexists_cov Yfun (x_1 ⟨0, by simp⟩)) hden_exists
   have hget_eq :
       (⟦(Term.abstract.go
           (Term.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec))
@@ -501,7 +511,32 @@ private theorem chpredDenSpecSomeAt
     simpa [SMT.RenamingContext.denote] using hspec_isSome
   obtain ⟨Φ, hdenΦ⟩ := Option.isSome_iff_exists.mp hspec_some_goal
   refine ⟨hφ_goal, Φ, hdenΦ, ?_⟩
-  exact denote_type_eq_of_typing (typ_t := typ_z!_spec_body) (hden := hdenΦ) (hΔΓ := sorry)
+  -- FV-restricted type compatibility suffices: `z!_spec`'s free variables are
+  -- among `{z, z!}`, both bound by the `z`/`z!` inserts of the body type-context.
+  refine SMT.RenamingContext.denote_type_of_typing_fv
+    typ_z!_spec_body ?_ hφ_goal hdenΦ
+  intro v σ hv hlk
+  have hv' := fv_z!_spec hv
+  rw [List.mem_union_iff] at hv'
+  rcases hv' with hvz | hvz!
+  · have hvz' : v = z := by simpa [fv] using hvz
+    subst v
+    rw [AList.lookup_insert] at hlk
+    cases hlk
+    refine ⟨x₀, ?_, hx₀_ty⟩
+    show Function.update
+      (Function.update (Function.update «Δ» x! (some Yfun)) z! (some wy0))
+      z (some x₀) z = some x₀
+    rw [Function.update_self]
+  · have hvz!' : v = z! := List.mem_singleton.mp hvz!
+    subst v
+    rw [AList.lookup_insert_ne z_ne_z!.symm, AList.lookup_insert] at hlk
+    cases hlk
+    refine ⟨wy0, ?_, hwy0_ty⟩
+    show Function.update
+      (Function.update (Function.update «Δ» x! (some Yfun)) z! (some wy0))
+      z (some x₀) z! = some wy0
+    rw [Function.update_of_ne z_ne_z!.symm, Function.update_self]
 
 private theorem chpredDenSpecTrueAtCast
     {Γ : TypeContext} {«Δ» : RenamingContext.Context} {z!_spec : Term}
@@ -575,6 +610,11 @@ private theorem chpredDenSpecTrueAtCast
     ZFSet.is_func_is_pfunc hcast
   have hx₀_cast_dom : x₀.fst ∈ cast.Dom := by
     simpa [ZFSet.is_func_dom_eq hcast] using hx₀_mem
+  -- TODO: blocked on loosenAux_prf_spec postcondition (adequacy clause).
+  -- `X₀!` is the existentially-bound loosened value supplied by `den_z_at`; its
+  -- denotation `hden_var_z!` carries no type information, so deriving `X₀!.snd.fst = α'`
+  -- via the FV-restricted `denote_type_of_typing_fv` on the bare `Term.var z!` is
+  -- circular. The honest fix strengthens `den_z_at`'s postcondition.
   have hX₀_ty : X₀!.snd.fst = α' :=
     denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!) (hΔΓ := sorry)
   have hX₀_val :
@@ -803,6 +843,12 @@ private theorem chpredBodyTyOf
     (typ_exists :
       (AList.insert z! α' Γ) ⊢ˢ
         (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec)) : SMTType.bool)
+    (respects_exists :
+      ∀ (Yfun W : SMT.Dom), W.snd.fst = α' →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update «Δ» x! (some Yfun)) z! (some W))
+          (AList.insert z! α' Γ)
+          (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec)))
     (hbody_total :
       ∀ (Yfun : SMT.Dom)
         (x_1 : Fin [z!].length → SMT.Dom)
@@ -824,7 +870,7 @@ private theorem chpredBodyTyOf
         (hbody_total Yfun x_1 hx_1)).snd.fst =
       SMTType.bool := by
   exact chpredBodyGetTypeOf
-    (Γ := Γ) (typ_exists' := typ_exists) hgo_cov hexists_cov hgo_exists hbody_total
+    (Γ := Γ) (typ_exists' := typ_exists) respects_exists hgo_cov hexists_cov hgo_exists hbody_total
     Yfun x_1 hx_1
 
 set_option maxHeartbeats 1500000 in
@@ -2898,10 +2944,34 @@ theorem loosenAux_prf_exact.chpred («Δ» : RenamingContext.Context.{u})
                   (hgo_cov Yfun)).uncurry x_1⟧ˢ.get
                   (hbody_total Yfun x_1 hx_1)).snd.fst =
                 SMTType.bool := by
+            have respects_exists_St₂ :
+                ∀ (Yfun W : SMT.Dom), W.snd.fst = α' →
+                  SMT.RenamingContext.RespectsTypeContextOnFV
+                    (Function.update (Function.update «Δ» x! (some Yfun)) z! (some W))
+                    (AList.insert z! α' St₂.types)
+                    (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec)) := by
+              intro Yfun' W hW_ty v σ hv hlk
+              have hv' := hfv_exists_sub hv
+              rw [List.mem_union_iff] at hv'
+              rcases hv' with hvx | hvz!
+              · have hv_ne_x! : v ≠ x! := fun h => x!_not_mem_fv_x (h ▸ hvx)
+                have hv_ne_z! : v ≠ z! := fun h => z!_not_mem_fv_x (h ▸ hvx)
+                rw [AList.lookup_insert_ne hv_ne_z!, St₂_types_eq,
+                  AList.lookup_insert_ne hv_ne_x!] at hlk
+                obtain ⟨d, hd_eq, hd_ty⟩ := respects hvx hlk
+                refine ⟨d, ?_, hd_ty⟩
+                rw [Function.update_of_ne hv_ne_z!, Function.update_of_ne hv_ne_x!]
+                exact hd_eq
+              · have hvz!' : v = z! := List.mem_singleton.mp hvz!
+                subst v
+                rw [AList.lookup_insert] at hlk
+                cases hlk
+                exact ⟨W, by rw [Function.update_self], hW_ty⟩
             exact chpredBodyTyOf
               (Γ := St₂.types)
               (hgo_cov := hgo_cov) (hexists_cov := hexists_cov) (hgo_exists := hgo_exists)
-              (typ_exists := typ_exists') (hbody_total := hbody_total)
+              (typ_exists := typ_exists') (respects_exists := respects_exists_St₂)
+              (hbody_total := hbody_total)
               Yfun x_1 hx_1
           have den_app_at
               (Yfun wy0 x₀ : SMT.Dom)
@@ -3115,8 +3185,18 @@ theorem loosenAux_prf_exact.chpred («Δ» : RenamingContext.Context.{u})
                 · exfalso
                   exact hlen_pos (by simp)
               obtain ⟨Dlam, hDlam_raw⟩ := Option.isSome_iff_exists.mp hlam_some
-              have hDlam_ty : Dlam.snd.fst = α'.fun SMTType.bool :=
-                denote_type_eq_of_typing (typ_t := typ_lambda) (hden := hDlam_raw) (hΔΓ := sorry)
+              have hDlam_ty : Dlam.snd.fst = α'.fun SMTType.bool := by
+                -- The lambda's free variables sit inside `fv x` (`hfv_lambda_sub`); on
+                -- those, `Function.update «Δ» x! _` agrees with `«Δ»`, and `St₂.types`
+                -- agrees with `St₁.types`, so the top-level FV-respects `respects` applies.
+                refine SMT.RenamingContext.denote_type_of_typing_fv
+                  typ_lambda ?_ _ hDlam_raw
+                intro v σ hv hlk
+                have hv_x : v ∈ SMT.fv x := hfv_lambda_sub hv
+                have hv_ne : v ≠ x! := fun h => x!_not_mem_fv_x (h ▸ hv_x)
+                rw [St₂_types_eq, AList.lookup_insert_ne hv_ne] at hlk
+                obtain ⟨d, hd_eq, hd_ty⟩ := respects hv_x hlk
+                exact ⟨d, by rw [Function.update_of_ne hv_ne]; exact hd_eq, hd_ty⟩
               have hEq_ty : Y.snd.fst = Dlam.snd.fst := by
                 rw [hY, hDlam_ty]
               obtain ⟨Deq, hDeq_raw, hDeq_ty⟩ :=
