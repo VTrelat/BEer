@@ -2394,7 +2394,36 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                               hφ_goal⟧ˢ = some Dspec := by
                         simpa [SMT.RenamingContext.denote] using hDspec_ctx
                       have hDspec_ty : Dspec.2.1 = .bool := by
-                        exact denote_type_eq_of_typing (typ_t := typ_the_x!_spec_St₃) (hden := hDspec_raw) (hΔΓ := sorry)
+                        refine SMT.RenamingContext.denote_type_of_typing_fv typ_the_x!_spec_St₃ ?_ _ hDspec_raw
+                        intro v σ hv hlk
+                        have hv' := fv_the_x!_spec hv
+                        rw [List.mem_union_iff] at hv'
+                        rcases hv' with hvt | hvthe
+                        · have hv_ne_x! : v ≠ x! := by
+                            intro h; subst h
+                            exact x!_not_mem_fv_x (by simpa [SMT.fv] using hvt)
+                          have hv_ne_the : v ≠ the_x! := by
+                            intro h; subst h
+                            exact the_x!_fresh (SMT.Typing.mem_context_of_mem_fv typ_the_x_St₂ hvt)
+                          have hv_St₂ : v ∈ St₂.types :=
+                            SMT.Typing.mem_context_of_mem_fv typ_the_x_St₂ hvt
+                          obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_St₂)
+                          have hσ'_St₃ : St₃.types.lookup v = some σ' :=
+                            AList.lookup_of_subset St₃_types_eq ((AList.lookup_insert_ne hv_ne_the).trans hσ')
+                          have hσeq : σ = σ' := by rw [hσ'_St₃] at hlk; exact (Option.some.inj hlk).symm
+                          subst hσeq
+                          obtain ⟨d, hd_eq, hd_ty⟩ := respects_the hvt hσ'
+                          refine ⟨d, ?_, hd_ty⟩
+                          rw [Function.update_of_ne hv_ne_the, Function.update_of_ne hv_ne_x!]
+                          exact hd_eq
+                        · have hvthe' : v = the_x! := List.mem_singleton.mp hvthe
+                          subst v
+                          have hσeq : σ = α' := by
+                            have hlkthe := SMT.Typing.varE typ_the_x!_St₃
+                            rw [hlkthe] at hlk; exact (Option.some.inj hlk).symm
+                          subst hσeq
+                          refine ⟨x_1 i0, ?_, hx0.1⟩
+                          rw [Function.update_self]
                       let Δgoal : SMT.RenamingContext.Context :=
                         Function.update (Function.update «Δ» x! (some X!opt)) the_x! (some (x_1 i0))
                       have hcov_x! : SMT.RenamingContext.CoversFV Δgoal (SMT.Term.var x!) := by
@@ -2482,7 +2511,10 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                             (congrArg (fun d : SMT.Dom => d.fst) (Option.some.inj hdenY')).trans hExistsTrue0
                         by_contra hnotmem
                         have hXthe_ty : Xthe.snd.fst = α := by
-                          exact denote_type_eq_of_typing (typ_t := typ_the_x_St₂) (hden := hden_x_the) (hΔΓ := sorry)
+                          -- FV-restricted type compatibility suffices: `respects_the` gives
+                          -- type compatibility on `fv x.the` between `«Δ»` and `St₂.types`.
+                          exact SMT.RenamingContext.denote_type_of_typing_fv
+                            typ_the_x_St₂ respects_the hx_the hden_x_the
                         have hXthe_memα : Xthe.fst ∈ ⟦α⟧ᶻ := by
                           simpa [hXthe_ty] using Xthe.snd.snd
                         have hX_fst_eq : X.fst = (ZFSet.Option.some ⟨Xthe.fst, hXthe_memα⟩).1 := by
@@ -2749,7 +2781,36 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                                 some Dspec := by
                             simpa [SMT.RenamingContext.denote] using hDspec_ctx_the
                           have hDspec_ty : Dspec.2.1 = .bool := by
-                            exact denote_type_eq_of_typing (typ_t := typ_the_x!_spec_St₃) (hden := hDspec_raw) (hΔΓ := sorry)
+                            refine SMT.RenamingContext.denote_type_of_typing_fv typ_the_x!_spec_St₃ ?_ _ hDspec_raw
+                            intro v σ hv hlk
+                            have hv' := fv_the_x!_spec hv
+                            rw [List.mem_union_iff] at hv'
+                            rcases hv' with hvt | hvthe
+                            · have hv_ne_x! : v ≠ x! := by
+                                intro h; subst h
+                                exact x!_not_mem_fv_x (by simpa [SMT.fv] using hvt)
+                              have hv_ne_the : v ≠ the_x! := by
+                                intro h; subst h
+                                exact the_x!_fresh (SMT.Typing.mem_context_of_mem_fv typ_the_x_St₂ hvt)
+                              have hv_St₂ : v ∈ St₂.types :=
+                                SMT.Typing.mem_context_of_mem_fv typ_the_x_St₂ hvt
+                              obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_St₂)
+                              have hσ'_St₃ : St₃.types.lookup v = some σ' :=
+                                AList.lookup_of_subset St₃_types_eq ((AList.lookup_insert_ne hv_ne_the).trans hσ')
+                              have hσeq : σ = σ' := by rw [hσ'_St₃] at hlk; exact (Option.some.inj hlk).symm
+                              subst hσeq
+                              obtain ⟨d, hd_eq, hd_ty⟩ := respects_the hvt hσ'
+                              refine ⟨d, ?_, hd_ty⟩
+                              rw [Function.update_of_ne hv_ne_the, Function.update_of_ne hv_ne_x!]
+                              exact hd_eq
+                            · have hvthe' : v = the_x! := List.mem_singleton.mp hvthe
+                              subst v
+                              have hσeq : σ = α' := by
+                                have hlkthe := SMT.Typing.varE typ_the_x!_St₃
+                                rw [hlkthe] at hlk; exact (Option.some.inj hlk).symm
+                              subst hσeq
+                              refine ⟨wy i0, ?_, hx0.1⟩
+                              rw [Function.update_self]
                           let Δgoal : SMT.RenamingContext.Context :=
                             Function.update (Function.update «Δ» x! (some Y)) the_x! (some (wy i0))
                           have hcov_x! : SMT.RenamingContext.CoversFV Δgoal (SMT.Term.var x!) := by
@@ -3031,7 +3092,36 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                               hφ_goal⟧ˢ = some Dspec := by
                         simpa [SMT.RenamingContext.denote] using hDspec_ctx
                       have hDspec_ty : Dspec.2.1 = .bool := by
-                        exact denote_type_eq_of_typing (typ_t := typ_the_x!_spec_St₃) (hden := hDspec_raw) (hΔΓ := sorry)
+                        refine SMT.RenamingContext.denote_type_of_typing_fv typ_the_x!_spec_St₃ ?_ _ hDspec_raw
+                        intro v σ hv hlk
+                        have hv' := fv_the_x!_spec hv
+                        rw [List.mem_union_iff] at hv'
+                        rcases hv' with hvt | hvthe
+                        · have hv_ne_x! : v ≠ x! := by
+                            intro h; subst h
+                            exact x!_not_mem_fv_x (by simpa [SMT.fv] using hvt)
+                          have hv_ne_the : v ≠ the_x! := by
+                            intro h; subst h
+                            exact the_x!_fresh (SMT.Typing.mem_context_of_mem_fv typ_the_x_St₂ hvt)
+                          have hv_St₂ : v ∈ St₂.types :=
+                            SMT.Typing.mem_context_of_mem_fv typ_the_x_St₂ hvt
+                          obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_St₂)
+                          have hσ'_St₃ : St₃.types.lookup v = some σ' :=
+                            AList.lookup_of_subset St₃_types_eq ((AList.lookup_insert_ne hv_ne_the).trans hσ')
+                          have hσeq : σ = σ' := by rw [hσ'_St₃] at hlk; exact (Option.some.inj hlk).symm
+                          subst hσeq
+                          obtain ⟨d, hd_eq, hd_ty⟩ := respects_the hvt hσ'
+                          refine ⟨d, ?_, hd_ty⟩
+                          rw [Function.update_of_ne hv_ne_the, Function.update_of_ne hv_ne_x!]
+                          exact hd_eq
+                        · have hvthe' : v = the_x! := List.mem_singleton.mp hvthe
+                          subst v
+                          have hσeq : σ = α' := by
+                            have hlkthe := SMT.Typing.varE typ_the_x!_St₃
+                            rw [hlkthe] at hlk; exact (Option.some.inj hlk).symm
+                          subst hσeq
+                          refine ⟨x_1 i0, ?_, hx0.1⟩
+                          rw [Function.update_self]
                       let Δgoal : SMT.RenamingContext.Context :=
                         Function.update (Function.update «Δ» x! (some Y)) the_x! (some (x_1 i0))
                       have hcov_x! : SMT.RenamingContext.CoversFV Δgoal (SMT.Term.var x!) := by
