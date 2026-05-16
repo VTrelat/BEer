@@ -551,6 +551,17 @@ theorem funSpecTermFvSubset
     · rw [fv, List.mem_singleton] at hv_a!
       exact False.elim (hv_not_a! hv_a!)
 
+/-- Transport `RespectsTypeContextOnFV` across two renaming contexts that agree
+on the free variables of the indexed term. -/
+theorem funRespectsFVCongr.{u}
+    {Dc Dc' : RenamingContext.Context.{u}} {Γ : TypeContext} {t : Term}
+    (resp : SMT.RenamingContext.RespectsTypeContextOnFV Dc Γ t)
+    (hag : ∀ v ∈ fv t, Dc v = Dc' v) :
+    SMT.RenamingContext.RespectsTypeContextOnFV Dc' Γ t := by
+  intro v σ hv hlk
+  obtain ⟨d, hd, hd_ty⟩ := resp hv hlk
+  exact ⟨d, (hag v hv) ▸ hd, hd_ty⟩
+
 /-- FV-restricted type compatibility for a unary loosening spec term `a!_spec`,
 denoted under a renaming context that binds the argument variable `a` and the
 loosened variable `a!`. The spec term's free variables are confined to `{a, a!}`
@@ -583,6 +594,37 @@ theorem funUnarySpecRespectsFV.{u}
     cases hlk
     refine ⟨w, ?_, hw_ty⟩
     rw [Function.update_of_ne a_ne_a!.symm, Function.update_self]
+
+/-- Variant of `funUnarySpecRespectsFV` where the loosened variable `a!` is the
+outermost binding both in the renaming context and the type context — the shape
+produced by `loosenAux` for the existential-body spec. -/
+theorem funUnarySpecRespectsFV'.{u}
+    {a!_spec : Term} {a a! x! : 𝒱} {α α' γ : SMTType}
+    {Δbase : RenamingContext.Context.{u}} {x₀ w : SMT.Dom.{u}}
+    {Γ : TypeContext}
+    (fv_spec : fv a!_spec ⊆ fv (Term.var a) ∪ {a!})
+    (a_ne_a! : a ≠ a!)
+    (hx_ty : x₀.snd.fst = α)
+    (hw_ty : w.snd.fst = α') :
+    SMT.RenamingContext.RespectsTypeContextOnFV
+      (Function.update (Function.update Δbase a (some x₀)) a! (some w))
+      (AList.insert a! α' (AList.insert a α (AList.insert x! γ Γ)))
+      a!_spec := by
+  intro v σ hv hlk
+  have hv' := fv_spec hv
+  rw [List.mem_union_iff] at hv'
+  rcases hv' with hva | hva!
+  · have hv_eq : v = a := by rwa [fv, List.mem_singleton] at hva
+    subst hv_eq
+    rw [AList.lookup_insert_ne a_ne_a!, AList.lookup_insert] at hlk
+    cases hlk
+    refine ⟨x₀, ?_, hx_ty⟩
+    rw [Function.update_of_ne a_ne_a!, Function.update_self]
+  · have hv_eq : v = a! := by simpa [Singleton.singleton] using hva!
+    subst hv_eq
+    rw [AList.lookup_insert] at hlk
+    cases hlk
+    exact ⟨w, Function.update_self _ _ _, hw_ty⟩
 
 theorem funSpecTermCoversUpdate.{u}
     {«Δ» : RenamingContext.Context.{u}}
@@ -2780,7 +2822,16 @@ theorem funExistsABTotalAt.{u}
                   ⟦((@ˢx) (Term.var a)).abstract (Function.update ΔY a (some x₀)) hcov_xa⟧ˢ =
                     some Dxa)
     (typ_a_ctx : Γa ⊢ˢ a!_spec : SMTType.bool)
-    (typ_b_ctx : Γb ⊢ˢ b!_spec : SMTType.bool) :
+    (typ_b_ctx : Γb ⊢ˢ b!_spec : SMTType.bool)
+    (respects_a :
+      ∀ x₀ : SMT.Dom.{u}, x₀.snd.fst = α →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update ΔY a (some x₀)) a! (some wy0)) Γa a!_spec)
+    (respects_b :
+      ∀ y₀ : SMT.Dom.{u}, y₀.snd.fst = β →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update (Function.update ΔY a! (some wy0)) b (some y₀)) b! (some DappX))
+          Γb b!_spec) :
     ⟦(Term.exists [a, b] [α, β] (((@ˢx) (Term.var a) =ˢ Term.var b) ∧ˢ (a!_spec ∧ˢ b!_spec))).abstract
         (Function.update (Function.update ΔY a! (some wy0)) b! (some DappX))
         hφ_exists_ab⟧ˢ.isSome =
@@ -2998,9 +3049,54 @@ theorem funExistsABTotalAt.{u}
     obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
     obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
     have hDa_ty : Da.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a) (hΔΓ := sorry)
+      have hresp_w :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δw Γa a!_spec := by
+        refine funRespectsFVCongr
+          (resp := respects_a (w ⟨0, by simp⟩) (hw ⟨0, by simp⟩).1) ?_
+        intro v hv
+        have hv' := fv_a!_spec hv
+        rw [List.mem_union_iff] at hv'
+        rcases hv' with hva | hva!
+        · rw [fv, List.mem_singleton] at hva
+          subst hva
+          dsimp [Δw, Δb0]
+          rw [Function.update_of_ne a_ne_a!, Function.update_self,
+            Function.update_of_ne b_ne_a.symm, Function.update_self]
+        · have hv_eq : v = a! := by
+            change v ∈ ([a!] : List 𝒱) at hva!
+            rw [List.mem_singleton] at hva!
+            exact hva!
+          subst hv_eq
+          dsimp [Δw, Δb0]
+          rw [Function.update_self, Function.update_of_ne a!_ne_b,
+            Function.update_of_ne a_ne_a!.symm, Function.update_of_ne a!_ne_b!,
+            Function.update_self]
+      exact SMT.RenamingContext.denote_type_of_typing_fv
+        (htyp := typ_a_ctx) (hden := hden_a) (hcompat := hresp_w)
     have hDb_ty : Db.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b) (hΔΓ := sorry)
+      have hresp_w :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δw Γb b!_spec := by
+        refine funRespectsFVCongr
+          (resp := respects_b (w ⟨1, by simp⟩) (hw ⟨1, by simp⟩).1) ?_
+        intro v hv
+        have hv' := fv_b!_spec hv
+        rw [List.mem_union_iff] at hv'
+        rcases hv' with hvb | hvb!
+        · rw [fv, List.mem_singleton] at hvb
+          subst hvb
+          dsimp [Δw, Δb0]
+          rw [Function.update_self, Function.update_of_ne b_ne_b!,
+            Function.update_self]
+        · have hv_eq : v = b! := by
+            change v ∈ ([b!] : List 𝒱) at hvb!
+            rw [List.mem_singleton] at hvb!
+            exact hvb!
+          subst hv_eq
+          dsimp [Δw, Δb0]
+          rw [Function.update_of_ne b_ne_b!.symm, Function.update_of_ne a_ne_b!.symm,
+            Function.update_self, Function.update_self]
+      exact SMT.RenamingContext.denote_type_of_typing_fv
+        (htyp := typ_b_ctx) (hden := hden_b) (hcompat := hresp_w)
     have hcov_app_w :
         RenamingContext.CoversFV Δw ((@ˢx) (Term.var a)) := by
       have hcov_body_w := hcov_body_upd (w ⟨0, by simp⟩) (w ⟨1, by simp⟩)
@@ -6970,6 +7066,17 @@ theorem funSpecTrueImpliesCastAt.{u}
         exact ⟨hcov_xa, Dxa, hDxa_ty, hden_xa⟩)
       (typ_a_ctx := typ_a!_spec_ctx_base)
       (typ_b_ctx := typ_b!_spec_ctx_base)
+      (respects_a := by
+        intro x₀ hx₀_ty
+        exact funUnarySpecRespectsFV' fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
+      (respects_b := by
+        intro y₀ hy₀_ty
+        have b_ne_b! : b ≠ b! := by
+          intro h
+          exact b!_not_base (h ▸ by
+            rw [AList.mem_insert]
+            exact Or.inl rfl)
+        exact funUnarySpecRespectsFV' fv_b!_spec b_ne_b! hy₀_ty hwy1_ty)
   have hbody_ty_b_at :
       ∀ wy0 wy1 : SMT.Dom,
         wy0.snd.fst = α' →
@@ -7999,6 +8106,17 @@ theorem funSpecTotalAt.{u}
         exact ⟨hcov_xa, Dxa, hDxa_ty, hden_xa⟩)
       (typ_a_ctx := typ_a!_spec_ctx_base)
       (typ_b_ctx := typ_b!_spec_ctx_base)
+      (respects_a := by
+        intro x₀ hx₀_ty
+        exact funUnarySpecRespectsFV' fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
+      (respects_b := by
+        intro y₀ hy₀_ty
+        have b_ne_b! : b ≠ b! := by
+          intro h
+          exact b!_not_base (h ▸ by
+            rw [AList.mem_insert]
+            exact Or.inl rfl)
+        exact funUnarySpecRespectsFV' fv_b!_spec b_ne_b! hy₀_ty hwy1_ty)
   have hbody_total_b_at :
       ∀ wy0 wy1 : SMT.Dom.{u},
         wy0.snd.fst = α' →
