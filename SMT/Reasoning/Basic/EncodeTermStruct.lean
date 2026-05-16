@@ -6818,6 +6818,96 @@ theorem encodeTerm_struct
   exact ⟨h1, h2, h3, h4, h5, h6,
     encodeTerm_struct.renaming_witness Δ₀_ext Δ₀_none_out h1 h3 h5⟩
 
+/-- The `modify`-style type-insert `forIn` loop leaves `declarations` unchanged. -/
+theorem encodeTerm_state.modifyTypes_forIn_decls (pairs : List (SMT.𝒱 × SMTType))
+    {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    forIn pairs PUnit.unit (fun (p : SMT.𝒱 × SMTType) _ => (do
+      modify (fun (e : EncoderState) => { e with types := AList.insert p.1 p.2 e.types })
+      pure (ForInStep.yield PUnit.unit) : Encoder (ForInStep PUnit)))
+    ⦃ ⇓ () ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  induction pairs with
+  | nil =>
+    mintro pre ∀S; mpure pre
+    simp only [List.forIn_nil]
+    mspec Std.Do.Spec.pure
+  | cons p pairs ih =>
+    mintro pre ∀S; mpure pre
+    simp only [List.forIn_cons, bind_assoc]
+    mspec Std.Do.Spec.modifyGet_StateT
+    mspec Std.Do.Spec.pure
+    mspec ih
+
+/-- The `addToContext` `forIn` loop leaves `declarations` unchanged. -/
+theorem SMT.addToContext_forIn_decls (pairs : List (SMT.𝒱 × SMTType))
+    {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    forIn pairs PUnit.unit (fun (p : SMT.𝒱 × SMTType) _ => do
+      SMT.addToContext p.1 p.2; pure (ForInStep.yield PUnit.unit))
+    ⦃ ⇓ () ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  induction pairs with
+  | nil =>
+    mintro pre ∀S; mpure pre
+    simp only [List.forIn_nil]
+    mspec Std.Do.Spec.pure
+  | cons p pairs ih =>
+    mintro pre ∀S; mpure pre
+    simp only [List.forIn_cons, bind_assoc]
+    unfold SMT.addToContext
+    mspec Std.Do.Spec.modifyGet_StateT
+    mspec Std.Do.Spec.pure
+    mspec ih
+
+/-- `eraseFromContext` leaves `declarations` unchanged. -/
+theorem SMT.eraseFromContext_decls {v : SMT.𝒱} {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    SMT.eraseFromContext v
+    ⦃ ⇓ () ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  unfold SMT.eraseFromContext
+  mintro pre ∀S; mpure pre
+  mspec Std.Do.Spec.modifyGet_StateT
+
+/-- The `eraseFromContext` `forIn` loop leaves `declarations` unchanged. -/
+theorem SMT.eraseFromContext_forIn_decls (zs : List SMT.𝒱) {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    forIn zs PUnit.unit (fun (v : SMT.𝒱) _ => do
+      SMT.eraseFromContext v; pure (ForInStep.yield PUnit.unit))
+    ⦃ ⇓ () ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  induction zs with
+  | nil =>
+    mintro pre ∀S; mpure pre
+    simp only [List.forIn_nil]
+    mspec Std.Do.Spec.pure
+  | cons z zs ih =>
+    mintro pre ∀S; mpure pre
+    simp only [List.forIn_cons, bind_assoc]
+    unfold SMT.eraseFromContext
+    mspec Std.Do.Spec.modifyGet_StateT
+    mspec Std.Do.Spec.pure
+    mspec ih
+
+/-- `freshVarList` leaves `declarations` unchanged (only calls `freshVar`). -/
+theorem SMT.freshVarList_decls (τs : List SMTType) {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    SMT.freshVarList τs
+    ⦃ ⇓ _ ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  induction τs with
+  | nil =>
+    mintro pre ∀S; mpure pre
+    show _ ⊢ₛ wp⟦(pure [] : Encoder (List SMT.𝒱))⟧ _ _
+    mspec Std.Do.Spec.pure
+  | cons τ τs ih =>
+    mintro pre ∀S; mpure pre
+    show _ ⊢ₛ wp⟦(List.cons <$> SMT.freshVar τ <*> SMT.freshVarList τs : Encoder (List SMT.𝒱))⟧ _ _
+    rw [show (List.cons <$> SMT.freshVar τ <*> SMT.freshVarList τs : Encoder (List SMT.𝒱)) =
+         (do let v ← SMT.freshVar τ; let vs ← SMT.freshVarList τs; pure (v :: vs)) from rfl]
+    mspec SMT.freshVar_decls
+    case post.success =>
+    mintro ∀S₁; mrename_i pre; mpure pre
+    mspec ih
+    mpure_intro
+    simp_all
+
 set_option maxHeartbeats 4000000 in
 /-- The `declarations`-delta invariant `C8''` of `encodeTerm`: encoding `t`
 appends a chunk `Δ` to `declarations`, every spec-body in `Δ` has free variables
