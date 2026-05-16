@@ -905,6 +905,154 @@ theorem loosenAux_prf_state
               exact Or.inl hx
             · exact absurd (List.mem_singleton.mp hw!) hv_ne_w!
 
+/-! ### `declarations`-preservation specs for `freshVar`, `defaultSpecM`, `loosenAux_prf`
+
+`freshVar` only touches `freshvarsc`/`usedVars`/`types`; `defaultSpecM` and
+`loosenAux_prf` only call `freshVar` (and recurse), so all three leave
+`env.declarations` untouched.  These small specs let the cast-helper delta
+specs (`castMembership_decl` etc.) account for the declarations delta as
+exactly the explicit `declareConst`/`addSpec` calls. -/
+
+/-- `incrementFreshVarC` leaves `declarations` unchanged. -/
+theorem SMT.incrementFreshVarC_decls {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    SMT.incrementFreshVarC
+    ⦃ ⇓ _ ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  unfold SMT.incrementFreshVarC
+  mintro pre ∀S; mpure pre
+  mspec Std.Do.Spec.modifyGet_StateT
+
+/-- `freshVar` leaves `declarations` unchanged. -/
+theorem SMT.freshVar_decls {τ : SMTType} {name : String} {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    SMT.freshVar τ name
+    ⦃ ⇓ _ ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  unfold SMT.freshVar
+  mintro pre ∀S; mpure pre
+  mspec SMT.incrementFreshVarC_decls
+
+/-- `defaultSpecM` leaves `declarations` unchanged (it only calls `freshVar`). -/
+theorem defaultSpecM_decls (τ : SMTType) {name : String} {t : SMT.Term}
+    {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    defaultSpecM name τ t
+    ⦃ ⇓? _ ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  induction τ generalizing name t with
+  | int | bool | unit | option σ _ =>
+    mintro pre ∀S; mpure pre
+    unfold defaultSpecM
+    mspec Std.Do.Spec.pure
+  | pair σ ρ σ_ih ρ_ih =>
+    mintro pre ∀S; mpure pre
+    unfold defaultSpecM
+    mspec σ_ih
+    mintro ∀S'; mrename_i pre; mpure pre
+    mspec ρ_ih
+  | «fun» σ ρ _ ρ_ih =>
+    mintro pre ∀S; mpure pre
+    unfold defaultSpecM
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀S'; mrename_i pre; mpure pre
+      mspec ρ_ih
+      mpure_intro; simp_all
+
+/-- The `pair` recursion of `loosenAux_prf_decls`, shared with the `graph`
+case (whose inner recursion is a `castPath.pair`). -/
+theorem loosenAux_prf_decls_pair {α β α' β' : SMTType} (pα : α ~> α') (pβ : β ~> β')
+    (pα_ih : ∀ {name : String} {x : SMT.Term} {decl : SMT.Chunk},
+      ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄ loosenAux_prf name pα x
+      ⦃ ⇓? _ ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄)
+    (pβ_ih : ∀ {name : String} {x : SMT.Term} {decl : SMT.Chunk},
+      ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄ loosenAux_prf name pβ x
+      ⦃ ⇓? _ ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄)
+    {name : String} {x : SMT.Term} {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    loosenAux_prf name (castPath.pair pα pβ) x
+    ⦃ ⇓? _ ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  mintro pre ∀S; mpure pre
+  unfold loosenAux_prf
+  mspec SMT.freshVar_decls
+  case post.success =>
+    mintro ∀S'; mrename_i pre; mpure pre
+    mspec pα_ih
+    mintro ∀S''; mrename_i pre; mpure pre
+    mspec pβ_ih
+    mpure_intro; simp_all
+
+/-- `loosenAux_prf` leaves `declarations` unchanged (it only calls `freshVar`
+and `defaultSpecM`, and recurses). -/
+theorem loosenAux_prf_decls {α β : SMTType} (c : α ~> β) {name : String}
+    {x : SMT.Term} {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
+    loosenAux_prf name c x
+    ⦃ ⇓? _ ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  induction c generalizing name x decl with
+  | @refl α hα =>
+    mintro pre ∀S; mpure pre
+    unfold loosenAux_prf
+    mspec SMT.freshVar_decls
+  | @opt α α' p ih =>
+    mintro pre ∀S; mpure pre
+    unfold loosenAux_prf
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀S'; mrename_i pre; mpure pre
+      split
+      · mspec Std.Do.Spec.pure
+        mpure_intro; simp_all
+      · mspec ih
+        mpure_intro; simp_all
+      · mspec ih
+        mpure_intro; simp_all
+  | @chpred α α' p ih =>
+    mintro pre ∀S; mpure pre
+    unfold loosenAux_prf
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀S'; mrename_i pre; mpure pre
+      mspec SMT.freshVar_decls
+      case post.success =>
+        mintro ∀S''; mrename_i pre; mpure pre
+        mspec ih
+        mpure_intro; simp_all
+  | @pair α β α' β' pα pβ pα_ih pβ_ih =>
+    mintro pre ∀S; mpure pre
+    unfold loosenAux_prf
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀S'; mrename_i pre; mpure pre
+      mspec pα_ih
+      mspec pβ_ih
+      mpure_intro; simp_all
+  | @«fun» α β α' β' hβ pα pβ pα_ih pβ_ih =>
+    mintro pre ∀S; mpure pre
+    unfold loosenAux_prf
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀S'; mrename_i pre; mpure pre
+      mspec SMT.freshVar_decls
+      case post.success =>
+        mintro ∀S''; mrename_i pre; mpure pre
+        mspec pα_ih
+        mspec SMT.freshVar_decls
+        case post.success =>
+          mintro ∀S5; mrename_i pre; mpure pre
+          mspec pβ_ih
+          mspec defaultSpecM_decls
+          mpure_intro; simp_all
+  | @graph α β α' β' pα pβ pα_ih pβ_ih =>
+    mintro pre ∀S; mpure pre
+    unfold loosenAux_prf
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀S'; mrename_i pre; mpure pre
+      mspec SMT.freshVar_decls
+      case post.success =>
+        mintro ∀S''; mrename_i pre; mpure pre
+        mspec (loosenAux_prf_decls_pair pα pβ pα_ih pβ_ih)
+        mpure_intro; simp_all
+
 set_option maxHeartbeats 4000000 in
 /-- Purely structural specification of `castUnionAux` (no `B`-typing, no
 `respects`, no denotation): given that the free variables of both inputs `S`
