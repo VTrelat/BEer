@@ -2948,6 +2948,212 @@ theorem castUnionAux_decl
     unfold castUnionAux
     mvcgen
 
+set_option maxHeartbeats 4000000 in
+/-- `castInterAux`'s `declarations` delta `Dlt`: the encoded intersection term's
+free variables live in `fv S ∪ fv T ∪ declVars Dlt`, and every `addSpec`-
+introduced spec body's free variables stay within the same bound. Mirrors
+`castUnionAux_decl`. -/
+theorem castInterAux_decl
+    {α β : SMTType} (c : α ~> β) (S T : SMT.Term) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} {decl : SMT.Chunk} :
+    ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
+        ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
+          SMT.fv S ⊆ AList.keys Λ ∧ SMT.fv T ⊆ AList.keys Λ ∧ E.declarations = decl⌝ ⦄
+    castInterAux S T c
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
+      ∃ Dlt : SMT.Chunk,
+        E'.declarations = decl ++ Dlt ∧
+        (∀ b ∈ specBodies Dlt, SMT.fv b ⊆ SMT.fv S ∪ SMT.fv T ∪ declVars Dlt) ∧
+        SMT.fv t' ⊆ SMT.fv S ∪ SMT.fv T ∪ declVars Dlt ⌝⦄ := by
+  cases c with
+  | @graph α β α' β' c_α c_β =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    unfold castInterAux
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i S!_pair
+    obtain ⟨S!, S!_spec⟩ := S!_pair
+    mpure pre
+    obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
+      S!_keys_sub, S!_preserves, S!_fv_sub, S!_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨hs_decl, _, _, _, _⟩ := pres
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀St₂
+      mrename_i pref
+      mpure pref
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      rename_i x
+      refine ⟨[.declare_const S! (.fun (.pair α' β') .bool),
+        .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_, ?_, ?_⟩
+      · rw [pref, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+          List.append_assoc, List.cons_append, List.nil_append]
+      · intro b hb
+        simp only [specBodies, List.filterMap_cons, List.filterMap_nil] at hb
+        rw [List.mem_singleton] at hb
+        subst hb
+        intro v hv
+        simp only [declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff,
+          List.mem_singleton] at hv ⊢
+        rcases List.mem_union_iff.mp (S!_fv_sub hv) with hm | hm
+        · exact Or.inl (Or.inl hm)
+        · exact Or.inr (List.mem_singleton.mp hm)
+      · intro v hv
+        simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
+          List.not_mem_nil, or_false, declVars, List.filterMap_cons, List.filterMap_nil,
+          List.mem_union_iff] at hv ⊢
+        obtain ⟨hv_body, hv_ne_x⟩ := hv
+        rcases hv_body with (hvS! | hvx) | (hvT | hvx)
+        · exact Or.inr hvS!
+        · exact absurd hvx hv_ne_x
+        · exact Or.inl (Or.inr hvT)
+        · exact absurd hvx hv_ne_x
+  | @«fun» α β α' β' hβ c_α c_β =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    unfold castInterAux
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i S!_pair
+    obtain ⟨S!, S!_spec⟩ := S!_pair
+    mpure pre
+    obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
+      S!_keys_sub, S!_preserves, S!_fv_sub, S!_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨hs_decl, _, _, _, _⟩ := pres
+    split
+    · rename_i σ _
+      mspec SMT.freshVar_decls
+      case post.success =>
+        mintro ∀St₂
+        mrename_i pref
+        mpure pref
+        mspec Std.Do.Spec.pure
+        mpure_intro
+        refine ⟨[.declare_const S! (.fun α' (.option σ)),
+          .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_, ?_, ?_⟩
+        · rw [pref, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+            List.append_assoc, List.cons_append, List.nil_append]
+        · intro b hb
+          simp only [specBodies, List.filterMap_cons, List.filterMap_nil] at hb
+          rw [List.mem_singleton] at hb
+          subst hb
+          intro v hv
+          simp only [declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff,
+            List.mem_singleton] at hv ⊢
+          rcases List.mem_union_iff.mp (S!_fv_sub hv) with hm | hm
+          · exact Or.inl (Or.inl hm)
+          · exact Or.inr (List.mem_singleton.mp hm)
+        · intro v hv
+          simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
+            List.not_mem_nil, or_false, declVars, List.filterMap_cons, List.filterMap_nil,
+            List.mem_union_iff] at hv ⊢
+          obtain ⟨hv_body, hv_ne_p⟩ := hv
+          rcases hv_body with ((hvS! | hvpa) | hvpa') | ((hvT | hvpb) | hvpb')
+          · exact Or.inr hvS!
+          · exact absurd hvpa hv_ne_p
+          · exact absurd hvpa' hv_ne_p
+          · exact Or.inl (Or.inr hvT)
+          · exact absurd hvpb hv_ne_p
+          · exact absurd hvpb' hv_ne_p
+    · mvcgen
+  | @chpred α α' c_α =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    unfold castInterAux
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i S!_pair
+    obtain ⟨S!, S!_spec⟩ := S!_pair
+    mpure pre
+    obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
+      S!_keys_sub, S!_preserves, S!_fv_sub, S!_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨hs_decl, _, _, _, _⟩ := pres
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀St₂
+      mrename_i pref
+      mpure pref
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      rename_i x
+      refine ⟨[.declare_const S! (.fun α' .bool),
+        .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_, ?_, ?_⟩
+      · rw [pref, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+          List.append_assoc, List.cons_append, List.nil_append]
+      · intro b hb
+        simp only [specBodies, List.filterMap_cons, List.filterMap_nil] at hb
+        rw [List.mem_singleton] at hb
+        subst hb
+        intro v hv
+        simp only [declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff,
+          List.mem_singleton] at hv ⊢
+        rcases List.mem_union_iff.mp (S!_fv_sub hv) with hm | hm
+        · exact Or.inl (Or.inl hm)
+        · exact Or.inr (List.mem_singleton.mp hm)
+      · intro v hv
+        simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
+          List.not_mem_nil, or_false, declVars, List.filterMap_cons, List.filterMap_nil,
+          List.mem_union_iff] at hv ⊢
+        obtain ⟨hv_body, hv_ne_x⟩ := hv
+        rcases hv_body with (hvS! | hvx) | (hvT | hvx)
+        · exact Or.inr hvS!
+        · exact absurd hvx hv_ne_x
+        · exact Or.inl (Or.inr hvT)
+        · exact absurd hvx hv_ne_x
+  | @opt α α' c_α =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    unfold castInterAux
+    mvcgen
+  | @pair α β α' β' c_α c_β =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    unfold castInterAux
+    mvcgen
+  | @refl α hα =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    unfold castInterAux
+    mvcgen
+
 /-- `encodeTerm` depends on its `B.Env` argument only through `flags`: the
 result is unchanged across environments with equal `flags`. Local copy of
 `CollectCaseHelpers.encodeTerm_env_irrel` (importing that module would pull in
