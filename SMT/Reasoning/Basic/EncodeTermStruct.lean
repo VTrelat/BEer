@@ -1790,7 +1790,341 @@ theorem castMembership_state
       (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ⌝⦄ := by
   unfold castMembership
   mvcgen
-  all_goals sorry
+  case vc1.h_1.isTrue =>
+    rename_i α' hσS hσx St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv⟩ := hpre
+    and_intros
+    · exact le_refl _
+    · exact fun _ h => h
+    · exact fun _ h => h
+    · exact sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append] at hv
+      rcases hv with hvS | hvx
+      · exact AList.mem_keys.mp (hS_fv hvS)
+      · exact AList.mem_keys.mp (hx_fv hvx)
+    · intro v hv hΛ hin; exact hΛ hin
+  case vc2.h_1.isFalse.isTrue =>
+    rename_i α' hσS hσx_ne hσx_le St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv⟩ := hpre
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i xout
+    obtain ⟨x!, x!_spec⟩ := xout
+    mpure pre
+    obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
+      x!_keys_sub, x!_preserves, x!_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hd_types, hd_used, hd_fvc]
+    have x!_in : x! ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact x!_le
+    · exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh) x!_Λ_sub
+    · exact x!_used_sub
+    · exact x!_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with hvspec | hvS | hvx!
+      · have hmem := x!_fv_sub hvspec
+        rw [List.mem_union_iff] at hmem
+        rcases hmem with hvx | hvx!'
+        · exact AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
+        · exact List.mem_singleton.mp hvx!' ▸ x!_in
+      · exact AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hS_fv hvS)))))
+      · exact hvx! ▸ x!_in
+    · exact x!_preserves
+  case vc3.h_1.isFalse.isFalse.isTrue =>
+    rename_i α' hσS hσx_ne hσx_nle hα'_le St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv⟩ := hpre
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i Sout
+    obtain ⟨S!, S!_spec⟩ := Sout
+    mpure pre
+    obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
+      S!_keys_sub, S!_preserves, S!_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hd_types, hd_used, hd_fvc]
+    have S!_in : S! ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact S!_le
+    · exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh) S!_Λ_sub
+    · exact S!_used_sub
+    · exact S!_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with hvspec | hvS! | hvx
+      · have hmem := S!_fv_sub hvspec
+        rw [List.mem_union_iff] at hmem
+        rcases hmem with hvS | hvS!'
+        · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hS_fv hvS)))))
+        · exact List.mem_singleton.mp hvS!' ▸ S!_in
+      · exact hvS! ▸ S!_in
+      · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
+    · exact S!_preserves
+  case vc4.h_2.h_1.isTrue.isTrue =>
+    rename_i α' β' hσS α β hσx hα_le hβ_le St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv⟩ := hpre
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i xout
+    obtain ⟨x!, x!_spec⟩ := xout
+    mpure pre
+    obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
+      x!_keys_sub, x!_preserves, x!_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hd_types, hd_used, hd_fvc]
+    have x!_in : x! ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact x!_le
+    · exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh) x!_Λ_sub
+    · exact x!_used_sub
+    · exact x!_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with hvspec | (hvS | hvx!a) | hvx!b
+      · have hmem := x!_fv_sub hvspec
+        rw [List.mem_union_iff] at hmem
+        rcases hmem with hvx | hvx!'
+        · exact AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
+        · exact List.mem_singleton.mp hvx!' ▸ x!_in
+      · exact AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hS_fv hvS)))))
+      · exact hvx!a ▸ x!_in
+      · exact hvx!b ▸ x!_in
+    · exact x!_preserves
+  case vc5.h_2.h_1.isTrue.isFalse.isTrue =>
+    rename_i α' β' hσS α β hσx hα_le hβ_nle hβ'_le St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv⟩ := hpre
+    mspec loosenAux_prf_state
+    mrename_i prex
+    mintro ∀St₁
+    rename_i xout
+    obtain ⟨x!, x!_spec⟩ := xout
+    mpure prex
+    obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
+      x!_keys_sub, x!_preserves, x!_fv_sub⟩ := prex
+    mspec SMT.declareConst_spec
+    mrename_i predx
+    mintro ∀St₁d
+    mpure predx
+    obtain ⟨_, _, hdx_fvc, hdx_used, hdx_types⟩ := predx
+    have St₁d_keys_sub : AList.keys St₁d.types ⊆ St₁d.env.usedVars := by
+      rw [hdx_types, hdx_used]; exact x!_keys_sub
+    mspec loosenAux_prf_state
+    mrename_i preS
+    mintro ∀St₂
+    rename_i Sout
+    obtain ⟨S!, S!_spec⟩ := Sout
+    mpure preS
+    obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
+      S!_keys_sub, S!_preserves, S!_fv_sub⟩ := preS
+    mspec SMT.declareConst_spec
+    mrename_i predS
+    mintro ∀St₂d
+    mpure predS
+    obtain ⟨_, _, hdS_fvc, hdS_used, hdS_types⟩ := predS
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hdS_types, hdS_used, hdS_fvc]
+    have S!_in_St₂ : S! ∈ St₂.types :=
+      AList.mem_of_subset S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl))
+    have St₁_to_St₂ : St₁.types ⊆ St₂.types := by
+      have h₁ : St₁d.types ⊆ St₂.types :=
+        AList.subset_trans
+          (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh) S!_Λ_sub
+      rwa [hdx_types] at h₁
+    have Λ_to_St₂ : St.types ⊆ St₂.types :=
+      AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh)
+        (AList.subset_trans x!_Λ_sub St₁_to_St₂)
+    have x!_in_St₂ : x! ∈ St₂.types :=
+      AList.mem_of_subset St₁_to_St₂
+        (AList.mem_of_subset x!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact le_trans x!_le (hdx_fvc ▸ S!_le)
+    · exact Λ_to_St₂
+    · exact fun v hv => S!_used_sub (hdx_used ▸ x!_used_sub hv)
+    · exact S!_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with (hvxspec | hvSspec) | ((hvS! | hvx!) | hvxsnd)
+      · have hmem := x!_fv_sub hvxspec
+        rw [List.mem_union_iff] at hmem
+        rcases hmem with hvx | hvx!'
+        · simp only [SMT.fv] at hvx
+          exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
+            (AList.mem_keys.mpr (hx_fv hvx)))
+        · exact List.mem_singleton.mp hvx!' ▸ AList.mem_keys.mp x!_in_St₂
+      · have hmem := S!_fv_sub hvSspec
+        rw [List.mem_union_iff] at hmem
+        rcases hmem with hvS | hvS!'
+        · exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
+            (AList.mem_keys.mpr (hS_fv hvS)))
+        · exact List.mem_singleton.mp hvS!' ▸ AList.mem_keys.mp S!_in_St₂
+      · exact hvS! ▸ AList.mem_keys.mp S!_in_St₂
+      · exact hvx! ▸ AList.mem_keys.mp x!_in_St₂
+      · exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
+          (AList.mem_keys.mpr (hx_fv hvxsnd)))
+    · intro v hv hΛ
+      have hv_St₁d : v ∉ St₁d.types := by
+        rw [hdx_types]; exact x!_preserves v hv hΛ
+      have hv_St₁d_used : v ∈ St₁d.env.usedVars := by
+        rw [hdx_used]; exact x!_used_sub hv
+      exact S!_preserves v hv_St₁d_used hv_St₁d
+  case vc6.h_2.h_1.isFalse.isTrue.isTrue =>
+    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_le St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv⟩ := hpre
+    mspec loosenAux_prf_state
+    mrename_i prey
+    mintro ∀St₁
+    rename_i yout
+    obtain ⟨y!, y!_spec⟩ := yout
+    mpure prey
+    obtain ⟨y!_le, y!_Λ_sub, y!_fresh, y!_not_used, y!_used_sub,
+      y!_keys_sub, y!_preserves, y!_fv_sub⟩ := prey
+    mspec SMT.declareConst_spec
+    mrename_i predy
+    mintro ∀St₁d
+    mpure predy
+    obtain ⟨_, _, hdy_fvc, hdy_used, hdy_types⟩ := predy
+    have St₁d_keys_sub : AList.keys St₁d.types ⊆ St₁d.env.usedVars := by
+      rw [hdy_types, hdy_used]; exact y!_keys_sub
+    mspec loosenAux_prf_state
+    mrename_i preS
+    mintro ∀St₂
+    rename_i Sout
+    obtain ⟨S!, S!_spec⟩ := Sout
+    mpure preS
+    obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
+      S!_keys_sub, S!_preserves, S!_fv_sub⟩ := preS
+    mspec SMT.declareConst_spec
+    mrename_i predS
+    mintro ∀St₂d
+    mpure predS
+    obtain ⟨_, _, hdS_fvc, hdS_used, hdS_types⟩ := predS
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hdS_types, hdS_used, hdS_fvc]
+    have S!_in_St₂ : S! ∈ St₂.types :=
+      AList.mem_of_subset S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl))
+    have St₁_to_St₂ : St₁.types ⊆ St₂.types := by
+      have h₁ : St₁d.types ⊆ St₂.types :=
+        AList.subset_trans
+          (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh) S!_Λ_sub
+      rwa [hdy_types] at h₁
+    have Λ_to_St₂ : St.types ⊆ St₂.types :=
+      AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem y!_fresh)
+        (AList.subset_trans y!_Λ_sub St₁_to_St₂)
+    have y!_in_St₂ : y! ∈ St₂.types :=
+      AList.mem_of_subset St₁_to_St₂
+        (AList.mem_of_subset y!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact le_trans y!_le (hdy_fvc ▸ S!_le)
+    · exact Λ_to_St₂
+    · exact fun v hv => S!_used_sub (hdy_used ▸ y!_used_sub hv)
+    · exact S!_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with (hvyspec | hvSspec) | ((hvS! | hvxfst) | hvy!)
+      · have hmem := y!_fv_sub hvyspec
+        rw [List.mem_union_iff] at hmem
+        rcases hmem with hvx | hvy!'
+        · simp only [SMT.fv] at hvx
+          exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
+            (AList.mem_keys.mpr (hx_fv hvx)))
+        · exact List.mem_singleton.mp hvy!' ▸ AList.mem_keys.mp y!_in_St₂
+      · have hmem := S!_fv_sub hvSspec
+        rw [List.mem_union_iff] at hmem
+        rcases hmem with hvS | hvS!'
+        · exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
+            (AList.mem_keys.mpr (hS_fv hvS)))
+        · exact List.mem_singleton.mp hvS!' ▸ AList.mem_keys.mp S!_in_St₂
+      · exact hvS! ▸ AList.mem_keys.mp S!_in_St₂
+      · exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
+          (AList.mem_keys.mpr (hx_fv hvxfst)))
+      · exact hvy! ▸ AList.mem_keys.mp y!_in_St₂
+    · intro v hv hΛ
+      have hv_St₁d : v ∉ St₁d.types := by
+        rw [hdy_types]; exact y!_preserves v hv hΛ
+      have hv_St₁d_used : v ∈ St₁d.env.usedVars := by
+        rw [hdy_used]; exact y!_used_sub hv
+      exact S!_preserves v hv_St₁d_used hv_St₁d
+  case vc7.h_2.h_1.isFalse.isTrue.isFalse.isTrue =>
+    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_nle hβ'_le St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv⟩ := hpre
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i Sout
+    obtain ⟨S!, S!_spec⟩ := Sout
+    mpure pre
+    obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
+      S!_keys_sub, S!_preserves, S!_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hd_types, hd_used, hd_fvc]
+    have S!_in : S! ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    and_intros
+    · exact S!_le
+    · exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh) S!_Λ_sub
+    · exact S!_used_sub
+    · exact S!_keys_sub
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      rcases hv with hvspec | (hvS! | hvxfst) | hvxsnd
+      · have hmem := S!_fv_sub hvspec
+        rw [List.mem_union_iff] at hmem
+        rcases hmem with hvS | hvS!'
+        · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hS_fv hvS)))))
+        · exact List.mem_singleton.mp hvS!' ▸ S!_in
+      · exact hvS! ▸ S!_in
+      · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvxfst)))))
+      · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvxsnd)))))
+    · exact S!_preserves
 
 /-- `encodeTerm` depends on its `B.Env` argument only through `flags`: the
 result is unchanged across environments with equal `flags`. Local copy of
