@@ -7381,9 +7381,21 @@ theorem encodeTerm_decl
       · rcases List.mem_union_iff.mp (y_enc_fv_sub hv) with h | h
         · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
         · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
-  | min S _ih => sorry
-  | max S _ih => sorry
-  | card S _ih => sorry
+  | min S _ih =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, St_decl_eq⟩ := pre
+    simp only [encodeTerm] <;> mvcgen
+  | max S _ih =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, St_decl_eq⟩ := pre
+    simp only [encodeTerm] <;> mvcgen
+  | card S _ih =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, St_decl_eq⟩ := pre
+    simp only [encodeTerm] <;> mvcgen
   | and x y x_ih y_ih =>
     mintro pre ∀St
     mpure pre
@@ -7483,8 +7495,129 @@ theorem encodeTerm_decl
             · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
       · exact wp_bind_throw _ _ _ _
     · exact wp_bind_throw _ _ _ _
-  | not x ih => sorry
-  | pow S ih => sorry
+  | not x ih =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, St_decl_eq⟩ := pre
+    rw [encodeTerm]
+    obtain ⟨rfl, typ_x⟩ := B.Typing.notE typ_t
+    have hx_bv_nodup : (B.bv x).Nodup := by simpa [B.bv] using bv_nodup
+    have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
+      simpa [B.Term.vars, B.fv, B.bv] using hv)
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ St.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simpa [B.Term.vars, B.fv, B.bv] using hv)
+    mspec (ih E (Λ := St.types) (n := St.env.freshvarsc) (used := used) (decl := decl)
+      typ_x vars_used_x Λ_inv_x hx_bv_nodup)
+    mrename_i pre
+    mintro ∀σ_x
+    mpure pre
+    obtain ⟨Δx, x_decl_eq, x_spec_sub, x_enc_fv_sub⟩ := pre
+    rename_i out_x
+    obtain ⟨x_enc, σx⟩ := out_x
+    split
+    · rename_i heq
+      injection heq with hxe hσe
+      subst hσe
+      subst hxe
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      refine ⟨Δx, x_decl_eq, ?_, ?_⟩
+      · intro b hb v hv
+        simp only [B.fv]
+        exact x_spec_sub b hb hv
+      · intro v hv
+        simp only [SMT.fv] at hv
+        simp only [B.fv]
+        exact x_enc_fv_sub hv
+    · exact wp_bind_throw _ _ _ _
+  | pow S ih =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, St_decl_eq⟩ := pre
+    rw [encodeTerm]
+    obtain ⟨β, rfl, typ_S⟩ := B.Typing.powE typ_t
+    have hS_bv_nodup : (B.bv S).Nodup := by simpa [B.bv] using bv_nodup
+    have vars_used_S : ∀ v ∈ S.vars, v ∈ used := fun v hv => vars_used v (by
+      simpa [B.Term.vars, B.fv, B.bv] using hv)
+    have Λ_inv_S : ∀ v ∈ S.vars, v ∈ St.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simpa [B.Term.vars, B.fv, B.bv] using hv)
+    mspec (ih E (Λ := St.types) (n := St.env.freshvarsc) (used := used) (decl := decl)
+      typ_S vars_used_S Λ_inv_S hS_bv_nodup)
+    mrename_i pre
+    mintro ∀σ_S
+    mpure pre
+    obtain ⟨ΔS, S_decl_eq, S_spec_sub, S_enc_fv_sub⟩ := pre
+    rename_i out_S
+    obtain ⟨S_enc, σS⟩ := out_S
+    split
+    · rename_i heq
+      subst heq
+      mspec Std.Do.Spec.get_StateT
+      mspec SMT.freshVar_decls
+      case post.success x =>
+      mintro ∀St₁
+      mrename_i pre
+      mpure pre
+      mspec SMT.freshVar_decls
+      case post.success ℰ =>
+      mintro ∀St₂
+      mrename_i pre2
+      mpure pre2
+      simp only [modify]
+      mspec Std.Do.Spec.modifyGet_StateT
+      mpure_intro
+      refine ⟨ΔS, by rw [pre2, pre, S_decl_eq], ?_, ?_⟩
+      · intro b hb v hv
+        simp only [B.fv]
+        exact S_spec_sub b hb hv
+      · intro v hv
+        simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append,
+          List.mem_cons, List.not_mem_nil, or_false] at hv
+        obtain ⟨⟨hv1, hv_ne_x⟩, hv_ne_ℰ⟩ := hv
+        simp only [B.fv]
+        rcases hv1 with (hvℰ | hvx) | hvS | hvx
+        · exact absurd hvℰ hv_ne_ℰ
+        · exact absurd hvx hv_ne_x
+        · exact S_enc_fv_sub hvS
+        · exact absurd hvx hv_ne_x
+    · rename_i heq
+      subst heq
+      mspec Std.Do.Spec.get_StateT
+      mspec SMT.freshVar_decls
+      case post.success x =>
+      mintro ∀St₁
+      mrename_i pre
+      mpure pre
+      mspec SMT.freshVar_decls
+      case post.success y =>
+      mintro ∀St₂
+      mrename_i pre2
+      mpure pre2
+      mspec SMT.freshVar_decls
+      case post.success ff =>
+      mintro ∀St₃
+      mrename_i pre3
+      mpure pre3
+      simp only [modify]
+      mspec Std.Do.Spec.modifyGet_StateT
+      mpure_intro
+      refine ⟨ΔS, by rw [pre3, pre2, pre, S_decl_eq], ?_, ?_⟩
+      · intro b hb v hv
+        simp only [B.fv]
+        exact S_spec_sub b hb hv
+      · intro v hv
+        simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append,
+          List.mem_cons, List.not_mem_nil, or_false] at hv
+        obtain ⟨⟨hv1, hv_ne_xy⟩, hv_ne_f⟩ := hv
+        simp only [B.fv]
+        rcases hv1 with ((hvf | hvx) | hvy) | (hvS | hvx) | hvy
+        · exact absurd hvf hv_ne_f
+        · exact absurd (Or.inl hvx) hv_ne_xy
+        · exact absurd (Or.inr hvy) hv_ne_xy
+        · exact S_enc_fv_sub hvS
+        · exact absurd (Or.inl hvx) hv_ne_xy
+        · exact absurd (Or.inr hvy) hv_ne_xy
+    · mvcgen
   | cprod A C A_ih C_ih => sorry
   | mem x S x_ih S_ih => sorry
   | eq x y x_ih y_ih => sorry
