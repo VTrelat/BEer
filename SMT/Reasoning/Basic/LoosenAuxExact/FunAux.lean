@@ -4243,6 +4243,15 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
               y₀.fst.pair wy1.fst ∈ castβ)
     (typ_a_ctx : Γa ⊢ˢ a!_spec : SMTType.bool)
     (typ_b_ctx : Γb ⊢ˢ b!_spec : SMTType.bool)
+    (respects_a :
+      ∀ x₀ : SMT.Dom.{u}, x₀.snd.fst = α →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update Δx a (some x₀)) a! (some wy0)) Γa a!_spec)
+    (respects_b :
+      ∀ y₀ : SMT.Dom.{u}, y₀.snd.fst = β →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update (Function.update Δx a! (some wy0)) b (some y₀)) b! (some wy1))
+          Γb b!_spec)
     (hwy0_ty : wy0.snd.fst = α')
     (hwy1_ty : wy1.snd.fst = β')
     (x₀r : ZFSet)
@@ -4483,9 +4492,54 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
       obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
       obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
       have hDa_ty : Da.snd.fst = SMTType.bool := by
-        exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a) (hΔΓ := sorry)
+        have hresp_w :
+            SMT.RenamingContext.RespectsTypeContextOnFV Δw Γa a!_spec := by
+          refine funRespectsFVCongr
+            (resp := respects_a (w ⟨0, by simp⟩) (hw ⟨0, by simp⟩).1) ?_
+          intro v hv
+          have hv' := fv_a!_spec hv
+          rw [List.mem_union_iff] at hv'
+          rcases hv' with hva | hva!
+          · rw [fv, List.mem_singleton] at hva
+            subst hva
+            dsimp [Δw, Δb0]
+            rw [Function.update_of_ne a_ne_a!, Function.update_self,
+              Function.update_of_ne b_ne_a.symm, Function.update_self]
+          · have hv_eq : v = a! := by
+              change v ∈ ([a!] : List 𝒱) at hva!
+              rw [List.mem_singleton] at hva!
+              exact hva!
+            subst hv_eq
+            dsimp [Δw, Δb0]
+            rw [Function.update_self, Function.update_of_ne a!_ne_b,
+              Function.update_of_ne a_ne_a!.symm, Function.update_of_ne a!_ne_b!,
+              Function.update_self]
+        exact SMT.RenamingContext.denote_type_of_typing_fv
+          (htyp := typ_a_ctx) (hden := hden_a) (hcompat := hresp_w)
       have hDb_ty : Db.snd.fst = SMTType.bool := by
-        exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b) (hΔΓ := sorry)
+        have hresp_w :
+            SMT.RenamingContext.RespectsTypeContextOnFV Δw Γb b!_spec := by
+          refine funRespectsFVCongr
+            (resp := respects_b (w ⟨1, by simp⟩) (hw ⟨1, by simp⟩).1) ?_
+          intro v hv
+          have hv' := fv_b!_spec hv
+          rw [List.mem_union_iff] at hv'
+          rcases hv' with hvb | hvb!
+          · rw [fv, List.mem_singleton] at hvb
+            subst hvb
+            dsimp [Δw, Δb0]
+            rw [Function.update_self, Function.update_of_ne b_ne_b!,
+              Function.update_self]
+          · have hv_eq : v = b! := by
+              change v ∈ ([b!] : List 𝒱) at hvb!
+              rw [List.mem_singleton] at hvb!
+              exact hvb!
+            subst hv_eq
+            dsimp [Δw, Δb0]
+            rw [Function.update_of_ne b_ne_b!.symm, Function.update_of_ne a_ne_b!.symm,
+              Function.update_self, Function.update_self]
+        exact SMT.RenamingContext.denote_type_of_typing_fv
+          (htyp := typ_b_ctx) (hden := hden_b) (hcompat := hresp_w)
       have hcov_app_w :
           RenamingContext.CoversFV Δw ((@ˢx) (Term.var a)) := by
         have hcov_body_w := hcov_body_upd (w ⟨0, by simp⟩) (w ⟨1, by simp⟩)
@@ -4790,11 +4844,13 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
         obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
         obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
         have hDa_ty : Da.snd.fst = SMTType.bool := by
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a_ctx) (hden := hden_a) (hΔΓ := sorry)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a_ctx) (hcompat := respects_a wx₁ rfl)
+            (hden := hden_a_goal_eq ▸ hden_a)
         have hDb_ty : Db.snd.fst = SMTType.bool := by
-          exact denote_type_eq_of_typing
-            (typ_t := typ_b_ctx) (hden := hden_b) (hΔΓ := sorry)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_b_ctx) (hcompat := respects_b yy₁ rfl)
+            (hden := hden_b_goal_eq ▸ hden_b)
         obtain ⟨Dspec, hden_specs, hDspec_ty⟩ :=
           denote_and_some_bool_of_some_bool hden_a hDa_ty hden_b hDb_ty
         obtain ⟨hcov_xa, Dxa, hDxa_ty, hDxa_val, hden_xa⟩ :=
@@ -4890,12 +4946,14 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
                     (q := b!_spec.abstract Δgoal hφb_goal)
                     (typ_p_bool := by
                       intro D hden
-                      exact denote_type_eq_of_typing
-                        (typ_t := typ_a_ctx) (hden := hden) (hΔΓ := sorry))
+                      exact SMT.RenamingContext.denote_type_of_typing_fv
+                        (htyp := typ_a_ctx) (hcompat := respects_a wx₁ rfl)
+                        (hden := hden_a_goal_eq ▸ hden))
                     (typ_q_bool := by
                       intro D hden
-                      exact denote_type_eq_of_typing
-                        (typ_t := typ_b_ctx) (hden := hden) (hΔΓ := sorry))
+                      exact SMT.RenamingContext.denote_type_of_typing_fv
+                        (htyp := typ_b_ctx) (hcompat := respects_b yy₁ rfl)
+                        (hden := hden_b_goal_eq ▸ hden))
                     hden_specs hDspec_true
                 have hden_a_true_at :
                     ⟦a!_spec.abstract
@@ -5224,11 +5282,13 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
           obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
           obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
           have hDa_ty : Da.snd.fst = SMTType.bool := by
-            exact denote_type_eq_of_typing
-              (typ_t := typ_a_ctx) (hden := hden_a) (hΔΓ := sorry)
+            exact SMT.RenamingContext.denote_type_of_typing_fv
+              (htyp := typ_a_ctx) (hcompat := respects_a wx₁ rfl)
+              (hden := hden_a_goal_eq ▸ hden_a)
           have hDb_ty : Db.snd.fst = SMTType.bool := by
-            exact denote_type_eq_of_typing
-              (typ_t := typ_b_ctx) (hden := hden_b) (hΔΓ := sorry)
+            exact SMT.RenamingContext.denote_type_of_typing_fv
+              (htyp := typ_b_ctx) (hcompat := respects_b yy₁ rfl)
+              (hden := hden_b_goal_eq ▸ hden_b)
           obtain ⟨Dspec, hden_specs, hDspec_ty⟩ :=
             denote_and_some_bool_of_some_bool hden_a hDa_ty hden_b hDb_ty
           obtain ⟨hcov_xa, Dxa, hDxa_ty, hDxa_val, hden_xa⟩ :=
@@ -5324,12 +5384,14 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
                       (q := b!_spec.abstract Δgoal hφb_goal)
                       (typ_p_bool := by
                         intro D hden
-                        exact denote_type_eq_of_typing
-                          (typ_t := typ_a_ctx) (hden := hden) (hΔΓ := sorry))
+                        exact SMT.RenamingContext.denote_type_of_typing_fv
+                          (htyp := typ_a_ctx) (hcompat := respects_a wx₁ rfl)
+                          (hden := hden_a_goal_eq ▸ hden))
                       (typ_q_bool := by
                         intro D hden
-                        exact denote_type_eq_of_typing
-                          (typ_t := typ_b_ctx) (hden := hden) (hΔΓ := sorry))
+                        exact SMT.RenamingContext.denote_type_of_typing_fv
+                          (htyp := typ_b_ctx) (hcompat := respects_b yy₁ rfl)
+                          (hden := hden_b_goal_eq ▸ hden))
                       hden_specs hDspec_true
                   have hden_a_true_at :
                       ⟦a!_spec.abstract
@@ -6381,6 +6443,17 @@ theorem funDenSpecTrueAtCast.{u}
                     hφb hdenΦb htrueΦb)
                 (typ_a_ctx := typ_a!_spec_ctx_base)
                 (typ_b_ctx := typ_b!_spec_ctx_base)
+                (respects_a := by
+                  intro x₀ hx₀_ty
+                  exact funUnarySpecRespectsFV' fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
+                (respects_b := by
+                  intro y₀ hy₀_ty
+                  have b_ne_b! : b ≠ b! := by
+                    intro h
+                    exact b!_not_base (h ▸ by
+                      rw [AList.mem_insert]
+                      exact Or.inl rfl)
+                  exact funUnarySpecRespectsFV' fv_b!_spec b_ne_b! hy₀_ty hwy1_ty)
                 (hwy0_ty := hwy0_ty)
                 (hwy1_ty := hwy1_ty)
                 (x₀r := x₀)
