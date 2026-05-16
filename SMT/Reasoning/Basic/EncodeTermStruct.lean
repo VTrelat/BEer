@@ -108,6 +108,75 @@ theorem keys_insert_subset_cons {Γ : SMT.TypeContext} {v : SMT.𝒱} {τ : SMTT
   · exact Or.inl rfl
   · exact Or.inr (hsub (List.mem_of_mem_erase hw))
 
+/-! ### `declVars` — names declared by `declare_const` instructions
+
+The `all` encoder scopes cast helpers as universal binders `ex_binders`, which
+are obtained by `filterMap`-ping the `declare_const` instructions out of the
+declarations delta produced while encoding the body + membership.  `declVars`
+names exactly that set, so the `declarations`↔`fv` invariant of `encodeTerm`
+(`encodeTerm_decl` below) and the cast-helper delta specs can be stated and
+composed additively. -/
+
+/-- Names introduced by `declare_const` instructions in a `Chunk`. -/
+def declVars (decls : SMT.Chunk) : List SMT.𝒱 :=
+  decls.filterMap fun
+    | .declare_const v _ => some v
+    | _ => none
+
+@[simp] theorem declVars_nil : declVars [] = [] := rfl
+
+@[simp] theorem declVars_append (a b : SMT.Chunk) :
+    declVars (a ++ b) = declVars a ++ declVars b := by
+  simp [declVars, List.filterMap_append]
+
+@[simp] theorem declVars_concat (a : SMT.Chunk) (i : SMT.Instr) :
+    declVars (a.concat i) = declVars a ++ declVars [i] := by
+  rw [List.concat_eq_append, declVars_append]
+
+@[simp] theorem declVars_declare_const (v : SMT.𝒱) (τ : SMTType) :
+    declVars [.declare_const v τ] = [v] := rfl
+
+@[simp] theorem declVars_define_fun (v : SMT.𝒱) (τ σ : SMTType) (t : SMT.Term) :
+    declVars [.define_fun v τ σ t] = [] := rfl
+
+theorem declVars_subset_of_isPrefix {a b : SMT.Chunk} (h : a <+: b) :
+    declVars a ⊆ declVars b := by
+  obtain ⟨c, rfl⟩ := h
+  rw [declVars_append]
+  exact fun v hv => List.mem_append_left _ hv
+
+/-- The `define_fun … unit bool` bodies of a `Chunk`, as produced by `addSpec`. -/
+def specBodies (decls : SMT.Chunk) : List SMT.Term :=
+  decls.filterMap fun
+    | .define_fun _ .unit .bool b => some b
+    | _ => none
+
+@[simp] theorem specBodies_nil : specBodies [] = [] := rfl
+
+@[simp] theorem specBodies_append (a b : SMT.Chunk) :
+    specBodies (a ++ b) = specBodies a ++ specBodies b := by
+  simp [specBodies, List.filterMap_append]
+
+@[simp] theorem specBodies_concat (a : SMT.Chunk) (i : SMT.Instr) :
+    specBodies (a.concat i) = specBodies a ++ specBodies [i] := by
+  rw [List.concat_eq_append, specBodies_append]
+
+@[simp] theorem specBodies_declare_const (v : SMT.𝒱) (τ : SMTType) :
+    specBodies [.declare_const v τ] = [] := rfl
+
+@[simp] theorem mem_specBodies_define_fun {a : SMT.Chunk} {b : SMT.Term} :
+    b ∈ specBodies a ↔ ∃ name, .define_fun name .unit .bool b ∈ a := by
+  unfold specBodies
+  rw [List.mem_filterMap]
+  constructor
+  · rintro ⟨i, hi, heq⟩
+    match i, heq with
+    | .define_fun name .unit .bool b', h =>
+      simp only [Option.some.injEq] at h
+      exact ⟨name, h ▸ hi⟩
+  · rintro ⟨name, hi⟩
+    exact ⟨.define_fun name .unit .bool b, hi, rfl⟩
+
 set_option maxHeartbeats 4000000 in
 /-- Purely structural specification of `defaultSpecM`: it advances `freshvarsc`,
 only grows `usedVars`, keeps `keys ⊆ usedVars`, preserves source variables, and
