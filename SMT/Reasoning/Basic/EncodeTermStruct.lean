@@ -8088,7 +8088,123 @@ theorem encodeTerm_decl
             · exact absurd (Or.inr (Or.inr hy')) hv_ne_xyy'
       · mvcgen
     · mvcgen
-  | app f x f_ih x_ih => sorry
+  | app f x f_ih x_ih =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, St_decl_eq⟩ := pre
+    rw [encodeTerm]
+    obtain ⟨αx, typ_f, typ_x⟩ := B.Typing.appE typ_t
+    have hf_bv_nodup : (B.bv f).Nodup := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.1
+    have hx_bv_nodup : (B.bv x).Nodup := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
+    have hfx_bv_disj : ∀ a ∈ B.bv f, ∀ b ∈ B.bv x, a ≠ b := by
+      have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
+    have vars_used_f : ∀ v ∈ f.vars, v ∈ used := fun v hv => vars_used v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    have vars_used_x : ∀ v ∈ x.vars, v ∈ used := fun v hv => vars_used v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inr h)
+    have Λ_inv_f : ∀ v ∈ f.vars, v ∈ St.types → v ∈ E.context := fun v hv => Λ_inv v (by
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+      rcases hv with h | h <;> [left; right] <;> exact .inl h)
+    mspec (Std.Do.Triple.and (encodeTerm f E)
+      (encodeTerm_state E (Λ := St.types) (n := St.env.freshvarsc) (used := used)
+        typ_f vars_used_f Λ_inv_f hf_bv_nodup)
+      (f_ih E (Λ := St.types) (n := St.env.freshvarsc) (used := used) (decl := decl)
+        typ_f vars_used_f Λ_inv_f hf_bv_nodup))
+    mrename_i pre
+    mintro ∀σ_f
+    mpure pre
+    obtain ⟨⟨f_used_sub, f_Λ_sub, f_keys_sub, f_cov, f_fv_sub, f_preserves⟩,
+      Δf, f_decl_eq, f_spec_sub, f_enc_fv_sub⟩ := pre
+    rename_i out_f
+    obtain ⟨f_enc, σf⟩ := out_f
+    have Λ_inv_x : ∀ v ∈ x.vars, v ∈ σ_f.types → v ∈ E.context := fun v hv hΛ => by
+      have hv_par : v ∈ (B.Term.app f x).vars := by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact .inr h
+      by_cases hv_St : v ∈ St.types
+      · exact Λ_inv v hv_par hv_St
+      · have hv_vars_f : v ∈ B.Term.vars f := by
+          by_contra h_neg
+          exact absurd hΛ (f_preserves v (vars_used v hv_par) hv_St h_neg)
+        rcases B.Term.mem_vars_iff.mp hv_vars_f with h | h
+        · exact _root_.B.Typing.typed_by_fv typ_f h
+        · rcases B.Term.mem_vars_iff.mp hv with hx_fv | hx_bv
+          · exact absurd (_root_.B.Typing.typed_by_fv typ_x hx_fv)
+              (_root_.B.Typing.bv_notMem_context typ_f v h)
+          · exact absurd rfl (hfx_bv_disj v h v hx_bv)
+    mspec (Std.Do.Triple.and (encodeTerm x E)
+      (encodeTerm_state E (Λ := σ_f.types) (n := σ_f.env.freshvarsc)
+        (used := σ_f.env.usedVars) typ_x
+        (fun v hv => f_used_sub (vars_used_x v hv)) Λ_inv_x hx_bv_nodup)
+      (x_ih E (Λ := σ_f.types) (n := σ_f.env.freshvarsc)
+        (used := σ_f.env.usedVars) (decl := decl ++ Δf) typ_x
+        (fun v hv => f_used_sub (vars_used_x v hv)) Λ_inv_x hx_bv_nodup))
+    mrename_i pre
+    mintro ∀σ_x
+    mpure pre
+    obtain ⟨⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩,
+      Δx, x_decl_eq, x_spec_sub, x_enc_fv_sub⟩ := pre
+    rename_i out_x
+    obtain ⟨x_enc, σx⟩ := out_x
+    mspec castApp_decl
+    case pre =>
+      mpure_intro
+      refine ⟨trivial, trivial, x_keys_sub, rfl, ?_, x_fv_sub, x_decl_eq⟩
+      intro v hv
+      exact AList.mem_keys.mp (AList.mem_of_subset x_Λ_sub
+        (AList.mem_keys.mpr (f_fv_sub hv)))
+    mrename_i pre
+    mintro ∀σ'
+    mpure pre
+    obtain ⟨Dlt, ca_decl_eq, ca_spec_sub, ca_fv_sub⟩ := pre
+    mpure_intro
+    refine ⟨Δf ++ Δx ++ Dlt, ?_, ?_, ?_⟩
+    · rw [ca_decl_eq]; simp only [List.append_assoc]
+    · intro b hb
+      rw [specBodies_append, specBodies_append, List.mem_append, List.mem_append] at hb
+      rw [B.fv, declVars_append, declVars_append]
+      rcases hb with (hb | hb) | hb
+      · intro v hv
+        rcases List.mem_union_iff.mp (f_spec_sub b hb hv) with h | h
+        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
+        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
+            (List.mem_append_left _ h)))
+      · intro v hv
+        rcases List.mem_union_iff.mp (x_spec_sub b hb hv) with h | h
+        · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
+        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
+            (List.mem_append_right _ h)))
+      · intro v hv
+        have hb' := ca_spec_sub b hb hv
+        rcases List.mem_union_iff.mp hb' with h | h
+        · rcases List.mem_union_iff.mp h with h | h
+          · rcases List.mem_union_iff.mp (f_enc_fv_sub h) with h | h
+            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
+            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
+                (List.mem_append_left _ h)))
+          · rcases List.mem_union_iff.mp (x_enc_fv_sub h) with h | h
+            · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
+            · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
+                (List.mem_append_right _ h)))
+        · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
+    · intro v hv
+      have hv' := ca_fv_sub hv
+      rw [B.fv, declVars_append, declVars_append]
+      rcases List.mem_union_iff.mp hv' with h | h
+      · rcases List.mem_union_iff.mp h with h | h
+        · rcases List.mem_union_iff.mp (f_enc_fv_sub h) with h | h
+          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_left _ h))
+          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
+              (List.mem_append_left _ h)))
+        · rcases List.mem_union_iff.mp (x_enc_fv_sub h) with h | h
+          · exact List.mem_union_iff.mpr (Or.inl (List.mem_append_right _ h))
+          · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_left _
+              (List.mem_append_right _ h)))
+      · exact List.mem_union_iff.mpr (Or.inr (List.mem_append_right _ h))
   | collect vs D P D_ih P_ih => sorry
   | all vs D P D_ih P_ih => sorry
   | lambda vs D P D_ih P_ih => sorry
