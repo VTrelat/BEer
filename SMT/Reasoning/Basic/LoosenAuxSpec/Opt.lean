@@ -328,6 +328,11 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
             rw [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff] at denx'
             obtain ⟨Xt, den_t, hXeq⟩ := denx'
             obtain ⟨Φt, Xt!, denXt!, hφt, denφt, hΦt_ty, ⟨hΦt_true, hCast_t⟩, htot_t⟩ := den_the Xt den_t
+            -- TODO: blocked on loosenAux_prf_spec postcondition. `Xt!` is the
+            -- existentially-bound loosened value from `den_the`; `denXt!` is the
+            -- trivial denotation of the bare `Term.var the_x!`, carrying no type
+            -- info, so `Xt!.snd.fst = α'` is not derivable here. Fixing requires
+            -- strengthening `loosenAux_prf_spec`'s adequacy clause.
             have hXt!_ty : Xt!.snd.fst = α' := denote_type_eq_of_typing (typ_t := typ_the_x!) (hden := denXt!) (hΔΓ := sorry)
             have hXt!_memα' : Xt!.fst ∈ ⟦α'⟧ᶻ := by
               simpa only [hXt!_ty] using Xt!.snd.snd
@@ -1399,6 +1404,11 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
               obtain ⟨Φt, Xt!, denXt!, hφt, denφt, hΦt_ty, ⟨hΦt_true, hCast_t⟩, htot_t⟩ :=
                 den_the Xthe hden_x_the
               have hXt!_ty : Xt!.snd.fst = α' := by
+                -- TODO: blocked on loosenAux_prf_spec postcondition. `Xt!` is the
+                -- existentially-bound loosened value from `den_the`; `denXt!` is the
+                -- trivial denotation of the bare `Term.var the_x!`, carrying no type
+                -- info, so `Xt!.snd.fst = α'` is not derivable here. Fixing requires
+                -- strengthening `loosenAux_prf_spec`'s adequacy clause.
                 exact denote_type_eq_of_typing (typ_t := typ_the_x!) (hden := denXt!) (hΔΓ := sorry)
               have hXt!_memα' : Xt!.fst ∈ ⟦α'⟧ᶻ := by
                 simpa only [hXt!_ty] using Xt!.snd.snd
@@ -1411,7 +1421,10 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
                 refine ⟨hX_mem, ?_, ?_⟩
                 · exact SetLike.coe_mem (ZFSet.Option.some ⟨Xt!.fst, hXt!_memα'⟩)
                 · have hXthe_ty : Xthe.snd.fst = α := by
-                    exact denote_type_eq_of_typing (typ_t := typ_the_x_St₂) (hden := hden_x_the) (hΔΓ := sorry)
+                    -- FV-restricted type compatibility suffices: `respects_the` gives
+                    -- type compatibility on `fv x.the` between `«Δ»` and `St₂.types`.
+                    exact SMT.RenamingContext.denote_type_of_typing_fv
+                      typ_the_x_St₂ respects_the hx_the hden_x_the
                   have hXthe_memα : Xthe.fst ∈ ⟦α⟧ᶻ := by
                     simpa [hXthe_ty] using Xthe.snd.snd
                   have hX_fst_eq : X.fst = (ZFSet.Option.some ⟨Xthe.fst, hXthe_memα⟩).1 := by
