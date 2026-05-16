@@ -118,6 +118,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                                                                     X.fst.pair Y.fst ∈ ↑(castZF_of_path pβ).1⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun β)
   («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x)
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x)
   (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true) :
   ⦃fun x =>
     match x with
@@ -602,7 +603,8 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                   fv_a!_spec fv_b!_spec fv_hdefault
               · intro X denx
                 have hX_ty : X.snd.fst = α.fun β := by
-                  exact denote_type_eq_of_typing (typ_t := typ_x) (hden := denx) (hΔΓ := sorry)
+                  exact SMT.RenamingContext.denote_type_of_typing_fv
+                    (htyp := typ_x) (hden := denx) (hcompat := respects)
                 have hX_mem : X.fst ∈ ⟦α.fun β⟧ᶻ := by
                   erw [← hX_ty]
                   exact X.snd.snd

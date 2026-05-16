@@ -1319,6 +1319,11 @@ theorem funVarSpecTrueAtCast.{u}
       x₀ hx₀_ty
   obtain ⟨htrue, hcast_X₀!⟩ := htrue_cast
   have hX₀_ty : X₀!.snd.fst = τ' := by
+    -- TODO: blocked on loosenAux_prf_spec postcondition
+    -- `denote_type_of_typing_fv` on the bare `Term.var z!` would require
+    -- `RespectsTypeContextOnFV ... (.var z!)`, i.e. `X₀!.snd.fst = τ'` itself
+    -- (circular); `X₀!` is the existentially-bound loosened value with no
+    -- threaded type tag.
     exact denote_type_eq_of_typing (typ_t := typ_var_z!) (hden := hden_var) (hΔΓ := sorry)
   exact funVarDenTrueAtCast
     («Δ» := Function.update «Δ» z (some x₀))

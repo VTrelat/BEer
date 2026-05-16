@@ -71,4 +71,4 @@ theorem loosenAux_prf_exact
       apply loosenAux_prf_exact.graph pα pβ pα_ih pβ_ih typ_x «Δ» hx respects pf
   | @«fun» α β α' β' hβ pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
-      exact loosenAux_prf_exact.fun hβ pα pβ pα_ih pβ_ih typ_x «Δ» hx pf
+      exact loosenAux_prf_exact.fun hβ pα pβ pα_ih pβ_ih typ_x «Δ» hx respects pf
