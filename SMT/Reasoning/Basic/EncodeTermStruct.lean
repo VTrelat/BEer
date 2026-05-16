@@ -2657,6 +2657,91 @@ theorem castMembership_decl
         · exact Or.inr (List.mem_singleton.mp hm)
       tauto
 
+set_option maxHeartbeats 4000000 in
+/-- `castEq`'s `declarations` delta is a `declare_const`-only chunk
+(`specBodies Δ = []` — `castEq` never calls `addSpec`), and the encoded equality
+term's free variables live in `fv A ∪ fv B ∪ declVars Δ`. -/
+theorem castEq_decl
+    (A B : SMT.Term) (σA σB : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} {decl : SMT.Chunk} :
+    ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
+        ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
+          SMT.fv A ⊆ AList.keys Λ ∧ SMT.fv B ⊆ AList.keys Λ ∧ E.declarations = decl⌝ ⦄
+    castEq (A, σA) (B, σB)
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
+      ∃ Dlt : SMT.Chunk,
+        E'.declarations = decl ++ Dlt ∧
+        specBodies Dlt = [] ∧
+        SMT.fv t' ⊆ SMT.fv A ∪ SMT.fv B ∪ declVars Dlt ⌝⦄ := by
+  unfold castEq
+  mvcgen
+  · -- σA = σB : direct equality `A =ˢ B`
+    rename_i hpre
+    obtain ⟨rfl, rfl, sub, rfl, hA_fv, hB_fv, rfl⟩ := hpre
+    refine ⟨[], by simp, by simp, ?_⟩
+    intro v hv
+    simp only [SMT.fv, List.mem_append, declVars_nil, List.mem_union_iff,
+      List.not_mem_nil, or_false] at hv ⊢
+    tauto
+  · -- σA ⊑ σB : loosen A
+    rename_i hpre
+    obtain ⟨rfl, rfl, sub, rfl, hA_fv, hB_fv, rfl⟩ := hpre
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i Aout
+    obtain ⟨A!, A!_spec⟩ := Aout
+    mpure pre
+    obtain ⟨A!_le, A!_Λ_sub, A!_fresh, A!_not_used, A!_used_sub,
+      A!_keys_sub, A!_preserves, A!_fv_sub, A!_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨[.declare_const A! σB], ?_, by simp, ?_⟩
+    · rw [hd_decl, A!_decl, List.concat_eq_append]
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
+        declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+      have hsp : v ∈ SMT.fv A!_spec → v ∈ SMT.fv A ∨ v = A! := by
+        intro h
+        rcases List.mem_union_iff.mp (A!_fv_sub h) with hm | hm
+        · exact Or.inl hm
+        · exact Or.inr (List.mem_singleton.mp hm)
+      tauto
+  · -- σB ⊑ σA : loosen B
+    rename_i hpre
+    obtain ⟨rfl, rfl, sub, rfl, hA_fv, hB_fv, rfl⟩ := hpre
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i Bout
+    obtain ⟨B!, B!_spec⟩ := Bout
+    mpure pre
+    obtain ⟨B!_le, B!_Λ_sub, B!_fresh, B!_not_used, B!_used_sub,
+      B!_keys_sub, B!_preserves, B!_fv_sub, B!_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨[.declare_const B! σA], ?_, by simp, ?_⟩
+    · rw [hd_decl, B!_decl, List.concat_eq_append]
+    · intro v hv
+      simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
+        declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+      have hsp : v ∈ SMT.fv B!_spec → v ∈ SMT.fv B ∨ v = B! := by
+        intro h
+        rcases List.mem_union_iff.mp (B!_fv_sub h) with hm | hm
+        · exact Or.inl hm
+        · exact Or.inr (List.mem_singleton.mp hm)
+      tauto
+
 /-- `encodeTerm` depends on its `B.Env` argument only through `flags`: the
 result is unchanged across environments with equal `flags`. Local copy of
 `CollectCaseHelpers.encodeTerm_env_irrel` (importing that module would pull in
