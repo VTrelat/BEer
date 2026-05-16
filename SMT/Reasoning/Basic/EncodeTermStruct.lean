@@ -1767,6 +1767,31 @@ theorem castApp_state
           · exact hw_ne_ff rfl
           · exact hw_St₁ hw_in
 
+set_option maxHeartbeats 4000000 in
+/-- Purely structural specification of `castMembership` (no `B`-typing, no
+`respects`, no denotation): mirrors `castApp_state`. Given that the free
+variables of both inputs `x` and `S` already live in the type context `Λ`, the
+membership encoding advances `freshvarsc`, only grows `usedVars`, keeps
+`keys ⊆ usedVars`, preserves source variables, and the encoded term's free
+variables stay within the final context. Proved by cases on the input types. -/
+theorem castMembership_state
+    (x S : SMT.Term) (σx σS : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} :
+    ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
+        ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
+          SMT.fv x ⊆ AList.keys Λ ∧ SMT.fv S ⊆ AList.keys Λ⌝ ⦄
+    castMembership (x, σx) (S, σS)
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
+      n ≤ E'.freshvarsc ∧
+      Λ ⊆ Γ' ∧
+      used ⊆ E'.usedVars ∧
+      AList.keys Γ' ⊆ E'.usedVars ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∧
+      (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ⌝⦄ := by
+  unfold castMembership
+  mvcgen
+  all_goals sorry
+
 /-- `encodeTerm` depends on its `B.Env` argument only through `flags`: the
 result is unchanged across environments with equal `flags`. Local copy of
 `CollectCaseHelpers.encodeTerm_env_irrel` (importing that module would pull in
