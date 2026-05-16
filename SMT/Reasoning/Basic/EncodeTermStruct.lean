@@ -6817,3 +6817,55 @@ theorem encodeTerm_struct
   mpure_intro
   exact ⟨h1, h2, h3, h4, h5, h6,
     encodeTerm_struct.renaming_witness Δ₀_ext Δ₀_none_out h1 h3 h5⟩
+
+set_option maxHeartbeats 4000000 in
+/-- The `declarations`-delta invariant `C8''` of `encodeTerm`: encoding `t`
+appends a chunk `Δ` to `declarations`, every spec-body in `Δ` has free variables
+within `B.fv t ∪ declVars Δ`, and the encoded term `t'` likewise has free
+variables within `B.fv t ∪ declVars Δ`. Proved by a 26-case induction on `t`;
+the `keys`-context preconditions of the Stage-1 cast delta-specs are supplied
+for sub-terms by pairing `encodeTerm_state` with the induction hypothesis. -/
+theorem encodeTerm_decl
+    (E : B.Env) {Λ : SMT.TypeContext} {t : B.Term} {α : B.BType}
+    (typ_t : E.context ⊢ᴮ t : α)
+    {used : List SMT.𝒱}
+    (vars_used : ∀ v ∈ t.vars, v ∈ used)
+    (Λ_inv : ∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context)
+    (bv_nodup : (B.bv t).Nodup)
+    {n : ℕ} {decl : SMT.Chunk} :
+    ⦃ fun (⟨E0, Λ'⟩ : EncoderState) ↦
+        ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used ∧
+          E0.declarations = decl⌝ ⦄
+    encodeTerm t E
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
+      ∃ Dlt : SMT.Chunk,
+        E'.declarations = decl ++ Dlt ∧
+        (∀ b ∈ specBodies Dlt, SMT.fv b ⊆ B.fv t ∪ declVars Dlt) ∧
+        SMT.fv t' ⊆ B.fv t ∪ declVars Dlt ⌝⦄ := by
+  induction t generalizing E n used Λ α decl with
+  | int i => sorry
+  | bool b => sorry
+  | var v => sorry
+  | «ℤ» => sorry
+  | 𝔹 => sorry
+  | maplet x y x_ih y_ih => sorry
+  | add x y x_ih y_ih => sorry
+  | sub x y x_ih y_ih => sorry
+  | mul x y x_ih y_ih => sorry
+  | le x y x_ih y_ih => sorry
+  | min S _ih => sorry
+  | max S _ih => sorry
+  | card S _ih => sorry
+  | and x y x_ih y_ih => sorry
+  | not x ih => sorry
+  | pow S ih => sorry
+  | cprod A C A_ih C_ih => sorry
+  | mem x S x_ih S_ih => sorry
+  | eq x y x_ih y_ih => sorry
+  | union A C A_ih C_ih => sorry
+  | inter A C A_ih C_ih => sorry
+  | pfun A C A_ih C_ih => sorry
+  | app f x f_ih x_ih => sorry
+  | collect vs D P D_ih P_ih => sorry
+  | all vs D P D_ih P_ih => sorry
+  | lambda vs D P D_ih P_ih => sorry
