@@ -6843,11 +6843,75 @@ theorem encodeTerm_decl
         (∀ b ∈ specBodies Dlt, SMT.fv b ⊆ B.fv t ∪ declVars Dlt) ∧
         SMT.fv t' ⊆ B.fv t ∪ declVars Dlt ⌝⦄ := by
   induction t generalizing E n used Λ α decl with
-  | int i => sorry
-  | bool b => sorry
-  | var v => sorry
-  | «ℤ» => sorry
-  | 𝔹 => sorry
+  | int i =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨[], by simp, by simp, ?_⟩
+    intro v hv
+    simp only [SMT.fv, List.not_mem_nil] at hv
+  | bool b =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨[], by simp, by simp, ?_⟩
+    intro v hv
+    simp only [SMT.fv, List.not_mem_nil] at hv
+  | var v =>
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mvcgen
+    case vc1 τ τ_lookup =>
+      refine ⟨[], by simp, by simp, ?_⟩
+      intro x hx
+      rw [SMT.fv, List.mem_singleton] at hx
+      subst x
+      simp only [B.fv, declVars_nil, List.mem_union_iff, List.mem_singleton,
+        List.not_mem_nil, or_false]
+  | «ℤ» =>
+    mintro pre ∀S
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mspec Std.Do.Spec.get_StateT
+    mspec SMT.freshVar_decls
+    case post.success 𝓋 =>
+      mintro ∀S'
+      mrename_i pre
+      mpure pre
+      mspec Std.Do.Spec.modifyGet_StateT
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      refine ⟨[], by simpa using pre, by simp, ?_⟩
+      intro v hv
+      simp only [SMT.fv, List.mem_removeAll_iff] at hv
+      nomatch hv.1
+  | 𝔹 =>
+    mintro pre ∀S
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mspec Std.Do.Spec.get_StateT
+    mspec SMT.freshVar_decls
+    case post.success 𝓋 =>
+      mintro ∀S'
+      mrename_i pre
+      mpure pre
+      mspec Std.Do.Spec.modifyGet_StateT
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      refine ⟨[], by simpa using pre, by simp, ?_⟩
+      intro v hv
+      simp only [SMT.fv, List.mem_removeAll_iff] at hv
+      nomatch hv.1
   | maplet x y x_ih y_ih => sorry
   | add x y x_ih y_ih => sorry
   | sub x y x_ih y_ih => sorry
