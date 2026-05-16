@@ -3154,6 +3154,379 @@ theorem castInterAux_decl
     unfold castInterAux
     mvcgen
 
+set_option maxHeartbeats 4000000 in
+/-- `castApp`'s `declarations` delta `Dlt`: the encoded application term's free
+variables live in `fv f ∪ fv x ∪ declVars Dlt`, and every `addSpec`-introduced
+spec body's free variables stay within the same bound.  The relation-to-function
+casts (`.fun (.pair τ σ) .bool` arm) declare two consts (the loosened input and
+the functionalised helper) and emit two spec bodies (the loosening spec and the
+functionalisation `forall`), all of whose extra free variables are exactly the
+declared constants. -/
+theorem castApp_decl
+    (f x : SMT.Term) (σf σx : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} {decl : SMT.Chunk} :
+    ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
+        ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
+          SMT.fv f ⊆ AList.keys Λ ∧ SMT.fv x ⊆ AList.keys Λ ∧ E.declarations = decl⌝ ⦄
+    castApp (f, σf) (x, σx)
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
+      ∃ Dlt : SMT.Chunk,
+        E'.declarations = decl ++ Dlt ∧
+        (∀ b ∈ specBodies Dlt, SMT.fv b ⊆ SMT.fv f ∪ SMT.fv x ∪ declVars Dlt) ∧
+        SMT.fv t' ⊆ SMT.fv f ∪ SMT.fv x ∪ declVars Dlt ⌝⦄ := by
+  unfold castApp
+  mvcgen
+  case vc3.h_2.isTrue =>
+    rename_i hxeq hfeq _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i fpair
+    obtain ⟨fL, fL_spec⟩ := fpair
+    mpure pre
+    obtain ⟨fL_le, fL_Λ_sub, fL_fresh, fL_not_used, fL_used_sub,
+      fL_keys_sub, fL_preserves, fL_fv_sub, fL_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨hs_decl, _, _, _, _⟩ := pres
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    exact ⟨_, by rw [hs_decl, hd_decl, fL_decl, List.concat_eq_append, List.concat_eq_append,
+        List.append_assoc, List.cons_append, List.nil_append],
+      by
+        intro b hb
+        simp only [specBodies, List.filterMap_cons, List.filterMap_nil] at hb
+        rw [List.mem_singleton] at hb
+        subst hb
+        intro v hv
+        simp only [declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff,
+          List.mem_singleton] at hv ⊢
+        rcases List.mem_union_iff.mp (fL_fv_sub hv) with hm | hm
+        · exact Or.inl (Or.inl hm)
+        · exact Or.inr (List.mem_singleton.mp hm),
+      by
+        intro v hv
+        simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
+          declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff] at hv ⊢
+        rcases hv with hvfL | hvx
+        · exact Or.inr hvfL
+        · exact Or.inl (Or.inr hvx)⟩
+  case vc4.h_2.isFalse.isTrue =>
+    rename_i hxeq hfeq _ _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i xpair
+    obtain ⟨x!, x!_spec⟩ := xpair
+    mpure pre
+    obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
+      x!_keys_sub, x!_preserves, x!_fv_sub, x!_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨hs_decl, _, _, _, _⟩ := pres
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    exact ⟨_, by rw [hs_decl, hd_decl, x!_decl, List.concat_eq_append, List.concat_eq_append,
+        List.append_assoc, List.cons_append, List.nil_append],
+      by
+        intro b hb
+        simp only [specBodies, List.filterMap_cons, List.filterMap_nil] at hb
+        rw [List.mem_singleton] at hb
+        subst hb
+        intro v hv
+        simp only [declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff,
+          List.mem_singleton] at hv ⊢
+        rcases List.mem_union_iff.mp (x!_fv_sub hv) with hm | hm
+        · exact Or.inl (Or.inr hm)
+        · exact Or.inr (List.mem_singleton.mp hm),
+      by
+        intro v hv
+        simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
+          declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff] at hv ⊢
+        rcases hv with hvf | hvx!
+        · exact Or.inl (Or.inl hvf)
+        · exact Or.inr hvx!⟩
+  case vc5.h_3.isTrue =>
+    rename_i hxeq hfeq _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i fpair
+    obtain ⟨fL, fL_spec⟩ := fpair
+    mpure pre
+    obtain ⟨fL_le, fL_Λ_sub, fL_fresh, fL_not_used, fL_used_sub,
+      fL_keys_sub, fL_preserves, fL_fv_sub, fL_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨hs_decl, _, _, _, _⟩ := pres
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    exact ⟨_, by rw [hs_decl, hd_decl, fL_decl, List.concat_eq_append, List.concat_eq_append,
+        List.append_assoc, List.cons_append, List.nil_append],
+      by
+        intro b hb
+        simp only [specBodies, List.filterMap_cons, List.filterMap_nil] at hb
+        rw [List.mem_singleton] at hb
+        subst hb
+        intro v hv
+        simp only [declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff,
+          List.mem_singleton] at hv ⊢
+        rcases List.mem_union_iff.mp (fL_fv_sub hv) with hm | hm
+        · exact Or.inl (Or.inl hm)
+        · exact Or.inr (List.mem_singleton.mp hm),
+      by
+        intro v hv
+        simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
+          declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff] at hv ⊢
+        rcases hv with hvfL | hvx
+        · exact Or.inr hvfL
+        · exact Or.inl (Or.inr hvx)⟩
+  case vc6.h_3.isFalse.isTrue =>
+    rename_i hxeq hfeq _ _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i xpair
+    obtain ⟨x!, x!_spec⟩ := xpair
+    mpure pre
+    obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
+      x!_keys_sub, x!_preserves, x!_fv_sub, x!_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨hs_decl, _, _, _, _⟩ := pres
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    exact ⟨_, by rw [hs_decl, hd_decl, x!_decl, List.concat_eq_append, List.concat_eq_append,
+        List.append_assoc, List.cons_append, List.nil_append],
+      by
+        intro b hb
+        simp only [specBodies, List.filterMap_cons, List.filterMap_nil] at hb
+        rw [List.mem_singleton] at hb
+        subst hb
+        intro v hv
+        simp only [declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff,
+          List.mem_singleton] at hv ⊢
+        rcases List.mem_union_iff.mp (x!_fv_sub hv) with hm | hm
+        · exact Or.inl (Or.inr hm)
+        · exact Or.inr (List.mem_singleton.mp hm),
+      by
+        intro v hv
+        simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
+          declVars, List.filterMap_cons, List.filterMap_nil, List.mem_union_iff] at hv ⊢
+        rcases hv with hvf | hvx!
+        · exact Or.inl (Or.inl hvf)
+        · exact Or.inr hvx!⟩
+  case vc1.h_1.isTrue =>
+    rename_i hxeq hfeq _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i fpair
+    obtain ⟨fL, fL_spec⟩ := fpair
+    mpure pre
+    obtain ⟨fL_le, fL_Λ_sub, fL_fresh, fL_not_used, fL_used_sub,
+      fL_keys_sub, fL_preserves, fL_fv_sub, fL_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨hs_decl, _, _, _, _⟩ := pres
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀St₂
+      mrename_i pref
+      mpure pref
+      rename_i ff
+      mspec SMT.declareConst_spec
+      mrename_i pred2
+      mintro ∀St₂d
+      mpure pred2
+      obtain ⟨hd2_decl, _, _, _, _⟩ := pred2
+      mspec SMT.freshVar_decls
+      case post.success =>
+        mintro ∀St₃
+        mrename_i pref2
+        mpure pref2
+        rename_i u_var
+        mspec SMT.freshVar_decls
+        case post.success =>
+          mintro ∀St₄
+          mrename_i pref3
+          mpure pref3
+          rename_i v_var
+          mspec SMT.addSpec_spec
+          mrename_i pres2
+          mintro ∀St₄s
+          mpure pres2
+          obtain ⟨hs2_decl, _, _, _, _⟩ := pres2
+          mspec Std.Do.Spec.pure
+          mpure_intro
+          exact ⟨_,
+            by rw [hs2_decl, pref3, pref2, hd2_decl, pref, hs_decl, hd_decl, fL_decl]
+               simp only [List.concat_eq_append, List.append_assoc, List.cons_append,
+                 List.nil_append]
+               rfl,
+            by
+              intro b hb v hv
+              simp only [specBodies, List.filterMap_cons, List.filterMap_nil,
+                List.mem_cons, List.not_mem_nil, or_false] at hb
+              simp only [List.mem_union_iff, declVars, List.filterMap_cons, List.filterMap_nil,
+                List.mem_cons, List.not_mem_nil, or_false]
+              rcases hb with rfl | rfl
+              · rcases List.mem_union_iff.mp (fL_fv_sub hv) with hm | hm
+                · exact Or.inl (Or.inl hm)
+                · exact Or.inr (Or.inl (List.mem_singleton.mp hm))
+              · simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
+                  List.not_mem_nil, or_false] at hv
+                obtain ⟨hv_body, hv_ne⟩ := hv
+                rcases hv_body with (hvfL | hvu | hvv) | (hvff | hvu') | hvv'
+                · exact Or.inr (Or.inl hvfL)
+                · exact absurd (Or.inl hvu) hv_ne
+                · exact absurd (Or.inr hvv) hv_ne
+                · exact Or.inr (Or.inr hvff)
+                · exact absurd (Or.inl hvu') hv_ne
+                · exact absurd (Or.inr hvv') hv_ne,
+            by
+              intro v hv
+              simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
+                List.mem_union_iff, declVars, List.filterMap_cons, List.filterMap_nil] at hv ⊢
+              rcases hv with hvff | hvx
+              · exact Or.inr (Or.inr hvff)
+              · exact Or.inl (Or.inr hvx)⟩
+  case vc2.h_1.isFalse.isTrue =>
+    rename_i hxeq hfeq _ _ St hpre
+    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
+    mspec loosenAux_prf_state_decls
+    mrename_i pre
+    mintro ∀St₁
+    rename_i xpair
+    obtain ⟨x!, x!_spec⟩ := xpair
+    mpure pre
+    obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
+      x!_keys_sub, x!_preserves, x!_fv_sub, x!_decl⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨hd_decl, _, _, _, _⟩ := pred
+    mspec SMT.addSpec_spec
+    mrename_i pres
+    mintro ∀St₁s
+    mpure pres
+    obtain ⟨hs_decl, _, _, _, _⟩ := pres
+    mspec SMT.freshVar_decls
+    case post.success =>
+      mintro ∀St₂
+      mrename_i pref
+      mpure pref
+      rename_i ff
+      mspec SMT.declareConst_spec
+      mrename_i pred2
+      mintro ∀St₂d
+      mpure pred2
+      obtain ⟨hd2_decl, _, _, _, _⟩ := pred2
+      mspec SMT.freshVar_decls
+      case post.success =>
+        mintro ∀St₃
+        mrename_i pref2
+        mpure pref2
+        rename_i u_var
+        mspec SMT.freshVar_decls
+        case post.success =>
+          mintro ∀St₄
+          mrename_i pref3
+          mpure pref3
+          rename_i v_var
+          mspec SMT.addSpec_spec
+          mrename_i pres2
+          mintro ∀St₄s
+          mpure pres2
+          obtain ⟨hs2_decl, _, _, _, _⟩ := pres2
+          mspec Std.Do.Spec.pure
+          mpure_intro
+          exact ⟨_,
+            by rw [hs2_decl, pref3, pref2, hd2_decl, pref, hs_decl, hd_decl, x!_decl]
+               simp only [List.concat_eq_append, List.append_assoc, List.cons_append,
+                 List.nil_append]
+               rfl,
+            by
+              intro b hb v hv
+              simp only [specBodies, List.filterMap_cons, List.filterMap_nil,
+                List.mem_cons, List.not_mem_nil, or_false] at hb
+              simp only [List.mem_union_iff, declVars, List.filterMap_cons, List.filterMap_nil,
+                List.mem_cons, List.not_mem_nil, or_false]
+              rcases hb with rfl | rfl
+              · rcases List.mem_union_iff.mp (x!_fv_sub hv) with hm | hm
+                · exact Or.inl (Or.inr hm)
+                · exact Or.inr (Or.inl (List.mem_singleton.mp hm))
+              · simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
+                  List.not_mem_nil, or_false] at hv
+                obtain ⟨hv_body, hv_ne⟩ := hv
+                rcases hv_body with (hvf | hvu | hvv) | (hvff | hvu') | hvv'
+                · exact Or.inl (Or.inl hvf)
+                · exact absurd (Or.inl hvu) hv_ne
+                · exact absurd (Or.inr hvv) hv_ne
+                · exact Or.inr (Or.inr hvff)
+                · exact absurd (Or.inl hvu') hv_ne
+                · exact absurd (Or.inr hvv') hv_ne,
+            by
+              intro v hv
+              simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
+                List.mem_union_iff, declVars, List.filterMap_cons, List.filterMap_nil] at hv ⊢
+              rcases hv with hvff | hvx!
+              · exact Or.inr (Or.inr hvff)
+              · exact Or.inr (Or.inl hvx!)⟩
+
 /-- `encodeTerm` depends on its `B.Env` argument only through `flags`: the
 result is unchanged across environments with equal `flags`. Local copy of
 `CollectCaseHelpers.encodeTerm_env_irrel` (importing that module would pull in
