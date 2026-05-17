@@ -1469,7 +1469,7 @@ theorem B.Typing.simplifier {Γ : B.TypeContext} {x : B.Term} {τ : BType} (h : 
     · rename B.simplifier _ = _ => eq
       rename _ ⊢ᴮ B.simplifier _ : _ => typ
       rw [eq] at typ
-      obtain ⟨-, _, _⟩ := B.Typing.notE typ
+      obtain ⟨-, _⟩ := B.Typing.notE typ
       assumption
     · apply B.Typing.not
       assumption
