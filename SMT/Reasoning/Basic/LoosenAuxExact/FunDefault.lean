@@ -270,10 +270,17 @@ theorem defaultSpecMSpec.{u} :
         · refine ⟨hφ, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
           · simpa [SMT.Term.abstract, SMTType.defaultZFSet] using
               (denote_eq_eq_zftrue_of_fst_eq den_t hden_zero
+                -- TODO: blocked on postcondition strengthening — `defaultSpecMSpec`'s
+                -- postcondition quantifies a fresh `«Δ₀»` and provides only `den_t`;
+                -- deriving `Y.2.1 = τ` needs `RespectsTypeContextOnFV «Δ₀» Γ t`, which
+                -- must be added to the postcondition and threaded through `funDefaultSpecAt`
+                -- (FunAux.lean) and `loosenAux_prf_exact.fun` (Fun.lean).
                 (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)) hdef)
           · intro
             rfl
         · obtain ⟨Φ, hdenΦ, hΦ_ty⟩ := denote_eq_some_of_some den_t hden_zero
+            -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+            -- see the int-case `hdef` branch above.
             (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           exact ⟨hφ, Φ, by simpa [SMT.Term.abstract] using hdenΦ, hΦ_ty, fun h => (hdef h).elim⟩
   | bool =>
@@ -310,10 +317,14 @@ theorem defaultSpecMSpec.{u} :
         · refine ⟨hφ, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
           · simpa [SMT.Term.abstract, SMTType.defaultZFSet] using
               (denote_eq_eq_zftrue_of_fst_eq den_t hden_false
+                -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+                -- see the int-case `hdef` branch above.
                 (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)) hdef)
           · intro
             rfl
         · obtain ⟨Φ, hdenΦ, hΦ_ty⟩ := denote_eq_some_of_some den_t hden_false
+            -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+            -- see the int-case `hdef` branch above.
             (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           exact ⟨hφ, Φ, by simpa [SMT.Term.abstract] using hdenΦ, hΦ_ty, fun h => (hdef h).elim⟩
   | unit =>
@@ -374,10 +385,14 @@ theorem defaultSpecMSpec.{u} :
         · refine ⟨hφ, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
           · simpa [SMT.Term.abstract] using
               (denote_eq_eq_zftrue_of_fst_eq den_t hden_none
+                -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+                -- see the int-case `hdef` branch above.
                 (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)) hdef)
           · intro
             rfl
         · obtain ⟨Φ, hdenΦ, hΦ_ty⟩ := denote_eq_some_of_some den_t hden_none
+            -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+            -- see the int-case `hdef` branch above.
             (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           exact ⟨hφ, Φ, by simpa [SMT.Term.abstract] using hdenΦ, hΦ_ty, fun h => (hdef h).elim⟩
   | pair α β ihα ihβ =>
@@ -514,6 +529,8 @@ theorem defaultSpecMSpec.{u} :
               intro v hv
               exact ht₀ v (by simpa [SMT.fv] using hv)
             have hY_ty : Y.snd.fst = α.pair β :=
+              -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+              -- see the int-case `hdef` branch in the `int` case above.
               denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
             have hY_mem : Y.fst ∈ ⟦α.pair β⟧ᶻ := by
               simpa [hY_ty] using Y.snd.snd
@@ -754,6 +771,8 @@ theorem defaultSpecMSpec.{u} :
               intro hx_mem
               exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hx_mem)
             have hY_ty : Y.snd.fst = α.fun β :=
+              -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+              -- see the int-case `hdef` branch in the `int` case above.
               denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
             have hY_func : ZFSet.IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ Y.fst := by
               rw [←ZFSet.mem_funs]
@@ -1157,6 +1176,10 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
               some ⟨ZFSet.ofInt 0, .int, ZFSet.mem_ofInt_Int 0⟩ := by
           rw [SMT.Term.abstract, SMT.denote, Option.pure_def]
         exact denote_eq_true_implies_fst_eq den_t hden_zero
+          -- TODO: blocked on postcondition strengthening — `defaultSpecMTrueImpliesDefault`'s
+          -- postcondition quantifies a fresh `«Δ₀»` and provides only `den_t`; deriving
+          -- `Y.2.1 = τ` needs `RespectsTypeContextOnFV «Δ₀» Γ t`, which must be added to
+          -- the postcondition and threaded through its callers.
           (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           (by simpa [SMT.Term.abstract] using hdenΦ) htrue
   | bool =>
@@ -1185,6 +1208,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
           rw [SMT.Term.abstract, SMT.denote, Option.pure_def]
           rfl
         exact denote_eq_true_implies_fst_eq den_t hden_false
+          -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+          -- see the `int` case of `defaultSpecMTrueImpliesDefault`.
           (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           (by simpa [SMT.Term.abstract] using hdenΦ) htrue
   | unit =>
@@ -1207,6 +1232,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
       · intro Δ₀ ht₀ Y den_t hφ Φ hdenΦ htrue
         obtain ⟨y, τ, hy⟩ := Y
         have hY_ty : τ = SMTType.unit :=
+          -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+          -- see the `int` case of `defaultSpecMTrueImpliesDefault`.
           denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
         cases hY_ty
         rw [SMTType.defaultZFSet]
@@ -1238,6 +1265,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 SMTType.mem_toZFSet_of_defaultZFSet⟩ := by
           simpa [noneCast, SMTType.defaultZFSet, SMT.Term.abstract, SMT.denote]
         exact denote_eq_true_implies_fst_eq den_t hden_none
+          -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+          -- see the `int` case of `defaultSpecMTrueImpliesDefault`.
           (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry))
           (by simpa [SMT.Term.abstract] using hdenΦ) htrue
   | pair α β ihα ihβ =>
@@ -1424,6 +1453,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 intro v hv
                 exact ht₀ v (by simpa [SMT.fv] using hv)
               have hY_ty : Y.snd.fst = α.pair β :=
+                -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+                -- see the `int` case of `defaultSpecMTrueImpliesDefault`.
                 denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
               have hY_mem : Y.fst ∈ ⟦α.pair β⟧ᶻ := by
                 simpa [hY_ty] using Y.snd.snd
@@ -1458,6 +1489,11 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 exact hφ v (by simpa [SMT.fv, List.mem_append] using Or.inr hv)
               obtain ⟨Dfst, Dsnd, hdenDfst, hDfst_true, hdenDsnd, hDsnd_true⟩ :=
                 denoteAndTrueComponents
+                  -- TODO: blocked on postcondition strengthening — the recursively-produced
+                  -- spec sub-terms `hfst`/`hsnd` are denoted under the fresh `«Δ₀»`; the
+                  -- `denoteAndTrueComponents` obligation needs `RespectsTypeContextOnFV «Δ₀» _ hfst`
+                  -- (resp. `hsnd`), which requires strengthening `defaultSpecMTrueImpliesDefault`'s
+                  -- postcondition and threading the hypothesis through its callers.
                   (fun hdenDfst =>
                     denote_type_eq_of_typing
                       (typ_t := SMT.Typing.weakening (h := sub₃) typ_hfst) (hden := hdenDfst) (hΔΓ := sorry))
@@ -1626,6 +1662,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
               intro hx_mem
               exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hx_mem)
             have hY_ty : Y.snd.fst = α.fun β :=
+              -- TODO: blocked on postcondition strengthening (RespectsTypeContextOnFV «Δ₀» Γ t) —
+              -- see the int-case `hdef` branch in `defaultSpecMSpec`'s `int` case.
               denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t) (hΔΓ := sorry)
             have hY_func : ZFSet.IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ Y.fst := by
               rw [←ZFSet.mem_funs]
