@@ -45,6 +45,7 @@ theorem loosenAux_prf_spec.pair («Δ» : RenamingContext.Context) {α β α' β
                                                   RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path pα).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -91,6 +92,7 @@ theorem loosenAux_prf_spec.pair («Δ» : RenamingContext.Context) {α β α' β
                                                   RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = β' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path pβ).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -131,6 +133,7 @@ theorem loosenAux_prf_spec.pair («Δ» : RenamingContext.Context) {α β α' β
                                         ∃ (_ : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec) (_
                                           : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                          X!.snd.fst = α'.pair β' ∧
                                           Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path (pα.pair pβ)).1) ∧
                                               ∀ (Y : SMT.Dom),
@@ -466,8 +469,8 @@ theorem loosenAux_prf_spec.pair («Δ» : RenamingContext.Context) {α β α' β
           · funext τ
             rw [π₂_pair]
           · apply proof_irrel_heq
-        obtain ⟨Φfst, Xfst!, denfst!, hφfst, denφfst, hΦfst_ty, ⟨hΦfst_true, hCastfst⟩, hfst_total⟩ := den_fst _ den_fst_x
-        obtain ⟨Φsnd, Xsnd!, densnd!, hφsnd, denφsnd, hΦsnd_ty, ⟨hΦsnd_true, hCastsnd⟩, hsnd_total⟩ := den_snd _ den_snd_x
+        obtain ⟨Φfst, Xfst!, denfst!, hφfst, denφfst, hXfst!_ty, hΦfst_ty, ⟨hΦfst_true, hCastfst⟩, hfst_total⟩ := den_fst _ den_fst_x
+        obtain ⟨Φsnd, Xsnd!, densnd!, hφsnd, denφsnd, hXsnd!_ty, hΦsnd_ty, ⟨hΦsnd_true, hCastsnd⟩, hsnd_total⟩ := den_snd _ den_snd_x
         have hXfst!_memα' : Xfst!.1 ∈ ⟦α'⟧ᶻ := by
           have hpairmem : X₁.pair Xfst!.1 ∈ ⟦α⟧ᶻ.prod ⟦α'⟧ᶻ := (castZF_of_path pα).2.1 hCastfst
           rw [ZFSet.pair_mem_prod] at hpairmem
@@ -532,7 +535,7 @@ theorem loosenAux_prf_spec.pair («Δ» : RenamingContext.Context) {α β α' β
             rcases hvsnd' with hvx_snd | hvsnd_single
             · exact Or.inl (by simpa [fv] using hvx_snd)
             · exact (hv_ne_snd (List.mem_singleton.mp hvsnd_single)).elim
-        refine ⟨⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, X!, ?_, ?_, ?_, ?_, ?_⟩
+        refine ⟨⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, X!, ?_, ?_, ?_, ?_, ?_, ?_⟩
         · dsimp [X!]
           rw [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.some_inj]
           apply Option.get_of_eq_some
@@ -741,12 +744,9 @@ theorem loosenAux_prf_spec.pair («Δ» : RenamingContext.Context) {α β α' β
                   · rw [π₁_pair]
                   · obtain ⟨Xfst!, τXfst!, hXfst!⟩ := Xfst!
                     dsimp
-                    -- TODO: blocked on loosenAux_prf_spec postcondition. `Xfst!` is the
-                    -- existentially-bound loosened value from `den_fst`; `denfst!` is the
-                    -- trivial denotation of the bare `Term.var fst!`, carrying no type
-                    -- info, so `τXfst! = α'` is not derivable here. Fixing requires
-                    -- strengthening `loosenAux_prf_spec`'s adequacy clause.
-                    obtain rfl := denote_type_eq_of_typing (typ_t := typ_fst!) (hden := denfst!) (hΔΓ := sorry)
+                    -- `Xfst!`'s type tag is now supplied by the strengthened
+                    -- `loosenAux_prf_spec` adequacy clause (`hXfst!_ty`).
+                    obtain rfl := hXfst!_ty
                     congr 1
                     · funext τ
                       rw [π₁_pair]
@@ -846,13 +846,9 @@ theorem loosenAux_prf_spec.pair («Δ» : RenamingContext.Context) {α β α' β
                   · obtain ⟨Xsnd!, τXsnd!, hXsnd!⟩ := Xsnd!
                     dsimp
                     congr
-                    symm
-                    -- TODO: blocked on loosenAux_prf_spec postcondition. `Xsnd!` is the
-                    -- existentially-bound loosened value from `den_snd`; `densnd!` is the
-                    -- trivial denotation of the bare `Term.var snd!`, carrying no type
-                    -- info, so `τXsnd! = β'` is not derivable here. Fixing requires
-                    -- strengthening `loosenAux_prf_spec`'s adequacy clause.
-                    exact denote_type_eq_of_typing (typ_t := typ_snd!) (hden := densnd!) (hΔΓ := sorry)
+                    -- `Xsnd!`'s type tag is now supplied by the strengthened
+                    -- `loosenAux_prf_spec` adequacy clause (`hXsnd!_ty`).
+                    exact hXsnd!_ty.symm
                 obtain ⟨Φsnd, τΦsnd, hΦsnd⟩ := Φsnd
                 obtain rfl := hΦsnd_true
                 obtain rfl := hΦsnd_ty
@@ -1281,6 +1277,8 @@ theorem loosenAux_prf_spec.pair («Δ» : RenamingContext.Context) {α β α' β
               simp only [overloadUnaryOp, subset_refl, subset_of_empty, mem_insert_iff,
                 mem_singleton, true_or, dite_true, id_eq, symmDiff_empty]
             · apply proof_irrel_heq
+        · -- X!.snd.fst = α'.pair β': true by construction of X!.
+          rfl
         · rfl
         · constructor
           · dsimp [X!]
