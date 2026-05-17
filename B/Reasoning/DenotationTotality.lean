@@ -89,6 +89,7 @@
   finiteness/IsPFunc witnesses (these are guarded elsewhere in the encoder).
 -/
 import B.Reasoning.Lemmas
+import B.Reasoning.WellDefined
 
 open B Classical PHOAS ZFSet
 
@@ -229,6 +230,28 @@ private theorem BType.hasArity_foldl_succ {n : ℕ} (αs : Fin (n + 1) → BType
     rw [Fin.foldl_succ_last, B.BType.hasArity]
     exact ih (fun i => αs i.castSucc)
 
+/-- `WellDefined` distributes over the `Fin.foldl` of cross-products that the
+    binder typing rules fold the domain into: well-definedness of the folded
+    domain term gives well-definedness of every component. -/
+private theorem wd_foldl_cprod {n : ℕ} (Ds : Fin (n + 1) → PHOAS.Term B.Dom)
+    (h : WellDefined (Fin.foldl n (fun d (i : Fin n) => d ⨯ᴮ' Ds i.succ) (Ds 0))) :
+    ∀ i, WellDefined (Ds i) := by
+  induction n with
+  | zero =>
+    rw [Fin.foldl_zero] at h
+    intro i
+    rw [show i = 0 by omega]
+    exact h
+  | succ n ih =>
+    rw [Fin.foldl_succ_last] at h
+    obtain ⟨h_init, h_last⟩ := h
+    have ih' : ∀ i : Fin (n + 1), WellDefined (Ds (Fin.castSucc i)) :=
+      ih (fun i => Ds (Fin.castSucc i)) h_init
+    intro i
+    induction i using Fin.lastCases with
+    | last => rw [← Fin.succ_last]; exact h_last
+    | cast j => exact ih' j
+
 /-! ## Main Theorem (statement) -/
 
 /--
@@ -254,7 +277,8 @@ private theorem BType.hasArity_foldl_succ {n : ℕ} (αs : Fin (n + 1) → BType
 theorem denote_exists_of_typing
     {Γ : PHOAS.TypeContext B.Dom} {t : PHOAS.Term B.Dom} {τ : BType}
     (htyp : Γ ⊢ᴮ' t : τ)
-    (hwt : WellTypedCtx Γ) :
+    (hwt : WellTypedCtx Γ)
+    (hwd : WellDefined t) :
     ∃ D : B.Dom, ⟦t⟧ᴮ = some D ∧ D.2.1 = τ := by
   induction htyp with
   -- Variable: the denotation IS the variable, type tag follows from WellTypedCtx.
@@ -274,8 +298,8 @@ theorem denote_exists_of_typing
     rw [B.denote, Option.pure_def]
   -- Maplet (pair)
   | maplet _ _ ihx ihy =>
-    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt
-    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt
+    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt hwd.1
+    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt hwd.2
     dsimp at htypx htypy
     subst htypx
     subst htypy
@@ -286,8 +310,8 @@ theorem denote_exists_of_typing
       simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some]
   -- Addition
   | add _ _ ihx ihy =>
-    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt
-    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt
+    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt hwd.1
+    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt hwd.2
     dsimp at htypx htypy
     subst htypx
     subst htypy
@@ -296,8 +320,8 @@ theorem denote_exists_of_typing
     simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
   -- Subtraction
   | sub _ _ ihx ihy =>
-    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt
-    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt
+    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt hwd.1
+    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt hwd.2
     dsimp at htypx htypy
     subst htypx
     subst htypy
@@ -306,8 +330,8 @@ theorem denote_exists_of_typing
     simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
   -- Multiplication
   | mul _ _ ihx ihy =>
-    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt
-    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt
+    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt hwd.1
+    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt hwd.2
     dsimp at htypx htypy
     subst htypx
     subst htypy
@@ -316,8 +340,8 @@ theorem denote_exists_of_typing
     simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
   -- And
   | and _ _ ihx ihy =>
-    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt
-    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt
+    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt hwd.1
+    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt hwd.2
     dsimp at htypx htypy
     subst htypx
     subst htypy
@@ -326,7 +350,7 @@ theorem denote_exists_of_typing
     simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
   -- Not
   | not _ ihx =>
-    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt
+    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt hwd
     dsimp at htypx
     subst htypx
     refine ⟨⟨¬ᶻ X, .bool, overloadUnaryOp_mem⟩, ?_, rfl⟩
@@ -334,8 +358,8 @@ theorem denote_exists_of_typing
     simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
   -- Equality
   | eq _ _ ihx ihy =>
-    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt
-    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt
+    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt hwd.1
+    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt hwd.2
     dsimp at htypx htypy
     subst htypx
     subst htypy
@@ -345,8 +369,8 @@ theorem denote_exists_of_typing
       Option.failure_eq_none, dite_true]
   -- Less-or-equal
   | le _ _ ihx ihy =>
-    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt
-    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt
+    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt hwd.1
+    obtain ⟨⟨Y, βy, hY⟩, deny, htypy⟩ := ihy hwt hwd.2
     dsimp at htypx htypy
     subst htypx
     subst htypy
@@ -363,8 +387,8 @@ theorem denote_exists_of_typing
     rw [B.denote, Option.pure_def]
   -- Membership: x ∈ S where S : .set α and x : α.
   | mem _ _ ihx ihS =>
-    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt
-    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt
+    obtain ⟨⟨X, αx, hX⟩, denx, htypx⟩ := ihx hwt hwd.1
+    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt hwd.2
     dsimp at htypx htypS
     subst htypx
     have hαS : αS = .set αx := htypS
@@ -394,8 +418,17 @@ theorem denote_exists_of_typing
   | @collect Γ' n α D P n_pos typD typP typD_ih typP_ih =>
     obtain ⟨m, rfl⟩ := Nat.exists_add_one_eq.mpr n_pos
     -- Step 1: build domain denotation via the foldl-cprod helper.
+    have wd_D : ∀ i, WellDefined (D i) :=
+      wd_foldl_cprod D (by
+        have hd := hwd.1
+        rw [show (Fin.foldl (m + 1 - 1) (fun d (x : Fin (m + 1 - 1)) =>
+            match x with | ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i + 1, Nat.add_lt_of_lt_sub hi⟩)
+            (D ⟨0, n_pos⟩)) =
+            Fin.foldl m (fun d (i : Fin m) => d ⨯ᴮ' D i.succ) (D 0) by
+          simp only [Nat.add_one_sub_one]; rfl] at hd
+        exact hd)
     have hDi : ∀ i, ∃ D' : B.Dom, ⟦D i⟧ᴮ = some D' ∧ D'.snd.fst = (α i).set :=
-      fun i => typD_ih i hwt
+      fun i => typD_ih i hwt (wd_D i)
     obtain ⟨⟨𝒟, σ, h𝒟⟩, hden𝒟, htyp𝒟⟩ := denote_foldl_cprod_succ α D hDi
     dsimp at htyp𝒟
     subst htyp𝒟
@@ -407,7 +440,7 @@ theorem denote_exists_of_typing
         (∀ i, (x i).2.1 = α i) →
         ∃ D : B.Dom, ⟦P x⟧ᴮ = some D ∧ D.snd.fst = .bool := by
       intro x hx
-      exact typP_ih x (hwt.update hx)
+      exact typP_ih x (hwt.update hx) (hwd.2 x)
     -- Step 4: Translate type-tag witness (matching τ.get) into the (matching α) form
     -- needed by body_den_of_typed.
     have type_tag_eq : ∀ i, τ.get (m + 1) i = α i :=
@@ -479,7 +512,7 @@ theorem denote_exists_of_typing
     rfl
   -- Powerset
   | @pow _ α _ _ ihS =>
-    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt
+    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt hwd
     dsimp at htypS
     have hαS : αS = .set α := htypS
     subst hαS
@@ -491,8 +524,8 @@ theorem denote_exists_of_typing
       simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
   -- Cartesian product
   | @cprod _ α β _ _ _ _ ihS ihT =>
-    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt
-    obtain ⟨⟨Td, αT, hT⟩, denT, htypT⟩ := ihT hwt
+    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt hwd.1
+    obtain ⟨⟨Td, αT, hT⟩, denT, htypT⟩ := ihT hwt hwd.2
     dsimp at htypS htypT
     have hαS : αS = .set α := htypS; subst hαS
     have hαT : αT = .set β := htypT; subst hαT
@@ -507,8 +540,8 @@ theorem denote_exists_of_typing
       simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
   -- Union
   | @union _ α _ _ _ _ ihS ihT =>
-    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt
-    obtain ⟨⟨Td, αT, hT⟩, denT, htypT⟩ := ihT hwt
+    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt hwd.1
+    obtain ⟨⟨Td, αT, hT⟩, denT, htypT⟩ := ihT hwt hwd.2
     dsimp at htypS htypT
     have hαS : αS = .set α := htypS; subst hαS
     have hαT : αT = .set α := htypT; subst hαT
@@ -521,8 +554,8 @@ theorem denote_exists_of_typing
         dite_true]
   -- Inter
   | @inter _ α _ _ _ _ ihS ihT =>
-    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt
-    obtain ⟨⟨Td, αT, hT⟩, denT, htypT⟩ := ihT hwt
+    obtain ⟨⟨Sd, αS, hS⟩, denS, htypS⟩ := ihS hwt hwd.1
+    obtain ⟨⟨Td, αT, hT⟩, denT, htypT⟩ := ihT hwt hwd.2
     dsimp at htypS htypT
     have hαS : αS = .set α := htypS; subst hαS
     have hαT : αT = .set α := htypT; subst hαT
@@ -535,8 +568,8 @@ theorem denote_exists_of_typing
         dite_true]
   -- Partial function space
   | @pfun _ α β _ _ _ _ ihA ihB =>
-    obtain ⟨⟨Ad, αA, hA⟩, denA, htypA⟩ := ihA hwt
-    obtain ⟨⟨Bd, αB, hB⟩, denB, htypB⟩ := ihB hwt
+    obtain ⟨⟨Ad, αA, hA⟩, denA, htypA⟩ := ihA hwt hwd.1
+    obtain ⟨⟨Bd, αB, hB⟩, denB, htypB⟩ := ihB hwt hwd.2
     dsimp at htypA htypB
     have hαA : αA = .set α := htypA; subst hαA
     have hαB : αB = .set β := htypB; subst hαB
@@ -553,8 +586,17 @@ theorem denote_exists_of_typing
   | @all Γ' n α D P n_pos typD typP typD_ih typP_ih =>
     obtain ⟨m, rfl⟩ := Nat.exists_add_one_eq.mpr n_pos
     -- Step 1: domain denotes
+    have wd_D : ∀ i, WellDefined (D i) :=
+      wd_foldl_cprod D (by
+        have hd := hwd.1
+        rw [show (Fin.foldl (m + 1 - 1) (fun d (x : Fin (m + 1 - 1)) =>
+            match x with | ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i + 1, Nat.add_lt_of_lt_sub hi⟩)
+            (D ⟨0, n_pos⟩)) =
+            Fin.foldl m (fun d (i : Fin m) => d ⨯ᴮ' D i.succ) (D 0) by
+          simp only [Nat.add_one_sub_one]; rfl] at hd
+        exact hd)
     have hDi : ∀ i, ∃ D' : B.Dom, ⟦D i⟧ᴮ = some D' ∧ D'.snd.fst = (α i).set :=
-      fun i => typD_ih i hwt
+      fun i => typD_ih i hwt (wd_D i)
     obtain ⟨⟨𝒟, σ, h𝒟⟩, hden𝒟, htyp𝒟⟩ := denote_foldl_cprod_succ α D hDi
     dsimp at htyp𝒟
     subst htyp𝒟
@@ -566,7 +608,7 @@ theorem denote_exists_of_typing
         (∀ i, (x i).2.1 = α i) →
         ∃ D : B.Dom, ⟦P x⟧ᴮ = some D ∧ D.snd.fst = .bool := by
       intro x hx
-      exact typP_ih x (hwt.update hx)
+      exact typP_ih x (hwt.update hx) (hwd.2 x)
     -- Step 4: Translate type-tag witness into the (matching α) form.
     have type_tag_eq : ∀ i, τ.get (m + 1) i = α i :=
       fun _ => BType.get_of_foldl
@@ -647,8 +689,17 @@ theorem denote_exists_of_typing
   | @lambda Γ' n α γ D E n_pos typD typE typD_ih typE_ih =>
     obtain ⟨m, rfl⟩ := Nat.exists_add_one_eq.mpr n_pos
     -- Step 1: domain denotes
+    have wd_D : ∀ i, WellDefined (D i) :=
+      wd_foldl_cprod D (by
+        have hd := hwd.1
+        rw [show (Fin.foldl (m + 1 - 1) (fun d (x : Fin (m + 1 - 1)) =>
+            match x with | ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i + 1, Nat.add_lt_of_lt_sub hi⟩)
+            (D ⟨0, n_pos⟩)) =
+            Fin.foldl m (fun d (i : Fin m) => d ⨯ᴮ' D i.succ) (D 0) by
+          simp only [Nat.add_one_sub_one]; rfl] at hd
+        exact hd)
     have hDi : ∀ i, ∃ D' : B.Dom, ⟦D i⟧ᴮ = some D' ∧ D'.snd.fst = (α i).set :=
-      fun i => typD_ih i hwt
+      fun i => typD_ih i hwt (wd_D i)
     obtain ⟨⟨𝒟, σ, h𝒟⟩, hden𝒟, htyp𝒟⟩ := denote_foldl_cprod_succ α D hDi
     dsimp at htyp𝒟
     subst htyp𝒟
@@ -660,7 +711,7 @@ theorem denote_exists_of_typing
         (∀ i, (x i).2.1 = α i) →
         ∃ D : B.Dom, ⟦E x⟧ᴮ = some D ∧ D.snd.fst = γ := by
       intro x hx
-      exact typE_ih x (hwt.update hx)
+      exact typE_ih x (hwt.update hx) (hwd.2 x)
     -- Step 4: Translate type-tag witness into the (matching α) form.
     have type_tag_eq : ∀ i, τ.get (m + 1) i = α i :=
       fun _ => BType.get_of_foldl
@@ -781,20 +832,51 @@ theorem denote_exists_of_typing
         simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some]
         rw [htyp_xₙ]
         rfl
-  -- Application
-  -- TODO: Need to bridge IsPFunc and dom membership facts from typing.
-  | app _ _ _ _ => sorry
-  -- Cardinality
-  -- TODO: Need Finiteness witness from typing or hypothesis.
-  | card _ _ => sorry
-  -- Min
-  -- TODO: Need Finite + Nonempty witness; not derivable purely from typing.
-  -- Either restrict the theorem to these conditions or change the underlying
-  -- denote semantics.
-  | min _ _ => sorry
-  -- Max
-  -- TODO: Same as min.
-  | max _ _ => sorry
+  -- Application: well-definedness supplies the IsPFunc and domain witnesses.
+  | app _ _ ihf ihx =>
+    obtain ⟨⟨Fd, σF, hFd⟩, denf, htypf⟩ := ihf hwt hwd.1
+    obtain ⟨⟨Xd, σX, hXd⟩, denx, htypx⟩ := ihx hwt hwd.2.1
+    dsimp at htypf htypx
+    subst htypf
+    subst htypx
+    obtain ⟨hpf, hdom⟩ := hwd.2.2 _ _ denf denx
+    have hispf : Fd.IsPFunc _ _ := hpf _ _ rfl
+    obtain ⟨y, hy⟩ := hdom
+    have hXdom : Xd ∈ Fd.Dom := ZFSet.mem_dom hispf hy
+    rw [B.denote, denf, denx]
+    simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some]
+    simp only [hispf, hXdom, ↓reduceDIte]
+    exact ⟨_, rfl, rfl⟩
+  -- Cardinality: well-definedness supplies the finiteness witness.
+  | card _ ihS =>
+    obtain ⟨⟨Sd, σS, hSd⟩, denS, htypS⟩ := ihS hwt hwd.1
+    dsimp at htypS
+    subst htypS
+    have hfin : Sd.IsFinite := hwd.2 _ denS
+    rw [B.denote, denS]
+    simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
+    rw [dif_pos hfin]
+    exact ⟨_, rfl, rfl⟩
+  -- Min: well-definedness supplies the finite + nonempty witness.
+  | min _ ihS =>
+    obtain ⟨⟨Sd, σS, hSd⟩, denS, htypS⟩ := ihS hwt hwd.1
+    dsimp at htypS
+    subst htypS
+    have hfn : Sd.IsFinite ∧ Sd.Nonempty := hwd.2 _ denS
+    rw [B.denote, denS]
+    simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
+    rw [dif_pos hfn]
+    exact ⟨_, rfl, rfl⟩
+  -- Max: well-definedness supplies the finite + nonempty witness.
+  | max _ ihS =>
+    obtain ⟨⟨Sd, σS, hSd⟩, denS, htypS⟩ := ihS hwt hwd.1
+    dsimp at htypS
+    subst htypS
+    have hfn : Sd.IsFinite ∧ Sd.Nonempty := hwd.2 _ denS
+    rw [B.denote, denS]
+    simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some, Option.failure_eq_none]
+    rw [dif_pos hfn]
+    exact ⟨_, rfl, rfl⟩
 
 /-! ## Corollaries -/
 
@@ -807,9 +889,10 @@ theorem denote_exists_of_typing
 theorem denote_isSome_of_typing
     {Γ : PHOAS.TypeContext B.Dom} {t : PHOAS.Term B.Dom} {τ : BType}
     (htyp : Γ ⊢ᴮ' t : τ)
-    (hwt : WellTypedCtx Γ) :
+    (hwt : WellTypedCtx Γ)
+    (hwd : WellDefined t) :
     (⟦t⟧ᴮ).isSome = true := by
-  obtain ⟨D, hD, _⟩ := denote_exists_of_typing htyp hwt
+  obtain ⟨D, hD, _⟩ := denote_exists_of_typing htyp hwt hwd
   exact Option.isSome_iff_exists.mpr ⟨D, hD⟩
 
 /--
@@ -819,10 +902,11 @@ theorem denote_type_of_typing
     {Γ : PHOAS.TypeContext B.Dom} {t : PHOAS.Term B.Dom} {τ : BType}
     (htyp : Γ ⊢ᴮ' t : τ)
     (hwt : WellTypedCtx Γ)
+    (hwd : WellDefined t)
     {D : B.Dom}
     (hden : ⟦t⟧ᴮ = some D) :
     D.2.1 = τ := by
-  obtain ⟨D', hD', htyp'⟩ := denote_exists_of_typing htyp hwt
+  obtain ⟨D', hD', htyp'⟩ := denote_exists_of_typing htyp hwt hwd
   rw [hD'] at hden; cases hden; exact htyp'
 
 end B.PHOAS
@@ -857,13 +941,14 @@ theorem denote_exists_of_typing
     (typ_t : Γ ⊢ᴮ t : τ)
     («Δ» : B.𝒱 → Option B.Dom)
     (Δ_isSome : ∀ v ∈ B.fv t, («Δ» v).isSome = true)
-    (hcompat : B.PHOAS.WellTypedCtx (Γ.abstract («Δ» := «Δ»))) :
+    (hcompat : B.PHOAS.WellTypedCtx (Γ.abstract («Δ» := «Δ»)))
+    (hwd : B.PHOAS.WellDefined (t.abstract «Δ» Δ_isSome)) :
     ∃ T : ZFSet, ∃ hT : T ∈ τ.toZFSet,
       ⟦t.abstract «Δ» Δ_isSome⟧ᴮ = some ⟨T, τ, hT⟩ := by
   have htyp_phoas : Γ.abstract («Δ» := «Δ») ⊢ᴮ' t.abstract «Δ» Δ_isSome : τ :=
     _root_.Typing.of_abstract Δ_isSome typ_t
   obtain ⟨D, hD, htyp_eq⟩ :=
-    B.PHOAS.denote_exists_of_typing htyp_phoas hcompat
+    B.PHOAS.denote_exists_of_typing htyp_phoas hcompat hwd
   obtain ⟨T, σ, hT⟩ := D
   dsimp at htyp_eq
   subst htyp_eq
