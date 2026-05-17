@@ -6944,6 +6944,7 @@ private theorem totality_witness_hasflag_construct.{u}
     (typ_t : E_ctx ⊢ᴮ B.Term.all vs D P : BType.bool)
     (typ_D : E_ctx ⊢ᴮ D : .set τ)
     (typP : (vs.zipToAList αs ∪ E_ctx) ⊢ᴮ P : BType.bool)
+    (wd_P : B.Term.WellDefined.{u} P)
     (typ_D_enc : Γ_D ⊢ˢ D_enc : τ.toSMTType.fun SMTType.bool)
     (τ_hasArity : τ.hasArity vs.length)
     (vs_not_D_fv : ∀ v ∈ vs, v ∉ B.fv D)
@@ -7349,6 +7350,7 @@ private theorem totality_witness_hasflag_construct.{u}
       -- obtain a P denotation.
       have hP_exists := denote_exists_of_typing typP
         Δ_ext_alt_fin Δ_fv_P_alt_fin (@WFTC.wf _ WFTC.of_abstract)
+        (wd_P.toPHOAS Δ_ext_alt_fin Δ_fv_P_alt_fin)
       obtain ⟨P_val, hP_val, hP_den_abs⟩ := hP_exists
       -- Lift P_val's typing through the abstract.
       have hP_den_at_abs :

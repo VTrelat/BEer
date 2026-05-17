@@ -913,6 +913,132 @@ end B.PHOAS
 
 namespace B
 
+/-! ## Concrete-`B.Term` well-definedness
+
+`B.PHOAS.WellDefined` is a predicate on PHOAS terms, but the SMT correctness
+theorem `encodeTerm_spec` quantifies over concrete `B.Term`s. `B.Term.WellDefined`
+is the `B.Term`-level mirror: it collects the same partial-operation side
+conditions, but — because finiteness / `IsPFunc` are semantic — states the
+`card`/`min`/`max`/`app` conditions for *every* renaming context, making the
+predicate independent of any particular abstraction. This independence is what
+lets `encodeTerm_spec`'s induction discharge the well-definedness premise of an
+inductive hypothesis (`B.Term.WellDefined` of a subterm) directly from the
+well-definedness of the whole term, with no `«Δ»` bookkeeping.
+`B.Term.WellDefined.toPHOAS` bridges it to `B.PHOAS.WellDefined (t.abstract …)`. -/
+
+/-- Concrete-`B.Term` analogue of `B.PHOAS.WellDefined`; see the section comment. -/
+def Term.WellDefined.{u} : B.Term → Prop
+  | .var _ | .int _ | .bool _ | .ℤ | .𝔹 => True
+  | .not x | .pow x => Term.WellDefined x
+  | .maplet x y | .add x y | .sub x y | .mul x y | .le x y | .and x y | .eq x y
+  | .mem x y | .cprod x y | .union x y | .inter x y | .pfun x y =>
+      Term.WellDefined x ∧ Term.WellDefined y
+  | .collect _ D P | .lambda _ D P | .all _ D P =>
+      Term.WellDefined D ∧ Term.WellDefined P
+  | .card S =>
+      Term.WellDefined S ∧
+        ∀ («Δ» : B.𝒱 → Option (B.Dom.{u})) (h : ∀ v ∈ B.fv S, («Δ» v).isSome = true),
+          ∀ D, ⟦S.abstract «Δ» h⟧ᴮ = some D → D.1.IsFinite
+  | .min S | .max S =>
+      Term.WellDefined S ∧
+        ∀ («Δ» : B.𝒱 → Option (B.Dom.{u})) (h : ∀ v ∈ B.fv S, («Δ» v).isSome = true),
+          ∀ D, ⟦S.abstract «Δ» h⟧ᴮ = some D → D.1.IsFinite ∧ D.1.Nonempty
+  | .app f x =>
+      Term.WellDefined f ∧ Term.WellDefined x ∧
+        ∀ («Δ» : B.𝒱 → Option (B.Dom.{u}))
+          (hf : ∀ v ∈ B.fv f, («Δ» v).isSome = true)
+          (hx : ∀ v ∈ B.fv x, («Δ» v).isSome = true),
+          ∀ Df Dx, ⟦f.abstract «Δ» hf⟧ᴮ = some Df → ⟦x.abstract «Δ» hx⟧ᴮ = some Dx →
+            (∀ τ σ, Df.2.1 = .set (τ ×ᴮ σ) → Df.1.IsPFunc τ.toZFSet σ.toZFSet) ∧
+              ∃ y, Dx.1.pair y ∈ Df.1
+
+/-- Well-definedness of a binder body distributes over the `Fin.uncurry` of the
+`abstract.go` machinery: the abstracted body is well-defined at every tuple. -/
+private theorem wellDefined_uncurry_go.{u} {P : B.Term}
+    (ihP : ∀ («Δ» : B.𝒱 → Option (B.Dom.{u})) (h : ∀ v ∈ B.fv P, («Δ» v).isSome = true),
+      B.PHOAS.WellDefined (P.abstract «Δ» h))
+    {vs : List B.𝒱} {«Δ» : B.𝒱 → Option (B.Dom.{u})}
+    (h_go : ∀ v ∈ B.fv P, v ∉ vs → («Δ» v).isSome = true) :
+    ∀ ws : Fin vs.length → B.Dom.{u},
+      B.PHOAS.WellDefined ((B.Term.abstract.go P vs «Δ» h_go).uncurry ws) := by
+  cases vs with
+  | nil =>
+    intro ws
+    rw [B.Term.abstract.go]
+    simp only [Function.OfArity.uncurry, Function.FromTypes.uncurry]
+    exact ihP «Δ» _
+  | cons v₀ vs' =>
+    intro ws
+    have pf : ∀ v ∈ B.fv P,
+        (Function.updates «Δ» (v₀ :: vs') ((List.ofFn ws).map Option.some) v).isSome = true := by
+      intro v hv
+      by_cases hvvs : v ∈ v₀ :: vs'
+      · exact Function.updates_isSome_of_mem_map_some «Δ» (v₀ :: vs') (List.ofFn ws) v hvvs
+          (by rw [List.length_ofFn])
+      · rw [Function.updates_of_not_mem «Δ» (v₀ :: vs') _ v hvvs]
+        exact h_go v hv hvvs
+    have heq := Term.abstract.go.alt_def₂ (v₀ :: vs') P (List.ofFn ws)
+      (by rw [List.length_ofFn]) h_go
+      (by simp) pf
+    simp only [List.getElem_ofFn, Fin.eta] at heq
+    rw [heq]
+    exact ihP _ pf
+
+/-- Bridge: concrete `B.Term` well-definedness implies PHOAS well-definedness of
+any abstraction. This is the lemma `encodeTerm_spec.all_case` uses to feed the
+`B.PHOAS.WellDefined` argument of `B.denote_exists_of_typing`. -/
+theorem Term.WellDefined.toPHOAS.{u} : ∀ {t : B.Term}, B.Term.WellDefined.{u} t →
+    ∀ («Δ» : B.𝒱 → Option (B.Dom.{u})) (h : ∀ v ∈ B.fv t, («Δ» v).isSome = true),
+      B.PHOAS.WellDefined (t.abstract «Δ» h) := by
+  intro t
+  induction t with
+  | var v => intro _ «Δ» h; simp only [B.Term.abstract, B.PHOAS.WellDefined]
+  | int n => intro _ «Δ» h; simp only [B.Term.abstract, B.PHOAS.WellDefined]
+  | bool b => intro _ «Δ» h; simp only [B.Term.abstract, B.PHOAS.WellDefined]
+  | «ℤ» => intro _ «Δ» h; simp only [B.Term.abstract, B.PHOAS.WellDefined]
+  | 𝔹 => intro _ «Δ» h; simp only [B.Term.abstract, B.PHOAS.WellDefined]
+  | not x ih => intro wd «Δ» h; rw [B.Term.abstract]; exact ih wd «Δ» _
+  | pow x ih => intro wd «Δ» h; rw [B.Term.abstract]; exact ih wd «Δ» _
+  | maplet x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | add x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | sub x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | mul x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | le x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | and x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | eq x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | mem x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | cprod x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | union x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | inter x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | pfun x y ihx ihy =>
+    intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ihx wd.1 «Δ» _, ihy wd.2 «Δ» _⟩
+  | card S ih => intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ih wd.1 «Δ» _, wd.2 «Δ» _⟩
+  | min S ih => intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ih wd.1 «Δ» _, wd.2 «Δ» _⟩
+  | max S ih => intro wd «Δ» h; rw [B.Term.abstract]; exact ⟨ih wd.1 «Δ» _, wd.2 «Δ» _⟩
+  | app f x ihf ihx =>
+    intro wd «Δ» h; rw [B.Term.abstract]
+    exact ⟨ihf wd.1 «Δ» _, ihx wd.2.1 «Δ» _, wd.2.2 «Δ» _ _⟩
+  | collect vs D P ihD ihP =>
+    intro wd «Δ» h; rw [B.Term.abstract]
+    exact ⟨ihD wd.1 «Δ» _, wellDefined_uncurry_go (fun «Δ'» h' => ihP wd.2 «Δ'» h') _⟩
+  | lambda vs D P ihD ihP =>
+    intro wd «Δ» h; rw [B.Term.abstract]
+    exact ⟨ihD wd.1 «Δ» _, wellDefined_uncurry_go (fun «Δ'» h' => ihP wd.2 «Δ'» h') _⟩
+  | all vs D P ihD ihP =>
+    intro wd «Δ» h; rw [B.Term.abstract]
+    exact ⟨ihD wd.1 «Δ» _, wellDefined_uncurry_go (fun «Δ'» h' => ihP wd.2 «Δ'» h') _⟩
+
 /--
   Bridged variant: a B-Term-level totality statement that uses
   `B.Term.abstract` and `B.Typing.of_abstract` to reduce to the PHOAS-level

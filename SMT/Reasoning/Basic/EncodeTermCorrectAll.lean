@@ -154,6 +154,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
   (bv_nodup : (B.bv (Term.all vs D P)).Nodup)
   (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((Term.all vs D P)))
   (fv_in_Λ : ∀ v ∈ B.fv ((Term.all vs D P)), v ∈ Λ)
+  (wd_P : B.Term.WellDefined.{u} P)
   -- Path-A R3e: SPLIT existential_witness_hasflag into two hypotheses for
   -- finer-grained discharge. The original bundled witness packaged three
   -- conjuncts (existence + RDom + Δ-universal totality). R3e separates
@@ -1212,6 +1213,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       · exfalso
         apply hP_den_cond
         exact B.denote_exists_of_typing typP Δ_ext Δ_fv_P (@WFTC.wf _ WFTC.of_abstract)
+          (wd_P.toPHOAS Δ_ext Δ_fv_P)
   -- NO-FLAG BRANCH
   mspec SMT.mapFinIdxM_all_body_spec_noflag vs E.flags
     (τ.toSMTType.fromProdl (vs.length - 1)) hlen_eq h_noflag
@@ -2155,3 +2157,4 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       exfalso
       apply hP_den_cond
       exact B.denote_exists_of_typing typP Δ_ext Δ_fv_P (@WFTC.wf _ WFTC.of_abstract)
+        (wd_P.toPHOAS Δ_ext Δ_fv_P)
