@@ -469,8 +469,20 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
         Typing.of_abstract hx_fv typx⟩ den_x
       obtain ⟨⟨Y, τY, hY⟩, den_y, _⟩ := hmatch
       exact absurd (hy.symm.trans den_y) (by simp)
-  | mem x S x_ih S_ih => sorry
-  | collect vs D P D_ih P_ih => sorry
+  | mem x S x_ih S_ih =>
+    -- TODO: blocked — `simplifier_aux_mem` rewrites set-comprehension membership
+    -- (`x ∈ᴮ collect vs D P ⟿ (x ∈ᴮ D) ∧ᴮ substList vs xs P`); proving this
+    -- preserves the "denotation is none" property requires a substitution-
+    -- denotation soundness lemma (`⟦substList vs ts P⟧` vs `⟦P⟧` under env
+    -- updates) that does not exist upstream of this file.
+    sorry
+  | collect vs D P D_ih P_ih =>
+    -- TODO: blocked on forward denotation preservation (`simplifier_partial_correct`,
+    -- proven downstream in SimplifierCorrect/Basic.lean). The `collect` denotation
+    -- guards on value-dependent `dite`s (`den_P`, `typP_det`) over `⟦P x⟧`; relating
+    -- `⟦simplifier P⟧` to `⟦P⟧` here needs the forward direction, which would be a
+    -- circular import.
+    sorry
   | pow S ih =>
     unfold simplifier at h
     obtain ⟨α, rfl, typS⟩ := Typing.powE typ_t
@@ -601,9 +613,24 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
     specialize h _ den_simpT.symm
     simp only [↓reduceDIte] at h
     nomatch h
-  | card S ih => sorry
-  | app f x f_ih x_ih => sorry
-  | lambda vs D P D_ih P_ih => sorry
+  | card S ih =>
+    -- TODO: blocked on forward denotation preservation (`simplifier_partial_correct`,
+    -- proven downstream in SimplifierCorrect/Basic.lean). `⟦|S|ᴮ⟧` guards on the
+    -- value-dependent test `S'.IsFinite`; the IH only gives the none→none direction,
+    -- so the some-but-not-finite subcase needs the forward direction (circular import).
+    sorry
+  | app f x f_ih x_ih =>
+    -- TODO: blocked on forward denotation preservation (`simplifier_partial_correct`,
+    -- proven downstream in SimplifierCorrect/Basic.lean). `⟦f x⟧` guards on the
+    -- value-dependent tests `F.IsPFunc`/`X ∈ F.Dom`; the some-but-test-fails subcase
+    -- needs the forward direction (circular import).
+    sorry
+  | lambda vs D P D_ih P_ih =>
+    -- TODO: blocked on forward denotation preservation (`simplifier_partial_correct`,
+    -- proven downstream in SimplifierCorrect/Basic.lean). `⟦lambda⟧` guards on
+    -- value-dependent `dite`s (`den_E`, `typE_det`) over `⟦E x⟧`; relating
+    -- `⟦simplifier P⟧` to `⟦P⟧` needs the forward direction (circular import).
+    sorry
   | pfun A B A_ih B_ih =>
     unfold simplifier at h
     obtain ⟨α, β, rfl, typA, typB⟩ := Typing.pfunE typ_t
@@ -640,6 +667,21 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
     rw [Option.bind_eq_none_iff] at h
     specialize h _ den_simpB.symm
     nomatch h
-  | min S ih => sorry
-  | max S ih => sorry
-  | all vs D P D_ih P_ih => sorry
+  | min S ih =>
+    -- TODO: blocked on forward denotation preservation (`simplifier_partial_correct`,
+    -- proven downstream in SimplifierCorrect/Basic.lean). `⟦S.min⟧` guards on the
+    -- value-dependent test `S'.IsFinite ∧ S'.Nonempty`; the some-but-test-fails
+    -- subcase needs the forward direction (circular import).
+    sorry
+  | max S ih =>
+    -- TODO: blocked on forward denotation preservation (`simplifier_partial_correct`,
+    -- proven downstream in SimplifierCorrect/Basic.lean). `⟦S.max⟧` guards on the
+    -- value-dependent test `S'.IsFinite ∧ S'.Nonempty`; the some-but-test-fails
+    -- subcase needs the forward direction (circular import).
+    sorry
+  | all vs D P D_ih P_ih =>
+    -- TODO: blocked on forward denotation preservation (`simplifier_partial_correct`,
+    -- proven downstream in SimplifierCorrect/Basic.lean). `simplifier_aux_all` both
+    -- rewrites `∀` over comprehensions and the `all` denotation guards on
+    -- value-dependent `dite`s over `⟦P x⟧`; both need the forward direction.
+    sorry
