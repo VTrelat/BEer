@@ -1229,6 +1229,37 @@ theorem funDenVarExactAt.{u}
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hden_z_x₀⟩ := post_x₀
   exact hden_z_x₀ x₀ hden_var_z_x₀
 
+/-- The denotation of an abstracted equality term, when defined, always carries the
+`bool` SMT type tag (structural from the `=ˢ'` denotation arm). -/
+theorem denote_eq_abstract_bool.{u}
+    {t₁ t₂ : SMT.Term} {«Δ» : RenamingContext.Context.{u}}
+    {hcov : RenamingContext.CoversFV «Δ» (t₁ =ˢ t₂)}
+    {D : SMT.Dom.{u}}
+    (hden : ⟦(t₁ =ˢ t₂).abstract «Δ» hcov⟧ˢ = some D) :
+    D.snd.fst = SMTType.bool := by
+  rw [SMT.Term.abstract] at hden
+  cases h₁ : ⟦t₁.abstract «Δ» (fun v hv => hcov v (SMT.fv.mem_eq (.inl hv)))⟧ˢ with
+  | none =>
+      rw [SMT.denote, h₁] at hden
+      simp at hden
+  | some D₁ =>
+    cases h₂ : ⟦t₂.abstract «Δ» (fun v hv => hcov v (SMT.fv.mem_eq (.inr hv)))⟧ˢ with
+    | none =>
+        rw [SMT.denote, h₁, h₂] at hden
+        obtain ⟨X₁, α₁, hX₁⟩ := D₁
+        simp at hden
+    | some D₂ =>
+      rw [SMT.denote, h₁, h₂] at hden
+      obtain ⟨X₁, α₁, hX₁⟩ := D₁
+      obtain ⟨X₂, α₂, hX₂⟩ := D₂
+      simp only [Option.bind_eq_bind, Option.bind_some] at hden
+      by_cases hαβ : α₁ = α₂
+      · rw [dif_pos hαβ] at hden
+        have hD := Option.some.inj hden
+        rw [← hD]
+      · rw [dif_neg hαβ] at hden
+        exact absurd hden (by simp)
+
 /-- Build an FV-restricted respects relation for `.app (.var x) (.var a)` over a
 doubly-updated renaming context, from the type tags of the bindings. -/
 theorem respectsAppVarVar.{u}
@@ -6501,8 +6532,8 @@ theorem funDenSpecTrueAtCast.{u}
           obtain ⟨D, hden_body, _⟩ := hbody_true_b_at wy1 hwy1_ty
           exact Option.isSome_of_eq_some hden_body
         · intro wy1 hwy1_ty D hden_body
-          exact denote_type_eq_of_typing
-            (typ_t := typ_bBody_base') (hden := hden_body) (hΔΓ := sorry)
+          simp only [bBody, funBBodyTerm] at hden_body
+          exact denote_eq_abstract_bool hden_body
         · intro wy1 hwy1_ty
           exact hbody_true_b_at wy1 hwy1_ty
       refine ⟨⟨zftrue, SMTType.bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl⟩
@@ -6673,6 +6704,10 @@ theorem funDenSpecTrueAtCast.{u}
     obtain ⟨D, hden_body, _⟩ := hbody_true_at wy0 hwy0_ty
     exact Option.isSome_of_eq_some hden_body
   · intro wy0 hwy0_ty D hden_body
+    -- TODO: blocked — `aBody` is `.ite exists_a (.forall ..) hdefault`; the `.ite`
+    -- denotation picks the `.forall` branch (structurally bool) or the `hdefault`
+    -- branch, whose denotation type tag needs `RespectsTypeContextOnFV` for
+    -- `hdefault` (separate cascade from the `defaultSpecMSpec` threading).
     exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body) (hΔΓ := sorry)
   · intro wy0 hwy0_ty
     exact hbody_true_at wy0 hwy0_ty
@@ -7258,7 +7293,8 @@ theorem funSpecTrueImpliesCastAt.{u}
                 some D →
                 D.snd.fst = SMTType.bool := by
     intro wy0 wy1 hwy0_ty hwy1_ty D hden_body
-    exact denote_type_eq_of_typing (typ_t := typ_bBody_base') (hden := hden_body) (hΔΓ := sorry)
+    simp only [bBody, funBBodyTerm] at hden_body
+    exact denote_eq_abstract_bool hden_body
   have hbody_total_b_at :
       ∀ wy0 wy1 : SMT.Dom,
         wy0.snd.fst = α' →
@@ -7339,6 +7375,9 @@ theorem funSpecTrueImpliesCastAt.{u}
       exact hσ_bool
     have hDexists_ty : Dexists.snd.fst = SMTType.bool := by
       cases hσ_bool
+      -- TODO: blocked — `exists_ab` is a `.exists` term; its denotation type tag
+      -- needs `RespectsTypeContextOnFV` for `exists_ab` (separate cascade from the
+      -- `defaultSpecMSpec` threading).
       exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists) (hΔΓ := sorry)
     obtain ⟨Dout, hden_out, _⟩ :=
       denote_eq_some_of_some hden_eq hden_exists (by rw [hDeq_ty, hDexists_ty])
@@ -7485,6 +7524,9 @@ theorem funSpecTrueImpliesCastAt.{u}
             ⟦aBody.abstract (Function.update ΔY a! (some wy0)) (hcov_aBody_updY wy0)⟧ˢ = some D →
               D.snd.fst = SMTType.bool := by
       intro wy0 hwy0_ty D hden_body
+      -- TODO: blocked — `aBody` is `.ite exists_a (.forall ..) hdefault`; the `hdefault`
+      -- branch's denotation type tag needs `RespectsTypeContextOnFV` for `hdefault`
+      -- (separate cascade from the `defaultSpecMSpec` threading).
       exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body) (hΔΓ := sorry)
     change
       @ᶻY.fst
@@ -8379,6 +8421,9 @@ theorem funSpecTotalAt.{u}
       exact hσ_bool
     have hDexists_ty : Dexists.snd.fst = SMTType.bool := by
       cases hσ_bool
+      -- TODO: blocked — `exists_ab` is a `.exists` term; its denotation type tag
+      -- needs `RespectsTypeContextOnFV` for `exists_ab` (separate cascade from the
+      -- `defaultSpecMSpec` threading).
       exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists) (hΔΓ := sorry)
     obtain ⟨Dout, hden_out, _⟩ :=
       denote_eq_some_of_some hden_eq hden_exists (by rw [hDeq_ty, hDexists_ty])
