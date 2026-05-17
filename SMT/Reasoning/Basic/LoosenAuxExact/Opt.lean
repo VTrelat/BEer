@@ -45,6 +45,7 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                                                   RenamingContext.CoversFV (Function.update «Δ₀» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ₀» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path hα).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -92,6 +93,7 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                                         ∃ (_ : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec) (_
                                           : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                          X!.snd.fst = α'.option ∧
                                           Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path hα.opt).1) ∧
                                               ∀ (Y : SMT.Dom),
@@ -147,6 +149,7 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                                                   RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                                   (denφ :
                                                   ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path hα).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -347,13 +350,8 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
             have denx' := denx
             rw [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff] at denx'
             obtain ⟨Xt, den_t, hXeq⟩ := denx'
-            obtain ⟨Φt, Xt!, denXt!, hφt, denφt, hΦt_ty, ⟨hΦt_true, hCast_t⟩, htot_t⟩ := den_the Xt den_t
-            -- TODO: blocked on loosenAux_prf_spec postcondition. `Xt!` is the
-            -- existentially-bound loosened value from `den_the`; `denXt!` is the
-            -- trivial denotation of the bare `Term.var the_x!`, carrying no type
-            -- info, so `Xt!.snd.fst = α'` is not derivable here. Fixing requires
-            -- strengthening `loosenAux_prf_spec`'s adequacy clause.
-            have hXt!_ty : Xt!.snd.fst = α' := denote_type_eq_of_typing (typ_t := typ_the_x!) (hden := denXt!) (hΔΓ := sorry)
+            obtain ⟨Φt, Xt!, denXt!, hφt, denφt, hXt!_ty, hΦt_ty, ⟨hΦt_true, hCast_t⟩, htot_t⟩ := den_the Xt den_t
+            -- `Xt!`'s type tag is supplied by the strengthened adequacy clause.
             have hXt!_memα' : Xt!.fst ∈ ⟦α'⟧ᶻ := by
               simpa only [hXt!_ty] using Xt!.snd.snd
             let X!opt : SMT.Dom :=
@@ -381,7 +379,7 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                 rcases hv' with hvt | hvthe'
                 · exact Or.inl (by rwa [fv])
                 · exact (hv_ne_the (List.mem_singleton.mp hvthe')).elim
-            refine ⟨⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, X!opt, ?_, ?_, ?_, ?_, ?_, ?_⟩
+            refine ⟨⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, X!opt, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
             · dsimp [X!opt]
               rw [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.some_inj]
               apply Option.get_of_eq_some
@@ -767,6 +765,8 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                 congr
                 simp only [subset_refl, subset_of_empty, mem_insert_iff, mem_singleton, true_or, ↓reduceDIte, symmDiff_empty]
                 apply proof_irrel_heq
+            · -- X!opt.snd.fst = α'.option: true by construction of X!opt.
+              rfl
             · rfl
             · constructor
               · rfl
@@ -1785,8 +1785,7 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                         cases hX_ty
                         rfl
               refine ⟨zftrue, Or.inr rfl, X!none.fst, ?_⟩
-              refine ⟨⟨rfl, hcast_none⟩, α'.option, X!none.snd.snd, ?_⟩
-              refine ⟨?_, hden_x!none, ?_⟩
+              refine ⟨⟨rfl, hcast_none⟩, X!none.snd.snd, ?_, hden_x!none, ?_⟩
               · refine ⟨hφ_none, ?_⟩
                 have hdenx_none :
                     ⟦x.abstract (Function.update «Δ» x! (some X!none)) (hcov_x_upd X!none)⟧ˢ = some X :=
@@ -1948,21 +1947,15 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                 cases hX_ty
                 simp
               obtain ⟨Xthe, hden_x_the⟩ := Option.isSome_iff_exists.mp hden_x_the_some
-              obtain ⟨Φt, Xt!, denXt!, hφt, denφt, hΦt_ty, ⟨hΦt_true, hCast_t⟩, htot_t⟩ :=
+              obtain ⟨Φt, Xt!, denXt!, hφt, denφt, hXt!_ty, hΦt_ty, ⟨hΦt_true, hCast_t⟩, htot_t⟩ :=
                 den_the Xthe hden_x_the
-              have hXt!_ty : Xt!.snd.fst = α' := by
-                -- TODO: blocked on loosenAux_prf_spec postcondition. `Xt!` is the
-                -- existentially-bound loosened value from `den_the`; `denXt!` is the
-                -- trivial denotation of the bare `Term.var the_x!`, carrying no type
-                -- info, so `Xt!.snd.fst = α'` is not derivable here. Fixing requires
-                -- strengthening `loosenAux_prf_spec`'s adequacy clause.
-                exact denote_type_eq_of_typing (typ_t := typ_the_x!) (hden := denXt!) (hΔΓ := sorry)
+              -- `Xt!`'s type tag is supplied by the strengthened adequacy clause.
               have hXt!_memα' : Xt!.fst ∈ ⟦α'⟧ᶻ := by
                 simpa only [hXt!_ty] using Xt!.snd.snd
               let X!opt : SMT.Dom :=
                 ⟨(ZFSet.Option.some ⟨Xt!.fst, hXt!_memα'⟩).1, α'.option,
                   SetLike.coe_mem (ZFSet.Option.some ⟨Xt!.fst, hXt!_memα'⟩)⟩
-              refine ⟨zftrue, Or.inr rfl, X!opt.fst, ⟨rfl, ?_⟩, X!opt.snd.fst, X!opt.snd.snd, ?_⟩
+              refine ⟨zftrue, Or.inr rfl, X!opt.fst, ⟨rfl, ?_⟩, X!opt.snd.snd, ?_⟩
               · rw [castZF_of_path, castZF_option]
                 rw [ZFSet.lambda_spec]
                 refine ⟨hX_mem, ?_, ?_⟩
@@ -2096,6 +2089,11 @@ theorem loosenAux_prf_exact.opt.{u} («Δ» : RenamingContext.Context.{u})
                       · exfalso
                         exact hvx (List.mem_singleton.mp hvx_single)
                   refine ⟨hφ_opt, ?_⟩
+                  -- The framework re-expanded X! into ⟨X!opt.fst, ⟨α'.option, _⟩⟩;
+                  -- fold it back to X!opt so the rewrite lemmas below fire.
+                  have hX!opt_fold :
+                      (⟨X!opt.fst, ⟨α'.option, X!opt.snd.snd⟩⟩ : SMT.Dom) = X!opt := rfl
+                  simp only [hX!opt_fold]
                   have hdenx_Xopt :
                       ⟦x.abstract (Function.update «Δ» x! (some X!opt)) (hcov_x_upd X!opt)⟧ˢ = some X :=
                     denx_upd X!opt
