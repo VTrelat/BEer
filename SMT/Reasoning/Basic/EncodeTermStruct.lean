@@ -2732,6 +2732,116 @@ theorem castMembership_decl
       tauto
 
 set_option maxHeartbeats 4000000 in
+/-- State-context spec for `castEq`, parametrized by an extra var-list `X`
+(mirrors `castMembership_state`): the encoded equality term's free variables stay
+within `AList.keys Γ' ∪ X` when the inputs' free variables do. -/
+theorem castEq_state
+    (A B : SMT.Term) (σA σB : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} {X : List SMT.𝒱} :
+    ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
+        ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
+          SMT.fv A ⊆ AList.keys Λ ∪ X ∧ SMT.fv B ⊆ AList.keys Λ ∪ X⌝ ⦄
+    castEq (A, σA) (B, σB)
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
+      n ≤ E'.freshvarsc ∧
+      Λ ⊆ Γ' ∧
+      used ⊆ E'.usedVars ∧
+      AList.keys Γ' ⊆ E'.usedVars ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∪ X ∧
+      (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ⌝⦄ := by
+  unfold castEq
+  mvcgen
+  · -- σA = σB : direct equality `A =ˢ B`
+    rename_i hpre
+    obtain ⟨rfl, rfl, sub, rfl, hA_fv, hB_fv⟩ := hpre
+    refine ⟨le_refl _, fun _ h => h, fun _ h => h, sub, ?_, fun v hv hΛ hin => hΛ hin⟩
+    intro v hv
+    simp only [SMT.fv, List.mem_append] at hv
+    rcases hv with hv | hv
+    · exact hA_fv hv
+    · exact hB_fv hv
+  · -- σA ⊑ σB : loosen A
+    rename_i hpre
+    obtain ⟨rfl, rfl, sub, rfl, hA_fv, hB_fv⟩ := hpre
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i Aout
+    obtain ⟨A!, A!_spec⟩ := Aout
+    mpure pre
+    obtain ⟨A!_le, A!_Λ_sub, A!_fresh, A!_not_used, A!_used_sub,
+      A!_keys_sub, A!_preserves, A!_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hd_types, hd_used, hd_fvc]
+    have A!_in : A! ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset A!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    refine ⟨A!_le, AList.subset_trans
+      (SMT.TypeContext.entries_subset_insert_of_notMem A!_fresh) A!_Λ_sub,
+      A!_used_sub, A!_keys_sub, ?_, A!_preserves⟩
+    intro v hv
+    simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+    rcases hv with (hvA! | hvB) | hvspec
+    · exact List.mem_union_iff.mpr (Or.inl (hvA! ▸ A!_in))
+    · rcases List.mem_union_iff.mp (hB_fv hvB) with hΛ | hX
+      · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset A!_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+      · exact List.mem_union_iff.mpr (Or.inr hX)
+    · have hmem := A!_fv_sub hvspec
+      rw [List.mem_union_iff] at hmem
+      rcases hmem with hA | hA!
+      · rcases List.mem_union_iff.mp (hA_fv hA) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset A!_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
+      · exact List.mem_union_iff.mpr (Or.inl (List.mem_singleton.mp hA! ▸ A!_in))
+  · -- σB ⊑ σA : loosen B
+    rename_i hpre
+    obtain ⟨rfl, rfl, sub, rfl, hA_fv, hB_fv⟩ := hpre
+    mspec loosenAux_prf_state
+    mrename_i pre
+    mintro ∀St₁
+    rename_i Bout
+    obtain ⟨B!, B!_spec⟩ := Bout
+    mpure pre
+    obtain ⟨B!_le, B!_Λ_sub, B!_fresh, B!_not_used, B!_used_sub,
+      B!_keys_sub, B!_preserves, B!_fv_sub⟩ := pre
+    mspec SMT.declareConst_spec
+    mrename_i pred
+    mintro ∀St₁d
+    mpure pred
+    obtain ⟨_, _, hd_fvc, hd_used, hd_types⟩ := pred
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [hd_types, hd_used, hd_fvc]
+    have B!_in : B! ∈ AList.keys St₁.types :=
+      AList.mem_keys.mp (AList.mem_of_subset B!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
+    refine ⟨B!_le, AList.subset_trans
+      (SMT.TypeContext.entries_subset_insert_of_notMem B!_fresh) B!_Λ_sub,
+      B!_used_sub, B!_keys_sub, ?_, B!_preserves⟩
+    intro v hv
+    simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+    rcases hv with (hvB! | hvA) | hvspec
+    · exact List.mem_union_iff.mpr (Or.inl (hvB! ▸ B!_in))
+    · rcases List.mem_union_iff.mp (hA_fv hvA) with hΛ | hX
+      · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset B!_Λ_sub
+          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+      · exact List.mem_union_iff.mpr (Or.inr hX)
+    · have hmem := B!_fv_sub hvspec
+      rw [List.mem_union_iff] at hmem
+      rcases hmem with hB | hB!
+      · rcases List.mem_union_iff.mp (hB_fv hB) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset B!_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
+      · exact List.mem_union_iff.mpr (Or.inl (List.mem_singleton.mp hB! ▸ B!_in))
+
+set_option maxHeartbeats 4000000 in
 /-- `castEq`'s `declarations` delta is a `declare_const`-only chunk
 (`specBodies Δ = []` — `castEq` never calls `addSpec`), and the encoded equality
 term's free variables live in `fv A ∪ fv B ∪ declVars Δ`. -/
