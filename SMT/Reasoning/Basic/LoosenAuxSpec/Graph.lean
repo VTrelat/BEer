@@ -652,7 +652,27 @@ private theorem graphDenSpecSomeAt
     simpa [SMT.RenamingContext.denote] using hspec_isSome
   obtain ⟨Φ, hdenΦ⟩ := Option.isSome_iff_exists.mp hspec_some_goal
   refine ⟨hφ_goal, Φ, hdenΦ, ?_⟩
-  exact denote_type_eq_of_typing (typ_t := typ_z!_spec_body) (hden := hdenΦ) (hΔΓ := sorry)
+  -- FV-restricted type compatibility: `fv z!_spec ⊆ {z, z!}`, both bound by the
+  -- `z`/`z!` updates of `Δgoal` with tags `σ`/`σ'`.
+  refine SMT.RenamingContext.denote_type_of_typing_fv typ_z!_spec_body ?_ hφ_goal hdenΦ
+  intro v τ hv hlk
+  have hv' := fv_z!_spec hv
+  rw [List.mem_union_iff] at hv'
+  rcases hv' with hvz | hvz!
+  · have hvz' : v = z := by simpa [fv] using hvz
+    subst v
+    rw [AList.lookup_insert] at hlk
+    cases hlk
+    exact ⟨x₀, Function.update_self _ _ _, hx₀_ty⟩
+  · have hvz!' : v = z! := List.mem_singleton.mp hvz!
+    subst v
+    rw [AList.lookup_insert_ne z_ne_z!.symm, AList.lookup_insert] at hlk
+    cases hlk
+    refine ⟨wy0, ?_, hwy0_ty⟩
+    show Function.update
+      (Function.update (Function.update «Δ» x! (some Yfun)) z! (some wy0))
+      z (some x₀) z! = some wy0
+    rw [Function.update_of_ne z_ne_z!.symm, Function.update_self]
 
 private theorem graphDenSomeSndAt
     {«Δ» : RenamingContext.Context} {x! z z! : 𝒱}
@@ -795,6 +815,11 @@ private theorem graphDenSpecTrueAtCast
     ZFSet.is_func_is_pfunc hcast
   have hx₀_cast_dom : x₀.fst ∈ cast.Dom := by
     simpa [ZFSet.is_func_dom_eq hcast] using hx₀_mem
+  -- TODO: blocked on loosenAux_prf_spec postcondition. `X₀!` is the existentially-bound
+  -- loosened value supplied by `den_z_at`; `hden_var_z!` is the trivial denotation of the
+  -- bare `Term.var z!`, carrying no type info, so `X₀!.snd.fst = σ'` is not derivable
+  -- here (the FV-restricted respects on `Term.var z!` would itself require it). Fixing
+  -- requires strengthening the adequacy clause of `loosenAux_prf_spec`'s postcondition.
   have hX₀_ty : X₀!.snd.fst = σ' :=
     denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!) (hΔΓ := sorry)
   have hX₀_val :
@@ -1222,6 +1247,12 @@ private theorem graphBodyTyOf
       (AList.insert z! σ' Γ) ⊢ˢ
         (.exists [z] [σ] (((@ˢx) (.fst (.var z)) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec)) :
         SMTType.bool)
+    (respects_exists :
+      ∀ (Yfun W : SMT.Dom), W.snd.fst = σ' →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update «Δ» x! (some Yfun)) z! (some W))
+          (AList.insert z! σ' Γ)
+          (.exists [z] [σ] (((@ˢx) (.fst (.var z)) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec)))
     (hbody_total :
       ∀ (Yfun : SMT.Dom)
         (x_1 : Fin [z!].length → SMT.Dom)
@@ -1250,8 +1281,11 @@ private theorem graphBodyTyOf
         some D0 := by
     rw [←hgo_exists Yfun x_1 hx_1]
     exact hden_body
+  have hW_ty : (x_1 ⟨0, by simp⟩).snd.fst = σ' := (hx_1 ⟨0, by simp⟩).1
   have hD0_ty : D0.snd.fst = SMTType.bool :=
-    denote_type_eq_of_typing (typ_t := typ_exists) (hden := hden_exists) (hΔΓ := sorry)
+    SMT.RenamingContext.denote_type_of_typing_fv typ_exists
+      (respects_exists Yfun (x_1 ⟨0, by simp⟩) hW_ty)
+      (hexists_cov Yfun (x_1 ⟨0, by simp⟩)) hden_exists
   have hget_eq :
       (⟦(Term.abstract.go
           (Term.exists [z] [σ] (((@ˢx) (.fst (.var z)) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec))
@@ -1447,6 +1481,13 @@ private theorem graphLambdaIsSome
         (.exists [z] [α.pair β]
           ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec)) :
         SMTType.bool)
+    (respects_exists :
+      ∀ (Yfun W : SMT.Dom), W.snd.fst = α'.pair β' →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update «Δ» x! (some Yfun)) z! (some W))
+          (AList.insert z! (α'.pair β') Γ)
+          (.exists [z] [α.pair β]
+            ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec)))
     (hbody_total :
       ∀ (Yfun : SMT.Dom)
         (x_1 : Fin [z!].length → SMT.Dom)
@@ -1478,10 +1519,12 @@ private theorem graphLambdaIsSome
       simpa using hy_1 i
     rw [graphBodyTyOf
           (hgo_cov := hgo_cov) (hexists_cov := hexists_cov) (hgo_exists := hgo_exists)
-          (typ_exists := typ_exists) (hbody_total := hbody_total) Y x_1 hx_1',
+          (typ_exists := typ_exists) (respects_exists := respects_exists)
+          (hbody_total := hbody_total) Y x_1 hx_1',
         graphBodyTyOf
           (hgo_cov := hgo_cov) (hexists_cov := hexists_cov) (hgo_exists := hgo_exists)
-          (typ_exists := typ_exists) (hbody_total := hbody_total) Y y_1 hy_1']
+          (typ_exists := typ_exists) (respects_exists := respects_exists)
+          (hbody_total := hbody_total) Y y_1 hy_1']
   · exfalso
     exact den_t_isSome (fun {x_1} hx_1 => by
       have hx_1' : ∀ i, (x_1 i).snd.fst = α'.pair β' ∧ (x_1 i).fst ∈ ⟦α'.pair β'⟧ᶻ := by
@@ -2813,6 +2856,13 @@ private theorem graphLambdaWitness
         (.exists [z] [α.pair β]
           ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec)) :
         SMTType.bool)
+    (respects_exists :
+      ∀ (Yfun W : SMT.Dom), W.snd.fst = α'.pair β' →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update «Δ» x! (some Yfun)) z! (some W))
+          (AList.insert z! (α'.pair β') Γ)
+          (.exists [z] [α.pair β]
+            ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec)))
     (hbody_total :
       ∀ (Yfun : SMT.Dom)
         (x_1 : Fin [z!].length → SMT.Dom)
@@ -2989,7 +3039,8 @@ private theorem graphLambdaWitness
           SMTType.bool := by
       exact graphBodyTyOf
         (hgo_cov := hgo_cov) (hexists_cov := hexists_cov) (hgo_exists := hgo_exists)
-        (typ_exists := typ_exists) (hbody_total := hbody_total)
+        (typ_exists := typ_exists) (respects_exists := respects_exists)
+        (hbody_total := hbody_total)
         Yfun x_1 (by
           intro i
           exact graphSpecificArg hx_1 i)
@@ -3878,7 +3929,14 @@ private theorem graphLambdaWitnessAt.{u}
     (x_ne_z : x! ≠ z)
     (x_ne_z! : x! ≠ z!)
     (z_not_mem_fv_x : z ∉ SMT.fv x)
-    (z!_not_mem_fv_x : z! ∉ SMT.fv x) :
+    (z!_not_mem_fv_x : z! ∉ SMT.fv x)
+    (respects_exists :
+      ∀ (Yfun W : SMT.Dom), W.snd.fst = α'.pair β' →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update «Δ» x! (some Yfun)) z! (some W))
+          (AList.insert z! (α'.pair β') St₂.types)
+          (.exists [z] [α.pair β]
+            ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec))) :
     ∃ X! : SMT.Dom,
       X.fst.pair X!.fst ∈ (castZF_of_path (pα.graph pβ)).1 ∧
       ⟦((λˢ [z!]) [α'.pair β']
@@ -3899,6 +3957,7 @@ private theorem graphLambdaWitnessAt.{u}
     (pα := pα) (pβ := pβ)
     X hX_mem hX_func
     hcov_lambda_upd hgo_cov hexists_cov hgo_exists typing_pack.typ_exists
+    respects_exists
     (graphBodyTotal
       (Γ := St₂.types) («Δ» := «Δ») (x := x) (z!_spec := z!_spec)
       (x! := x!) (z := z) (z! := z!)
@@ -4494,6 +4553,27 @@ theorem loosenAux_prf_spec.graph.{uGraphSpecProof} («Δ» : RenamingContext.Con
               hcov_x_upd denx_upd fv_z!_spec
               z_ne_z! x_ne_z x_ne_z!
               z_not_mem_fv_x z!_not_mem_fv_x
+              -- FV-restricted type compatibility for the `.exists` body: on `fv x`
+              -- use the top-level `respects`; at the fresh `z!` slot the tag is the
+              -- supplied `W.snd.fst`.
+              (by
+                intro Yfun W hW_ty v σ hv hlk
+                have hv' := hfv_exists_sub hv
+                rw [List.mem_union_iff] at hv'
+                rcases hv' with hvx | hvz!
+                · have hv_ne_x! : v ≠ x! := fun h => x!_not_mem_fv_x (h ▸ hvx)
+                  have hv_ne_z! : v ≠ z! := fun h => z!_not_mem_fv_x (h ▸ hvx)
+                  rw [AList.lookup_insert_ne hv_ne_z!, St₂_types_eq,
+                    AList.lookup_insert_ne hv_ne_x!] at hlk
+                  obtain ⟨d, hd_eq, hd_ty⟩ := respects hvx hlk
+                  refine ⟨d, ?_, hd_ty⟩
+                  rw [Function.update_of_ne hv_ne_z!, Function.update_of_ne hv_ne_x!]
+                  exact hd_eq
+                · have hvz!' : v = z! := List.mem_singleton.mp hvz!
+                  subst v
+                  rw [AList.lookup_insert] at hlk
+                  cases hlk
+                  exact ⟨W, by rw [Function.update_self], hW_ty⟩)
           have hvar_X! :
               ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ =
                 some X! := by
@@ -4566,23 +4646,42 @@ theorem loosenAux_prf_spec.graph.{uGraphSpecProof} («Δ» : RenamingContext.Con
                   (hgo_cov := hgo_cov) (hexists_cov := hexists_cov)
                   (hgo_exists := hgo_exists)
                   (typ_exists := typing_pack.typ_exists)
+                  (respects_exists := by
+                    -- FV-restricted type compatibility for the `.exists` body: on `fv x`
+                    -- use `respects`; at the fresh `z!` slot the tag is `W.snd.fst`.
+                    intro Yfun W hW_ty v σ hv hlk
+                    have hv' := hfv_exists_sub hv
+                    rw [List.mem_union_iff] at hv'
+                    rcases hv' with hvx | hvz!
+                    · have hv_ne_x! : v ≠ x! := fun h => x!_not_mem_fv_x (h ▸ hvx)
+                      have hv_ne_z! : v ≠ z! := fun h => z!_not_mem_fv_x (h ▸ hvx)
+                      rw [AList.lookup_insert_ne hv_ne_z!, St₂_types_eq,
+                        AList.lookup_insert_ne hv_ne_x!] at hlk
+                      obtain ⟨d, hd_eq, hd_ty⟩ := respects hvx hlk
+                      refine ⟨d, ?_, hd_ty⟩
+                      rw [Function.update_of_ne hv_ne_z!, Function.update_of_ne hv_ne_x!]
+                      exact hd_eq
+                    · have hvz!' : v = z! := List.mem_singleton.mp hvz!
+                      subst v
+                      rw [AList.lookup_insert] at hlk
+                      cases hlk
+                      exact ⟨W, by rw [Function.update_self], hW_ty⟩)
                   (hbody_total := hbody_total) Y
               obtain ⟨Dlam, hDlam_raw⟩ := Option.isSome_iff_exists.mp hlam_some
-              have respects_St₂ :
-                  SMT.RenamingContext.RespectsTypeContext
-                    (Function.update «Δ» x! (some Y)) St₂.types := by
-                intro v σ hlookup
-                by_cases hv : v = x!
-                · subst hv
-                  rw [St₂_types_eq, AList.lookup_insert] at hlookup
-                  cases hlookup
-                  exact ⟨Y, Function.update_self _ _ _, hY⟩
-                · rw [Function.update_of_ne hv]
-                  rw [St₂_types_eq, AList.lookup_insert_ne hv] at hlookup
-                  exact respects sorry hlookup
-              have hDlam_ty : Dlam.snd.fst = (α'.pair β').fun SMTType.bool :=
-                denote_type_eq_of_typing (typ_t := typing_pack.typ_lambda) (hden := hDlam_raw)
-                  (hΔΓ := respects_St₂)
+              -- FV-restricted type compatibility: the lambda's free variables sit inside
+              -- `fv x` (`hfv_lambda_sub`); on those, `Function.update «Δ» x! _` agrees with
+              -- `«Δ»` and `St₂.types` agrees with `Λ`, so the top-level `respects` applies.
+              -- The full `RespectsTypeContext` is not available (it would need type
+              -- compatibility on all of `St₂.types`, beyond `fv` of the lambda).
+              have hDlam_ty : Dlam.snd.fst = (α'.pair β').fun SMTType.bool := by
+                refine SMT.RenamingContext.denote_type_of_typing_fv
+                  typing_pack.typ_lambda ?_ _ hDlam_raw
+                intro v σ hv hlk
+                have hv_x : v ∈ SMT.fv x := hfv_lambda_sub hv
+                have hv_ne : v ≠ x! := fun h => x!_not_mem_fv_x (h ▸ hv_x)
+                rw [St₂_types_eq, AList.lookup_insert_ne hv_ne] at hlk
+                obtain ⟨d, hd_eq, hd_ty⟩ := respects hv_x hlk
+                exact ⟨d, by rw [Function.update_of_ne hv_ne]; exact hd_eq, hd_ty⟩
               have hEq_ty : Y.snd.fst = Dlam.snd.fst := by
                 rw [hY, hDlam_ty]
               obtain ⟨Deq, hDeq_raw, hDeq_ty⟩ :=
