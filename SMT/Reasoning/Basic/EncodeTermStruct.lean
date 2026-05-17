@@ -1062,17 +1062,17 @@ variables, and the encoded term's free variables stay within the final context.
 Proved by cases on the cast path. -/
 theorem castUnionAux_state
     {α β : SMTType} (c : α ~> β) (S T : SMT.Term) {Λ : SMT.TypeContext} {n : ℕ}
-    {used : List SMT.𝒱} :
+    {used : List SMT.𝒱} {X : List SMT.𝒱} :
     ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
-          SMT.fv S ⊆ AList.keys Λ ∧ SMT.fv T ⊆ AList.keys Λ⌝ ⦄
+          SMT.fv S ⊆ AList.keys Λ ∪ X ∧ SMT.fv T ⊆ AList.keys Λ ∪ X⌝ ⦄
     castUnionAux S T c
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       n ≤ E'.freshvarsc ∧
       Λ ⊆ Γ' ∧
       used ⊆ E'.usedVars ∧
       AList.keys Γ' ⊆ E'.usedVars ∧
-      SMT.fv t' ⊆ AList.keys Γ' ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∪ X ∧
       (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ⌝⦄ := by
   cases c with
   | @graph α β α' β' c_α c_β =>
@@ -1126,13 +1126,18 @@ theorem castUnionAux_state
       simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
         List.not_mem_nil, or_false] at hv
       obtain ⟨hv_body, hv_ne_x⟩ := hv
-      rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
-      refine Or.inr ?_
+      have mem_St₂ : ∀ w, w ∈ AList.keys St₁.types → w ∈ AList.keys St₂.types := by
+        intro w hw
+        rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
+        exact Or.inr (AList.mem_keys.mp hw)
       rcases hv_body with (hvS! | hvx) | (hvT | hvx)
-      · exact hvS! ▸ AList.mem_keys.mpr S!_in
+      · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (hvS! ▸ AList.mem_keys.mpr S!_in)))
       · exact absurd hvx hv_ne_x
-      · exact AList.mem_keys.mpr (AList.mem_of_subset S!_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hT_fv hvT)))))
+      · rcases List.mem_union_iff.mp (hT_fv hvT) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (AList.mem_keys.mpr
+            (AList.mem_of_subset S!_Λ_sub
+              (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ)))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
       · exact absurd hvx hv_ne_x
     · intro v hv hΛ
       rw [St₂_types_eq]
@@ -1193,14 +1198,19 @@ theorem castUnionAux_state
         simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
           List.not_mem_nil, or_false] at hv
         obtain ⟨hv_body, hv_ne_x⟩ := hv
-        rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
-        refine Or.inr ?_
+        have mem_St₂ : ∀ w, w ∈ AList.keys St₁.types → w ∈ AList.keys St₂.types := by
+          intro w hw
+          rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
+          exact Or.inr (AList.mem_keys.mp hw)
         rcases hv_body with ((hvS! | hvxa) | hvxa') | ((hvT | hvxb) | hvxb')
-        · exact hvS! ▸ AList.mem_keys.mpr S!_in
+        · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (hvS! ▸ AList.mem_keys.mpr S!_in)))
         · exact absurd hvxa hv_ne_x
         · exact absurd hvxa' hv_ne_x
-        · exact AList.mem_keys.mpr (AList.mem_of_subset S!_Λ_sub
-            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hT_fv hvT)))))
+        · rcases List.mem_union_iff.mp (hT_fv hvT) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (AList.mem_keys.mpr
+              (AList.mem_of_subset S!_Λ_sub
+                (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ)))))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
         · exact absurd hvxb hv_ne_x
         · exact absurd hvxb' hv_ne_x
       · intro v hv hΛ
@@ -1262,13 +1272,18 @@ theorem castUnionAux_state
       simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
         List.not_mem_nil, or_false] at hv
       obtain ⟨hv_body, hv_ne_x⟩ := hv
-      rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
-      refine Or.inr ?_
+      have mem_St₂ : ∀ w, w ∈ AList.keys St₁.types → w ∈ AList.keys St₂.types := by
+        intro w hw
+        rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
+        exact Or.inr (AList.mem_keys.mp hw)
       rcases hv_body with (hvS! | hvx) | (hvT | hvx)
-      · exact hvS! ▸ AList.mem_keys.mpr S!_in
+      · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (hvS! ▸ AList.mem_keys.mpr S!_in)))
       · exact absurd hvx hv_ne_x
-      · exact AList.mem_keys.mpr (AList.mem_of_subset S!_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hT_fv hvT)))))
+      · rcases List.mem_union_iff.mp (hT_fv hvT) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (AList.mem_keys.mpr
+            (AList.mem_of_subset S!_Λ_sub
+              (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ)))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
       · exact absurd hvx hv_ne_x
     · intro v hv hΛ
       rw [St₂_types_eq]
@@ -1305,17 +1320,17 @@ variables, and the encoded term's free variables stay within the final context.
 Proved by cases on the cast path. -/
 theorem castInterAux_state
     {α β : SMTType} (c : α ~> β) (S T : SMT.Term) {Λ : SMT.TypeContext} {n : ℕ}
-    {used : List SMT.𝒱} :
+    {used : List SMT.𝒱} {X : List SMT.𝒱} :
     ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
-          SMT.fv S ⊆ AList.keys Λ ∧ SMT.fv T ⊆ AList.keys Λ⌝ ⦄
+          SMT.fv S ⊆ AList.keys Λ ∪ X ∧ SMT.fv T ⊆ AList.keys Λ ∪ X⌝ ⦄
     castInterAux S T c
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       n ≤ E'.freshvarsc ∧
       Λ ⊆ Γ' ∧
       used ⊆ E'.usedVars ∧
       AList.keys Γ' ⊆ E'.usedVars ∧
-      SMT.fv t' ⊆ AList.keys Γ' ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∪ X ∧
       (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ⌝⦄ := by
   cases c with
   | @graph α β α' β' c_α c_β =>
@@ -1369,13 +1384,18 @@ theorem castInterAux_state
       simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
         List.not_mem_nil, or_false] at hv
       obtain ⟨hv_body, hv_ne_x⟩ := hv
-      rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
-      refine Or.inr ?_
+      have mem_St₂ : ∀ w, w ∈ AList.keys St₁.types → w ∈ AList.keys St₂.types := by
+        intro w hw
+        rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
+        exact Or.inr (AList.mem_keys.mp hw)
       rcases hv_body with (hvS! | hvx) | (hvT | hvx)
-      · exact hvS! ▸ AList.mem_keys.mpr S!_in
+      · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (hvS! ▸ AList.mem_keys.mpr S!_in)))
       · exact absurd hvx hv_ne_x
-      · exact AList.mem_keys.mpr (AList.mem_of_subset S!_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hT_fv hvT)))))
+      · rcases List.mem_union_iff.mp (hT_fv hvT) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (AList.mem_keys.mpr
+            (AList.mem_of_subset S!_Λ_sub
+              (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ)))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
       · exact absurd hvx hv_ne_x
     · intro v hv hΛ
       rw [St₂_types_eq]
@@ -1436,14 +1456,19 @@ theorem castInterAux_state
         simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
           List.not_mem_nil, or_false] at hv
         obtain ⟨hv_body, hv_ne_x⟩ := hv
-        rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
-        refine Or.inr ?_
+        have mem_St₂ : ∀ w, w ∈ AList.keys St₁.types → w ∈ AList.keys St₂.types := by
+          intro w hw
+          rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
+          exact Or.inr (AList.mem_keys.mp hw)
         rcases hv_body with ((hvS! | hvxa) | hvxa') | ((hvT | hvxb) | hvxb')
-        · exact hvS! ▸ AList.mem_keys.mpr S!_in
+        · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (hvS! ▸ AList.mem_keys.mpr S!_in)))
         · exact absurd hvxa hv_ne_x
         · exact absurd hvxa' hv_ne_x
-        · exact AList.mem_keys.mpr (AList.mem_of_subset S!_Λ_sub
-            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hT_fv hvT)))))
+        · rcases List.mem_union_iff.mp (hT_fv hvT) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (AList.mem_keys.mpr
+              (AList.mem_of_subset S!_Λ_sub
+                (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ)))))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
         · exact absurd hvxb hv_ne_x
         · exact absurd hvxb' hv_ne_x
       · intro v hv hΛ
@@ -1505,13 +1530,18 @@ theorem castInterAux_state
       simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
         List.not_mem_nil, or_false] at hv
       obtain ⟨hv_body, hv_ne_x⟩ := hv
-      rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
-      refine Or.inr ?_
+      have mem_St₂ : ∀ w, w ∈ AList.keys St₁.types → w ∈ AList.keys St₂.types := by
+        intro w hw
+        rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
+        exact Or.inr (AList.mem_keys.mp hw)
       rcases hv_body with (hvS! | hvx) | (hvT | hvx)
-      · exact hvS! ▸ AList.mem_keys.mpr S!_in
+      · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (hvS! ▸ AList.mem_keys.mpr S!_in)))
       · exact absurd hvx hv_ne_x
-      · exact AList.mem_keys.mpr (AList.mem_of_subset S!_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hT_fv hvT)))))
+      · rcases List.mem_union_iff.mp (hT_fv hvT) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (AList.mem_keys.mpr
+            (AList.mem_of_subset S!_Λ_sub
+              (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ)))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
       · exact absurd hvx hv_ne_x
     · intro v hv hΛ
       rw [St₂_types_eq]
@@ -1548,17 +1578,17 @@ variables, and the encoded term's free variables stay within the final context.
 Proved by cases on the function/argument types. -/
 theorem castApp_state
     (f x : SMT.Term) (σf σx : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
-    {used : List SMT.𝒱} :
+    {used : List SMT.𝒱} {X : List SMT.𝒱} :
     ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
-          SMT.fv f ⊆ AList.keys Λ ∧ SMT.fv x ⊆ AList.keys Λ⌝ ⦄
+          SMT.fv f ⊆ AList.keys Λ ∪ X ∧ SMT.fv x ⊆ AList.keys Λ ∪ X⌝ ⦄
     castApp (f, σf) (x, σx)
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       n ≤ E'.freshvarsc ∧
       Λ ⊆ Γ' ∧
       used ⊆ E'.usedVars ∧
       AList.keys Γ' ⊆ E'.usedVars ∧
-      SMT.fv t' ⊆ AList.keys Γ' ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∪ X ∧
       (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ⌝⦄ := by
   unfold castApp
   mvcgen
@@ -1599,9 +1629,11 @@ theorem castApp_state
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
       rcases hv with hvfv1 | hvx
-      · exact hvfv1 ▸ fv1_in
-      · exact AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
+      · exact List.mem_union_iff.mpr (Or.inl (hvfv1 ▸ fv1_in))
+      · rcases List.mem_union_iff.mp (hx_fv hvx) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
     · exact fv1_preserves
   case vc4.h_2.isFalse.isTrue =>
     rename_i hxeq hfeq _ _ St hpre
@@ -1640,9 +1672,11 @@ theorem castApp_state
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
       rcases hv with hvf | hvxv1
-      · exact AList.mem_keys.mp (AList.mem_of_subset xv1_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hf_fv hvf)))))
-      · exact hvxv1 ▸ xv1_in
+      · rcases List.mem_union_iff.mp (hf_fv hvf) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset xv1_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
+      · exact List.mem_union_iff.mpr (Or.inl (hvxv1 ▸ xv1_in))
     · exact xv1_preserves
   case vc5.h_3.isTrue =>
     rename_i hxeq hfeq _ St hpre
@@ -1681,9 +1715,11 @@ theorem castApp_state
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
       rcases hv with hvfv1 | hvx
-      · exact hvfv1 ▸ fv1_in
-      · exact AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
+      · exact List.mem_union_iff.mpr (Or.inl (hvfv1 ▸ fv1_in))
+      · rcases List.mem_union_iff.mp (hx_fv hvx) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
     · exact fv1_preserves
   case vc6.h_3.isFalse.isTrue =>
     rename_i hxeq hfeq _ _ St hpre
@@ -1722,9 +1758,11 @@ theorem castApp_state
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
       rcases hv with hvf | hvxv1
-      · exact AList.mem_keys.mp (AList.mem_of_subset xv1_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hf_fv hvf)))))
-      · exact hvxv1 ▸ xv1_in
+      · rcases List.mem_union_iff.mp (hf_fv hvf) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset xv1_Λ_sub
+            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
+      · exact List.mem_union_iff.mpr (Or.inl (hvxv1 ▸ xv1_in))
     · exact xv1_preserves
   case vc1.h_1.isTrue =>
     rename_i hxeq hfeq _ St hpre
@@ -1825,14 +1863,16 @@ theorem castApp_state
       intro w hw
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
       rcases hw with hwff | hwx
-      · exact hwff ▸ ff_in_St₄
-      · have hx_in_St₁ : w ∈ AList.keys St₁.types :=
-          AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
-            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hwx)))))
-        have hx_in_St₂ : w ∈ AList.keys St₂.types := by
-          rw [← AList.mem_keys, St₂_types_eq, AList.mem_insert]
-          exact Or.inr (AList.mem_keys.mp hx_in_St₁)
-        exact St₃_into_St₄ (St₂_into_St₃ hx_in_St₂)
+      · exact List.mem_union_iff.mpr (Or.inl (hwff ▸ ff_in_St₄))
+      · rcases List.mem_union_iff.mp (hx_fv hwx) with hΛ | hX
+        · have hx_in_St₁ : w ∈ AList.keys St₁.types :=
+            AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
+              (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))
+          have hx_in_St₂ : w ∈ AList.keys St₂.types := by
+            rw [← AList.mem_keys, St₂_types_eq, AList.mem_insert]
+            exact Or.inr (AList.mem_keys.mp hx_in_St₁)
+          exact List.mem_union_iff.mpr (Or.inl (St₃_into_St₄ (St₂_into_St₃ hx_in_St₂)))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
     · rw [hs2_types]
       intro w hw hΛ
       have hw_St₁ : w ∉ St₁.types := fv1_preserves w hw hΛ
@@ -1960,8 +2000,8 @@ theorem castApp_state
       intro w hw
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
       rcases hw with hwff | hwfv1
-      · exact hwff ▸ ff_in_St₄
-      · exact hwfv1 ▸ fv1_in_St₄
+      · exact List.mem_union_iff.mpr (Or.inl (hwff ▸ ff_in_St₄))
+      · exact List.mem_union_iff.mpr (Or.inl (hwfv1 ▸ fv1_in_St₄))
     · rw [hs2_types]
       intro w hw hΛ
       have hw_St₁ : w ∉ St₁.types := fv1_preserves w hw hΛ
@@ -1993,17 +2033,17 @@ membership encoding advances `freshvarsc`, only grows `usedVars`, keeps
 variables stay within the final context. Proved by cases on the input types. -/
 theorem castMembership_state
     (x S : SMT.Term) (σx σS : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
-    {used : List SMT.𝒱} :
+    {used : List SMT.𝒱} {X : List SMT.𝒱} :
     ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
-          SMT.fv x ⊆ AList.keys Λ ∧ SMT.fv S ⊆ AList.keys Λ⌝ ⦄
+          SMT.fv x ⊆ AList.keys Λ ∪ X ∧ SMT.fv S ⊆ AList.keys Λ ∪ X⌝ ⦄
     castMembership (x, σx) (S, σS)
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       n ≤ E'.freshvarsc ∧
       Λ ⊆ Γ' ∧
       used ⊆ E'.usedVars ∧
       AList.keys Γ' ⊆ E'.usedVars ∧
-      SMT.fv t' ⊆ AList.keys Γ' ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∪ X ∧
       (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ⌝⦄ := by
   unfold castMembership
   mvcgen
@@ -2018,8 +2058,8 @@ theorem castMembership_state
     · intro v hv
       simp only [SMT.fv, List.mem_append] at hv
       rcases hv with hvS | hvx
-      · exact AList.mem_keys.mp (hS_fv hvS)
-      · exact AList.mem_keys.mp (hx_fv hvx)
+      · exact hS_fv hvS
+      · exact hx_fv hvx
     · intro v hv hΛ hin; exact hΛ hin
   case vc2.h_1.isFalse.isTrue =>
     rename_i α' hσS hσx_ne hσx_le St hpre
@@ -2054,12 +2094,16 @@ theorem castMembership_state
       · have hmem := x!_fv_sub hvspec
         rw [List.mem_union_iff] at hmem
         rcases hmem with hvx | hvx!'
-        · exact AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub
-            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
-        · exact List.mem_singleton.mp hvx!' ▸ x!_in
-      · exact AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hS_fv hvS)))))
-      · exact hvx! ▸ x!_in
+        · rcases List.mem_union_iff.mp (hx_fv hvx) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+              x!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
+        · exact List.mem_union_iff.mpr (Or.inl (List.mem_singleton.mp hvx!' ▸ x!_in))
+      · rcases List.mem_union_iff.mp (hS_fv hvS) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+            x!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
+      · exact List.mem_union_iff.mpr (Or.inl (hvx! ▸ x!_in))
     · exact x!_preserves
   case vc3.h_1.isFalse.isFalse.isTrue =>
     rename_i α' hσS hσx_ne hσx_nle hα'_le St hpre
@@ -2094,12 +2138,16 @@ theorem castMembership_state
       · have hmem := S!_fv_sub hvspec
         rw [List.mem_union_iff] at hmem
         rcases hmem with hvS | hvS!'
-        · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
-            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hS_fv hvS)))))
-        · exact List.mem_singleton.mp hvS!' ▸ S!_in
-      · exact hvS! ▸ S!_in
-      · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
+        · rcases List.mem_union_iff.mp (hS_fv hvS) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+              S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
+        · exact List.mem_union_iff.mpr (Or.inl (List.mem_singleton.mp hvS!' ▸ S!_in))
+      · exact List.mem_union_iff.mpr (Or.inl (hvS! ▸ S!_in))
+      · rcases List.mem_union_iff.mp (hx_fv hvx) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+            S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
     · exact S!_preserves
   case vc4.h_2.h_1.isTrue.isTrue =>
     rename_i α' β' hσS α β hσx hα_le hβ_le St hpre
@@ -2134,13 +2182,17 @@ theorem castMembership_state
       · have hmem := x!_fv_sub hvspec
         rw [List.mem_union_iff] at hmem
         rcases hmem with hvx | hvx!'
-        · exact AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub
-            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvx)))))
-        · exact List.mem_singleton.mp hvx!' ▸ x!_in
-      · exact AList.mem_keys.mp (AList.mem_of_subset x!_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hS_fv hvS)))))
-      · exact hvx!a ▸ x!_in
-      · exact hvx!b ▸ x!_in
+        · rcases List.mem_union_iff.mp (hx_fv hvx) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+              x!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
+        · exact List.mem_union_iff.mpr (Or.inl (List.mem_singleton.mp hvx!' ▸ x!_in))
+      · rcases List.mem_union_iff.mp (hS_fv hvS) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+            x!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
+      · exact List.mem_union_iff.mpr (Or.inl (hvx!a ▸ x!_in))
+      · exact List.mem_union_iff.mpr (Or.inl (hvx!b ▸ x!_in))
     · exact x!_preserves
   case vc5.h_2.h_1.isTrue.isFalse.isTrue =>
     rename_i α' β' hσS α β hσx hα_le hβ_nle hβ'_le St hpre
@@ -2202,19 +2254,27 @@ theorem castMembership_state
         rw [List.mem_union_iff] at hmem
         rcases hmem with hvx | hvx!'
         · simp only [SMT.fv] at hvx
-          exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
-            (AList.mem_keys.mpr (hx_fv hvx)))
-        · exact List.mem_singleton.mp hvx!' ▸ AList.mem_keys.mp x!_in_St₂
+          rcases List.mem_union_iff.mp (hx_fv hvx) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+              Λ_to_St₂ (AList.mem_keys.mpr hΛ))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
+        · exact List.mem_union_iff.mpr (Or.inl
+            (List.mem_singleton.mp hvx!' ▸ AList.mem_keys.mp x!_in_St₂))
       · have hmem := S!_fv_sub hvSspec
         rw [List.mem_union_iff] at hmem
         rcases hmem with hvS | hvS!'
-        · exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
-            (AList.mem_keys.mpr (hS_fv hvS)))
-        · exact List.mem_singleton.mp hvS!' ▸ AList.mem_keys.mp S!_in_St₂
-      · exact hvS! ▸ AList.mem_keys.mp S!_in_St₂
-      · exact hvx! ▸ AList.mem_keys.mp x!_in_St₂
-      · exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
-          (AList.mem_keys.mpr (hx_fv hvxsnd)))
+        · rcases List.mem_union_iff.mp (hS_fv hvS) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+              Λ_to_St₂ (AList.mem_keys.mpr hΛ))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
+        · exact List.mem_union_iff.mpr (Or.inl
+            (List.mem_singleton.mp hvS!' ▸ AList.mem_keys.mp S!_in_St₂))
+      · exact List.mem_union_iff.mpr (Or.inl (hvS! ▸ AList.mem_keys.mp S!_in_St₂))
+      · exact List.mem_union_iff.mpr (Or.inl (hvx! ▸ AList.mem_keys.mp x!_in_St₂))
+      · rcases List.mem_union_iff.mp (hx_fv hvxsnd) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+            Λ_to_St₂ (AList.mem_keys.mpr hΛ))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
     · intro v hv hΛ
       have hv_St₁d : v ∉ St₁d.types := by
         rw [hdx_types]; exact x!_preserves v hv hΛ
@@ -2281,19 +2341,27 @@ theorem castMembership_state
         rw [List.mem_union_iff] at hmem
         rcases hmem with hvx | hvy!'
         · simp only [SMT.fv] at hvx
-          exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
-            (AList.mem_keys.mpr (hx_fv hvx)))
-        · exact List.mem_singleton.mp hvy!' ▸ AList.mem_keys.mp y!_in_St₂
+          rcases List.mem_union_iff.mp (hx_fv hvx) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+              Λ_to_St₂ (AList.mem_keys.mpr hΛ))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
+        · exact List.mem_union_iff.mpr (Or.inl
+            (List.mem_singleton.mp hvy!' ▸ AList.mem_keys.mp y!_in_St₂))
       · have hmem := S!_fv_sub hvSspec
         rw [List.mem_union_iff] at hmem
         rcases hmem with hvS | hvS!'
-        · exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
-            (AList.mem_keys.mpr (hS_fv hvS)))
-        · exact List.mem_singleton.mp hvS!' ▸ AList.mem_keys.mp S!_in_St₂
-      · exact hvS! ▸ AList.mem_keys.mp S!_in_St₂
-      · exact AList.mem_keys.mp (AList.mem_of_subset Λ_to_St₂
-          (AList.mem_keys.mpr (hx_fv hvxfst)))
-      · exact hvy! ▸ AList.mem_keys.mp y!_in_St₂
+        · rcases List.mem_union_iff.mp (hS_fv hvS) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+              Λ_to_St₂ (AList.mem_keys.mpr hΛ))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
+        · exact List.mem_union_iff.mpr (Or.inl
+            (List.mem_singleton.mp hvS!' ▸ AList.mem_keys.mp S!_in_St₂))
+      · exact List.mem_union_iff.mpr (Or.inl (hvS! ▸ AList.mem_keys.mp S!_in_St₂))
+      · rcases List.mem_union_iff.mp (hx_fv hvxfst) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+            Λ_to_St₂ (AList.mem_keys.mpr hΛ))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
+      · exact List.mem_union_iff.mpr (Or.inl (hvy! ▸ AList.mem_keys.mp y!_in_St₂))
     · intro v hv hΛ
       have hv_St₁d : v ∉ St₁d.types := by
         rw [hdy_types]; exact y!_preserves v hv hΛ
@@ -2333,14 +2401,20 @@ theorem castMembership_state
       · have hmem := S!_fv_sub hvspec
         rw [List.mem_union_iff] at hmem
         rcases hmem with hvS | hvS!'
-        · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
-            (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hS_fv hvS)))))
-        · exact List.mem_singleton.mp hvS!' ▸ S!_in
-      · exact hvS! ▸ S!_in
-      · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvxfst)))))
-      · exact AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub
-          (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr (hx_fv hvxsnd)))))
+        · rcases List.mem_union_iff.mp (hS_fv hvS) with hΛ | hX
+          · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+              S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+          · exact List.mem_union_iff.mpr (Or.inr hX)
+        · exact List.mem_union_iff.mpr (Or.inl (List.mem_singleton.mp hvS!' ▸ S!_in))
+      · exact List.mem_union_iff.mpr (Or.inl (hvS! ▸ S!_in))
+      · rcases List.mem_union_iff.mp (hx_fv hvxfst) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+            S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
+      · rcases List.mem_union_iff.mp (hx_fv hvxsnd) with hΛ | hX
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+            S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
+        · exact List.mem_union_iff.mpr (Or.inr hX)
     · exact S!_preserves
 
 /-! ### Cast-helper `declarations`-delta spec for `castMembership`
@@ -5525,15 +5599,15 @@ theorem encodeTerm_state
       rename_i _ Senc1 _ heqA _ Senc2 _ heqC _ _
       obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqA
       obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqC
-      mspec castUnionAux_state
+      mspec (castUnionAux_state _ _ _ (X := []))
       case pre =>
         mpure_intro
         refine ⟨trivial, trivial, C_keys_sub, rfl, ?_, ?_⟩
         · intro v hv
-          exact AList.mem_keys.mp (AList.mem_of_subset C_Λ_sub
-            (AList.mem_keys.mpr (A_fv_sub hv)))
+          exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset C_Λ_sub
+            (AList.mem_keys.mpr (A_fv_sub hv)))))
         · intro v hv
-          exact C_fv_sub hv
+          exact List.mem_union_iff.mpr (Or.inl (C_fv_sub hv))
       case post.success =>
         mrename_i hpost
         mintro ∀St'
@@ -5549,7 +5623,8 @@ theorem encodeTerm_state
           rcases hv with hv | hv
           · exact h_used_sub (C_used_sub (A_cov v hv))
           · exact h_used_sub (C_cov v hv)
-        · exact h_fv_sub
+        · intro v hv
+          exact (List.mem_union_iff.mp (h_fv_sub hv)).resolve_right List.not_mem_nil
         · intro v hv hΛ hvars
           have hvA : v ∉ B.Term.vars A := fun h => hvars (by
             simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
@@ -5564,15 +5639,15 @@ theorem encodeTerm_state
         rename_i _ Senc1 _ heqA _ Senc2 _ heqC _ _ _
         obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqA
         obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqC
-        mspec castUnionAux_state
+        mspec (castUnionAux_state _ _ _ (X := []))
         case pre =>
           mpure_intro
           refine ⟨trivial, trivial, C_keys_sub, rfl, ?_, ?_⟩
           · intro v hv
-            exact C_fv_sub hv
+            exact List.mem_union_iff.mpr (Or.inl (C_fv_sub hv))
           · intro v hv
-            exact AList.mem_keys.mp (AList.mem_of_subset C_Λ_sub
-              (AList.mem_keys.mpr (A_fv_sub hv)))
+            exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset C_Λ_sub
+              (AList.mem_keys.mpr (A_fv_sub hv)))))
         case post.success =>
           mrename_i hpost
           mintro ∀St'
@@ -5588,7 +5663,8 @@ theorem encodeTerm_state
             rcases hv with hv | hv
             · exact h_used_sub (C_used_sub (A_cov v hv))
             · exact h_used_sub (C_cov v hv)
-          · exact h_fv_sub
+          · intro v hv
+            exact (List.mem_union_iff.mp (h_fv_sub hv)).resolve_right List.not_mem_nil
           · intro v hv hΛ hvars
             have hvA : v ∉ B.Term.vars A := fun h => hvars (by
               simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
@@ -5715,15 +5791,15 @@ theorem encodeTerm_state
       rename_i _ Senc1 _ heqA _ Senc2 _ heqC _ _
       obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqA
       obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqC
-      mspec castInterAux_state
+      mspec (castInterAux_state _ _ _ (X := []))
       case pre =>
         mpure_intro
         refine ⟨trivial, trivial, C_keys_sub, rfl, ?_, ?_⟩
         · intro v hv
-          exact AList.mem_keys.mp (AList.mem_of_subset C_Λ_sub
-            (AList.mem_keys.mpr (A_fv_sub hv)))
+          exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset C_Λ_sub
+            (AList.mem_keys.mpr (A_fv_sub hv)))))
         · intro v hv
-          exact C_fv_sub hv
+          exact List.mem_union_iff.mpr (Or.inl (C_fv_sub hv))
       case post.success =>
         mrename_i hpost
         mintro ∀St'
@@ -5739,7 +5815,8 @@ theorem encodeTerm_state
           rcases hv with hv | hv
           · exact h_used_sub (C_used_sub (A_cov v hv))
           · exact h_used_sub (C_cov v hv)
-        · exact h_fv_sub
+        · intro v hv
+          exact (List.mem_union_iff.mp (h_fv_sub hv)).resolve_right List.not_mem_nil
         · intro v hv hΛ hvars
           have hvA : v ∉ B.Term.vars A := fun h => hvars (by
             simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
@@ -5754,15 +5831,15 @@ theorem encodeTerm_state
         rename_i _ Senc1 _ heqA _ Senc2 _ heqC _ _ _
         obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqA
         obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqC
-        mspec castInterAux_state
+        mspec (castInterAux_state _ _ _ (X := []))
         case pre =>
           mpure_intro
           refine ⟨trivial, trivial, C_keys_sub, rfl, ?_, ?_⟩
           · intro v hv
-            exact C_fv_sub hv
+            exact List.mem_union_iff.mpr (Or.inl (C_fv_sub hv))
           · intro v hv
-            exact AList.mem_keys.mp (AList.mem_of_subset C_Λ_sub
-              (AList.mem_keys.mpr (A_fv_sub hv)))
+            exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset C_Λ_sub
+              (AList.mem_keys.mpr (A_fv_sub hv)))))
         case post.success =>
           mrename_i hpost
           mintro ∀St'
@@ -5778,7 +5855,8 @@ theorem encodeTerm_state
             rcases hv with hv | hv
             · exact h_used_sub (C_used_sub (A_cov v hv))
             · exact h_used_sub (C_cov v hv)
-          · exact h_fv_sub
+          · intro v hv
+            exact (List.mem_union_iff.mp (h_fv_sub hv)).resolve_right List.not_mem_nil
           · intro v hv hΛ hvars
             have hvA : v ∉ B.Term.vars A := fun h => hvars (by
               simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
@@ -6028,15 +6106,15 @@ theorem encodeTerm_state
     mintro ∀σ_x
     mpure pre
     obtain ⟨x_used_sub, x_Λ_sub, x_keys_sub, x_cov, x_fv_sub, x_preserves⟩ := pre
-    mspec castApp_state
+    mspec (castApp_state _ _ _ _ (X := []))
     case pre =>
       mpure_intro
       refine ⟨trivial, trivial, x_keys_sub, rfl, ?_, ?_⟩
       · intro v hv
-        exact AList.mem_keys.mp (AList.mem_of_subset x_Λ_sub
-          (AList.mem_keys.mpr (f_fv_sub hv)))
+        exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset x_Λ_sub
+          (AList.mem_keys.mpr (f_fv_sub hv)))))
       · intro v hv
-        exact x_fv_sub hv
+        exact List.mem_union_iff.mpr (Or.inl (x_fv_sub hv))
     case post.success =>
       mrename_i hpost
       mintro ∀σ'
@@ -6052,7 +6130,10 @@ theorem encodeTerm_state
         rcases hv with hv | hv
         · exact h_used_sub (x_used_sub (f_cov v hv))
         · exact h_used_sub (x_cov v hv)
-      · exact h_fv_sub
+      · intro v hv
+        rcases List.mem_union_iff.mp (h_fv_sub hv) with h | h
+        · exact h
+        · simp at h
       · intro v hv hΛ hvars
         have hvf : v ∉ B.Term.vars f := fun h => hvars (by
           simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at h ⊢
@@ -6264,24 +6345,26 @@ theorem encodeTerm_state
             · intro p hp
               exact List.mem_append_left _ (List.mem_reverse.mpr
                 (List.mem_fst_of_mem_zip hp))
-          mspec castApp_state
+          mspec (castApp_state _ _ _ _ (X := []))
           case pre =>
             mpure_intro
             refine ⟨trivial, trivial, St₄_keys_sub, rfl, ?_, ?_⟩
             · -- fv D_enc ⊆ keys St₄.types
               intro v hv
-              exact AList.mem_keys.mp (AList.mem_of_subset St₁_sub_St₄
-                (AList.mem_keys.mpr (D_fv_sub hv)))
+              exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp
+                (AList.mem_of_subset St₁_sub_St₄ (AList.mem_keys.mpr (D_fv_sub hv)))))
             · -- fv ((xs.map var).toPairl) ⊆ keys St₄.types
               intro v hv
-              exact AList.mem_keys.mp (xs_sub_St₄_types v
-                (encodeTerm_state.fv_toPairl_map_var_subset xs v hv))
+              exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (xs_sub_St₄_types v
+                (encodeTerm_state.fv_toPairl_map_var_subset xs v hv))))
           case post.success =>
             mrename_i pre
             mintro ∀St₅
             mpure pre
-            obtain ⟨ca_le, ca_Λ_sub, ca_used_sub, ca_keys_sub, ca_fv_sub,
+            obtain ⟨ca_le, ca_Λ_sub, ca_used_sub, ca_keys_sub, ca_fv_sub₀,
               ca_preserves⟩ := pre
+            have ca_fv_sub : ∀ ⦃v⦄, v ∈ _ → v ∈ AList.keys St₅.types := fun v hv =>
+              (List.mem_union_iff.mp (ca_fv_sub₀ hv)).resolve_right List.not_mem_nil
             mspec Std.Do.Spec.pure
             mpure_intro
             have St₀_sub_St₅ : St₀.types ⊆ St₅.types :=
@@ -8653,7 +8736,7 @@ theorem encodeTerm_decl
             (castApp (D_enc, α'.fun β'.option) ((List.map SMT.Term.var xs).toPairl, αs'.toProdl))
             (castApp_state D_enc ((List.map SMT.Term.var xs).toPairl) (α'.fun β'.option)
               αs'.toProdl (Λ := St₄.types) (n := St₄.env.freshvarsc)
-              (used := St₄.env.usedVars))
+              (used := St₄.env.usedVars) (X := []))
             (castApp_decl D_enc ((List.map SMT.Term.var xs).toPairl) (α'.fun β'.option)
               αs'.toProdl (Λ := St₄.types) (n := St₄.env.freshvarsc)
               (used := St₄.env.usedVars) (decl := decl ++ ΔD ++ ΔP)))
@@ -8662,11 +8745,11 @@ theorem encodeTerm_decl
             refine ⟨⟨rfl, rfl, St₄_keys_sub, rfl, ?_, ?_⟩,
               rfl, rfl, St₄_keys_sub, rfl, ?_, ?_, St₄_decl⟩
             · intro v hv
-              exact AList.mem_keys.mp (AList.mem_of_subset St₁_sub_St₄
-                (AList.mem_keys.mpr (D_state_fv_sub hv)))
+              exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
+                St₁_sub_St₄ (AList.mem_keys.mpr (D_state_fv_sub hv)))))
             · intro v hv
-              exact AList.mem_keys.mp (xs_sub_St₄_types v
-                (encodeTerm_state.fv_toPairl_map_var_subset xs v hv))
+              exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (xs_sub_St₄_types v
+                (encodeTerm_state.fv_toPairl_map_var_subset xs v hv))))
             · intro v hv
               exact AList.mem_keys.mp (AList.mem_of_subset St₁_sub_St₄
                 (AList.mem_keys.mpr (D_state_fv_sub hv)))
