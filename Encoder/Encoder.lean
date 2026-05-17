@@ -339,6 +339,8 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         -- satisfiable.
         let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
         let spec_bodies := new_decls.filterMap fun | .define_fun _ .unit .bool b => some b | _ => none
+        -- Spec bodies constrain cast helpers via `vs`; rename to `zs` like `P'`.
+        let spec_bodies := spec_bodies.map (substList vs (zs.map .var))
         let inner := spec_bodies.foldr (.imp · ·) (.imp z_mem_D' P')
         let scoped_body := ex_binders.foldr (fun (v, τ) t => .forall [v] [τ] t) inner
 
@@ -369,6 +371,8 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
       let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
       let spec_bodies := new_decls.filterMap fun | .define_fun _ .unit .bool b => some b | _ => none
+      -- Spec bodies constrain cast helpers via `vs`; rename to `xs` like `P'`.
+      let spec_bodies := spec_bodies.map (substList vs (xs.map .var))
       let inner := spec_bodies.foldr (.imp · ·) (xsy_mem_D ⇒ˢ P')
       let scoped_body := ex_binders.foldr (fun (v, τ) t => .forall [v] [τ] t) inner
 

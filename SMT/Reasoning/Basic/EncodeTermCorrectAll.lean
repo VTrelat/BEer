@@ -726,11 +726,12 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           (List.foldr (fun x t => Term.forall [x.1] [x.2] t)
             (List.foldr (fun x1 x2 => x1 ⇒ˢ x2)
               (z_mem_D' ⇒ˢ SMT.substList vs (List.map SMT.Term.var zs) P_enc)
-              (List.filterMap
-                (fun x => match x with
-                  | Instr.define_fun v SMTType.unit SMTType.bool b => some b
-                  | _ => none)
-                (List.drop (List.length St₃.env.declarations) St₆.env.declarations)))
+              (List.map (SMT.substList vs (List.map SMT.Term.var zs))
+                (List.filterMap
+                  (fun x => match x with
+                    | Instr.define_fun v SMTType.unit SMTType.bool b => some b
+                    | _ => none)
+                  (List.drop (List.length St₃.env.declarations) St₆.env.declarations))))
             (List.filterMap
               (fun x => match x with
                 | Instr.declare_const v τ => some (v, τ)
@@ -801,16 +802,24 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
                 simp only [SMT.fv, List.mem_singleton] at hv_t
                 exact absurd (hv_t ▸ hz) hv_not_zs
           · -- v ∈ fv spec_body via scoping axiom
-            have h_in_decls : ∃ name, .define_fun name SMTType.unit SMTType.bool sb ∈
+            obtain ⟨sb₀, hsb₀_mem, rfl⟩ := List.mem_map.mp hsb_mem
+            have hv_sb' : v ∈ SMT.fv sb₀ := by
+              rcases SMT_mem_fv_substList hv_sb with h | ⟨t, ht, hv_t⟩
+              · exact h
+              · rw [List.mem_map] at ht
+                obtain ⟨z, hz, rfl⟩ := ht
+                simp only [SMT.fv, List.mem_singleton] at hv_t
+                exact absurd (hv_t ▸ hz) hv_not_zs
+            have h_in_decls : ∃ name, .define_fun name SMTType.unit SMTType.bool sb₀ ∈
                 (St₆.env.declarations).drop (St₃.env.declarations).length := by
-              rw [List.mem_filterMap] at hsb_mem
-              obtain ⟨inst, h_inst_mem, h_inst_eq⟩ := hsb_mem
+              rw [List.mem_filterMap] at hsb₀_mem
+              obtain ⟨inst, h_inst_mem, h_inst_eq⟩ := hsb₀_mem
               match inst, h_inst_eq with
               | .define_fun name SMTType.unit SMTType.bool b, h =>
                 simp only [Option.some.injEq] at h
                 exact ⟨name, h ▸ h_inst_mem⟩
             rcases SMT.encoder_spec_body_fv_in_ex_binders_or_renaming
-              St₃.env.declarations St₆.env.declarations Δ_P sb v h_in_decls hv_sb with
+              St₃.env.declarations St₆.env.declarations Δ_P sb₀ v h_in_decls hv_sb' with
               h_ex | h_Δ
             · exact absurd h_ex hv_not_ex
             · exact h_Δ
@@ -1010,11 +1019,12 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           (List.foldr (fun x t => Term.forall [x.1] [x.2] t)
             (List.foldr (fun x1 x2 => x1 ⇒ˢ x2)
               (z_mem_D' ⇒ˢ SMT.substList vs (List.map SMT.Term.var zs) P_enc)
-              (List.filterMap
-                (fun x => match x with
-                  | Instr.define_fun v SMTType.unit SMTType.bool b => some b
-                  | _ => none)
-                (List.drop (List.length St₃.env.declarations) St₆.env.declarations)))
+              (List.map (SMT.substList vs (List.map SMT.Term.var zs))
+                (List.filterMap
+                  (fun x => match x with
+                    | Instr.define_fun v SMTType.unit SMTType.bool b => some b
+                    | _ => none)
+                  (List.drop (List.length St₃.env.declarations) St₆.env.declarations))))
             (List.filterMap
               (fun x => match x with
                 | Instr.declare_const v τ => some (v, τ)
@@ -1081,16 +1091,24 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
                 obtain ⟨z, hz, rfl⟩ := ht
                 simp only [SMT.fv, List.mem_singleton] at hv_t
                 exact absurd (hv_t ▸ hz) hv_not_zs
-          · have h_in_decls : ∃ name, .define_fun name SMTType.unit SMTType.bool sb ∈
+          · obtain ⟨sb₀, hsb₀_mem, rfl⟩ := List.mem_map.mp hsb_mem
+            have hv_sb' : v ∈ SMT.fv sb₀ := by
+              rcases SMT_mem_fv_substList hv_sb with h | ⟨t, ht, hv_t⟩
+              · exact h
+              · rw [List.mem_map] at ht
+                obtain ⟨z, hz, rfl⟩ := ht
+                simp only [SMT.fv, List.mem_singleton] at hv_t
+                exact absurd (hv_t ▸ hz) hv_not_zs
+            have h_in_decls : ∃ name, .define_fun name SMTType.unit SMTType.bool sb₀ ∈
                 (St₆.env.declarations).drop (St₃.env.declarations).length := by
-              rw [List.mem_filterMap] at hsb_mem
-              obtain ⟨inst, h_inst_mem, h_inst_eq⟩ := hsb_mem
+              rw [List.mem_filterMap] at hsb₀_mem
+              obtain ⟨inst, h_inst_mem, h_inst_eq⟩ := hsb₀_mem
               match inst, h_inst_eq with
               | .define_fun name SMTType.unit SMTType.bool b, h =>
                 simp only [Option.some.injEq] at h
                 exact ⟨name, h ▸ h_inst_mem⟩
             rcases SMT.encoder_spec_body_fv_in_ex_binders_or_renaming
-              St₃.env.declarations St₆.env.declarations Δ_P sb v h_in_decls hv_sb with
+              St₃.env.declarations St₆.env.declarations Δ_P sb₀ v h_in_decls hv_sb' with
               h_ex | h_Δ
             · exact absurd h_ex hv_not_ex
             · exact h_Δ
@@ -1603,11 +1621,12 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           (List.foldr (fun x1 x2 => x1 ⇒ˢ x2)
             ((@ˢD_enc) (List.map SMT.Term.var zs).toPairl ⇒ˢ
               SMT.substList vs (List.map SMT.Term.var zs) P_enc)
-            (List.filterMap
-              (fun x => match x with
-                | Instr.define_fun v SMTType.unit SMTType.bool b => some b
-                | _ => none)
-              (List.drop (List.length St₃.env.declarations) St₅.env.declarations)))
+            (List.map (SMT.substList vs (List.map SMT.Term.var zs))
+              (List.filterMap
+                (fun x => match x with
+                  | Instr.define_fun v SMTType.unit SMTType.bool b => some b
+                  | _ => none)
+                (List.drop (List.length St₃.env.declarations) St₅.env.declarations))))
           (List.filterMap
             (fun x => match x with
               | Instr.declare_const v τ => some (v, τ)
@@ -1671,16 +1690,24 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
               simp only [SMT.fv, List.mem_singleton] at hv_t
               exact absurd (hv_t ▸ hz) hv_not_zs
         · -- v ∈ fv spec_body: use scoping axiom
-          have h_in_decls : ∃ name, .define_fun name SMTType.unit SMTType.bool sb ∈
+          obtain ⟨sb₀, hsb₀_mem, rfl⟩ := List.mem_map.mp hsb_mem
+          have hv_sb' : v ∈ SMT.fv sb₀ := by
+            rcases SMT_mem_fv_substList hv_sb with h | ⟨t, ht, hv_t⟩
+            · exact h
+            · rw [List.mem_map] at ht
+              obtain ⟨z, hz, rfl⟩ := ht
+              simp only [SMT.fv, List.mem_singleton] at hv_t
+              exact absurd (hv_t ▸ hz) hv_not_zs
+          have h_in_decls : ∃ name, .define_fun name SMTType.unit SMTType.bool sb₀ ∈
               (St₅.env.declarations).drop (St₃.env.declarations).length := by
-            rw [List.mem_filterMap] at hsb_mem
-            obtain ⟨inst, h_inst_mem, h_inst_eq⟩ := hsb_mem
+            rw [List.mem_filterMap] at hsb₀_mem
+            obtain ⟨inst, h_inst_mem, h_inst_eq⟩ := hsb₀_mem
             match inst, h_inst_eq with
             | .define_fun name SMTType.unit SMTType.bool b, h =>
               simp only [Option.some.injEq] at h
               exact ⟨name, h ▸ h_inst_mem⟩
           rcases SMT.encoder_spec_body_fv_in_ex_binders_or_renaming
-            St₃.env.declarations St₅.env.declarations Δ_P sb v h_in_decls hv_sb with
+            St₃.env.declarations St₅.env.declarations Δ_P sb₀ v h_in_decls hv_sb' with
             h_ex | h_Δ
           · exact absurd h_ex hv_not_ex
           · exact h_Δ
@@ -2002,11 +2029,12 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
             (List.foldr (fun x1 x2 => x1 ⇒ˢ x2)
               ((@ˢD_enc) (List.map SMT.Term.var zs).toPairl ⇒ˢ
                 SMT.substList vs (List.map SMT.Term.var zs) P_enc)
-              (List.filterMap
-                (fun x => match x with
-                  | Instr.define_fun v SMTType.unit SMTType.bool b => some b
-                  | _ => none)
-                (List.drop (List.length St₃.env.declarations) St₅.env.declarations)))
+              (List.map (SMT.substList vs (List.map SMT.Term.var zs))
+                (List.filterMap
+                  (fun x => match x with
+                    | Instr.define_fun v SMTType.unit SMTType.bool b => some b
+                    | _ => none)
+                  (List.drop (List.length St₃.env.declarations) St₅.env.declarations))))
             (List.filterMap
               (fun x => match x with
                 | Instr.declare_const v τ => some (v, τ)
@@ -2065,16 +2093,24 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
                 obtain ⟨z, hz, rfl⟩ := ht
                 simp only [SMT.fv, List.mem_singleton] at hv_t
                 exact absurd (hv_t ▸ hz) hv_not_zs
-          · have h_in_decls : ∃ name, .define_fun name SMTType.unit SMTType.bool sb ∈
+          · obtain ⟨sb₀, hsb₀_mem, rfl⟩ := List.mem_map.mp hsb_mem
+            have hv_sb' : v ∈ SMT.fv sb₀ := by
+              rcases SMT_mem_fv_substList hv_sb with h | ⟨t, ht, hv_t⟩
+              · exact h
+              · rw [List.mem_map] at ht
+                obtain ⟨z, hz, rfl⟩ := ht
+                simp only [SMT.fv, List.mem_singleton] at hv_t
+                exact absurd (hv_t ▸ hz) hv_not_zs
+            have h_in_decls : ∃ name, .define_fun name SMTType.unit SMTType.bool sb₀ ∈
                 (St₅.env.declarations).drop (St₃.env.declarations).length := by
-              rw [List.mem_filterMap] at hsb_mem
-              obtain ⟨inst, h_inst_mem, h_inst_eq⟩ := hsb_mem
+              rw [List.mem_filterMap] at hsb₀_mem
+              obtain ⟨inst, h_inst_mem, h_inst_eq⟩ := hsb₀_mem
               match inst, h_inst_eq with
               | .define_fun name SMTType.unit SMTType.bool b, h =>
                 simp only [Option.some.injEq] at h
                 exact ⟨name, h ▸ h_inst_mem⟩
             rcases SMT.encoder_spec_body_fv_in_ex_binders_or_renaming
-              St₃.env.declarations St₅.env.declarations Δ_P sb v h_in_decls hv_sb with
+              St₃.env.declarations St₅.env.declarations Δ_P sb₀ v h_in_decls hv_sb' with
               h_ex | h_Δ
             · exact absurd h_ex hv_not_ex
             · exact h_Δ

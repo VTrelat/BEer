@@ -8010,7 +8010,7 @@ theorem encodeTerm_combined
               have body_fv :
                   ∀ v ∈ SMT.fv (SMT.Term.forall zs τs
                     (exB.foldr (fun (p : SMT.𝒱 × SMTType) t => SMT.Term.forall [p.1] [p.2] t)
-                      (spB.foldr (.imp · ·)
+                      ((spB.map (SMT.substList vs (zs.map SMT.Term.var))).foldr (.imp · ·)
                         (.imp z_mem_D' (SMT.substList vs (zs.map SMT.Term.var) P_enc))))),
                     v ∉ zs ∧ v ∉ declVars ΔP ∧ v ∉ declVars Δcm ∧
                     ((∃ b ∈ specBodies ΔP, v ∈ SMT.fv b) ∨
@@ -8027,8 +8027,11 @@ theorem encodeTerm_combined
                   fun h => hv_notMem_dv (List.mem_append_right _ h), ?_⟩
                 rcases mem_fv_foldr_imp hv_inner with ⟨b, hb, hvb⟩ | hbase
                 · left
-                  rw [spec_bodies_eq] at hb
-                  exact ⟨b, hb, hvb⟩
+                  obtain ⟨b₀, hb₀, rfl⟩ := List.mem_map.mp hb
+                  rcases SMT_mem_fv_substList hvb with hvb' | ⟨t, ht, hvt⟩
+                  · rw [spec_bodies_eq] at hb₀
+                    exact ⟨b₀, hb₀, hvb'⟩
+                  · exact absurd (fv_zsvar t ht v hvt) hv_notMem_zs
                 · simp only [SMT.fv, List.mem_append] at hbase
                   rcases hbase with hz_mem | hsubst
                   · exact Or.inr (Or.inl hz_mem)
@@ -8353,7 +8356,7 @@ theorem encodeTerm_combined
             have body_fv :
                 ∀ v ∈ SMT.fv (SMT.Term.forall xs τs
                   (exB.foldr (fun (p : SMT.𝒱 × SMTType) t => SMT.Term.forall [p.1] [p.2] t)
-                    (spB.foldr (.imp · ·)
+                    ((spB.map (SMT.substList vs (xs.map SMT.Term.var))).foldr (.imp · ·)
                       (.imp xsy_mem_D (SMT.substList vs (xs.map SMT.Term.var) P_enc))))),
                   v ∉ xs ∧ v ∉ declVars ΔP ∧ v ∉ declVars Δcm ∧
                   ((∃ b ∈ specBodies ΔP, v ∈ SMT.fv b) ∨
@@ -8370,8 +8373,11 @@ theorem encodeTerm_combined
                 fun h => hv_notMem_dv (List.mem_append_right _ h), ?_⟩
               rcases mem_fv_foldr_imp hv_inner with ⟨b, hb, hvb⟩ | hbase
               · left
-                rw [spec_bodies_eq] at hb
-                exact ⟨b, hb, hvb⟩
+                obtain ⟨b₀, hb₀, rfl⟩ := List.mem_map.mp hb
+                rcases SMT_mem_fv_substList hvb with hvb' | ⟨t, ht, hvt⟩
+                · rw [spec_bodies_eq] at hb₀
+                  exact ⟨b₀, hb₀, hvb'⟩
+                · exact absurd (fv_xsvar t ht v hvt) hv_notMem_xs
               · simp only [SMT.fv, List.mem_append] at hbase
                 rcases hbase with hz_mem | hsubst
                 · exact Or.inr (Or.inl hz_mem)
