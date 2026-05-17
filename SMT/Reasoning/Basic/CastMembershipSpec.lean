@@ -859,8 +859,14 @@ theorem castMembership_branch2_spec.{u}
     exact preserves1 v hv_used hv_notΛ
   · intro Δctx hcov_t hcompat
     exact SMT.RenamingContext.denote_exists_of_typing typ_full hcompat hcov_t
-  · -- Δ-universal adequacy clause.
-    refine ⟨x!, x!_spec, rfl, x!_fresh, ?_, hadq_univ⟩
-    -- x! ∉ used: we have x!_not_used : x! ∉ St.env.usedVars = used.
-    rw [St_used_eq] at x!_not_used
-    exact x!_not_used
+  · -- Δ-universal adequacy clause. `hadq_univ` (from the strengthened
+    -- `loosenAux_prf_spec_univ`) additionally yields the loosened-value type
+    -- tag `X!.2.1 = τ`; this branch's clause does not expose it, so we drop it.
+    refine ⟨x!, x!_spec, rfl, x!_fresh, ?_, ?_⟩
+    · -- x! ∉ used: we have x!_not_used : x! ∉ St.env.usedVars = used.
+      rw [St_used_eq] at x!_not_used
+      exact x!_not_used
+    · intro Δctx hx respects pf X hX_den
+      obtain ⟨Φ, X!, hvar, hφ, hspec, _hX!ty, hΦty, hcast, htot⟩ :=
+        hadq_univ Δctx hx respects pf X hX_den
+      exact ⟨Φ, X!, hvar, hφ, hspec, hΦty, hcast, htot⟩
