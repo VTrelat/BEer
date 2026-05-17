@@ -1229,6 +1229,32 @@ theorem funDenVarExactAt.{u}
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hden_z_x₀⟩ := post_x₀
   exact hden_z_x₀ x₀ hden_var_z_x₀
 
+/-- Build an FV-restricted respects relation for `.app (.var x) (.var a)` over a
+doubly-updated renaming context, from the type tags of the bindings. -/
+theorem respectsAppVarVar.{u}
+    {«Δ» : RenamingContext.Context.{u}} {Γ : SMT.TypeContext}
+    {x a : 𝒱} {τx τa : SMTType} {Xd Ad : SMT.Dom.{u}}
+    (hx_ne_a : x ≠ a)
+    (hx_lookup : Γ.lookup x = some τx)
+    (ha_lookup : Γ.lookup a = some τa)
+    (hXd_ty : Xd.snd.fst = τx)
+    (hAd_ty : Ad.snd.fst = τa) :
+    RenamingContext.RespectsTypeContextOnFV
+      (Function.update (Function.update «Δ» x (some Xd)) a (some Ad)) Γ
+      (Term.app (.var x) (.var a)) := by
+  intro v σ hv hlk
+  simp only [SMT.fv, List.mem_append, List.mem_singleton] at hv
+  rcases hv with hvx | hva
+  · subst hvx
+    rw [hx_lookup] at hlk
+    cases hlk
+    refine ⟨Xd, ?_, hXd_ty⟩
+    rw [Function.update_of_ne hx_ne_a, Function.update_self]
+  · subst hva
+    rw [ha_lookup] at hlk
+    cases hlk
+    exact ⟨Ad, Function.update_self _ _ _, hAd_ty⟩
+
 theorem funDefaultSpecAt.{u}
     {«Δ» : RenamingContext.Context.{u}}
     {τ : SMTType}
@@ -1236,6 +1262,7 @@ theorem funDefaultSpecAt.{u}
     (sub : AList.keys St₁.types ⊆ St₁.env.usedVars)
     (typ_t : St₁.types ⊢ˢ t : τ)
     (ht : RenamingContext.CoversFV «Δ» t)
+    (respects : RenamingContext.RespectsTypeContextOnFV «Δ» St₁.types t)
     (hrun : Id.run ((defaultSpecM name τ t) St₁) = Except.ok (spec, St₂)) :
     ∀ (Y : SMT.Dom.{u}) (den_t : ⟦t.abstract «Δ» ht⟧ˢ = some Y),
       ∃ (hφ : RenamingContext.CoversFV «Δ» spec) (Φ : SMT.Dom.{u}),
@@ -1250,7 +1277,7 @@ theorem funDefaultSpecAt.{u}
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post
   rw [hrun] at post
   obtain ⟨_, _, _, _, _, _, _, hden_spec⟩ := post
-  exact hden_spec «Δ» ht Y den_t
+  exact hden_spec «Δ» ht Y respects den_t
 
 theorem funVarDenTrueAtCast.{u}
     {«Δ» : RenamingContext.Context.{u}}
@@ -1419,6 +1446,7 @@ theorem funDefaultTrueImpliesDefaultAt.{u}
     (sub : AList.keys St₁.types ⊆ St₁.env.usedVars)
     (typ_t : St₁.types ⊢ˢ t : τ)
     (ht : RenamingContext.CoversFV «Δ» t)
+    (respects : RenamingContext.RespectsTypeContextOnFV «Δ» St₁.types t)
     (hrun : Id.run ((defaultSpecM name τ t) St₁) = Except.ok (spec, St₂)) :
     ∀ (Y : SMT.Dom.{u}) (den_t : ⟦t.abstract «Δ» ht⟧ˢ = some Y)
       (hφ : RenamingContext.CoversFV «Δ» spec) {Φ : SMT.Dom.{u}},
@@ -1433,7 +1461,7 @@ theorem funDefaultTrueImpliesDefaultAt.{u}
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post
   rw [hrun] at post
   obtain ⟨_, _, _, _, _, _, hconv⟩ := post
-  exact hconv «Δ» ht Y den_t hφ hdenΦ htrue
+  exact hconv «Δ» ht Y respects den_t hφ hdenΦ htrue
 
 theorem funRunVarSpec
     {τ τ' : SMTType} {p : τ ⇝ τ'}
@@ -5812,6 +5840,8 @@ theorem funDenSpecTrueAtCast.{u}
               some Dapp)
     (default_spec_at :
       ∀ (Yfun wy0 Dapp : SMT.Dom.{u})
+        (hYfun_ty : Yfun.snd.fst = α'.fun β')
+        (hwy0_ty : wy0.snd.fst = α')
         (hden_app :
           ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
               (Function.update (Function.update Δctx x! (some Yfun)) a! (some wy0))
@@ -6592,7 +6622,7 @@ theorem funDenSpecTrueAtCast.{u}
         rw [hDapp_val]
         exact hX!_app_default wy0 hwy0_ty hy_ran
       obtain ⟨hφd, Φd, hdenΦd, _, hΦd_true_if⟩ :=
-        default_spec_at X! wy0 Dapp hden_app
+        default_spec_at X! wy0 Dapp hX!_ty hwy0_ty hden_app
       have hΦd_true : Φd.fst = zftrue := by
         exact hΦd_true_if hDapp_default
       have hφ_forall_b :
@@ -6883,6 +6913,8 @@ theorem funSpecTrueImpliesCastAt.{u}
               some Dapp)
     (default_spec_at :
       ∀ (Yfun wy0 Dapp : SMT.Dom.{u})
+        (hYfun_ty : Yfun.snd.fst = α'.fun β')
+        (hwy0_ty : wy0.snd.fst = α')
         (hden_app :
           ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
               (Function.update (Function.update Δctx x! (some Yfun)) a! (some wy0))
@@ -6911,6 +6943,8 @@ theorem funSpecTrueImpliesCastAt.{u}
           (Dapp.fst = β'.defaultZFSet → Φd.fst = zftrue))
     (default_true_implies_default_at :
       ∀ (Yfun wy0 Dapp : SMT.Dom.{u})
+        (hYfun_ty : Yfun.snd.fst = α'.fun β')
+        (hwy0_ty : wy0.snd.fst = α')
         (hden_app :
           ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
               (Function.update (Function.update Δctx x! (some Yfun)) a! (some wy0))
@@ -7424,7 +7458,7 @@ theorem funSpecTrueImpliesCastAt.{u}
         obtain ⟨Dapp, _, _, hden_app⟩ :=
           den_app_at Y wy0 hY_ty hY_func hwy0_ty
         obtain ⟨hφd, Φd, hdenΦd, _, _⟩ :=
-          default_spec_at Y wy0 Dapp hden_app
+          default_spec_at Y wy0 Dapp hY_ty hwy0_ty hden_app
         dsimp [aBody]
         rw [SMT.Term.abstract, SMT.denote, hden_exists_a_false]
         change
@@ -7762,7 +7796,7 @@ theorem funSpecTrueImpliesCastAt.{u}
       obtain ⟨Dapp, _, hDapp_val, hden_app⟩ :=
         den_app_at Y wy0 hY_ty hY_func hwy0_ty
       obtain ⟨hφd, Φd, hdenΦd, _, _⟩ :=
-        default_spec_at Y wy0 Dapp hden_app
+        default_spec_at Y wy0 Dapp hY_ty hwy0_ty hden_app
       have hden_default_body :
           ⟦hdefault.abstract (Function.update ΔY a! (some wy0)) hφd⟧ˢ =
             some Dbody := by
@@ -7790,7 +7824,7 @@ theorem funSpecTrueImpliesCastAt.{u}
           exact Option.some.inj (hdenΦd.symm.trans hden_default_body)
         exact hEq ▸ hDbody_true
       have hY_default : Dapp.fst = β'.defaultZFSet := by
-        exact default_true_implies_default_at Y wy0 Dapp hden_app hφd hdenΦd hΦd_true
+        exact default_true_implies_default_at Y wy0 Dapp hY_ty hwy0_ty hden_app hφd hdenΦd hΦd_true
       apply Subtype.ext
       calc
         (↑(@ᶻY.fst
@@ -7966,6 +8000,7 @@ theorem funSpecTotalAt.{u}
               some Dapp)
     (default_spec_at :
       ∀ (wy0 Dapp : SMT.Dom.{u})
+        (hwy0_ty : wy0.snd.fst = α')
         (hden_app :
           ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
               (Function.update (Function.update Δctx x! (some Y)) a! (some wy0))
@@ -8456,7 +8491,7 @@ theorem funSpecTotalAt.{u}
       obtain ⟨Dapp, _, _, hden_app⟩ :=
         den_app_at wy0 hwy0_ty
       obtain ⟨hφd, Φd, hdenΦd, _, _⟩ :=
-        default_spec_at wy0 Dapp hden_app
+        default_spec_at wy0 Dapp hwy0_ty hden_app
       dsimp [aBody]
       rw [SMT.Term.abstract, SMT.denote, hden_exists_a_false]
       change

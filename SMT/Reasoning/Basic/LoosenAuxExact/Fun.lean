@@ -1034,6 +1034,8 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                   exact ⟨Dapp, hDapp_ty, hDapp_val, hden_app⟩
                 have default_spec_at :
                     ∀ (Yfun wy0 Dapp : SMT.Dom)
+                      (hYfun_ty : Yfun.snd.fst = α'.fun β')
+                      (hwy0_ty : wy0.snd.fst = α')
                       (hden_app :
                         ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
                             (Function.update (Function.update «Δ» x! (some Yfun)) a! (some wy0))
@@ -1050,13 +1052,18 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                           some Φd ∧
                         Φd.snd.fst = SMTType.bool ∧
                         (Dapp.fst = β'.defaultZFSet → Φd.fst = zftrue) := by
-                  intro Yfun wy0 Dapp hden_app
-                  exact funDefaultSpecAt
+                  intro Yfun wy0 Dapp hYfun_ty hwy0_ty hden_app
+                  refine funDefaultSpecAt
                     («Δ» := Function.update (Function.update «Δ» x! (some Yfun)) a! (some wy0))
                     (St₁ := St₆) (St₂ := St₇)
                     (name := s!"{name}_funFun_default")
                     (t := .app (.var x!) (.var a!)) (spec := hdefault)
-                    keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) hrun_default Dapp hden_app
+                    keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) ?_ hrun_default Dapp hden_app
+                  exact respectsAppVarVar
+                    (hx_ne_a := x!_ne_a!)
+                    (hx_lookup := SMT.Typing.varE typ_var_x!_St₆)
+                    (ha_lookup := SMT.Typing.varE typ_var_a!_St₆')
+                    (hXd_ty := hYfun_ty) (hAd_ty := hwy0_ty)
                 have hex_fun_spec :
                     ∃ Φ : SMT.Dom,
                       ⟦fun_spec.abstract (Function.update «Δ» x! (some X!)) hφX!⟧ˢ = some Φ ∧
@@ -1165,8 +1172,8 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                         den_app_at Y wy0 hY_ty hY_func hwy0_ty
                       exact ⟨Dapp, hDapp_ty, hDapp_val, hden_app⟩)
                     (default_spec_at := by
-                      intro wy0 Dapp hden_app
-                      exact default_spec_at Y wy0 Dapp hden_app)
+                      intro wy0 Dapp hwy0_ty hden_app
+                      exact default_spec_at Y wy0 Dapp hY_ty hwy0_ty hden_app)
                     (hφY := hφY)
                 have hfun_spec_true_implies_cast :
                     ∀ (Y : SMT.Dom), Y.snd.fst = α'.fun β' →
@@ -1218,14 +1225,19 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                     (den_app_at := den_app_at)
                     (default_spec_at := default_spec_at)
                     (default_true_implies_default_at := by
-                      intro Yfun wy0 Dapp hden_app hφd Φd hdenΦd htrueΦd
-                      exact funDefaultTrueImpliesDefaultAt
+                      intro Yfun wy0 Dapp hYfun_ty hwy0_ty hden_app hφd Φd hdenΦd htrueΦd
+                      refine funDefaultTrueImpliesDefaultAt
                         («Δ» := Function.update (Function.update «Δ» x! (some Yfun)) a! (some wy0))
                         (St₁ := St₆) (St₂ := St₇)
                         (name := s!"{name}_funFun_default")
                         (t := .app (.var x!) (.var a!)) (spec := hdefault)
-                        keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) hrun_default
-                        Dapp hden_app hφd hdenΦd htrueΦd)
+                        keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) ?_ hrun_default
+                        Dapp hden_app hφd hdenΦd htrueΦd
+                      exact respectsAppVarVar
+                        (hx_ne_a := x!_ne_a!)
+                        (hx_lookup := SMT.Typing.varE typ_var_x!_St₆)
+                        (ha_lookup := SMT.Typing.varE typ_var_a!_St₆')
+                        (hXd_ty := hYfun_ty) (hAd_ty := hwy0_ty))
                     (hφY := hφY)
                     (hdenΦY := hdenΦY)
                     (htrue := htrueΦY)
