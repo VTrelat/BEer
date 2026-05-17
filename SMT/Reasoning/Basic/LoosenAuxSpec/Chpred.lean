@@ -2113,6 +2113,7 @@ private theorem chpredLambdaWitness
         x₀.fst.pair Y.fst ∈ (castZF_of_path p).1) :
     ∃ X! : SMT.Dom,
       X.fst.pair X!.fst ∈ (castZF_of_path p.chpred).1 ∧
+      X!.snd.fst = α'.fun SMTType.bool ∧
       ⟦((λˢ [z!]) [α'] (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec))).abstract
           (Function.update «Δ» x! (some X!)) (hcov_lambda_upd X!)⟧ˢ =
         some X! := by
@@ -2154,7 +2155,7 @@ private theorem chpredLambdaWitness
         X hX_mem hX_func hcov_lambda_upd hgo_cov hexists_cov hgo_exists
         hbody_total hbody_ty_of den_app_at den_spec_some_at den_spec_true_at_cast
         den_spec_true_implies_cast den_z_exact_at)
-  refine ⟨X!, ?_, hden_lambda_X!⟩
+  refine ⟨X!, ?_, rfl, hden_lambda_X!⟩
   rw [castZF_of_path, castZF_chpred, ZFSet.lambda_spec]
   refine ⟨hX_mem, hX!zf_mem, ?_⟩
   rw [dif_pos hX_func]
@@ -2640,7 +2641,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               apply Option.get_of_eq_some
               simp [Δx₀]
             obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hden_z_x₀⟩ := post_x₀
-            obtain ⟨_, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
+            obtain ⟨_, _, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
             exact (htot_x₀ Y hY_ty hφY).2 hdenY htrue
           have hfv_spec_sub :
               SMT.fv
@@ -3050,7 +3051,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                   (h1 := hφY) (h2 := hφ_base) hag_spec
               simpa [SMT.RenamingContext.denote] using hden_eq.symm.trans hdenY
             exact den_z_exact_at x₀ hx₀_ty hx₀_mem hwy0_ty hφ_base hden_base htrue
-          obtain ⟨X!, hcast_mem, hden_lambda_X!⟩ :=
+          obtain ⟨X!, hcast_mem, hX!_ty, hden_lambda_X!⟩ :=
             chpredLambdaWitness
               (Γ := St₄.types) («Δ» := «Δ») (x := x) (z!_spec := z!_spec)
               (x! := x!) (z := z) (z! := z!)
@@ -3066,7 +3067,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
             apply Option.get_of_eq_some
             exact Function.update_self _ _ _
           let Φtrue : SMT.Dom := ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩
-          refine ⟨Φtrue, X!, ?_, ?_, ?_, rfl, ?_⟩
+          refine ⟨Φtrue, X!, ?_, ?_, ?_, hX!_ty, rfl, ?_⟩
           · exact hvar_X!
           · intro v hv
             by_cases hvx : v = x!

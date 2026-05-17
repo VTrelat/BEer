@@ -45,6 +45,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
                                                   RenamingContext.CoversFV (Function.update «Δ₀» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ₀» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path pα).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -92,6 +93,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
                                                   RenamingContext.CoversFV (Function.update «Δ₀» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ₀» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = β' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path pβ).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -126,6 +128,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
                                         ∃ (_denx! : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                           (_denφ : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                            X!.snd.fst = α'.fun β' ∧
                                             Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧
                                                 X.fst.pair X!.fst ∈ (castZF_of_path (castPath.fun hβ pα pβ)).1) ∧
@@ -163,8 +166,8 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
   and_intros <;> try assumption
   intro X denx
   specialize h X denx
-  obtain ⟨Φ, X!, denx!, hφ, denφ, hΦ_ty, hΦ_true_cast, hrest⟩ := h
-  use Φ, X!, denx!, hφ, denφ, hΦ_ty, hΦ_true_cast
+  obtain ⟨Φ, X!, denx!, hφ, denφ, hX!_ty, hΦ_ty, hΦ_true_cast, hrest⟩ := h
+  use Φ, X!, denx!, hφ, denφ, hX!_ty, hΦ_ty, hΦ_true_cast
   intro Y hY_ty hφY
   specialize hrest Y hY_ty hφY
   exact hrest.1

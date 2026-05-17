@@ -46,6 +46,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                                                   RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ ↑(castZF_of_path pα).1) ∧
                                                       ∀ (Y : SMT.Dom.{u}),
@@ -99,6 +100,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                                                   RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = β' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ ↑(castZF_of_path pβ).1) ∧
                                                       ∀ (Y : SMT.Dom.{u}),
@@ -146,6 +148,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                                         ∃ (_ : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec) (_
                                           : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                          X!.snd.fst = α'.fun β' ∧
                                           Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧
                                                 X.fst.pair X!.fst ∈ ↑(castZF_of_path (castPath.fun hβ pα pβ)).1) ∧
@@ -1248,7 +1251,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                   exact (Classical.choose_spec hex_fun_spec).2.1
                 have hΦ_true : Φ.fst = zftrue := by
                   exact (Classical.choose_spec hex_fun_spec).2.2
-                refine ⟨Φ, X!, hden_var_x!, hφX!, hden_fun_spec', hΦ_ty, ?_, ?_⟩
+                refine ⟨Φ, X!, hden_var_x!, hφX!, hden_fun_spec', rfl, hΦ_ty, ?_, ?_⟩
                 · exact ⟨hΦ_true, hcast_mem⟩
                 · intro Y hY_ty hφY
                   refine ⟨hfun_spec_total Y hY_ty hφY, ?_⟩

@@ -55,6 +55,7 @@ abbrev FunExactIH.{u}
                                                       (Function.update «Δ₀» x! (some X!))
                                                       hφ⟧ˢ =
                                                     some Φ),
+                                                X!.snd.fst = τ' ∧
                                                 Φ.snd.fst = SMTType.bool ∧
                                                   (Φ.fst = zftrue ∧
                                                     X.fst.pair X!.fst ∈ (castZF_of_path p).1) ∧
@@ -75,6 +76,47 @@ abbrev FunExactIH.{u}
                                                                 ΦY.fst = zftrue →
                                                                   X.fst.pair Y.fst ∈
                                                                     (castZF_of_path p).1⌝⦄
+
+/-- The SMT denotation of a negation `¬ˢ' t`, when defined, always carries the
+`bool` SMT type tag (structural from the `¬ˢ'` denotation arm). Since
+`PHOAS.Term.exists` unfolds to `¬ˢ' (.forall ..)`, this also pins the tag of any
+`exists`/`forall`-shaped term's denotation. -/
+theorem denote_not_ty {t : SMT.PHOAS.Term SMT.Dom} {D : SMT.Dom}
+    (h : ⟦¬ˢ' t⟧ˢ = some D) : D.2.1 = SMTType.bool := by
+  rw [SMT.denote] at h
+  rw [Option.bind_eq_bind] at h
+  cases hd : ⟦t⟧ˢ with
+  | none => rw [hd, Option.bind_none] at h; exact absurd h (by simp)
+  | some Dt =>
+      obtain ⟨v, τ, hv⟩ := Dt
+      rw [hd, Option.bind_some] at h
+      cases τ <;> dsimp only at h
+      · rw [Option.pure_def, Option.some.injEq] at h; obtain rfl := h; rfl
+      all_goals (rw [Option.failure_eq_none] at h; exact absurd h (by simp))
+
+/-- The SMT denotation of a universally-quantified term `PHOAS.Term.forall τs P`,
+when defined, always carries the `bool` SMT type tag (structural from the
+`forall` denotation arm). -/
+theorem denote_forall_ty {n : ℕ} {τs : Fin n → SMTType}
+    {P : (Fin n → SMT.Dom) → SMT.PHOAS.Term SMT.Dom} {D : SMT.Dom}
+    (h : ⟦SMT.PHOAS.Term.forall τs P⟧ˢ = some D) : D.2.1 = SMTType.bool := by
+  rw [SMT.denote] at h
+  split at h
+  · split at h
+    · rw [Option.pure_def, Option.some.injEq] at h
+      obtain rfl := h
+      rfl
+    · exact absurd h (by rw [Option.failure_eq_none]; simp)
+  · exact absurd h (by rw [Option.failure_eq_none]; simp)
+
+/-- The SMT denotation of an existentially-quantified term
+`PHOAS.Term.exists τs P`, when defined, always carries the `bool` SMT type tag:
+`PHOAS.Term.exists` unfolds to `¬ˢ' (.forall ..)`. -/
+theorem denote_exists_ty {n : ℕ} {τs : Fin n → SMTType}
+    {P : (Fin n → SMT.Dom) → SMT.PHOAS.Term SMT.Dom} {D : SMT.Dom}
+    (h : ⟦SMT.PHOAS.Term.exists τs P⟧ˢ = some D) : D.2.1 = SMTType.bool := by
+  rw [SMT.PHOAS.Term.exists] at h
+  exact denote_not_ty h
 
 theorem typeContext_insert_swap_entries
     {Γ : TypeContext} {x y : 𝒱} {τx τy : SMTType}
@@ -1173,6 +1215,7 @@ theorem funDenVarExactAt.{u}
                 (Function.update (Function.update «Δ» z (some x₀)) z! (some X₀!))
                 hφ⟧ˢ =
               some Φ),
+          X₀!.snd.fst = τ' ∧
           Φ.snd.fst = SMTType.bool ∧
             (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
               ∀ (Y : SMT.Dom),
@@ -1386,7 +1429,7 @@ theorem funVarSpecTotalAt.{u}
         (Function.update (Function.update «Δ» z (some x₀)) z! (some wy0))
         hφY⟧ˢ.isSome =
       true := by
-  obtain ⟨_, _, _, _, _, _, _, htot⟩ :=
+  obtain ⟨_, _, _, _, _, _, _, _, htot⟩ :=
     funDenVarExactAt
       («Δ» := «Δ») (p := p) p_ih
       (sub := sub) (typ_var_z := typ_var_z) (hrun := hrun)
@@ -1416,7 +1459,7 @@ theorem funVarSpecTrueImpliesCast.{u}
         some ΦY)
     (htrue : ΦY.fst = zftrue) :
     x₀.fst.pair wy0.fst ∈ (castZF_of_path p).1 := by
-  obtain ⟨_, _, _, _, _, _, _, htot⟩ :=
+  obtain ⟨_, _, _, _, _, _, _, _, htot⟩ :=
     funDenVarExactAt
       («Δ» := «Δ») (p := p) p_ih
       (sub := sub) (typ_var_z := typ_var_z) (hrun := hrun)
@@ -1445,19 +1488,13 @@ theorem funVarSpecTrueAtCast.{u}
           hφY⟧ˢ =
         some ΦY ∧
       ΦY.fst = zftrue := by
-  obtain ⟨Φ, X₀!, hden_var, hφ, hden, _, htrue_cast, _⟩ :=
+  obtain ⟨Φ, X₀!, hden_var, hφ, hden, hX₀_ty, _, htrue_cast, _⟩ :=
     funDenVarExactAt
       («Δ» := «Δ») (p := p) p_ih
       (sub := sub) (typ_var_z := typ_var_z) (hrun := hrun)
       x₀ hx₀_ty
   obtain ⟨htrue, hcast_X₀!⟩ := htrue_cast
-  have hX₀_ty : X₀!.snd.fst = τ' := by
-    -- TODO: blocked on loosenAux_prf_spec postcondition
-    -- `denote_type_of_typing_fv` on the bare `Term.var z!` would require
-    -- `RespectsTypeContextOnFV ... (.var z!)`, i.e. `X₀!.snd.fst = τ'` itself
-    -- (circular); `X₀!` is the existentially-bound loosened value with no
-    -- threaded type tag.
-    exact denote_type_eq_of_typing (typ_t := typ_var_z!) (hden := hden_var) (hΔΓ := sorry)
+  -- `X₀!`'s type tag is now supplied by the strengthened `funDenVarExactAt`.
   exact funVarDenTrueAtCast
     («Δ» := Function.update «Δ» z (some x₀))
     (p := p)
@@ -6704,11 +6741,33 @@ theorem funDenSpecTrueAtCast.{u}
     obtain ⟨D, hden_body, _⟩ := hbody_true_at wy0 hwy0_ty
     exact Option.isSome_of_eq_some hden_body
   · intro wy0 hwy0_ty D hden_body
-    -- TODO: blocked — `aBody` is `.ite exists_a (.forall ..) hdefault`; the `.ite`
-    -- denotation picks the `.forall` branch (structurally bool) or the `hdefault`
-    -- branch, whose denotation type tag needs `RespectsTypeContextOnFV` for
-    -- `hdefault` (separate cascade from the `defaultSpecMSpec` threading).
-    exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body) (hΔΓ := sorry)
+    -- `aBody` is `.ite exists_a (.forall ..) hdefault`; the `.ite` denotation is
+    -- whichever branch is taken. The `.forall` branch is structurally `bool`
+    -- (`denote_forall_ty`); the `hdefault` branch is `bool` via `default_spec_at`.
+    have hden_body' := hden_body
+    rw [SMT.Term.abstract, SMT.denote] at hden_body'
+    rw [Option.bind_eq_bind] at hden_body'
+    cases hc : ⟦exists_a.abstract (Function.update Δx a! (some wy0)) _⟧ˢ with
+    | none => rw [hc] at hden_body'; exact absurd hden_body' (by simp)
+    | some Dc =>
+        obtain ⟨Cv, Cτ, Chv⟩ := Dc
+        cases Cτ <;> rw [hc, Option.bind_some] at hden_body' <;>
+          dsimp only at hden_body' <;>
+          (try (rw [Option.failure_eq_none] at hden_body'; exact absurd hden_body' (by simp)))
+        by_cases hcond : ZFSet.ZFBool.toBool ⟨Cv, Chv⟩ = true
+        · rw [if_pos hcond] at hden_body'
+          rw [SMT.Term.abstract] at hden_body'
+          exact denote_forall_ty hden_body'
+        · rw [if_neg hcond] at hden_body'
+          obtain ⟨Dapp, hDapp_ty, hDapp_val, hden_app⟩ :=
+            den_app_at X! wy0 hX!_ty hX!_func hwy0_ty
+          obtain ⟨hφd, Φd, hdenΦd, hΦd_ty, _⟩ :=
+            default_spec_at X! wy0 Dapp hX!_ty hwy0_ty hden_app
+          have hDΦd : D = Φd := by
+            have := hden_body'.symm.trans hdenΦd
+            exact (Option.some.inj this)
+          rw [hDΦd]
+          exact hΦd_ty
   · intro wy0 hwy0_ty
     exact hbody_true_at wy0 hwy0_ty
 
@@ -7374,11 +7433,12 @@ theorem funSpecTrueImpliesCastAt.{u}
       obtain ⟨hσ_bool, _, _, _⟩ := SMT.Typing.eqE typ_eq_ctx
       exact hσ_bool
     have hDexists_ty : Dexists.snd.fst = SMTType.bool := by
-      cases hσ_bool
-      -- TODO: blocked — `exists_ab` is a `.exists` term; its denotation type tag
-      -- needs `RespectsTypeContextOnFV` for `exists_ab` (separate cascade from the
-      -- `defaultSpecMSpec` threading).
-      exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists) (hΔΓ := sorry)
+      -- `exists_ab` is a `Term.exists`; its abstraction is `PHOAS.Term.exists`,
+      -- which unfolds to `¬ˢ' (.forall ..)`, so its denotation tag is `bool`.
+      have hden_exists' := hden_exists
+      simp only [exists_ab, funExistsABTerm, SMT.Term.abstract, List.length_cons,
+        List.length_nil, Nat.reduceAdd, ↓reduceDIte] at hden_exists'
+      exact denote_exists_ty hden_exists'
     obtain ⟨Dout, hden_out, _⟩ :=
       denote_eq_some_of_some hden_eq hden_exists (by rw [hDeq_ty, hDexists_ty])
     exact Option.isSome_of_eq_some (by
@@ -7524,10 +7584,33 @@ theorem funSpecTrueImpliesCastAt.{u}
             ⟦aBody.abstract (Function.update ΔY a! (some wy0)) (hcov_aBody_updY wy0)⟧ˢ = some D →
               D.snd.fst = SMTType.bool := by
       intro wy0 hwy0_ty D hden_body
-      -- TODO: blocked — `aBody` is `.ite exists_a (.forall ..) hdefault`; the `hdefault`
-      -- branch's denotation type tag needs `RespectsTypeContextOnFV` for `hdefault`
-      -- (separate cascade from the `defaultSpecMSpec` threading).
-      exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body) (hΔΓ := sorry)
+      -- `aBody` is `.ite exists_a (.forall ..) hdefault`; the `.ite` denotation is
+      -- whichever branch is taken. The `.forall` branch is structurally `bool`
+      -- (`denote_forall_ty`); the `hdefault` branch is `bool` via `default_spec_at`.
+      have hden_body' := hden_body
+      rw [SMT.Term.abstract, SMT.denote] at hden_body'
+      rw [Option.bind_eq_bind] at hden_body'
+      cases hc : ⟦exists_a.abstract (Function.update ΔY a! (some wy0)) _⟧ˢ with
+      | none => rw [hc] at hden_body'; exact absurd hden_body' (by simp)
+      | some Dc =>
+          obtain ⟨Cv, Cτ, Chv⟩ := Dc
+          cases Cτ <;> rw [hc, Option.bind_some] at hden_body' <;>
+            dsimp only at hden_body' <;>
+            (try (rw [Option.failure_eq_none] at hden_body'; exact absurd hden_body' (by simp)))
+          by_cases hcond : ZFSet.ZFBool.toBool ⟨Cv, Chv⟩ = true
+          · rw [if_pos hcond] at hden_body'
+            rw [SMT.Term.abstract] at hden_body'
+            exact denote_forall_ty hden_body'
+          · rw [if_neg hcond] at hden_body'
+            obtain ⟨Dapp, hDapp_ty, hDapp_val, hden_app⟩ :=
+              den_app_at Y wy0 hY_ty hY_func hwy0_ty
+            obtain ⟨hφd, Φd, hdenΦd, hΦd_ty, _⟩ :=
+              default_spec_at Y wy0 Dapp hY_ty hwy0_ty hden_app
+            have hDΦd : D = Φd := by
+              have := hden_body'.symm.trans hdenΦd
+              exact (Option.some.inj this)
+            rw [hDΦd]
+            exact hΦd_ty
     change
       @ᶻY.fst
         ⟨wy0.fst, by
@@ -8420,11 +8503,12 @@ theorem funSpecTotalAt.{u}
       obtain ⟨hσ_bool, _, _, _⟩ := SMT.Typing.eqE typ_eq_ctx
       exact hσ_bool
     have hDexists_ty : Dexists.snd.fst = SMTType.bool := by
-      cases hσ_bool
-      -- TODO: blocked — `exists_ab` is a `.exists` term; its denotation type tag
-      -- needs `RespectsTypeContextOnFV` for `exists_ab` (separate cascade from the
-      -- `defaultSpecMSpec` threading).
-      exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists) (hΔΓ := sorry)
+      -- `exists_ab` is a `Term.exists`; its abstraction is `PHOAS.Term.exists`,
+      -- which unfolds to `¬ˢ' (.forall ..)`, so its denotation tag is `bool`.
+      have hden_exists' := hden_exists
+      simp only [exists_ab, funExistsABTerm, SMT.Term.abstract, List.length_cons,
+        List.length_nil, Nat.reduceAdd, ↓reduceDIte] at hden_exists'
+      exact denote_exists_ty hden_exists'
     obtain ⟨Dout, hden_out, _⟩ :=
       denote_eq_some_of_some hden_eq hden_exists (by rw [hDeq_ty, hDexists_ty])
     exact Option.isSome_of_eq_some (by

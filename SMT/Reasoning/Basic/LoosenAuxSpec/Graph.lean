@@ -2808,7 +2808,7 @@ private theorem graphDenZExactAt
     apply Option.get_of_eq_some
     simp [Δx₀]
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hden_z_x₀⟩ := post_x₀
-  obtain ⟨_, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
+  obtain ⟨_, _, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
   exact (htot_x₀ Y hY_ty hφY).2 hdenY htrue
 
 set_option maxHeartbeats 1500000 in
@@ -2971,6 +2971,7 @@ private theorem graphLambdaWitness
         x₀.fst.pair wy0.fst ∈ (castZF_of_path (pα.pair pβ)).1) :
     ∃ X! : SMT.Dom,
       X.fst.pair X!.fst ∈ (castZF_of_path (pα.graph pβ)).1 ∧
+      X!.snd.fst = (α'.pair β').fun SMTType.bool ∧
       ⟦((λˢ [z!]) [α'.pair β']
             (.exists [z] [α.pair β]
               ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec))).abstract
@@ -3856,7 +3857,7 @@ private theorem graphLambdaWitness
         exact graphSpecificArg hx_1 i))
     · exfalso
       exact hlen_pos (by simp)
-  refine ⟨X!, ?_, hden_lambda_X!⟩
+  refine ⟨X!, ?_, rfl, hden_lambda_X!⟩
   rw [castZF_of_path, castZF_graph, ZFSet.lambda_spec]
   refine ⟨hX_mem, hX!zf_mem, ?_⟩
   rw [dif_pos hX_func]
@@ -3939,6 +3940,7 @@ private theorem graphLambdaWitnessAt.{u}
             ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec))) :
     ∃ X! : SMT.Dom,
       X.fst.pair X!.fst ∈ (castZF_of_path (pα.graph pβ)).1 ∧
+      X!.snd.fst = (α'.pair β').fun SMTType.bool ∧
       ⟦((λˢ [z!]) [α'.pair β']
             (.exists [z] [α.pair β]
               ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec))).abstract
@@ -4542,7 +4544,7 @@ theorem loosenAux_prf_spec.graph.{uGraphSpecProof} («Δ» : RenamingContext.Con
                   subst hi0
                   simp [h_ofFn_list]
             simpa [h_ofFn, Function.updates] using hgo
-          obtain ⟨X!, hcast_mem, hden_lambda_X!⟩ :=
+          obtain ⟨X!, hcast_mem, hX!_ty, hden_lambda_X!⟩ :=
             graphLambdaWitnessAt
               (pα_ih := pα_ih) (pβ_ih := pβ_ih)
               (Γ := St₂.types) («Δ» := «Δ») (x := x) (z!_spec := z!_spec)
@@ -4584,7 +4586,7 @@ theorem loosenAux_prf_spec.graph.{uGraphSpecProof} («Δ» : RenamingContext.Con
             apply Option.get_of_eq_some
             exact Function.update_self _ _ _
           let Φtrue : SMT.Dom := ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩
-          refine ⟨Φtrue, X!, ?_, ?_, ?_, rfl, ?_⟩
+          refine ⟨Φtrue, X!, ?_, ?_, ?_, hX!_ty, rfl, ?_⟩
           · exact hvar_X!
           · intro v hv
             simp only [fv, List.mem_append, List.mem_singleton] at hv
