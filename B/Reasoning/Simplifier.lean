@@ -149,13 +149,11 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
       simp only [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
         x_ih, Option.bind_some, y_ih, Option.bind_some]
     | and x y x_ih y_ih =>
-      -- TODO: provable but unverifiable here — the import chain (this file →
-      -- SimplifierCorrect.Basic) is broken: `simplifier_partial_correct.lambda`
-      -- in B/Reasoning/SimplifierCorrect/Basic.lean fails to compile after an
-      -- upstream change to `denote`'s `lambda`/`collect` clauses (the `den_E`/
-      -- `typE_det` predicates gained a typing-hypothesis parameter). The `and`
-      -- proof would case on `simplifier_aux_and` and use the forward IHs plus
-      -- boolean-algebra identities (`zffalse ⋀ Y = zffalse`, etc.).
+      -- TODO: provable — case on `simplifier_aux_and` using the forward IHs.
+      -- The absorbing arms (`bool false`/`bool true`) need boolean-algebra
+      -- identities for `overloadBinOp_𝔹 (· ⋀ ·)` (`false ⋀ᶻ Y = false` etc.),
+      -- which are not yet in the codebase (only the `overloadBinOp_Int`
+      -- analogues exist, in B/Reasoning/Lemmas.lean) and would need proving.
       sorry
     | not x ih =>
       -- STATEMENT IS FALSE — discovered soundness bug in `simplifier_aux_not`
@@ -171,19 +169,20 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
       -- which the bug does NOT break, so its `not` case remains true & proven.)
       sorry
     | eq x y x_ih y_ih =>
-      -- TODO: provable but unverifiable here — same broken import chain as the
-      -- `and` case (SimplifierCorrect.Basic does not compile). The `eq` proof
-      -- would case on `simplifier_aux_eq` using the forward IHs.
+      -- TODO: provable — case on `simplifier_aux_eq` using the forward IHs.
+      -- The absorbing arms collapsing to `bool true`/`¬ᴮ p` need boolean-algebra
+      -- identities for `=ᶻ` / `overloadBinOp_𝔹` that are not in the codebase.
       sorry
     | mem x S x_ih S_ih =>
       -- TODO: hard — `simplifier_aux_mem` rewrites set-comprehension membership
       -- via substitution; the forward proof needs a substitution-denotation
-      -- soundness lemma absent from the codebase. Also unverifiable (broken
-      -- SimplifierCorrect.Basic import chain).
+      -- soundness lemma (`⟦substList vs ts P⟧` vs `⟦P⟧` under env updates) that
+      -- is absent from the codebase.
       sorry
     | collect vs D P D_ih P_ih =>
-      -- TODO: hard (binders) and unverifiable — broken SimplifierCorrect.Basic
-      -- import chain.
+      -- TODO: hard — `simplifier_aux_collect` (`collect v D (.bool true) ⟿ D`)
+      -- plus the value-dependent `dite`s in the `collect` denotation; needs
+      -- substantial binder/denotation reasoning.
       sorry
     | app f x f_ih x_ih =>
       unfold simplifier
@@ -214,6 +213,7 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
       rw [dite_cond_eq_true (eq_true trivial), dite_cond_eq_true (eq_true F_pfunc),
         dite_cond_eq_true (eq_true X_dom)]
     | all vs D P D_ih P_ih =>
-      -- TODO: hard (binders) and unverifiable — broken SimplifierCorrect.Basic
-      -- import chain.
+      -- TODO: hard — `simplifier_aux_all` rewrites `∀` over comprehensions and
+      -- the `all` denotation has value-dependent `dite`s; needs substantial
+      -- binder/denotation reasoning.
       sorry
