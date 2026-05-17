@@ -621,3 +621,82 @@ theorem SMT_Typing_substList {Γ : SMT.TypeContext} (xs : List SMT.𝒱) (ts : L
       · exact fun t ht => hbvs t (List.mem_cons_of_mem _ ht)
       · intro i hi_x hi_t hx
         exact hpairs (i + 1) (Nat.succ_lt_succ hi_x) (Nat.succ_lt_succ hi_t) hx
+
+/-- Substituting a term with no bound variables leaves `bv` unchanged. This is
+the equality strengthening of `SMT_bv_subst_subset` (which gave only `⊆`); the
+`⊇` direction holds because the only place a `bv`-relevant subterm can be
+removed by `subst` is the `var` case, where the replacement `t` itself has no
+bound variables. -/
+theorem SMT_bv_subst_eq_of_bv_nil {x : SMT.𝒱} {t e : SMT.Term}
+    (hbv : SMT.bv t = []) : SMT.bv (SMT.subst x t e) = SMT.bv e := by
+  induction e with
+  | var w =>
+    unfold SMT.subst; split_ifs
+    · simpa [SMT.bv] using hbv
+    · rfl
+  | int _ | bool _ | none => unfold SMT.subst; rfl
+  | app f a ihf iha =>
+    unfold SMT.subst; simp only [SMT.bv, ihf, iha]
+  | lambda vs τs body ih =>
+    unfold SMT.subst; split_ifs
+    · rfl
+    · simp only [SMT.bv, ih]
+  | «forall» vs τs body ih =>
+    unfold SMT.subst; split_ifs
+    · rfl
+    · simp only [SMT.bv, ih]
+  | «exists» vs τs body ih =>
+    unfold SMT.subst; split_ifs
+    · rfl
+    · simp only [SMT.bv, ih]
+  | as a τ ih => unfold SMT.subst; simp only [SMT.bv, ih]
+  | eq t₁ t₂ ih₁ ih₂ => unfold SMT.subst; simp only [SMT.bv, ih₁, ih₂]
+  | and t₁ t₂ ih₁ ih₂ => unfold SMT.subst; simp only [SMT.bv, ih₁, ih₂]
+  | or t₁ t₂ ih₁ ih₂ => unfold SMT.subst; simp only [SMT.bv, ih₁, ih₂]
+  | not a ih => unfold SMT.subst; simp only [SMT.bv, ih]
+  | imp t₁ t₂ ih₁ ih₂ => unfold SMT.subst; simp only [SMT.bv, ih₁, ih₂]
+  | ite c a b ihc iha ihb => unfold SMT.subst; simp only [SMT.bv, ihc, iha, ihb]
+  | some a ih => unfold SMT.subst; simp only [SMT.bv, ih]
+  | the a ih => unfold SMT.subst; simp only [SMT.bv, ih]
+  | pair t₁ t₂ ih₁ ih₂ => unfold SMT.subst; simp only [SMT.bv, ih₁, ih₂]
+  | fst a ih => unfold SMT.subst; simp only [SMT.bv, ih]
+  | snd a ih => unfold SMT.subst; simp only [SMT.bv, ih]
+  | distinct ts ih =>
+    unfold SMT.subst; unfold SMT.bv
+    simp only [List.attach_map_val]
+    rw [List.map_map]
+    congr 1
+    apply List.map_congr_left
+    intro u hu
+    simp only [Function.comp_apply]
+    exact ih u hu
+  | le t₁ t₂ ih₁ ih₂ => unfold SMT.subst; simp only [SMT.bv, ih₁, ih₂]
+  | add t₁ t₂ ih₁ ih₂ => unfold SMT.subst; simp only [SMT.bv, ih₁, ih₂]
+  | sub t₁ t₂ ih₁ ih₂ => unfold SMT.subst; simp only [SMT.bv, ih₁, ih₂]
+  | mul t₁ t₂ ih₁ ih₂ => unfold SMT.subst; simp only [SMT.bv, ih₁, ih₂]
+
+/-- Substituting a list of bound-variable-free terms leaves `bv` unchanged. The
+equality strengthening of `SMT_bv_substList_subset`. -/
+theorem SMT_bv_substList_eq {xs : List SMT.𝒱} {ts : List SMT.Term} {e : SMT.Term}
+    (hbvs : ∀ t ∈ ts, SMT.bv t = []) :
+    SMT.bv (SMT.substList xs ts e) = SMT.bv e := by
+  induction xs generalizing ts e with
+  | nil => cases ts <;> rfl
+  | cons x xs ih =>
+    cases ts with
+    | nil => rfl
+    | cons t' ts' =>
+      unfold SMT.substList
+      rw [ih (fun t ht => hbvs t (List.mem_cons_of_mem _ ht))]
+      exact SMT_bv_subst_eq_of_bv_nil (hbvs t' (List.mem_cons_self ..))
+
+/-- Specialization of `SMT_bv_substList_eq` to substitutions by `var` terms:
+since `bv (.var w) = []`, the bound variables of `substList xs (ys.map .var) e`
+coincide exactly with those of `e`. -/
+theorem SMT_bv_substList_eq_of_var_terms {xs ys : List SMT.𝒱} {e : SMT.Term} :
+    SMT.bv (SMT.substList xs (ys.map SMT.Term.var) e) = SMT.bv e :=
+  SMT_bv_substList_eq (by
+    intro t ht
+    rw [List.mem_map] at ht
+    obtain ⟨w, _, rfl⟩ := ht
+    simp [SMT.bv])
