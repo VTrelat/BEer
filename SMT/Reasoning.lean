@@ -1,71 +1,99 @@
 import SMT.Semantics
-import Extra.Utils
-import Mathlib.Tactic.LiftLets
+import Mathlib.Data.List.FinRange
 
-open Classical SMT PHOAS ZFSet
+open Classical SMT SMT.PHOAS ZFSet
 
-private lemma foldl_endo_mem {α} {xs : List α} {f : ZFSet → α → ZFSet} {d : ZFSet} {B : ZFSet} (hd : d ∈ B) (h : ∀ x y, f x y ∈ B) :
-  xs.foldl f d ∈ B := by
-  induction xs generalizing d with
-  | nil => exact hd
-  | cons x xs ih => exact ih (h d x)
+namespace SMT
 
-private lemma foldl_attach_zfand_toBool {xs : List ZFBool} {d : ZFBool} {f : ZFBool → ZFBool} :
-  (xs.attach.foldl (λ acc ⟨x, hx⟩ => acc ⋀ (f x)) d).toBool = xs.attach.foldl (λ (acc : Bool) ⟨x, hx⟩ => acc && (f x).toBool) d.toBool := by
-  induction xs generalizing d with
-  | nil => simp
+/-- `overloadBinOp_𝔹` applied to two genuine booleans is just the operation. -/
+private theorem overloadBinOp_𝔹_val (op : ZFBool → ZFBool → ZFBool) (a b : ZFBool) :
+    overloadBinOp_𝔹 op a.val b.val = (op a b).val := by
+  unfold overloadBinOp_𝔹 overloadBinOp
+  rw [dif_pos ⟨a.2, b.2⟩]
+  rfl
+
+/-- A `ZFBool` is `⊤` iff it converts to `true`. -/
+private theorem zfbool_eq_top_iff (p : ZFBool) : p = ⊤ ↔ p.toBool = true := by
+  constructor
+  · rintro rfl; exact ZFBool.toBool_true
+  · intro h
+    conv_lhs => rw [← ZFBool.of_Bool_toBool p]
+    rw [h]; rfl
+
+/-- `⋀` is `⊤` iff both conjuncts are. -/
+private theorem zfbool_and_eq_top_iff (a b : ZFBool) : a ⋀ b = ⊤ ↔ a = ⊤ ∧ b = ⊤ := by
+  rw [zfbool_eq_top_iff, ZFBool.toBool_and, Bool.and_eq_true, zfbool_eq_top_iff,
+    zfbool_eq_top_iff]
+
+/-- Pairwise distinctness of the denotations of `ts` — the property that the
+SMT term `distinct ts` is intended to express. -/
+def denote.distinct_alt_def {n : ℕ} (ts : Fin n → PHOAS.Term Dom) : Prop :=
+  ∀ i j : Fin n, i < j → ⟦ts i⟧ˢ ≠ ⟦ts j⟧ˢ
+
+/-- `denote_distinct` of a list of domain values is `⊤` exactly when the list
+has no duplicate entries. -/
+theorem denote_distinct_eq_top_iff {Ts : List Dom} :
+    denote_distinct Ts = ⊤ ↔ Ts.Nodup := by
+  induction Ts with
+  | nil => simp [denote_distinct]
   | cons x xs ih =>
-    rw [List.attach_cons, List.foldl_cons, List.foldl_cons]
-    dsimp at ih ⊢
-    specialize @ih (d ⋀ f x)
-    rw [← ZFBool.toBool_and, List.foldl_map, List.foldl_map]
-    exact ih
+    have hd : denote_distinct (x :: xs)
+        = ZFBool.ofBool (decide (x ∉ xs)) ⋀ denote_distinct xs := by
+      rw [denote_distinct]
+      exact Subtype.ext (overloadBinOp_𝔹_val _ _ _)
+    rw [hd, zfbool_and_eq_top_iff, List.nodup_cons, ih, ZFBool.ofBool_decide_eq_true_iff]
 
-private lemma foldl_zfor_toBool {xs : List ZFBool} {d : ZFBool} :
-  (xs.foldl (λ acc x => acc ⋁ x) d).toBool = xs.foldl (λ (acc : Bool) x => acc ∨ x.toBool) d.toBool := by
-  induction xs generalizing d with
-  | nil => simp
-  | cons x xs ih =>
-    rw [List.foldl_cons, List.foldl_cons]
-    rw [@ih (d ⋁ x)]
-    congr
-    rw [ZFBool.toBool_or, Bool.or_eq_decide]
+/-- Cons equation for `List.allSome`. -/
+private theorem allSome_cons {α : Type*} (a : Option α) (as : List (Option α)) :
+    (a :: as).allSome = a.bind fun x => (as.allSome).map (x :: ·) := by
+  show (a :: as).mapM id = _
+  rw [List.mapM_cons]
+  cases a <;> simp [List.allSome, Option.map_eq_bind]
 
-noncomputable def denote.distinct_alt_def {Γ} {ts : List <| PHOAS.Term ZFSet} (h : Γ ⊢ .distinct ts : .bool) : {x // x ∈ ZFSet.𝔹} :=
-  let σ := choose (Typing.distinctE h).2.2
-  let hts := choose_spec (Typing.distinctE h).2.2
-  ⟨ts.upperDiag.attach.foldl (λ acc ⟨⟨x, y⟩, hxy⟩ =>
-    let typ : Γ ⊢ x : σ ∧ Γ ⊢ y : σ := And.casesOn (List.upperDiag_mem hxy) λ hx' hy' => ⟨hts x hx', hts y hy'⟩
-    let Z := overloadBinOp (A := σ.toZFSet) (·.val) (λ p => if p then ZFSet.ZFBool.true else ZFSet.ZFBool.false) ⊥ (· = ·) (x := ⟦x⟧ˢ ⟨Γ, σ, typ.1⟩) (y := ⟦y⟧ˢ ⟨Γ, σ, typ.2⟩)
-    acc ⋀ᶻ (¬ᶻ Z)) ZFSet.zftrue, by
-      dsimp [SMTType.toZFSet]
-      apply foldl_endo_mem ZFBool.zftrue_mem_𝔹
-      rintro acc ⟨⟨x, y⟩, hxy⟩
-      apply Subtype.property⟩
+/-- `List.allSome` succeeds with `Ts` exactly when the input is `Ts.map some`. -/
+private theorem allSome_eq_map_some {α : Type*} {l : List (Option α)} {Ts : List α} :
+    l.allSome = some Ts ↔ l = Ts.map some := by
+  induction l generalizing Ts with
+  | nil => cases Ts <;> simp [List.allSome, List.mapM_nil]
+  | cons a as ih =>
+    rw [allSome_cons]
+    cases a with
+    | none => cases Ts <;> simp
+    | some v =>
+      cases Ts with
+      | nil => simp
+      | cons t ts =>
+        simp only [Option.bind_some, Option.map_eq_some_iff, List.map_cons,
+          List.cons.injEq, Option.some.injEq, ih]
+        aesop
 
-set_option pp.proofs true in
-/--
-The denotation of `distinct [t₁, ..., tₙ]` is equivalent to `⟦t₁⟧ˢ ≠ ⟦t₂⟧ˢ ∧ ... ∧ ⟦tₙ₋₁⟧ˢ ≠ ⟦tₙ⟧ˢ`.
--/
-theorem denote_distinct_alt_def_correct {Γ} {ts} {h : Γ ⊢ .distinct ts : .bool} : ⟦.distinct ts⟧ˢ ⟨Γ, .bool, h⟩ = denote.distinct_alt_def h := by
-  induction ts with
-  | nil => nomatch Typing.distinctE h
-  | cons t ts ih =>
-    letI D₁ : ZFBool := ⟦PHOAS.Term.distinct (t :: ts)⟧ˢ ⟨Γ, ⟨SMTType.bool, h⟩⟩
-    letI D₂ : ZFBool := denote.distinct_alt_def h
-    refold_let D₁ D₂
-    cases hD₁ : D₁ using ZFBool.casesOn with
-    | false =>
-      unfold D₁ at hD₁
-      rw [denote, denote_aux.distinct, Subtype.coe_eta, ZFBool.ofBool_decide_eq_false_iff] at hD₁
-      push_neg at hD₁
-      generalize_proofs typ_ts hσ h_isfun at hD₁
+/-- The SMT denotation of `distinct ts` carries the boolean `⊤` exactly when
+the `ts` denote pairwise-distinctly (`denote.distinct_alt_def`). -/
+theorem denote_distinct_alt_def_correct {n : ℕ} {ts : Fin n → PHOAS.Term Dom} {D : Dom}
+    (hD : ⟦PHOAS.Term.distinct ts⟧ˢ = some D) :
+    D.1 = (⊤ : ZFBool) ↔ denote.distinct_alt_def ts := by
+  simp only [denote] at hD
+  cases hAS : (List.ofFn fun i => ⟦ts i⟧ˢ).allSome with
+  | none => rw [hAS] at hD; simp at hD
+  | some Ts =>
+    rw [hAS] at hD
+    injection hD with hD
+    subst hD
+    rw [allSome_eq_map_some] at hAS
+    show (denote_distinct Ts : ZFSet) = ((⊤ : ZFBool) : ZFSet) ↔ denote.distinct_alt_def ts
+    rw [Subtype.coe_inj, denote_distinct_eq_top_iff]
+    have hmap : Ts.Nodup ↔ Function.Injective (fun i : Fin n => ⟦ts i⟧ˢ) := by
+      rw [← List.nodup_ofFn (f := fun i : Fin n => ⟦ts i⟧ˢ), hAS,
+        List.nodup_map_iff (Option.some_injective Dom)]
+    rw [hmap]
+    unfold denote.distinct_alt_def
+    constructor
+    · intro hinj i j hij heq
+      exact absurd (hinj heq) (ne_of_lt hij)
+    · intro hpair i j heq
+      rcases lt_trichotomy i j with h | h | h
+      · exact absurd heq (hpair i j h)
+      · exact h
+      · exact absurd heq.symm (hpair j i h)
 
-      by_contra contr
-      replace contr : D₂ = ⊤ :=  ZFBool.not_bot_iff_top.mp λ h => contr h.symm
-      unfold D₂ denote.distinct_alt_def at contr
-      lift_lets at contr
-      extract_lets σ at contr
-      letI hts := choose_spec (denote.distinct_alt_def._proof_1 h)
-      sorry
-    | true => sorry
+end SMT
