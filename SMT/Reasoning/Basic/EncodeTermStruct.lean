@@ -3929,6 +3929,24 @@ theorem encodeTerm_state.erase_insert_self {a : SMT.𝒱} {τ : SMTType}
   rw [AList.entries_insert_of_notMem ha]
   exact List.kerase_cons_eq rfl
 
+/-- Erasing a key that is absent from the context is the identity. -/
+theorem encodeTerm_state.erase_of_notMem {a : SMT.𝒱} {s : SMT.TypeContext}
+    (ha : a ∉ s) : s.erase a = s := by
+  apply AList.ext
+  show List.kerase a s.entries = s.entries
+  exact List.kerase_of_notMem_keys (by simpa [AList.mem_keys] using ha)
+
+/-- Folding `erase` over a list of keys all absent from the context is the
+identity. -/
+theorem encodeTerm_state.foldl_erase_of_notMem (zs : List SMT.𝒱)
+    {s : SMT.TypeContext} (hzs : ∀ z ∈ zs, z ∉ s) :
+    zs.foldl (fun Γ v => Γ.erase v) s = s := by
+  induction zs generalizing s with
+  | nil => rfl
+  | cons z zs ih =>
+    rw [List.foldl_cons, encodeTerm_state.erase_of_notMem (hzs z (List.mem_cons_self ..))]
+    exact ih (fun w hw => hzs w (List.mem_cons_of_mem _ hw))
+
 /-- Spec for the `forIn` loop in the function-`D` arm of `encodeTerm`'s
 `collect`/`all` cases: it folds a bare `modify (types := types.insert …)` over a
 pair list. Unlike `addToContext`, this updates only `types` — `usedVars` and
@@ -4123,6 +4141,77 @@ theorem encodeTerm_state.mapFinIdxM_all_state
       ⌜ Γ' = Γ ∧ E'.freshvarsc = n ∧ E'.usedVars = used ∧ τs.length = tmp_τs.length ⌝⦄ := by
   unfold List.mapFinIdxM
   exact encodeTerm_state.mapFinIdxM_go_all_state vs flags tmp_τs hvs_eq tmp_τs #[] (by simp)
+
+/-- `declarations`-only spec for the `mapFinIdxM.go` flag pass of the `all`
+encoder: the pass only does `pure`/`throw`, so `declarations` is unchanged. -/
+theorem encodeTerm_state.mapFinIdxM_go_all_decls
+    (vs : List SMT.𝒱) (flags : List SMT.𝒱) (tmp_τs : List SMTType)
+    (hvs_eq : vs.length = tmp_τs.length)
+    (bs : List SMTType) (acc : Array SMTType) (hsize : bs.length + acc.size = tmp_τs.length)
+    {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝⦄
+    List.mapFinIdxM.go (as := tmp_τs)
+      (fun i τ hi =>
+        (if vs[i]'(by omega) ∈ flags then
+          (match τ with
+          | .fun (.pair α β) .bool => pure (.fun α (.option β))
+          | .fun α (.option β) => pure (.fun α (.option β))
+          | ξ => throw s!"encodeTerm:all: Unsupported flag type {vs[i]'(by omega)} : {ξ}"
+            : Encoder SMTType)
+        else pure τ))
+      bs acc hsize
+    ⦃ ⇓? _ ⟨E', _⟩ => ⌜E'.declarations = decl⌝ ⦄ := by
+  induction bs generalizing acc decl with
+  | nil =>
+    mintro pre ∀S; mpure pre
+    simp only [List.mapFinIdxM.go]
+    mspec Std.Do.Spec.pure
+  | cons b bs' ih =>
+    mintro pre ∀S; mpure pre
+    simp only [List.mapFinIdxM.go]
+    have h_acc_lt : acc.size < tmp_τs.length := by
+      simp only [List.length_cons] at hsize; omega
+    have hsize_cons : bs'.length + 1 + acc.size = tmp_τs.length := by
+      simp only [List.length_cons] at hsize; omega
+    by_cases hf : vs[acc.size]'(by omega) ∈ flags
+    · simp only [hf, if_true]
+      split
+      · rename_i τ_o α₀ β₀
+        have hsize_push : bs'.length + (acc.push (.fun α₀ (.option β₀))).size = tmp_τs.length := by
+          simp only [Array.size_push]; omega
+        mspec Std.Do.Spec.pure
+        mspec (ih (acc.push (.fun α₀ (.option β₀))) hsize_push)
+      · rename_i τ_o α₀ β₀
+        have hsize_push : bs'.length + (acc.push (.fun α₀ (.option β₀))).size = tmp_τs.length := by
+          simp only [Array.size_push]; omega
+        mspec Std.Do.Spec.pure
+        mspec (ih (acc.push (.fun α₀ (.option β₀))) hsize_push)
+      · mspec
+    · simp only [hf, if_false]
+      have hsize_push : bs'.length + (acc.push b).size = tmp_τs.length := by
+        simp only [Array.size_push]; omega
+      mspec Std.Do.Spec.pure
+      mspec (ih (acc.push b) hsize_push)
+
+/-- Top-level `declarations`-only spec for the `all` encoder's `mapFinIdxM`
+flag pass. See `mapFinIdxM_go_all_decls`. -/
+theorem encodeTerm_state.mapFinIdxM_all_decls
+    (vs : List SMT.𝒱) (flags : List SMT.𝒱) (tmp_τs : List SMTType)
+    (hvs_eq : vs.length = tmp_τs.length)
+    {decl : SMT.Chunk} :
+    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝⦄
+    tmp_τs.mapFinIdxM
+      (fun i τ hi =>
+        (if vs[i]'(by omega) ∈ flags then
+          (match τ with
+          | .fun (.pair α β) .bool => pure (.fun α (.option β))
+          | .fun α (.option β) => pure (.fun α (.option β))
+          | ξ => throw s!"encodeTerm:all: Unsupported flag type {vs[i]'(by omega)} : {ξ}"
+            : Encoder SMTType)
+        else pure τ))
+    ⦃ ⇓? _ ⟨E', _⟩ => ⌜E'.declarations = decl⌝ ⦄ := by
+  unfold List.mapFinIdxM
+  exact encodeTerm_state.mapFinIdxM_go_all_decls vs flags tmp_τs hvs_eq tmp_τs #[] (by simp)
 
 set_option maxHeartbeats 4000000 in
 /-- Structural postcondition of `encodeTerm` (no `«Δ»`, no `respects`, no
@@ -7206,6 +7295,29 @@ theorem SMT.eraseFromContext_forIn_decls (zs : List SMT.𝒱) {decl : SMT.Chunk}
     mspec Std.Do.Spec.pure
     mspec ih
 
+/-- State spec for the final `eraseFromContext` `forIn` loop of the `all`
+encoder: after erasing each `v ∈ zs`, the context is `zs.foldl (·.erase ·) Γ`,
+and `freshvarsc`/`usedVars` are unchanged. -/
+theorem SMT.eraseFromContext_forIn_spec (zs : List SMT.𝒱) {Γ : SMT.TypeContext}
+    {n : ℕ} {used : List SMT.𝒱} :
+    ⦃ λ ⟨E, Λ⟩ ↦ ⌜Λ = Γ ∧ E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
+    forIn zs PUnit.unit (fun (v : SMT.𝒱) _ => do
+      SMT.eraseFromContext v; pure (ForInStep.yield PUnit.unit))
+    ⦃ ⇓ () ⟨E, Λ⟩ => ⌜Λ = zs.foldl (fun Γ v => Γ.erase v) Γ ∧
+      E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄ := by
+  induction zs generalizing Γ with
+  | nil =>
+    mintro pre ∀S; mpure pre; obtain ⟨rfl, rfl, rfl⟩ := pre
+    simp only [List.forIn_nil]
+    mpure_intro; exact ⟨rfl, rfl, rfl⟩
+  | cons z zs ih =>
+    mintro pre ∀S; mpure pre; obtain ⟨rfl, rfl, rfl⟩ := pre
+    simp only [List.forIn_cons, bind_assoc]
+    mspec SMT.eraseFromContext_spec
+    mspec Std.Do.Spec.pure
+    simp only [List.foldl_cons]
+    exact ih
+
 /-- `freshVarList` leaves `declarations` unchanged (only calls `freshVar`). -/
 theorem SMT.freshVarList_decls (τs : List SMTType) {decl : SMT.Chunk} :
     ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
@@ -9394,6 +9506,58 @@ theorem specBody_mono {b : SMT.Term} {vx vt dx dt : List SMT.𝒱}
   rcases List.mem_union_iff.mp (h hw) with hvv | hdd
   · exact List.mem_union_iff.mpr (.inl (hv hvv))
   · exact List.mem_union_iff.mpr (.inr (hd hdd))
+
+/-- The `ex_binders` produced by the `all` encoder (`filterMap`-ing
+`declare_const` instructions to `(v, τ)` pairs) project onto exactly the
+`declVars` of the chunk. -/
+theorem map_fst_exBinders_eq_declVars (decls : SMT.Chunk) :
+    (decls.filterMap (fun | .declare_const v τ => some (v, τ) | _ => none)).map Prod.fst
+      = declVars decls := by
+  unfold declVars
+  induction decls with
+  | nil => rfl
+  | cons i is ih =>
+    cases i <;> simp_all
+
+/-- The `spec_bodies` produced by the `all` encoder (`filterMap`-ing
+`define_fun _ unit bool` instructions to their bodies) is exactly `specBodies`. -/
+theorem filterMap_specBodies_eq (decls : SMT.Chunk) :
+    decls.filterMap (fun | .define_fun _ .unit .bool b => some b | _ => none)
+      = specBodies decls := rfl
+
+/-- Free vars of an `.imp`-right-fold: a variable is free iff it is free in one
+of the folded clauses or in the base term.  Used in the `all` case to analyse
+`inner = spec_bodies.foldr (.imp · ·) base`. -/
+theorem mem_fv_foldr_imp {bs : List SMT.Term} {base : SMT.Term} {v : SMT.𝒱}
+    (hv : v ∈ SMT.fv (bs.foldr (.imp · ·) base)) :
+    (∃ b ∈ bs, v ∈ SMT.fv b) ∨ v ∈ SMT.fv base := by
+  induction bs with
+  | nil => exact Or.inr hv
+  | cons b bs ih =>
+    simp only [List.foldr_cons, SMT.fv, List.mem_append] at hv
+    rcases hv with hb | hrest
+    · exact Or.inl ⟨b, List.mem_cons_self .., hb⟩
+    · rcases ih hrest with ⟨b', hb', hvb'⟩ | hbase
+      · exact Or.inl ⟨b', List.mem_cons_of_mem _ hb', hvb'⟩
+      · exact Or.inr hbase
+
+/-- Free vars of a `.forall`-binder right-fold: a variable free in the result is
+free in the body `inner` and is not one of the bound binder names.  Used in the
+`all` case to analyse `scoped_body = ex_binders.foldr (fun (v,τ) t => .forall …)`. -/
+theorem mem_fv_foldr_forall {ps : List (SMT.𝒱 × SMTType)} {inner : SMT.Term}
+    {v : SMT.𝒱}
+    (hv : v ∈ SMT.fv (ps.foldr (fun (p : SMT.𝒱 × SMTType) t => SMT.Term.forall [p.1] [p.2] t)
+      inner)) :
+    v ∈ SMT.fv inner ∧ v ∉ ps.map Prod.fst := by
+  induction ps with
+  | nil => exact ⟨hv, by simp⟩
+  | cons p ps ih =>
+    simp only [List.foldr_cons, SMT.fv, List.mem_removeAll_iff, List.mem_singleton] at hv
+    obtain ⟨hv_inner, hv_ne⟩ := hv
+    obtain ⟨hv_in, hv_notMem⟩ := ih hv_inner
+    refine ⟨hv_in, ?_⟩
+    simp only [List.map_cons, List.mem_cons, not_or]
+    exact ⟨hv_ne, hv_notMem⟩
 
 set_option maxHeartbeats 4000000 in
 /-- Combined structural specification of `encodeTerm`: the `encodeTerm_state`
