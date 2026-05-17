@@ -2480,7 +2480,7 @@ theorem castMembership_decl
     {used : List SMT.𝒱} {decl : SMT.Chunk} :
     ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
-          SMT.fv x ⊆ AList.keys Λ ∧ SMT.fv S ⊆ AList.keys Λ ∧ E.declarations = decl⌝ ⦄
+          E.declarations = decl⌝ ⦄
     castMembership (x, σx) (S, σS)
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       ∃ Dlt : SMT.Chunk,
@@ -2491,7 +2491,7 @@ theorem castMembership_decl
   mvcgen
   case vc1.h_1.isTrue =>
     rename_i α' hσS hσx St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     refine ⟨[], by simp, by simp, ?_⟩
     intro v hv
     simp only [SMT.fv, List.mem_append, declVars_nil, List.mem_union_iff,
@@ -2499,7 +2499,7 @@ theorem castMembership_decl
     tauto
   case vc2.h_1.isFalse.isTrue =>
     rename_i α' hσS hσx_ne hσx_le St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     mspec loosenAux_prf_state_decls
     mrename_i pre
     mintro ∀St₁
@@ -2528,7 +2528,7 @@ theorem castMembership_decl
       tauto
   case vc3.h_1.isFalse.isFalse.isTrue =>
     rename_i α' hσS hσx_ne hσx_nle hα'_le St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     mspec loosenAux_prf_state_decls
     mrename_i pre
     mintro ∀St₁
@@ -2557,7 +2557,7 @@ theorem castMembership_decl
       tauto
   case vc4.h_2.h_1.isTrue.isTrue =>
     rename_i α' β' hσS α β hσx hα_le hβ_le St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     mspec loosenAux_prf_state_decls
     mrename_i pre
     mintro ∀St₁
@@ -2586,7 +2586,7 @@ theorem castMembership_decl
       tauto
   case vc5.h_2.h_1.isTrue.isFalse.isTrue =>
     rename_i α' β' hσS α β hσx hα_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     mspec loosenAux_prf_state_decls
     mrename_i prex
     mintro ∀St₁
@@ -2640,7 +2640,7 @@ theorem castMembership_decl
       tauto
   case vc6.h_2.h_1.isFalse.isTrue.isTrue =>
     rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_le St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     mspec loosenAux_prf_state_decls
     mrename_i prey
     mintro ∀St₁
@@ -2703,7 +2703,7 @@ theorem castMembership_decl
       · exact Or.inr (Or.inl hyeq)
   case vc7.h_2.h_1.isFalse.isTrue.isFalse.isTrue =>
     rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hx_fv, hS_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     mspec loosenAux_prf_state_decls
     mrename_i pre
     mintro ∀St₁
@@ -2740,7 +2740,7 @@ theorem castEq_decl
     {used : List SMT.𝒱} {decl : SMT.Chunk} :
     ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
-          SMT.fv A ⊆ AList.keys Λ ∧ SMT.fv B ⊆ AList.keys Λ ∧ E.declarations = decl⌝ ⦄
+          E.declarations = decl⌝ ⦄
     castEq (A, σA) (B, σB)
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       ∃ Dlt : SMT.Chunk,
@@ -2751,7 +2751,7 @@ theorem castEq_decl
   mvcgen
   · -- σA = σB : direct equality `A =ˢ B`
     rename_i hpre
-    obtain ⟨rfl, rfl, sub, rfl, hA_fv, hB_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     refine ⟨[], by simp, by simp, ?_⟩
     intro v hv
     simp only [SMT.fv, List.mem_append, declVars_nil, List.mem_union_iff,
@@ -2759,7 +2759,7 @@ theorem castEq_decl
     tauto
   · -- σA ⊑ σB : loosen A
     rename_i hpre
-    obtain ⟨rfl, rfl, sub, rfl, hA_fv, hB_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     mspec loosenAux_prf_state_decls
     mrename_i pre
     mintro ∀St₁
@@ -2788,7 +2788,7 @@ theorem castEq_decl
       tauto
   · -- σB ⊑ σA : loosen B
     rename_i hpre
-    obtain ⟨rfl, rfl, sub, rfl, hA_fv, hB_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     mspec loosenAux_prf_state_decls
     mrename_i pre
     mintro ∀St₁
@@ -2826,7 +2826,7 @@ theorem castUnionAux_decl
     {used : List SMT.𝒱} {decl : SMT.Chunk} :
     ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
-          SMT.fv S ⊆ AList.keys Λ ∧ SMT.fv T ⊆ AList.keys Λ ∧ E.declarations = decl⌝ ⦄
+          E.declarations = decl⌝ ⦄
     castUnionAux S T c
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       ∃ Dlt : SMT.Chunk,
@@ -2837,7 +2837,7 @@ theorem castUnionAux_decl
   | @graph α β α' β' c_α c_β =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castUnionAux castUnion.graph
     mspec loosenAux_prf_state_decls
     mrename_i pre
@@ -2892,7 +2892,7 @@ theorem castUnionAux_decl
   | @«fun» α β α' β' hβ c_α c_β =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castUnionAux castUnion.fun
     mspec loosenAux_prf_state_decls
     mrename_i pre
@@ -2951,7 +2951,7 @@ theorem castUnionAux_decl
   | @chpred α α' c_α =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castUnionAux castUnion.chpred
     mspec loosenAux_prf_state_decls
     mrename_i pre
@@ -3006,19 +3006,19 @@ theorem castUnionAux_decl
   | @opt α α' c_α =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castUnionAux
     mvcgen
   | @pair α β α' β' c_α c_β =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castUnionAux
     mvcgen
   | @refl α hα =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castUnionAux
     mvcgen
 
@@ -3032,7 +3032,7 @@ theorem castInterAux_decl
     {used : List SMT.𝒱} {decl : SMT.Chunk} :
     ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
-          SMT.fv S ⊆ AList.keys Λ ∧ SMT.fv T ⊆ AList.keys Λ ∧ E.declarations = decl⌝ ⦄
+          E.declarations = decl⌝ ⦄
     castInterAux S T c
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       ∃ Dlt : SMT.Chunk,
@@ -3043,7 +3043,7 @@ theorem castInterAux_decl
   | @graph α β α' β' c_α c_β =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castInterAux
     mspec loosenAux_prf_state_decls
     mrename_i pre
@@ -3098,7 +3098,7 @@ theorem castInterAux_decl
   | @«fun» α β α' β' hβ c_α c_β =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castInterAux
     mspec loosenAux_prf_state_decls
     mrename_i pre
@@ -3157,7 +3157,7 @@ theorem castInterAux_decl
   | @chpred α α' c_α =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castInterAux
     mspec loosenAux_prf_state_decls
     mrename_i pre
@@ -3212,19 +3212,19 @@ theorem castInterAux_decl
   | @opt α α' c_α =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castInterAux
     mvcgen
   | @pair α β α' β' c_α c_β =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castInterAux
     mvcgen
   | @refl α hα =>
     mintro pre ∀St
     mpure pre
-    obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv, rfl⟩ := pre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castInterAux
     mvcgen
 
@@ -3241,7 +3241,7 @@ theorem castApp_decl
     {used : List SMT.𝒱} {decl : SMT.Chunk} :
     ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used ∧
-          SMT.fv f ⊆ AList.keys Λ ∧ SMT.fv x ⊆ AList.keys Λ ∧ E.declarations = decl⌝ ⦄
+          E.declarations = decl⌝ ⦄
     castApp (f, σf) (x, σx)
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       ∃ Dlt : SMT.Chunk,
@@ -3252,7 +3252,7 @@ theorem castApp_decl
   mvcgen
   case vc3.h_2.isTrue =>
     rename_i hxeq hfeq _ St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
     mspec loosenAux_prf_state_decls
@@ -3297,7 +3297,7 @@ theorem castApp_decl
         · exact Or.inl (Or.inr hvx)⟩
   case vc4.h_2.isFalse.isTrue =>
     rename_i hxeq hfeq _ _ St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
     mspec loosenAux_prf_state_decls
@@ -3342,7 +3342,7 @@ theorem castApp_decl
         · exact Or.inr hvx!⟩
   case vc5.h_3.isTrue =>
     rename_i hxeq hfeq _ St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
     mspec loosenAux_prf_state_decls
@@ -3387,7 +3387,7 @@ theorem castApp_decl
         · exact Or.inl (Or.inr hvx)⟩
   case vc6.h_3.isFalse.isTrue =>
     rename_i hxeq hfeq _ _ St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
     mspec loosenAux_prf_state_decls
@@ -3432,7 +3432,7 @@ theorem castApp_decl
         · exact Or.inr hvx!⟩
   case vc1.h_1.isTrue =>
     rename_i hxeq hfeq _ St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
     mspec loosenAux_prf_state_decls
@@ -3517,7 +3517,7 @@ theorem castApp_decl
               · exact Or.inl (Or.inr hvx)⟩
   case vc2.h_1.isFalse.isTrue =>
     rename_i hxeq hfeq _ _ St hpre
-    obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv, rfl⟩ := hpre
+    obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := hpre
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hxeq
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp hfeq
     mspec loosenAux_prf_state_decls
@@ -7898,19 +7898,13 @@ theorem encodeTerm_decl
     rename_i out_S
     obtain ⟨S_enc, σS⟩ := out_S
     mspec castMembership_decl
-    case pre =>
-      mpure_intro
-      refine ⟨trivial, trivial, S_keys_sub, rfl, ?_, S_fv_sub, S_decl_eq⟩
-      intro v hv
-      exact AList.mem_keys.mp (AList.mem_of_subset S_Λ_sub
-        (AList.mem_keys.mpr (x_fv_sub hv)))
     mrename_i pre
     mintro ∀σ'
     mpure pre
     obtain ⟨Dlt, cm_decl_eq, cm_spec_nil, cm_fv_sub⟩ := pre
     mpure_intro
     refine ⟨Δx ++ ΔS ++ Dlt, ?_, ?_⟩
-    · rw [cm_decl_eq]; simp only [List.append_assoc]
+    · rw [cm_decl_eq, S_decl_eq]; simp only [List.append_assoc]
     · intro v hv
       have hv' := cm_fv_sub hv
       rw [B.fv, declVars_append, declVars_append]
@@ -7988,19 +7982,13 @@ theorem encodeTerm_decl
     rename_i out_y
     obtain ⟨y_enc, σy⟩ := out_y
     mspec castEq_decl
-    case pre =>
-      mpure_intro
-      refine ⟨trivial, trivial, y_keys_sub, rfl, ?_, y_fv_sub, y_decl_eq⟩
-      intro v hv
-      exact AList.mem_keys.mp (AList.mem_of_subset y_Λ_sub
-        (AList.mem_keys.mpr (x_fv_sub hv)))
     mrename_i pre
     mintro ∀σ'
     mpure pre
     obtain ⟨Dlt, ce_decl_eq, ce_spec_nil, ce_fv_sub⟩ := pre
     mpure_intro
     refine ⟨Δx ++ Δy ++ Dlt, ?_, ?_⟩
-    · rw [ce_decl_eq]; simp only [List.append_assoc]
+    · rw [ce_decl_eq, y_decl_eq]; simp only [List.append_assoc]
     · intro v hv
       have hv' := ce_fv_sub hv
       rw [B.fv, declVars_append, declVars_append]
@@ -8491,19 +8479,13 @@ theorem encodeTerm_decl
     rename_i out_x
     obtain ⟨x_enc, σx⟩ := out_x
     mspec castApp_decl
-    case pre =>
-      mpure_intro
-      refine ⟨trivial, trivial, x_keys_sub, rfl, ?_, x_fv_sub, x_decl_eq⟩
-      intro v hv
-      exact AList.mem_keys.mp (AList.mem_of_subset x_Λ_sub
-        (AList.mem_keys.mpr (f_fv_sub hv)))
     mrename_i pre
     mintro ∀σ'
     mpure pre
     obtain ⟨Dlt, ca_decl_eq, ca_spec_sub, ca_fv_sub⟩ := pre
     mpure_intro
     refine ⟨Δf ++ Δx ++ Dlt, ?_, ?_⟩
-    · rw [ca_decl_eq]; simp only [List.append_assoc]
+    · rw [ca_decl_eq, x_decl_eq]; simp only [List.append_assoc]
     · intro v hv
       have hv' := ca_fv_sub hv
       rw [B.fv, declVars_append, declVars_append]
@@ -8743,19 +8725,13 @@ theorem encodeTerm_decl
           case pre =>
             mpure_intro
             refine ⟨⟨rfl, rfl, St₄_keys_sub, rfl, ?_, ?_⟩,
-              rfl, rfl, St₄_keys_sub, rfl, ?_, ?_, St₄_decl⟩
+              rfl, rfl, St₄_keys_sub, rfl, St₄_decl⟩
             · intro v hv
               exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
                 St₁_sub_St₄ (AList.mem_keys.mpr (D_state_fv_sub hv)))))
             · intro v hv
               exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (xs_sub_St₄_types v
                 (encodeTerm_state.fv_toPairl_map_var_subset xs v hv))))
-            · intro v hv
-              exact AList.mem_keys.mp (AList.mem_of_subset St₁_sub_St₄
-                (AList.mem_keys.mpr (D_state_fv_sub hv)))
-            · intro v hv
-              exact AList.mem_keys.mp (xs_sub_St₄_types v
-                (encodeTerm_state.fv_toPairl_map_var_subset xs v hv))
           case post.success =>
             rename_i out_ca
             obtain ⟨Dxs, σDxs⟩ := out_ca
