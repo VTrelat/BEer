@@ -400,6 +400,7 @@ private theorem chpredDenSpecSomeAt
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = α' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = α' →
@@ -441,7 +442,7 @@ private theorem chpredDenSpecSomeAt
             hφY⟧ˢ =
           some Φ ∧
         Φ.snd.fst = SMTType.bool := by
-  obtain ⟨_, _, _, _, _, _, _, htot0⟩ := den_z_at x₀ hx₀_ty hx₀_mem
+  obtain ⟨_, _, _, _, _, _, _, _, htot0⟩ := den_z_at x₀ hx₀_ty hx₀_mem
   let Δbase : SMT.RenamingContext.Context :=
     Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some wy0)
   have hφ_base : SMT.RenamingContext.CoversFV Δbase z!_spec := by
@@ -559,6 +560,7 @@ private theorem chpredDenSpecTrueAtCast
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = α' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ cast) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = α' →
@@ -603,20 +605,14 @@ private theorem chpredDenSpecTrueAtCast
             hφY⟧ˢ =
           some Φ ∧
         Φ.fst = zftrue := by
-  obtain ⟨Φ0, X₀!, hden_var_z!, hφ0, hden0, _, hΦ0_true_cast, _⟩ := den_z_at x₀ hx₀_ty hx₀_mem
+  obtain ⟨Φ0, X₀!, hden_var_z!, hφ0, hden0, hX₀_ty, _, hΦ0_true_cast, _⟩ := den_z_at x₀ hx₀_ty hx₀_mem
   obtain ⟨hΦ0_true, hcast0⟩ := hΦ0_true_cast
   have hcast_pfunc :
       cast.IsPFunc ⟦α⟧ᶻ ⟦α'⟧ᶻ :=
     ZFSet.is_func_is_pfunc hcast
   have hx₀_cast_dom : x₀.fst ∈ cast.Dom := by
     simpa [ZFSet.is_func_dom_eq hcast] using hx₀_mem
-  -- TODO: blocked on loosenAux_prf_spec postcondition (adequacy clause).
-  -- `X₀!` is the existentially-bound loosened value supplied by `den_z_at`; its
-  -- denotation `hden_var_z!` carries no type information, so deriving `X₀!.snd.fst = α'`
-  -- via the FV-restricted `denote_type_of_typing_fv` on the bare `Term.var z!` is
-  -- circular. The honest fix strengthens `den_z_at`'s postcondition.
-  have hX₀_ty : X₀!.snd.fst = α' :=
-    denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!) (hΔΓ := sorry)
+  -- `X₀!`'s type tag is now supplied by the strengthened `den_z_at` adequacy clause.
   have hX₀_val :
       X₀!.fst = (@ᶻcast ⟨x₀.fst, hx₀_cast_dom⟩) := by
     symm
@@ -736,6 +732,7 @@ private theorem chpredBodyTotal
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = α' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = α' →
@@ -2282,6 +2279,7 @@ theorem loosenAux_prf_exact.chpred («Δ» : RenamingContext.Context.{u})
                                                   RenamingContext.CoversFV (Function.update «Δ₀» x! (some X!)) x!_spec)
                                                   (denφ :
                                                   ⟦x!_spec.abstract (Function.update «Δ₀» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path p).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -2329,6 +2327,7 @@ theorem loosenAux_prf_exact.chpred («Δ» : RenamingContext.Context.{u})
                                         ∃ (_ : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec) (_
                                           : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                          X!.snd.fst = α'.fun SMTType.bool ∧
                                           Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path p.chpred).1) ∧
                                               ∀ (Y : SMT.Dom),
@@ -2591,6 +2590,7 @@ theorem loosenAux_prf_exact.chpred («Δ» : RenamingContext.Context.{u})
                     ⟦z!_spec.abstract
                       (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                       some Φ),
+                  X₀!.snd.fst = α' ∧
                   Φ.snd.fst = SMTType.bool ∧
                     (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
                       ∀ (Y : SMT.Dom),
@@ -2729,7 +2729,7 @@ theorem loosenAux_prf_exact.chpred («Δ» : RenamingContext.Context.{u})
               apply Option.get_of_eq_some
               simp [Δx₀]
             obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hden_z_x₀⟩ := post_x₀
-            obtain ⟨_, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
+            obtain ⟨_, _, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
             exact (htot_x₀ Y hY_ty hφY).2 hdenY htrue
           have hfv_spec_sub :
               SMT.fv
@@ -3139,7 +3139,7 @@ theorem loosenAux_prf_exact.chpred («Δ» : RenamingContext.Context.{u})
             rw [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.some_inj]
             apply Option.get_of_eq_some
             exact Function.update_self _ _ _
-          refine ⟨⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, X!, ?_, ?_, ?_, rfl, ?_⟩
+          refine ⟨⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, X!, ?_, ?_, ?_, rfl, rfl, ?_⟩
           · exact hvar_X!
           · intro v hv
             by_cases hvx : v = x!
