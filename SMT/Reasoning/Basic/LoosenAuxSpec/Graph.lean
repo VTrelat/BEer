@@ -225,6 +225,7 @@ private abbrev GraphOuterIH.{u}
                                                       (Function.update «Δ₀» x! (some X!))
                                                       hφ⟧ˢ =
                                                     some Φ),
+                                                X!.snd.fst = τ' ∧
                                                 Φ.snd.fst = SMTType.bool ∧
                                                   (Φ.fst = zftrue ∧
                                                     X.fst.pair X!.fst ∈ (castZF_of_path p).1) ∧
@@ -283,6 +284,7 @@ private abbrev GraphOuterIHAt.{u}
                                                       (Function.update «Δ₀» x! (some X!))
                                                       hφ⟧ˢ =
                                                     some Φ),
+                                                X!.snd.fst = τ' ∧
                                                 Φ.snd.fst = SMTType.bool ∧
                                                   (Φ.fst = zftrue ∧
                                                     X.fst.pair X!.fst ∈ (castZF_of_path p).1) ∧
@@ -549,6 +551,7 @@ private theorem graphDenSpecSomeAt
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = σ' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = σ' →
@@ -583,7 +586,7 @@ private theorem graphDenSpecSomeAt
             hφY⟧ˢ =
           some Φ ∧
         Φ.snd.fst = SMTType.bool := by
-  obtain ⟨_, _, _, _, _, _, _, htot0⟩ := den_z_at x₀ hx₀_ty hx₀_mem
+  obtain ⟨_, _, _, _, _, _, _, _, htot0⟩ := den_z_at x₀ hx₀_ty hx₀_mem
   let Δbase : SMT.RenamingContext.Context :=
     Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some wy0)
   have hφ_base : SMT.RenamingContext.CoversFV Δbase z!_spec := by
@@ -771,6 +774,7 @@ private theorem graphDenSpecTrueAtCast
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = σ' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ cast) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = σ' →
@@ -808,20 +812,14 @@ private theorem graphDenSpecTrueAtCast
             hφY⟧ˢ =
           some Φ ∧
         Φ.fst = zftrue := by
-  obtain ⟨Φ0, X₀!, hden_var_z!, hφ0, hden0, _, hΦ0_true_cast, _⟩ := den_z_at x₀ hx₀_ty hx₀_mem
+  obtain ⟨Φ0, X₀!, hden_var_z!, hφ0, hden0, hX₀_ty, _, hΦ0_true_cast, _⟩ := den_z_at x₀ hx₀_ty hx₀_mem
   obtain ⟨hΦ0_true, hcast0⟩ := hΦ0_true_cast
   have hcast_pfunc :
       cast.IsPFunc ⟦σ⟧ᶻ ⟦σ'⟧ᶻ :=
     ZFSet.is_func_is_pfunc hcast
   have hx₀_cast_dom : x₀.fst ∈ cast.Dom := by
     simpa [ZFSet.is_func_dom_eq hcast] using hx₀_mem
-  -- TODO: blocked on loosenAux_prf_spec postcondition. `X₀!` is the existentially-bound
-  -- loosened value supplied by `den_z_at`; `hden_var_z!` is the trivial denotation of the
-  -- bare `Term.var z!`, carrying no type info, so `X₀!.snd.fst = σ'` is not derivable
-  -- here (the FV-restricted respects on `Term.var z!` would itself require it). Fixing
-  -- requires strengthening the adequacy clause of `loosenAux_prf_spec`'s postcondition.
-  have hX₀_ty : X₀!.snd.fst = σ' :=
-    denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!) (hΔΓ := sorry)
+  -- `X₀!`'s type tag is now supplied by the strengthened `den_z_at` adequacy clause.
   have hX₀_val :
       X₀!.fst = (@ᶻcast ⟨x₀.fst, hx₀_cast_dom⟩) := by
     symm
@@ -1355,6 +1353,7 @@ private theorem graphBodyTotal
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = α'.pair β' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path (pα.pair pβ)).1) ∧
                 ∀ (Y : SMT.Dom),
@@ -2689,6 +2688,7 @@ private theorem graphDenZAt.{u}
                   (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!))
                 hφ⟧ˢ =
               some Φ),
+          X₀!.snd.fst = α'.pair β' ∧
           Φ.snd.fst = SMTType.bool ∧
             (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path (pα.pair pβ)).1) ∧
               ∀ (Y : SMT.Dom),
@@ -4052,6 +4052,7 @@ theorem loosenAux_prf_spec.graph.{uGraphSpecProof} («Δ» : RenamingContext.Con
                                                   RenamingContext.CoversFV (Function.update «Δ₀» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ₀» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path pα).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -4099,6 +4100,7 @@ theorem loosenAux_prf_spec.graph.{uGraphSpecProof} («Δ» : RenamingContext.Con
                                                   RenamingContext.CoversFV (Function.update «Δ₀» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ₀» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = β' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path pβ).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -4140,6 +4142,7 @@ theorem loosenAux_prf_spec.graph.{uGraphSpecProof} («Δ» : RenamingContext.Con
                                         ∃ (_ : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec) (_
                                           : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                          X!.snd.fst = (α'.pair β').fun SMTType.bool ∧
                                           Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path (pα.graph pβ)).1) ∧
                                               ∀ (Y : SMT.Dom),

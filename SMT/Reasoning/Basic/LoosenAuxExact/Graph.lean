@@ -225,6 +225,7 @@ private abbrev GraphOuterIH.{u}
                                                       (Function.update «Δ₀» x! (some X!))
                                                       hφ⟧ˢ =
                                                     some Φ),
+                                                X!.snd.fst = τ' ∧
                                                 Φ.snd.fst = SMTType.bool ∧
                                                   (Φ.fst = zftrue ∧
                                                     X.fst.pair X!.fst ∈ (castZF_of_path p).1) ∧
@@ -283,6 +284,7 @@ private abbrev GraphExactOuterIH.{u}
                                                       (Function.update «Δ₀» x! (some X!))
                                                       hφ⟧ˢ =
                                                     some Φ),
+                                                X!.snd.fst = τ' ∧
                                                 Φ.snd.fst = SMTType.bool ∧
                                                   (Φ.fst = zftrue ∧
                                                     X.fst.pair X!.fst ∈ (castZF_of_path p).1) ∧
@@ -348,6 +350,7 @@ private abbrev GraphOuterIHAt.{u}
                                                       (Function.update «Δ₀» x! (some X!))
                                                       hφ⟧ˢ =
                                                     some Φ),
+                                                X!.snd.fst = τ' ∧
                                                 Φ.snd.fst = SMTType.bool ∧
                                                   (Φ.fst = zftrue ∧
                                                     X.fst.pair X!.fst ∈ (castZF_of_path p).1) ∧
@@ -381,8 +384,8 @@ private theorem graphWeakenExactIH.{u}
   and_intros <;> try assumption
   intro X denx
   specialize h X denx
-  obtain ⟨Φ, X!, denx!, hφ, denφ, hΦ_ty, hΦ_true_cast, hrest⟩ := h
-  use Φ, X!, denx!, hφ, denφ, hΦ_ty, hΦ_true_cast
+  obtain ⟨Φ, X!, denx!, hφ, denφ, hX!_ty, hΦ_ty, hΦ_true_cast, hrest⟩ := h
+  use Φ, X!, denx!, hφ, denφ, hX!_ty, hΦ_ty, hΦ_true_cast
   intro Y hY_ty hφY
   exact (hrest Y hY_ty hφY).1
 
@@ -628,6 +631,7 @@ private theorem graphDenSpecSomeAt
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = σ' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = σ' →
@@ -662,7 +666,7 @@ private theorem graphDenSpecSomeAt
             hφY⟧ˢ =
           some Φ ∧
         Φ.snd.fst = SMTType.bool := by
-  obtain ⟨_, _, _, _, _, _, _, htot0⟩ := den_z_at x₀ hx₀_ty hx₀_mem
+  obtain ⟨_, _, _, _, _, _, _, _, htot0⟩ := den_z_at x₀ hx₀_ty hx₀_mem
   let Δbase : SMT.RenamingContext.Context :=
     Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some wy0)
   have hφ_base : SMT.RenamingContext.CoversFV Δbase z!_spec := by
@@ -842,6 +846,7 @@ private theorem graphDenSpecTrueAtCast
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = σ' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ cast) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = σ' →
@@ -879,16 +884,14 @@ private theorem graphDenSpecTrueAtCast
             hφY⟧ˢ =
           some Φ ∧
         Φ.fst = zftrue := by
-  obtain ⟨Φ0, X₀!, hden_var_z!, hφ0, hden0, _, hΦ0_true_cast, _⟩ := den_z_at x₀ hx₀_ty hx₀_mem
+  obtain ⟨Φ0, X₀!, hden_var_z!, hφ0, hden0, hX₀_ty, _, hΦ0_true_cast, _⟩ := den_z_at x₀ hx₀_ty hx₀_mem
   obtain ⟨hΦ0_true, hcast0⟩ := hΦ0_true_cast
   have hcast_pfunc :
       cast.IsPFunc ⟦σ⟧ᶻ ⟦σ'⟧ᶻ :=
     ZFSet.is_func_is_pfunc hcast
   have hx₀_cast_dom : x₀.fst ∈ cast.Dom := by
     simpa [ZFSet.is_func_dom_eq hcast] using hx₀_mem
-  -- TODO: blocked on loosenAux_prf_spec postcondition (adequacy clause)
-  have hX₀_ty : X₀!.snd.fst = σ' :=
-    denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!) (hΔΓ := sorry)
+  -- `X₀!`'s type tag is now supplied by the strengthened `den_z_at` adequacy clause.
   have hX₀_val :
       X₀!.fst = (@ᶻcast ⟨x₀.fst, hx₀_cast_dom⟩) := by
     symm
@@ -1422,6 +1425,7 @@ private theorem graphBodyTotal
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = α'.pair β' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path (pα.pair pβ)).1) ∧
                 ∀ (Y : SMT.Dom),
@@ -2756,6 +2760,7 @@ private theorem graphDenZAt.{u}
                   (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!))
                 hφ⟧ˢ =
               some Φ),
+          X₀!.snd.fst = α'.pair β' ∧
           Φ.snd.fst = SMTType.bool ∧
             (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path (pα.pair pβ)).1) ∧
               ∀ (Y : SMT.Dom),
@@ -2905,6 +2910,7 @@ private theorem graphDenZExactAt.{u}
                                                           (Function.update Δx₀ x! (some X!))
                                                           hφ⟧ˢ =
                                                         some Φ),
+                                                    X!.snd.fst = α' ∧
                                                     Φ.snd.fst = SMTType.bool ∧
                                                       (Φ.fst = zftrue ∧
                                                         X.fst.pair X!.fst ∈ (castZF_of_path pα).1) ∧
@@ -2973,6 +2979,7 @@ private theorem graphDenZExactAt.{u}
                                                           (Function.update Δx₀ x! (some X!))
                                                           hφ⟧ˢ =
                                                         some Φ),
+                                                    X!.snd.fst = β' ∧
                                                     Φ.snd.fst = SMTType.bool ∧
                                                       (Φ.fst = zftrue ∧
                                                         X.fst.pair X!.fst ∈ (castZF_of_path pβ).1) ∧
@@ -3023,7 +3030,7 @@ private theorem graphDenZExactAt.{u}
     change (if z = z then some x₀ else «Δ» z) = some x₀
     rw [if_pos rfl]
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hden_z_x₀⟩ := post_x₀
-  obtain ⟨_, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
+  obtain ⟨_, _, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
   exact (htot_x₀ Y hY_ty hφY).2 hdenY htrue
 
 set_option maxHeartbeats 1500000 in
@@ -3186,6 +3193,7 @@ private theorem graphLambdaWitness
         x₀.fst.pair wy0.fst ∈ (castZF_of_path (pα.pair pβ)).1) :
     ∃ X! : SMT.Dom,
       X.fst.pair X!.fst ∈ (castZF_of_path (pα.graph pβ)).1 ∧
+      X!.snd.fst = (α'.pair β').fun SMTType.bool ∧
       ⟦((λˢ [z!]) [α'.pair β']
             (.exists [z] [α.pair β]
               ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec))).abstract
@@ -4071,7 +4079,7 @@ private theorem graphLambdaWitness
         exact graphSpecificArg hx_1 i))
     · exfalso
       exact hlen_pos (by simp)
-  refine ⟨X!, ?_, hden_lambda_X!⟩
+  refine ⟨X!, ?_, rfl, hden_lambda_X!⟩
   rw [castZF_of_path, castZF_graph, ZFSet.lambda_spec]
   refine ⟨hX_mem, hX!zf_mem, ?_⟩
   rw [dif_pos hX_func]
@@ -4156,6 +4164,7 @@ private theorem graphLambdaWitnessAt.{u}
     (z!_not_mem_fv_x : z! ∉ SMT.fv x) :
     ∃ X! : SMT.Dom,
       X.fst.pair X!.fst ∈ (castZF_of_path (pα.graph pβ)).1 ∧
+      X!.snd.fst = (α'.pair β').fun SMTType.bool ∧
       ⟦((λˢ [z!]) [α'.pair β']
             (.exists [z] [α.pair β]
               ((((@ˢx) (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec))).abstract
@@ -4267,6 +4276,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
                                                   RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ ↑(castZF_of_path pα).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -4320,6 +4330,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
                                                   RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = β' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ ↑(castZF_of_path pβ).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -4368,6 +4379,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
                                         ∃ (_ : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec) (_
                                           : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                          X!.snd.fst = (α'.pair β').fun SMTType.bool ∧
                                           Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ ↑(castZF_of_path (pα.graph pβ)).1) ∧
                                               ∀ (Y : SMT.Dom),
@@ -4810,7 +4822,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
               simp only [List.length_cons, List.length_nil, Nat.reduceAdd, List.ofFn_succ,
                 Fin.isValue, List.ofFn_zero, List.getElem_cons_zero, Fin.zero_eta]
             simpa [h_ofFn, Function.updates] using hgo
-          obtain ⟨X!, hcast_mem, hden_lambda_X!⟩ :=
+          obtain ⟨X!, hcast_mem, hX!_ty, hden_lambda_X!⟩ :=
             graphLambdaWitnessAt
               (pα_ih := pα_ih_spec) (pβ_ih := pβ_ih_spec)
               (pα_ih_exact := pα_ih) (pβ_ih_exact := pβ_ih)
@@ -4832,7 +4844,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
             apply Option.get_of_eq_some
             exact Function.update_self _ _ _
           let Φtrue : SMT.Dom := ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩
-          refine ⟨Φtrue, X!, ?_, ?_, ?_, rfl, ?_⟩
+          refine ⟨Φtrue, X!, ?_, ?_, ?_, hX!_ty, rfl, ?_⟩
           · exact hvar_X!
           · intro v hv
             simp only [fv, List.mem_append, List.mem_singleton] at hv
