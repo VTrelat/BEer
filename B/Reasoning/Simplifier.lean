@@ -186,10 +186,33 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
       -- import chain.
       sorry
     | app f x f_ih x_ih =>
-      -- TODO: provable but unverifiable here — broken SimplifierCorrect.Basic
-      -- import chain. `simplifier (app f x) = .app (simplifier f) (simplifier x)`
-      -- recurses without absorption, like the `sub`/`cprod` cases.
-      sorry
+      unfold simplifier
+      simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
+        Option.bind_eq_some_iff, PSigma.exists] at den_t
+      obtain ⟨F, _, hF, den_f, eq⟩ := den_t
+      obtain ⟨α, typf, typx⟩ := Typing.appE typ_t
+      obtain ⟨⟩ := denote_welltyped_eq
+        ⟨Γ.abstract («Δ» := «Δ»),
+        WFTC.of_abstract, .set _,
+        Typing.of_abstract (fun v hv => by apply ht; rw [fv, List.mem_append]; left; exact hv) typf⟩
+        den_f
+      simp_rw [Option.bind_eq_some_iff, PSigma.exists] at eq
+      obtain ⟨X, _, hX, den_x, eq⟩ := eq
+      obtain ⟨⟩ := denote_welltyped_eq
+        ⟨Γ.abstract («Δ» := «Δ»),
+        WFTC.of_abstract, _,
+        Typing.of_abstract (fun v hv => by apply ht; rw [fv, List.mem_append]; right; exact hv) typx⟩
+        den_x
+      split_ifs at eq with τ_eq F_pfunc X_dom
+      rw [Option.some_inj] at eq
+      injection eq
+      subst T
+      specialize f_ih _ wf_t.1 typf den_f
+      specialize x_ih _ wf_t.2 typx den_x
+      simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
+        f_ih, Option.bind_some, x_ih, Option.bind_some]
+      rw [dite_cond_eq_true (eq_true trivial), dite_cond_eq_true (eq_true F_pfunc),
+        dite_cond_eq_true (eq_true X_dom)]
     | all vs D P D_ih P_ih =>
       -- TODO: hard (binders) and unverifiable — broken SimplifierCorrect.Basic
       -- import chain.
