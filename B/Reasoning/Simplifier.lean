@@ -123,11 +123,74 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
         x_ih, Option.bind_some, y_ih, Option.bind_some, dite_true]
     | lambda vs D P D_ih P_ih =>
       exact simplifier_partial_correct.lambda vs D P D_ih P_ih ht wf_t typ_t den_t
-    | sub x y x_ih y_ih => sorry
-    | and x y x_ih y_ih => sorry
-    | not x ih => sorry
-    | eq x y x_ih y_ih => sorry
-    | mem x S x_ih S_ih => sorry
-    | collect vs D P D_ih P_ih => sorry
-    | app f x f_ih x_ih => sorry
-    | all vs D P D_ih P_ih => sorry
+    | sub x y x_ih y_ih =>
+      unfold simplifier
+      simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
+        Option.bind_eq_some_iff, PSigma.exists] at den_t
+      obtain ⟨X, _, hX, den_x, eq⟩ := den_t
+      obtain ⟨rfl, typx, typy⟩ := Typing.subE typ_t
+      obtain ⟨⟩ := denote_welltyped_eq
+        ⟨Γ.abstract («Δ» := «Δ»),
+        WFTC.of_abstract, .int,
+        Typing.of_abstract (fun v hv => by apply ht; rw [fv, List.mem_append]; left; exact hv) typx⟩
+        den_x
+      simp_rw [Option.bind_eq_some_iff, PSigma.exists] at eq
+      obtain ⟨Y, _, hY, den_y, eq⟩ := eq
+      obtain ⟨⟩ := denote_welltyped_eq
+        ⟨Γ.abstract («Δ» := «Δ»),
+        WFTC.of_abstract, .int,
+        Typing.of_abstract (fun v hv => by apply ht; rw [fv, List.mem_append]; right; exact hv) typy⟩
+        den_y
+      simp only [Option.some_inj] at eq
+      injection eq
+      subst T
+      specialize x_ih _ wf_t.1 typx den_x
+      specialize y_ih _ wf_t.2 typy den_y
+      simp only [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
+        x_ih, Option.bind_some, y_ih, Option.bind_some]
+    | and x y x_ih y_ih =>
+      -- TODO: provable but unverifiable here — the import chain (this file →
+      -- SimplifierCorrect.Basic) is broken: `simplifier_partial_correct.lambda`
+      -- in B/Reasoning/SimplifierCorrect/Basic.lean fails to compile after an
+      -- upstream change to `denote`'s `lambda`/`collect` clauses (the `den_E`/
+      -- `typE_det` predicates gained a typing-hypothesis parameter). The `and`
+      -- proof would case on `simplifier_aux_and` and use the forward IHs plus
+      -- boolean-algebra identities (`zffalse ⋀ Y = zffalse`, etc.).
+      sorry
+    | not x ih =>
+      -- STATEMENT IS FALSE — discovered soundness bug in `simplifier_aux_not`
+      -- (B/Simplifier.lean:188). The arm `| .not (.not p) => p` is wrong:
+      -- `simplifier_aux_not arg` computes `simplify (¬ arg)`, so for `arg = ¬¬p`
+      -- the result must be `simplify (¬¬¬p) = ¬p`, i.e. `.not p`, not `p`.
+      -- Consequently `simplifier` collapses triple negation: e.g.
+      -- `simplifier (¬ᴮ ¬ᴮ ¬ᴮ (.var v)) = .var v` (verified by `#eval`), while
+      -- `⟦¬ᴮ ¬ᴮ ¬ᴮ (.var v)⟧ = ¬ᶻ ⟦.var v⟧`. Hence this `not` case of
+      -- `simplifier_partial_correct` is genuinely false. Fix belongs in
+      -- B/Simplifier.lean (`simplifier_aux_not`): `.not (.not p) => .not p`.
+      -- (Note: `simplifier_partial_correct'` only asserts none-preservation,
+      -- which the bug does NOT break, so its `not` case remains true & proven.)
+      sorry
+    | eq x y x_ih y_ih =>
+      -- TODO: provable but unverifiable here — same broken import chain as the
+      -- `and` case (SimplifierCorrect.Basic does not compile). The `eq` proof
+      -- would case on `simplifier_aux_eq` using the forward IHs.
+      sorry
+    | mem x S x_ih S_ih =>
+      -- TODO: hard — `simplifier_aux_mem` rewrites set-comprehension membership
+      -- via substitution; the forward proof needs a substitution-denotation
+      -- soundness lemma absent from the codebase. Also unverifiable (broken
+      -- SimplifierCorrect.Basic import chain).
+      sorry
+    | collect vs D P D_ih P_ih =>
+      -- TODO: hard (binders) and unverifiable — broken SimplifierCorrect.Basic
+      -- import chain.
+      sorry
+    | app f x f_ih x_ih =>
+      -- TODO: provable but unverifiable here — broken SimplifierCorrect.Basic
+      -- import chain. `simplifier (app f x) = .app (simplifier f) (simplifier x)`
+      -- recurses without absorption, like the `sub`/`cprod` cases.
+      sorry
+    | all vs D P D_ih P_ih =>
+      -- TODO: hard (binders) and unverifiable — broken SimplifierCorrect.Basic
+      -- import chain.
+      sorry

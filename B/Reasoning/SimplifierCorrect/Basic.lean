@@ -524,18 +524,18 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
     split_ifs with den_simpP_isSome typ_simpP_det
     · rw [P_ih, Option.bind_some]
     · push_neg at typ_simpP_det
-      obtain ⟨x, y, x_𝒟, y_𝒟, contr⟩ := typ_simpP_det
-      obtain ⟨⟨x₁, α, hx₁⟩, eq₁⟩ := Option.isSome_iff_exists.mp <| denP_isSome x_𝒟
-      obtain ⟨⟨x₂, β, hx₂⟩, eq₂⟩ := Option.isSome_iff_exists.mp <| denP_isSome y_𝒟
+      obtain ⟨x, y, hx_typ, hy_typ, x_𝒟, y_𝒟, contr⟩ := typ_simpP_det
+      obtain ⟨⟨x₁, α, hx₁⟩, eq₁⟩ := Option.isSome_iff_exists.mp <| denP_isSome hx_typ x_𝒟
+      obtain ⟨⟨x₂, β, hx₂⟩, eq₂⟩ := Option.isSome_iff_exists.mp <| denP_isSome hy_typ y_𝒟
 
       generalize_proofs pf_contr₁ pf_contr₂ pf_contr₃ at contr
-      obtain ⟨⟨x₁', α', hx₁'⟩, eq₁'⟩ := Option.isSome_iff_exists.mp <| den_simpP_isSome x_𝒟
+      obtain ⟨⟨x₁', α', hx₁'⟩, eq₁'⟩ := Option.isSome_iff_exists.mp <| den_simpP_isSome hx_typ x_𝒟
       generalize_proofs pf_eq₁ at eq₁
-      obtain ⟨⟨x₂', β', hx₂'⟩, eq₂'⟩ := Option.isSome_iff_exists.mp <| den_simpP_isSome y_𝒟
+      obtain ⟨⟨x₂', β', hx₂'⟩, eq₂'⟩ := Option.isSome_iff_exists.mp <| den_simpP_isSome hy_typ y_𝒟
       generalize_proofs at eq₂
       rw [Option.get_of_eq_some pf_contr₂ eq₁', Option.get_of_eq_some pf_contr₃ eq₂'] at contr
       dsimp at contr
-      specialize typ_denP_det x y x_𝒟 y_𝒟
+      specialize typ_denP_det hx_typ hy_typ x_𝒟 y_𝒟
       generalize_proofs pf₁ pf₂ at typ_denP_det
       rw [Option.get_of_eq_some pf₁ eq₁, Option.get_of_eq_some pf₂ eq₂] at typ_denP_det
       dsimp at typ_denP_det
@@ -566,18 +566,19 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
       nomatch contr
     · push_neg at den_simpP_isSome
       simp_rw [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff, Option.isNone_iff_eq_none] at den_simpP_isSome
-      obtain ⟨xs, xs_mem_𝒟, den_simP_eq_none⟩ := den_simpP_isSome
+      obtain ⟨xs, xs_typ, xs_mem_𝒟, den_simP_eq_none⟩ := den_simpP_isSome
 
       rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P)] at den_simP_eq_none
       specialize @P_ih' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (xs i))) updates_isSome_fv_P wf_t.2.1 _ _ typ_P (ZFSet.ofFinDom xs)
       have contr := simplifier_partial_correct' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (xs i))) updates_isSome_fv_P wf_t.2.1 typ_P den_simP_eq_none
-      specialize denP_isSome xs_mem_𝒟
+      specialize denP_isSome xs_typ xs_mem_𝒟
       rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_P)] at denP_isSome
       rw [←Option.not_isSome_iff_eq_none] at contr
       nomatch contr denP_isSome
   · -- 𝒟 ≠ ∅
     -- transform Term.abstract.go into Term.abstract to make the result usable in the IH
-    rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp)] at eq
+    rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp)
+      (pf := updates_isSome_fv_P)] at eq
     · simp_rw [Option.bind_eq_some_iff, PSigma.exists] at eq
       obtain ⟨ℙ, γ, hℙ, den_P, eq⟩ := eq
       rw [Option.some_inj] at eq
@@ -609,7 +610,7 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
           generalize_proofs pf₁ pf₂ pf₃ pf₄
           have := @denP_isSome fun i => ⟨xy.π₁.get vs.length i, (List.reduce (fun x1 x2 => x1 ×ᴮ x2) αs pf₂).get vs.length i, pf₃ i⟩
           rw [Option.isSome_iff_exists] at this
-          specialize this ?_
+          specialize this (fun i => ⟨rfl, pf₃ i⟩) ?_
           · rw [ZFSet.ofFinDom_get (List.length_pos_iff.mpr vs_nemp) pf₃ hxy.1 αs_hasArity]
             exact hxy.2
           · obtain ⟨⟨x₁, α, hx₁⟩, den_P⟩ := this
@@ -626,11 +627,11 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
 
             rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P), this]
       · push_neg at typ_den_simpP_det
-        obtain ⟨x, y, x_𝒟, y_𝒟, typ_ne⟩ := typ_den_simpP_det
-        specialize typ_denP_det x y x_𝒟 y_𝒟
+        obtain ⟨x, y, hx_typ, hy_typ, x_𝒟, y_𝒟, typ_ne⟩ := typ_den_simpP_det
+        specialize typ_denP_det hx_typ hy_typ x_𝒟 y_𝒟
 
-        obtain ⟨⟨x₁, τ₁, hx₁⟩, den₁⟩ := Option.isSome_iff_exists.mp <| denP_isSome x_𝒟
-        obtain ⟨⟨y₁, τ₂, hy₁⟩, den₂⟩ := Option.isSome_iff_exists.mp <| denP_isSome y_𝒟
+        obtain ⟨⟨x₁, τ₁, hx₁⟩, den₁⟩ := Option.isSome_iff_exists.mp <| denP_isSome hx_typ x_𝒟
+        obtain ⟨⟨y₁, τ₂, hy₁⟩, den₂⟩ := Option.isSome_iff_exists.mp <| denP_isSome hy_typ y_𝒟
 
         generalize_proofs pf₁ pf₂ pf₃ at typ_denP_det den₁ den₂
         rw [Option.get_of_eq_some pf₂ den₁, Option.get_of_eq_some pf₃ den₂] at typ_denP_det
@@ -655,11 +656,11 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
 
         nomatch typ_ne
       · push_neg at den_simpP_isSome
-        obtain ⟨x, x_𝒟, den_isNone⟩ := den_simpP_isSome
+        obtain ⟨x, x_typ, x_𝒟, den_isNone⟩ := den_simpP_isSome
         rw [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff, Option.isNone_iff_eq_none,
           denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P)] at den_isNone
 
-        specialize denP_isSome x_𝒟
+        specialize denP_isSome x_typ x_𝒟
         rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_P)] at denP_isSome
         absurd simplifier_partial_correct' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (x i))) updates_isSome_fv_P wf_t.2.1 typ_P den_isNone
         rwa [←ne_eq, Option.ne_none_iff_isSome]
