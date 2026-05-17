@@ -40,6 +40,7 @@ theorem loosenAux_prf_exact
              rw [hv, Function.update_self, Option.isSome_some])⟧ˢ = some X!)
            (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
            (_ : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+           (X!.2.1 = β) ∧
            (Φ.2.1 = SMTType.bool) ∧
            (Φ.1 = zftrue ∧ (X.1.pair X!.1) ∈ (castZF_of_path 𝕔).1) ∧
            (∀ (Y : SMT.Dom) (_ : Y.2.1 = β)

@@ -36,6 +36,7 @@ theorem loosenAux_prf_spec.refl («Δ» : RenamingContext.Context) {α : SMTType
                                         ∃ (_ : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec) (_
                                           : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                          X!.snd.fst = α ∧
                                           Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧
                                                 X.fst.pair X!.fst ∈ (castZF_of_path (castPath.refl hα)).1) ∧
@@ -107,7 +108,7 @@ theorem loosenAux_prf_spec.refl («Δ» : RenamingContext.Context) {α : SMTType
         intro hx_mem
         exact x!_fresh (SMT.Typing.mem_context_of_mem_fv typ_x hx_mem)
       refine ⟨⟨overloadBinOp (A := ⟦X.2.1⟧ᶻ) (B := 𝔹) (fun x => (↑x : ZFSet)) (fun (p : Prop) => if p then ZFBool.true else ZFBool.false) False
-        (fun x1 x2 => x1 = x2) X.1 X.1, .bool, overloadBinOp_mem X.2.2 X.2.2⟩, X, ?_, ?_, ?_, ?_⟩
+        (fun x1 x2 => x1 = x2) X.1 X.1, .bool, overloadBinOp_mem X.2.2 X.2.2⟩, X, ?_, ?_, ?_, ?_, ?_⟩
       · rw [Term.abstract, denote, Option.pure_def, Option.some_inj]
         apply Option.get_of_eq_some
         apply Function.update_self
@@ -143,6 +144,16 @@ theorem loosenAux_prf_spec.refl («Δ» : RenamingContext.Context) {α : SMTType
         · dsimp
           rw [denx_upd, Option.bind_some]
           rw [dite_cond_eq_true (eq_true rfl)]
+      · -- X!.snd.fst = α: the loosened value is X itself, typed by `denx`.
+        have hXτ' := SMT.PHOAS.denote_welltyped_eq
+          (den_t := denx)
+          (t := x.abstract «Δ» hx)
+          ?_
+        on_goal 2 =>
+          use SMT.TypeContext.abstract («Δ» := «Δ») ?_, PHOAS.WFTC.of_abstract, α
+          · exact @PHOAS.Typing.of_abstract_fv _ _ St₁.types _ hx respects typ_x
+        dsimp at hXτ'
+        exact hXτ'.symm
       · constructor
         · rfl
         · constructor

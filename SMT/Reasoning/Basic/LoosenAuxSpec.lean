@@ -86,6 +86,7 @@ theorem loosenAux_prf_spec
               rw [hv, Function.update_self, Option.isSome_some])⟧ˢ = some X!)
             (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
             (_ : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+            (X!.2.1 = β) ∧
             (Φ.2.1 = SMTType.bool) ∧
             (Φ.1 = zftrue ∧ (X.1.pair X!.1) ∈ (castZF_of_path 𝕔).1) ∧
             (∀ (Y : SMT.Dom) (_ : Y.2.1 = β)
@@ -162,6 +163,7 @@ theorem loosenAux_prf_spec_univ
              (pf x! X!)⟧ˢ = some X!)
            (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
            (_ : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+           (X!.2.1 = β) ∧
            (Φ.2.1 = SMTType.bool) ∧
            (Φ.1 = zftrue ∧ (X.1.pair X!.1) ∈ (castZF_of_path 𝕔).1) ∧
            (∀ (Y : SMT.Dom) (_ : Y.2.1 = β)
@@ -206,6 +208,7 @@ theorem loosenAux_prf_spec_univ
                          rw [hv, Function.update_self, Option.isSome_some])⟧ˢ = some X!)
                        (hφ : RenamingContext.CoversFV (Function.update «Δ» x_! (some X!)) x_!_spec)
                        (_ : ⟦x_!_spec.abstract (Function.update «Δ» x_! (some X!)) hφ⟧ˢ = some Φ),
+                       (X!.2.1 = β) ∧
                        (Φ.2.1 = SMTType.bool) ∧
                        (Φ.1 = zftrue ∧ (X.1.pair X!.1) ∈ (castZF_of_path 𝕔).1) ∧
                        (∀ (Y : SMT.Dom) (_ : Y.2.1 = β)
@@ -240,8 +243,8 @@ theorem loosenAux_prf_spec_univ
     have hΔ := hi «Δ» hx hresp
     rw [hxst] at hΔ
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hadq⟩ := hΔ
-    obtain ⟨Φ, X!, h_var, hφ, h_spec, h_typeΦ, h_castmem, htotalY⟩ := hadq X hX_den
-    refine ⟨Φ, X!, ?_, hφ, h_spec, h_typeΦ, h_castmem, htotalY⟩
+    obtain ⟨Φ, X!, h_var, hφ, h_spec, h_typeX!, h_typeΦ, h_castmem, htotalY⟩ := hadq X hX_den
+    refine ⟨Φ, X!, ?_, hφ, h_spec, h_typeX!, h_typeΦ, h_castmem, htotalY⟩
     -- The variable abstract uses the inline pf; convert via proof irrelevance.
     convert h_var
   | error _ => trivial
