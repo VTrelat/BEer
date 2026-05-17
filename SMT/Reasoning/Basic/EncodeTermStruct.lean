@@ -9207,11 +9207,119 @@ theorem encodeTerm_combined
         (∀ b ∈ specBodies Dlt, SMT.fv b ⊆ B.Term.vars t ∪ declVars Dlt ∪ SMT.bv t') ∧
         SMT.fv t' ⊆ B.Term.vars t ∪ declVars Dlt) ⌝⦄ := by
   induction t generalizing E n used Λ α decl with
-  | int i => sorry
-  | bool b => sorry
-  | var v => sorry
-  | «ℤ» => sorry
-  | 𝔹 => sorry
+  | int i =>
+    mstart
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, [], by simp, by simp, ?_⟩
+    · intro v hv; simpa [St_used_eq] using hv
+    · intro v hv; simpa using hv
+    · intro v hv; simpa [St_used_eq] using St_sub hv
+    · intro v hv; simp [B.fv] at hv
+    · intro v hv; simp [SMT.fv] at hv
+    · exact fun _ _ h _ => h
+    · intro v hv; simp [SMT.fv] at hv
+  | bool b =>
+    mstart
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, [], by simp, by simp, ?_⟩
+    · intro v hv; simpa [St_used_eq] using hv
+    · intro v hv; simpa using hv
+    · intro v hv; simpa [St_used_eq] using St_sub hv
+    · intro v hv; simp [B.fv] at hv
+    · intro v hv; simp [SMT.fv] at hv
+    · exact fun _ _ h _ => h
+    · intro v hv; simp [SMT.fv] at hv
+  | var v =>
+    mstart
+    mintro pre ∀St
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mvcgen
+    case vc1 τ τ_lookup =>
+      have hv_in_types : v ∈ St.types :=
+        AList.lookup_isSome.1 (Option.isSome_of_eq_some τ_lookup)
+      refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, [], by simp, by simp, ?_⟩
+      · intro x hx; simpa [St_used_eq] using hx
+      · intro x hx; simpa using hx
+      · intro x hx; simpa [St_used_eq] using St_sub hx
+      · intro x hx
+        rw [B.fv, List.mem_singleton] at hx
+        subst x
+        simpa [St_used_eq] using (St_sub (AList.mem_keys.mpr hv_in_types))
+      · intro x hx
+        rw [SMT.fv, List.mem_singleton] at hx
+        subst x
+        exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr hv_in_types))
+      · exact fun _ _ h _ => h
+      · intro x hx
+        rw [SMT.fv, List.mem_singleton] at hx
+        subst x
+        exact List.mem_union_iff.mpr (.inl (B.Term.mem_vars_iff.mpr (.inl B.fv.mem_var)))
+  | «ℤ» =>
+    mstart
+    mintro pre ∀S
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mspec Std.Do.Spec.get_StateT
+    mspec (Std.Do.Triple.and (SMT.freshVar .int)
+      (SMT.freshVar_spec (Γ := S.types) (τ := .int) (n := S.env.freshvarsc)
+        (used := S.env.usedVars))
+      (SMT.freshVar_decls (τ := .int) (decl := S.env.declarations)))
+    case post.success 𝓋 =>
+      mrename_i pre
+      mintro ∀S'
+      mpure pre
+      obtain ⟨⟨types_eq, 𝓋_notMem, freshvarsc_eq, used_eq, 𝓋_neq_used⟩, decl_eq⟩ := pre
+      mspec Std.Do.Spec.modifyGet_StateT
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, [], by simpa using decl_eq, by simp, ?_⟩
+      · intro x hx; rw [used_eq, St_used_eq]; exact List.mem_cons_of_mem _ hx
+      · exact fun _ => id
+      · rw [used_eq]; intro x hx; exact List.mem_cons_of_mem _ (St_sub hx)
+      · intro x hx; rw [B.fv] at hx; contradiction
+      · intro x hx; simp only [SMT.fv, List.mem_removeAll_iff] at hx; nomatch hx.1
+      · exact fun _ _ h _ => h
+      · intro x hx; simp only [SMT.fv, List.mem_removeAll_iff] at hx; nomatch hx.1
+  | 𝔹 =>
+    mstart
+    mintro pre ∀S
+    mpure pre
+    obtain ⟨rfl, rfl, St_sub, St_used_eq, rfl⟩ := pre
+    rw [encodeTerm]
+    mspec Std.Do.Spec.get_StateT
+    mspec (Std.Do.Triple.and (SMT.freshVar .bool)
+      (SMT.freshVar_spec (Γ := S.types) (τ := .bool) (n := S.env.freshvarsc)
+        (used := S.env.usedVars))
+      (SMT.freshVar_decls (τ := .bool) (decl := S.env.declarations)))
+    case post.success 𝓋 =>
+      mrename_i pre
+      mintro ∀S'
+      mpure pre
+      obtain ⟨⟨types_eq, 𝓋_notMem, freshvarsc_eq, used_eq, 𝓋_neq_used⟩, decl_eq⟩ := pre
+      mspec Std.Do.Spec.modifyGet_StateT
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, [], by simpa using decl_eq, by simp, ?_⟩
+      · intro x hx; rw [used_eq, St_used_eq]; exact List.mem_cons_of_mem _ hx
+      · exact fun _ => id
+      · rw [used_eq]; intro x hx; exact List.mem_cons_of_mem _ (St_sub hx)
+      · intro x hx; rw [B.fv] at hx; contradiction
+      · intro x hx; simp only [SMT.fv, List.mem_removeAll_iff] at hx; nomatch hx.1
+      · exact fun _ _ h _ => h
+      · intro x hx; simp only [SMT.fv, List.mem_removeAll_iff] at hx; nomatch hx.1
   | maplet x y x_ih y_ih => sorry
   | add x y x_ih y_ih => sorry
   | sub x y x_ih y_ih => sorry
