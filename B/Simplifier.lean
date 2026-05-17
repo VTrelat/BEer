@@ -185,7 +185,7 @@ def simplifier_aux_all : List 𝒱 → Term → Term → Term
 def simplifier_aux_not : Term → Term
   | .bool true => .bool false
   | .bool false => .bool true
-  | .not (.not p) => p
+  | .not p => p
   | p => .not p
 def simplifier_aux_and : Term → Term → Term
   | .bool false, _ => .bool false
