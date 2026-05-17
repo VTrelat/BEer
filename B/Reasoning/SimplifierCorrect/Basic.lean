@@ -16,12 +16,12 @@ section simplifier_correct
 theorem simplifier_correct.maplet.{u} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv (x ↦ᴮ y), («Δ» v).isSome = true) (wf_t : (x ↦ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x ↦ᴮ y : τ) :
+  {τ : BType} (typ_t : Γ ⊢ᴮ x ↦ᴮ y : τ) :
   ⟦(x ↦ᴮ y).abstract «Δ» ht⟧ᴮ = ⟦(simplifier (x ↦ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   obtain ⟨α, β, rfl, hx, hy⟩ := Typing.mapletE typ_t
   specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 hx
@@ -30,12 +30,12 @@ theorem simplifier_correct.maplet.{u} (x y : B.Term)
 theorem simplifier_correct.sub.{u} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv (x -ᴮ y), («Δ» v).isSome = true) (wf_t : (x -ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x -ᴮ y : τ) :
+  {τ : BType} (typ_t : Γ ⊢ᴮ x -ᴮ y : τ) :
   ⟦(x -ᴮ y).abstract «Δ» ht⟧ᴮ = ⟦(simplifier (x -ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   obtain ⟨rfl, hx, hy⟩ := Typing.subE typ_t
   specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 hx
@@ -44,12 +44,12 @@ theorem simplifier_correct.sub.{u} (x y : B.Term)
 theorem simplifier_correct.le.{u} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv (x ≤ᴮ y), («Δ» v).isSome = true) (wf_t : (x -ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x ≤ᴮ y : τ) :
+  {τ : BType} (typ_t : Γ ⊢ᴮ x ≤ᴮ y : τ) :
   ⟦(x ≤ᴮ y).abstract «Δ» ht⟧ᴮ = ⟦(simplifier (x ≤ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   obtain ⟨rfl, hx, hy⟩ := Typing.leE typ_t
   specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 hx
@@ -58,12 +58,12 @@ theorem simplifier_correct.le.{u} (x y : B.Term)
 theorem simplifier_correct.cprod.{u} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv (x ⨯ᴮ y), («Δ» v).isSome = true) (wf_t : (x ⨯ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x ⨯ᴮ y : τ) :
+  {τ : BType} (typ_t : Γ ⊢ᴮ x ⨯ᴮ y : τ) :
   ⟦(x ⨯ᴮ y).abstract «Δ» ht⟧ᴮ = ⟦(simplifier (x ⨯ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   obtain ⟨_, _, rfl, hx, hy⟩ := Typing.cprodE typ_t
   specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 hx
@@ -72,12 +72,12 @@ theorem simplifier_correct.cprod.{u} (x y : B.Term)
 theorem simplifier_correct.union.{u} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv (x ∪ᴮ y), («Δ» v).isSome = true) (wf_t : (x ∪ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x ∪ᴮ y : τ) :
+  {τ : BType} (typ_t : Γ ⊢ᴮ x ∪ᴮ y : τ) :
   ⟦(x ∪ᴮ y).abstract «Δ» ht⟧ᴮ = ⟦(simplifier (x ∪ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   obtain ⟨_, rfl, hx, hy⟩ := Typing.unionE typ_t
   specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 hx
@@ -86,12 +86,12 @@ theorem simplifier_correct.union.{u} (x y : B.Term)
 theorem simplifier_correct.inter.{u} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv (x ∩ᴮ y), («Δ» v).isSome = true) (wf_t : (x ∩ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x ∩ᴮ y : τ) :
+  {τ : BType} (typ_t : Γ ⊢ᴮ x ∩ᴮ y : τ) :
   ⟦(x ∩ᴮ y).abstract «Δ» ht⟧ᴮ = ⟦(simplifier (x ∩ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   obtain ⟨_, rfl, hx, hy⟩ := Typing.interE typ_t
   specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 hx
@@ -100,12 +100,12 @@ theorem simplifier_correct.inter.{u} (x y : B.Term)
 theorem simplifier_correct.pfun.{u} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ x : τ → ⟦x.abstract «Δ» ht⟧ᴮ = ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ y : τ → ⟦y.abstract «Δ» ht⟧ᴮ = ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv (x ⇸ᴮ y), («Δ» v).isSome = true) (wf_t : (x ⇸ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x ⇸ᴮ y : τ) :
+  {τ : BType} (typ_t : Γ ⊢ᴮ x ⇸ᴮ y : τ) :
   ⟦(x ⇸ᴮ y).abstract «Δ» ht⟧ᴮ = ⟦(simplifier (x ⇸ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   obtain ⟨_, _, rfl, hx, hy⟩ := Typing.pfunE typ_t
   specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 hx
@@ -114,9 +114,9 @@ theorem simplifier_correct.pfun.{u} (x y : B.Term)
 theorem simplifier_correct.min.{u} (S : B.Term)
   (ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv S, («Δ» v).isSome = true) (wf_t : S.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ S : τ → ⟦S.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ S : τ → ⟦S.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv S.min, («Δ» v).isSome = true) (wf_t : S.min.WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ S.min : τ) : ⟦S.min.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S.min).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
+  {τ : BType} (typ_t : Γ ⊢ᴮ S.min : τ) : ⟦S.min.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S.min).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   unfold simplifier
   obtain ⟨rfl, typS⟩ := Typing.minE typ_t
   specialize ih (fun v hv => ht v hv) wf_t typS
@@ -124,9 +124,9 @@ theorem simplifier_correct.min.{u} (S : B.Term)
 theorem simplifier_correct.max.{u} (S : B.Term)
   (ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv S, («Δ» v).isSome = true) (wf_t : S.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ S : τ → ⟦S.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ S : τ → ⟦S.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv S.max, («Δ» v).isSome = true) (wf_t : S.max.WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ S.max : τ) : ⟦S.max.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S.max).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
+  {τ : BType} (typ_t : Γ ⊢ᴮ S.max : τ) : ⟦S.max.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S.max).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   unfold simplifier
   obtain ⟨rfl, typS⟩ := Typing.maxE typ_t
   specialize ih (fun v hv => ht v hv) wf_t typS
@@ -134,9 +134,9 @@ theorem simplifier_correct.max.{u} (S : B.Term)
 theorem simplifier_correct.card.{u} (S : B.Term)
   (ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv S, («Δ» v).isSome = true) (wf_t : S.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ S : τ → ⟦S.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ S : τ → ⟦S.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv S.card, («Δ» v).isSome = true) (wf_t : S.card.WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ S.card : τ) : ⟦S.card.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S.card).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
+  {τ : BType} (typ_t : Γ ⊢ᴮ S.card : τ) : ⟦S.card.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S.card).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   unfold simplifier
   obtain ⟨rfl, _, typS⟩ := Typing.cardE typ_t
   specialize ih (fun v hv => ht v hv) wf_t typS
@@ -144,9 +144,9 @@ theorem simplifier_correct.card.{u} (S : B.Term)
 theorem simplifier_correct.pow.{u} (S : B.Term)
   (ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv S, («Δ» v).isSome = true) (wf_t : S.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ S : τ → ⟦S.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
+      Γ ⊢ᴮ S : τ → ⟦S.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u}} (ht : ∀ v ∈ fv S.pow, («Δ» v).isSome = true) (wf_t : S.pow.WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ S.pow : τ) : ⟦S.pow.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S.pow).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
+  {τ : BType} (typ_t : Γ ⊢ᴮ S.pow : τ) : ⟦S.pow.abstract «Δ» ht⟧ᴮ = ⟦(simplifier S.pow).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   unfold simplifier
   obtain ⟨_, rfl, typS⟩ := Typing.powE typ_t
   specialize ih (fun v hv => ht v hv) wf_t typS
@@ -155,14 +155,14 @@ theorem simplifier_correct.pow.{u} (S : B.Term)
 theorem simplifier_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
   (D_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u_1}} (ht : ∀ v ∈ fv D, («Δ» v).isSome = true) (wf_t : D.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ D : τ →
+      Γ ⊢ᴮ D : τ →
         ⟦D.abstract «Δ» ht⟧ᴮ = ⟦(simplifier D).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   (P_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom.{u_1}} (ht : ∀ v ∈ fv P, («Δ» v).isSome = true) (wf_t : P.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ P : τ →
+      Γ ⊢ᴮ P : τ →
         ⟦P.abstract «Δ» ht⟧ᴮ = ⟦(simplifier P).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ)
   {«Δ» : 𝒱 → Option B.Dom.{u_1}} (ht : ∀ v ∈ fv (B.Term.lambda vs D P), («Δ» v).isSome = true)
-  (wf_t : (B.Term.lambda vs D P).WF) {Γ : B.TypeContext} {τ : BType} (typ_t : Γ ⊢ B.Term.lambda vs D P : τ) :
+  (wf_t : (B.Term.lambda vs D P).WF) {Γ : B.TypeContext} {τ : BType} (typ_t : Γ ⊢ᴮ B.Term.lambda vs D P : τ) :
   ⟦(B.Term.lambda vs D P).abstract «Δ» ht⟧ᴮ = ⟦(simplifier (B.Term.lambda vs D P)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ := by
   stop
   -- unfold definitions
@@ -300,16 +300,16 @@ theorem simplifier_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
 theorem simplifier_partial_correct.maplet.{u_1} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ →
+      Γ ⊢ᴮ x : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
           ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ →
+      Γ ⊢ᴮ y : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
           ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (x ↦ᴮ y), («Δ» v).isSome = true) (wf_t : (x ↦ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x ↦ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
+  {τ : BType} (typ_t : Γ ⊢ᴮ x ↦ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
   (den_t : ⟦(x ↦ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
   ⟦(simplifier (x ↦ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   unfold simplifier
@@ -341,16 +341,16 @@ theorem simplifier_partial_correct.maplet.{u_1} (x y : B.Term)
 theorem simplifier_partial_correct.add.{u_1} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ →
+      Γ ⊢ᴮ x : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
           ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ →
+      Γ ⊢ᴮ y : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
           ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (x +ᴮ y), («Δ» v).isSome = true) (wf_t : (x +ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x +ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
+  {τ : BType} (typ_t : Γ ⊢ᴮ x +ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
   (den_t : ⟦(x +ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
   ⟦(simplifier (x +ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff, PSigma.exists] at den_t
@@ -383,11 +383,11 @@ theorem simplifier_partial_correct.add.{u_1} (x y : B.Term)
 theorem simplifier_partial_correct.pow.{u_1} (S : B.Term)
   (ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv S, («Δ» v).isSome = true) (wf_t : S.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ S : τ →
+      Γ ⊢ᴮ S : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
           ⟦S.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (𝒫ᴮ S), («Δ» v).isSome = true) (wf_t : ( 𝒫ᴮ S).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ 𝒫ᴮ S : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
+  {τ : BType} (typ_t : Γ ⊢ᴮ 𝒫ᴮ S : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
   (den_t : ⟦( 𝒫ᴮ S).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
   ⟦(simplifier ( 𝒫ᴮ S)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   unfold simplifier
@@ -409,16 +409,16 @@ theorem simplifier_partial_correct.pow.{u_1} (S : B.Term)
 theorem simplifier_partial_correct.le.{u_1} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ →
+      Γ ⊢ᴮ x : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
           ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ →
+      Γ ⊢ᴮ y : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
           ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (x ≤ᴮ y), («Δ» v).isSome = true) (wf_t : (x ≤ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x ≤ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
+  {τ : BType} (typ_t : Γ ⊢ᴮ x ≤ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
   (den_t : ⟦(x ≤ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩) :
   ⟦(simplifier (x ≤ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   unfold simplifier
@@ -451,16 +451,16 @@ theorem simplifier_partial_correct.le.{u_1} (x y : B.Term)
 theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
   (D_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv D, («Δ» v).isSome = true) (wf_t : D.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ D : τ →
+      Γ ⊢ᴮ D : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
           ⟦D.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → ⟦(simplifier D).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   (P_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv P, («Δ» v).isSome = true) (wf_t : P.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ P : τ →
+      Γ ⊢ᴮ P : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
           ⟦P.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → ⟦(simplifier P).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (B.Term.lambda vs D P), («Δ» v).isSome = true)
-  (wf_t : (B.Term.lambda vs D P).WF) {Γ : B.TypeContext} {τ : BType} (typ_t : Γ ⊢ B.Term.lambda vs D P : τ)
+  (wf_t : (B.Term.lambda vs D P).WF) {Γ : B.TypeContext} {τ : BType} (typ_t : Γ ⊢ᴮ B.Term.lambda vs D P : τ)
   {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet} (den_t : ⟦(B.Term.lambda vs D P).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
   ⟦(simplifier (B.Term.lambda vs D P)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   -- destruct types

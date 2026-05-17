@@ -4,7 +4,7 @@ open Classical B PHOAS ZFSet
 
 /-
 example {x : Term} {«Δ»} {Γ}
-  (wf_x : x.WF) (typ_x : Γ ⊢ x : .int)
+  (wf_x : x.WF) (typ_x : Γ ⊢ᴮ x : .int)
   (h : ∀ v ∈ fv (simplifier (.int 0 *ᴮ x)), («Δ» v).isSome = true)
   (h' : ∀ v ∈ fv (.int 0 *ᴮ x), («Δ» v).isSome = true) :
   ⟦(simplifier (.int 0 *ᴮ x)).abstract «Δ» h⟧ᴮ = ⟦(.int 0 *ᴮ x).abstract «Δ» h'⟧ᴮ := by
@@ -43,7 +43,7 @@ example {x : Term} {«Δ»} {Γ}
 
 theorem simplifier_partial_correct {t : Term} {«Δ»}
   (ht : ∀ v ∈ fv t, («Δ» v).isSome = true)
-  (wf_t : t.WF) {Γ : TypeContext} {τ : BType} (typ_t : Γ ⊢ t : τ)
+  (wf_t : t.WF) {Γ : TypeContext} {τ : BType} (typ_t : Γ ⊢ᴮ t : τ)
   {T hTτ}
   (den_t : ⟦t.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
   ⟦(simplifier t).abstract («Δ» := «Δ») (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
