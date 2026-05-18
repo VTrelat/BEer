@@ -249,6 +249,20 @@ theorem BType.prod.fold_injective {αs βs : List BType} {α β : BType} (h : α
   · rintro ⟨rfl, rfl⟩
     rfl
 
+theorem Term.prod.fold_injective {αs βs : List Term} {α β : Term} (h : αs.length = βs.length) : αs.foldl (· ⨯ᴮ ·) α = βs.foldl (· ⨯ᴮ ·) β ↔ α = β ∧ αs = βs := by
+  constructor
+  · intro fold_eq
+    induction αs, βs, h using List.induction₂ generalizing α β with
+    | nil_nil => trivial
+    | cons_cons α' αs β' βs _ ih =>
+      simp [List.foldl] at fold_eq
+      obtain ⟨l, rfl⟩ := ih fold_eq
+      injection l with α_eq_β α'_eq_β'
+      subst α_eq_β α'_eq_β'
+      exact ⟨rfl, rfl⟩
+  · rintro ⟨rfl, rfl⟩
+    rfl
+
 theorem Typing.reduce_prod_inj {αs αs' : List BType} (h : αs ≠ []) (h' : αs.length = αs'.length) :
   (αs.map .set).reduce (· ×ᴮ ·) (by simpa) = (αs'.map .set).reduce (· ×ᴮ ·) (by simpa using (by rwa [← List.length_pos_iff, ← h', List.length_pos_iff] : αs' ≠ [])) → αs = αs' := by
   let α::αs := αs
@@ -260,6 +274,16 @@ theorem Typing.reduce_prod_inj {αs αs' : List BType} (h : αs ≠ []) (h' : α
   obtain ⟨l, r⟩ := this h
   injection l with α_eq_α'
   exact ⟨α_eq_α', List.map_ext @BType.set.inj r⟩
+
+theorem Term.reduce_prod_inj {αs αs' : List Term} (h : αs ≠ []) (h' : αs.length = αs'.length) :
+  αs.reduce (· ⨯ᴮ ·) h = αs'.reduce (· ⨯ᴮ ·) (by simpa using (by rwa [← List.length_pos_iff, ← h', List.length_pos_iff] : αs' ≠ [])) → αs = αs' := by
+  let α::αs := αs
+  let α'::αs' := αs'
+  simp [List.reduce]
+  have : αs.length = αs'.length := Nat.add_right_cancel h'
+  let this := (Term.prod.fold_injective (α := α) (β := α') this).mp
+  intro h
+  exact this h
 
 theorem Typing.reduce_of_Forall₂''
   {Ds : List Term} {αs : List BType} {Γ : B.TypeContext}
@@ -349,18 +373,402 @@ theorem Typing.det {Γ : TypeContext} {x : Term} {α β : BType} : Γ ⊢ᴮ x :
     | min _ ih
     | max _ ih => cases h₂; rfl
     | all => exact Typing.allE h₂ |>.left.symm
-    | collect => admit
-    | lambda => admit
+    | collect =>
+      expose_names
+      obtain ⟨αs', Ds', vs_nemp, vs_αs'_len, vs_Ds'_len, rfl, vs_nodup, red_D_eq_red_Ds, typ_Ds, typ_P, vs_fresh⟩ := Typing.collectE h₂
+      have D_Ds'_len : D.length = Ds'.length := by rwa [vs_D_len] at vs_Ds'_len
+      obtain rfl := @Term.reduce_prod_inj D Ds' (by rwa [←List.length_pos_iff, ←vs_D_len, List.length_pos_iff]) D_Ds'_len red_D_eq_red_Ds
+      congr
+      rw [vs_αs_len] at vs_αs'_len
+      rw [vs_D_len] at vs_Ds'_len
+      apply List.ext_get vs_αs'_len
+      intro i hi hi'
+      rw [List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typ_Ds)] at typ_Ds
+      injection typD_ih i _ (typ_Ds i (by rwa [←‹vs.length = D.length›, vs_αs_len]))
+    | lambda =>
+      expose_names
+      obtain ⟨γ, αs', Ds', vs_nemp, vs_αs'_len, vs_Ds'_len, rfl, vs_nodup, red_D_eq_red_Ds, typ_Ds, typ_P, vs_fresh⟩ := Typing.lambdaE h₂
+      have D_Ds'_len : D.length = Ds'.length := by rwa [vs_D_len] at vs_Ds'_len
+      obtain rfl := @Term.reduce_prod_inj D Ds' (by rwa [←List.length_pos_iff, ←vs_D_len, List.length_pos_iff]) D_Ds'_len red_D_eq_red_Ds
+      obtain rfl : αs = αs' := by
+        rw [vs_αs_len] at vs_αs'_len
+        rw [vs_D_len] at vs_Ds'_len
+        apply List.ext_get vs_αs'_len
+        intro i hi hi'
+        rw [List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typ_Ds)] at typ_Ds
+        injection typD_ih i _ (typ_Ds i (by rwa [←‹vs.length = D.length›, vs_αs_len]))
+      congr
+      exact typP_ih typ_P
 
-theorem Typing.context_weakening {Γ} {y} {α β} {e} : Γ ⊢ᴮ e : α → y ∉ Γ → (Γ.insert y β) ⊢ᴮ e : α := by
-  admit
+theorem Typing.typed_by_fv {Γ : TypeContext} {e : Term} {τ : BType} : Γ ⊢ᴮ e : τ → fv e ⊆ Γ.keys := by
+  intro h
+  induction h with
+  | var hv =>
+    unfold fv
+    simp only [List.cons_subset, List.nil_subset, and_true]
+    exact TypeContext.find_in_dom hv
+  | int | bool | «ℤ» | 𝔹 =>
+    simp [fv]
+  | @maplet Γ _ _ _ _ _ _ hx hy
+  | @add Γ _ _ _ _ hx hy
+  | @sub Γ _ _ _ _ hx hy
+  | @mul Γ _ _ _ _ hx hy
+  | @and Γ _ _ _ _ hx hy
+  | @eq  Γ _ _ _ _ _ hx hy
+  | @le Γ _ _ _ _ hx hy
+  | @mem Γ _ _ _ _ _ hx hy
+  | @cprod Γ _ _ _ _ _ _ hx hy
+  | @union Γ _ _ _ _ _ hx hy
+  | @inter Γ _ _ _ _ _ hx hy =>
+    intro v hv; simp [fv] at hv; exact hv.elim (hx ·) (hy ·)
+  | @pow Γ _ _ hx hy | @not Γ _ _ hx =>
+    assumption
+  | @pfun Γ _ _ _ _ _ _ hS hT | @app Γ _ _ _ _ _ _ hS hT =>
+    intro v hv; simp [fv] at hv; exact hv.elim (hS ·) (hT ·)
+  | card hS | min hS | max hS => rwa [fv]
+  | @collect Γ vs αs D P vs_nemp vs_nodup vs_Γ_disj vs_αs_len ihD ihP typP typD_ih typP_ih =>
+    intro v hv; simp [fv] at hv
+    rcases hv with hv_D | hv_P
+    · -- fv of List.reduce (⨯ᴮ) D
+      have : ∀ (acc : Term) (rest : List Term),
+          v ∈ fv (rest.foldl (· ⨯ᴮ ·) acc) → v ∈ fv acc ∨ ∃ D' ∈ rest, v ∈ fv D' := by
+        intro acc rest
+        induction rest generalizing acc with
+        | nil => intro h; exact Or.inl h
+        | cons D rest ih =>
+          intro h; rcases ih _ h with h | ⟨D', hD', hx_D'⟩
+          · rw [fv, List.mem_append] at h
+            exact h.elim Or.inl (fun h => Or.inr ⟨D, List.mem_cons_self .., h⟩)
+          · exact Or.inr ⟨D', List.mem_cons_of_mem _ hD', hx_D'⟩
+      rw [List.reduce] at hv_D
+      rcases this _ _ hv_D with hv_head | ⟨D', hD', hv_D'⟩
+      · have hne : 0 < D.length := List.length_pos_of_ne_nil
+            (by simpa [ihD, ← List.length_pos_iff] using vs_nemp)
+        rw [List.head_eq_getElem] at hv_head
+        exact typD_ih 0 hne hv_head
+      · obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem (List.mem_of_mem_tail hD')
+        exact typD_ih i hi hv_D'
+    · -- fv P removeAll vs
+      rw [List.mem_removeAll_iff] at hv_P
+      have hP : v ∈ (vs.zipToAList αs ∪ Γ) := typP_ih hv_P.1
+      have hv_not_zip : v ∉ vs.zipToAList αs :=
+        fun h => hv_P.2 (AList.mem_zipToAList h)
+      exact AList.mem_union.mp hP |>.elim (absurd · hv_not_zip) id
+  | @all Γ vs αs Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len ihD ihP typP typD_ih typP_ih
+  | @lambda Γ vs αs γ Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len ihD ihP typP typD_ih typP_ih =>
+    simp [fv]
+    constructor
+    · -- fv of List.reduce (⨯ᴮ) Ds
+      intro v hv
+      have : ∀ (acc : Term) (rest : List Term),
+          v ∈ fv (rest.foldl (· ⨯ᴮ ·) acc) → v ∈ fv acc ∨ ∃ D' ∈ rest, v ∈ fv D' := by
+        intro acc rest; induction rest generalizing acc with
+        | nil => exact Or.inl
+        | cons D rest ih =>
+          intro h; rcases ih _ h with h | ⟨D', hD', hx_D'⟩
+          · rw [fv, List.mem_append] at h
+            exact h.elim Or.inl (fun h => Or.inr ⟨D, List.mem_cons_self .., h⟩)
+          · exact Or.inr ⟨D', List.mem_cons_of_mem _ hD', hx_D'⟩
+      rw [List.reduce] at hv
+      rcases this _ _ hv with hv_head | ⟨D', hD', hv_D'⟩
+      · have hne : 0 < Ds.length := List.length_pos_of_ne_nil
+            (by simpa [ihD, ← List.length_pos_iff] using vs_nemp)
+        rw [List.head_eq_getElem] at hv_head
+        exact typD_ih 0 hne hv_head
+      · obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem (List.mem_of_mem_tail hD')
+        exact typD_ih i hi hv_D'
+    · -- fv P removeAll vs
+      intro v hv; rw [List.mem_removeAll_iff] at hv
+      have hP : v ∈ (vs.zipToAList αs ∪ Γ) := typP_ih hv.1
+      exact AList.mem_union.mp hP |>.elim (absurd · (fun h => hv.2 (AList.mem_zipToAList h))) id
 
-theorem Typing.context_weakening' {Γ} {vs : List 𝒱} {αs} {α} {e} : Γ ⊢ᴮ e : α → (∀ v ∈ vs, v ∉ Γ) → (vs.zipToAList αs ∪ Γ) ⊢ᴮ e : α := by
-  admit
+/-- Typing only depends on the `find?` behaviour of the context. -/
+theorem Typing.context_perm {Γ Δ : TypeContext} {e : Term} {τ : BType} :
+    (∀ x, Γ.find? x = Δ.find? x) → Γ ⊢ᴮ e : τ → Δ ⊢ᴮ e : τ := by
+  intro h he
+  induction e generalizing Γ Δ τ with
+  | var v =>
+    apply Typing.var
+    rw [← h v]
+    exact Typing.varE he
+  | int n
+  | bool b =>
+    first
+    | obtain rfl := Typing.intE he; exact Typing.int
+    | obtain rfl := Typing.boolE he; exact Typing.bool
+  | «ℤ»
+  | 𝔹 =>
+    rcases he
+    first
+    | exact Typing.ℤ
+    | exact Typing.𝔹
+  | maplet a b a_ih b_ih
+  | add a b a_ih b_ih
+  | sub a b a_ih b_ih
+  | mul a b a_ih b_ih
+  | le a b a_ih b_ih
+  | and a b a_ih b_ih
+  | eq a b a_ih b_ih
+  | mem a b a_ih b_ih
+  | cprod a b a_ih b_ih
+  | union a b a_ih b_ih
+  | inter a b a_ih b_ih
+  | app a b a_ih b_ih
+  | pfun a b a_ih b_ih =>
+    first
+    | obtain ⟨σ, ρ, rfl, typ_a, typ_b⟩ := Typing.mapletE he
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.addE he
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.subE he
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.mulE he
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.leE he
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.andE he
+    | obtain ⟨rfl, _, typ_a, typ_b⟩ := Typing.eqE he
+    | obtain ⟨rfl, _, typ_a, typ_b⟩ := Typing.memE he
+    | obtain ⟨_, _, rfl, typ_a, typ_b⟩ := Typing.cprodE he
+    | obtain ⟨_, rfl, typ_a, typ_b⟩ := Typing.unionE he
+    | obtain ⟨_, rfl, typ_a, typ_b⟩ := Typing.interE he
+    | obtain ⟨_, typ_a, typ_b⟩ := Typing.appE he
+    | obtain ⟨_, _, rfl, typ_a, typ_b⟩ := Typing.pfunE he
+    first
+    | exact Typing.maplet (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.add (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.sub (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.mul (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.le (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.and (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.eq (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.mem (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.cprod (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.union (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.inter (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.app (a_ih h typ_a) (b_ih h typ_b)
+    | exact Typing.pfun (a_ih h typ_a) (b_ih h typ_b)
+  | not x ih
+  | pow x ih
+  | card x ih
+  | min x ih
+  | max x ih =>
+    first
+    | obtain ⟨rfl, typ_x⟩ := Typing.notE he
+    | obtain ⟨_, rfl, typ_x⟩ := Typing.powE he
+    | obtain ⟨rfl, _, typ_x⟩ := Typing.cardE he
+    | obtain ⟨rfl, typ_x⟩ := Typing.minE he
+    | obtain ⟨rfl, typ_x⟩ := Typing.maxE he
+    first
+    | exact Typing.not (ih h typ_x)
+    | exact Typing.pow (ih h typ_x)
+    | exact Typing.card (ih h typ_x)
+    | exact Typing.min (ih h typ_x)
+    | exact Typing.max (ih h typ_x)
+  | collect vs D P D_ih P_ih =>
+    obtain ⟨αs, Ds, vs_nemp, vs_αs_len, vs_Ds_len, rfl, vs_nodup, rfl, typD, typP, vs_Γ_disj⟩ :=
+      Typing.collectE he
+    have Ds_nemp : Ds ≠ [] := by
+      rwa [← List.length_pos_iff, ← vs_Ds_len, List.length_pos_iff]
+    rw [List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typD),
+      Typing.reduce_of_Forall₂' Ds_nemp] at typD
+    refine Typing.collect vs_nemp vs_nodup (fun v hv hc => ?_) vs_αs_len vs_Ds_len ?_ ?_
+    · exact vs_Γ_disj v hv (TypeContext.mem_of_find?_eq h hc)
+    · rw [Typing.reduce_of_Forall₂' Ds_nemp]
+      exact D_ih h typD
+    · exact P_ih (TypeContext.union_find?_congr h) typP
+  | all vs D P D_ih P_ih =>
+    obtain ⟨rfl, vs_nemp, αs, Ds, vs_αs_len, vs_Ds_len, rfl, vs_nodup, typD, typP, vs_Γ_disj⟩ :=
+      Typing.allE he
+    have Ds_nemp : Ds ≠ [] := by
+      rwa [← List.length_pos_iff, ← vs_Ds_len, List.length_pos_iff]
+    rw [List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typD),
+      Typing.reduce_of_Forall₂' Ds_nemp] at typD
+    refine Typing.all vs_nemp vs_nodup (fun v hv hc => ?_) vs_αs_len vs_Ds_len ?_ ?_
+    · exact vs_Γ_disj v hv (TypeContext.mem_of_find?_eq h hc)
+    · rw [Typing.reduce_of_Forall₂' Ds_nemp]
+      exact D_ih h typD
+    · exact P_ih (TypeContext.union_find?_congr h) typP
+  | lambda vs D P D_ih P_ih =>
+    obtain ⟨ρ, αs, Ds, vs_nemp, vs_αs_len, vs_Ds_len, rfl, vs_nodup, rfl, typD, typP, vs_Γ_disj⟩ :=
+      Typing.lambdaE he
+    have Ds_nemp : Ds ≠ [] := by
+      rwa [← List.length_pos_iff, ← vs_Ds_len, List.length_pos_iff]
+    rw [List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typD),
+      Typing.reduce_of_Forall₂' Ds_nemp] at typD
+    refine Typing.lambda vs_nemp vs_nodup (fun v hv hc => ?_) vs_αs_len vs_Ds_len ?_ ?_
+    · exact vs_Γ_disj v hv (TypeContext.mem_of_find?_eq h hc)
+    · rw [Typing.reduce_of_Forall₂' Ds_nemp]
+      exact D_ih h typD
+    · exact P_ih (TypeContext.union_find?_congr h) typP
+
+/-- Weakening by a whole block of fresh variables. The `v ∉ bv e` hypothesis is
+necessary: a variable matching one of `e`'s bound names would break the binder
+disjointness premises (`vs_Γ_disj`). -/
+theorem Typing.context_weakening' {Γ} {vs : List 𝒱} {αs} {α} {e} :
+    Γ ⊢ᴮ e : α → (∀ v ∈ vs, v ∉ Γ) → (∀ v ∈ vs, v ∉ bv e) → (vs.zipToAList αs ∪ Γ) ⊢ᴮ e : α := by
+  intro h disj hbv
+  induction e generalizing Γ α with
+  | var v =>
+    apply Typing.var
+    have hvΓ : v ∈ Γ := AList.mem_keys.mp (TypeContext.find_in_dom (Typing.varE h))
+    have hvvs : v ∉ vs := fun hc => disj v hc hvΓ
+    unfold TypeContext.find?
+    rw [AList.lookup_union_right (fun hc => hvvs (AList.mem_zipToAList hc))]
+    exact Typing.varE h
+  | int n
+  | bool b =>
+    first
+    | (obtain rfl := Typing.intE h; exact Typing.int)
+    | (obtain rfl := Typing.boolE h; exact Typing.bool)
+  | «ℤ»
+  | 𝔹 =>
+    rcases h
+    first
+    | exact Typing.ℤ
+    | exact Typing.𝔹
+  | maplet a b a_ih b_ih
+  | add a b a_ih b_ih
+  | sub a b a_ih b_ih
+  | mul a b a_ih b_ih
+  | le a b a_ih b_ih
+  | and a b a_ih b_ih
+  | eq a b a_ih b_ih
+  | mem a b a_ih b_ih
+  | cprod a b a_ih b_ih
+  | union a b a_ih b_ih
+  | inter a b a_ih b_ih
+  | app a b a_ih b_ih
+  | pfun a b a_ih b_ih =>
+    have ha : ∀ v ∈ vs, v ∉ bv a := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inl hc)
+    have hb : ∀ v ∈ vs, v ∉ bv b := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inr hc)
+    first
+    | obtain ⟨σ, ρ, rfl, typ_a, typ_b⟩ := Typing.mapletE h
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.addE h
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.subE h
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.mulE h
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.leE h
+    | obtain ⟨rfl, typ_a, typ_b⟩ := Typing.andE h
+    | obtain ⟨rfl, _, typ_a, typ_b⟩ := Typing.eqE h
+    | obtain ⟨rfl, _, typ_a, typ_b⟩ := Typing.memE h
+    | obtain ⟨_, _, rfl, typ_a, typ_b⟩ := Typing.cprodE h
+    | obtain ⟨_, rfl, typ_a, typ_b⟩ := Typing.unionE h
+    | obtain ⟨_, rfl, typ_a, typ_b⟩ := Typing.interE h
+    | obtain ⟨_, typ_a, typ_b⟩ := Typing.appE h
+    | obtain ⟨_, _, rfl, typ_a, typ_b⟩ := Typing.pfunE h
+    first
+    | exact Typing.maplet (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.add (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.sub (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.mul (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.le (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.and (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.eq (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.mem (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.cprod (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.union (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.inter (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.app (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+    | exact Typing.pfun (a_ih typ_a disj ha) (b_ih typ_b disj hb)
+  | not x ih
+  | pow x ih
+  | card x ih
+  | min x ih
+  | max x ih =>
+    have hx : ∀ v ∈ vs, v ∉ bv x := fun v hv hc =>
+      hbv v hv (by simp only [bv]; exact hc)
+    first
+    | obtain ⟨rfl, typ_x⟩ := Typing.notE h
+    | obtain ⟨_, rfl, typ_x⟩ := Typing.powE h
+    | obtain ⟨rfl, _, typ_x⟩ := Typing.cardE h
+    | obtain ⟨rfl, typ_x⟩ := Typing.minE h
+    | obtain ⟨rfl, typ_x⟩ := Typing.maxE h
+    first
+    | exact Typing.not (ih typ_x disj hx)
+    | exact Typing.pow (ih typ_x disj hx)
+    | exact Typing.card (ih typ_x disj hx)
+    | exact Typing.min (ih typ_x disj hx)
+    | exact Typing.max (ih typ_x disj hx)
+  | collect ws D P D_ih P_ih =>
+    apply Typing.collectE at h
+    obtain ⟨βs, Ds, ws_nemp, ws_βs_len, ws_Ds_len, rfl, ws_nodup, rfl, typD, typP, ws_Γ_disj⟩ := h
+    have Ds_nemp : Ds ≠ [] := by rwa [← List.length_pos_iff, ← ws_Ds_len, List.length_pos_iff]
+    rw [List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typD),
+      Typing.reduce_of_Forall₂' Ds_nemp] at typD
+    have vs_ws_disj : ∀ v ∈ vs, v ∉ ws := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inl (Or.inl hc))
+    have hbvD : ∀ v ∈ vs, v ∉ bv (Ds.reduce (· ⨯ᴮ ·) Ds_nemp) := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inl (Or.inr hc))
+    have hbvP : ∀ v ∈ vs, v ∉ bv P := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inr hc)
+    have vs_zip_ws_disj : ∀ x, x ∈ vs.zipToAList αs → x ∉ ws.zipToAList βs := fun x hx hc =>
+      vs_ws_disj x (AList.mem_zipToAList hx) (AList.mem_zipToAList hc)
+    refine Typing.collect ws_nemp ws_nodup (fun w hw hc => ?_) ws_βs_len ws_Ds_len ?_ ?_
+    · exact (AList.mem_union.mp hc).elim
+        (fun h1 => vs_ws_disj w (AList.mem_zipToAList h1) hw) (ws_Γ_disj w hw)
+    · rw [Typing.reduce_of_Forall₂' Ds_nemp]
+      exact D_ih typD disj hbvD
+    · refine Typing.context_perm (TypeContext.union_swap_find? vs_zip_ws_disj)
+        (P_ih typP (fun v hv hc => ?_) hbvP)
+      exact (AList.mem_union.mp hc).elim
+        (fun h1 => vs_ws_disj v hv (AList.mem_zipToAList h1)) (disj v hv)
+  | all ws D P D_ih P_ih =>
+    apply Typing.allE at h
+    obtain ⟨rfl, ws_nemp, βs, Ds, ws_βs_len, ws_Ds_len, rfl, ws_nodup, typD, typP, ws_Γ_disj⟩ := h
+    have Ds_nemp : Ds ≠ [] := by rwa [← List.length_pos_iff, ← ws_Ds_len, List.length_pos_iff]
+    rw [List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typD),
+      Typing.reduce_of_Forall₂' Ds_nemp] at typD
+    have vs_ws_disj : ∀ v ∈ vs, v ∉ ws := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inl (Or.inl hc))
+    have hbvD : ∀ v ∈ vs, v ∉ bv (Ds.reduce (· ⨯ᴮ ·) Ds_nemp) := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inl (Or.inr hc))
+    have hbvP : ∀ v ∈ vs, v ∉ bv P := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inr hc)
+    have vs_zip_ws_disj : ∀ x, x ∈ vs.zipToAList αs → x ∉ ws.zipToAList βs := fun x hx hc =>
+      vs_ws_disj x (AList.mem_zipToAList hx) (AList.mem_zipToAList hc)
+    refine Typing.all ws_nemp ws_nodup (fun w hw hc => ?_) ws_βs_len ws_Ds_len ?_ ?_
+    · exact (AList.mem_union.mp hc).elim
+        (fun h1 => vs_ws_disj w (AList.mem_zipToAList h1) hw) (ws_Γ_disj w hw)
+    · rw [Typing.reduce_of_Forall₂' Ds_nemp]
+      exact D_ih typD disj hbvD
+    · refine Typing.context_perm (TypeContext.union_swap_find? vs_zip_ws_disj)
+        (P_ih typP (fun v hv hc => ?_) hbvP)
+      exact (AList.mem_union.mp hc).elim
+        (fun h1 => vs_ws_disj v hv (AList.mem_zipToAList h1)) (disj v hv)
+  | lambda ws D P D_ih P_ih =>
+    apply Typing.lambdaE at h
+    obtain ⟨ρ, βs, Ds, ws_nemp, ws_βs_len, ws_Ds_len, rfl, ws_nodup, rfl, typD, typP, ws_Γ_disj⟩ := h
+    have Ds_nemp : Ds ≠ [] := by rwa [← List.length_pos_iff, ← ws_Ds_len, List.length_pos_iff]
+    rw [List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typD),
+      Typing.reduce_of_Forall₂' Ds_nemp] at typD
+    have vs_ws_disj : ∀ v ∈ vs, v ∉ ws := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inl (Or.inl hc))
+    have hbvD : ∀ v ∈ vs, v ∉ bv (Ds.reduce (· ⨯ᴮ ·) Ds_nemp) := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inl (Or.inr hc))
+    have hbvP : ∀ v ∈ vs, v ∉ bv P := fun v hv hc =>
+      hbv v hv (by simp only [bv, List.mem_append]; exact Or.inr hc)
+    have vs_zip_ws_disj : ∀ x, x ∈ vs.zipToAList αs → x ∉ ws.zipToAList βs := fun x hx hc =>
+      vs_ws_disj x (AList.mem_zipToAList hx) (AList.mem_zipToAList hc)
+    refine Typing.lambda ws_nemp ws_nodup (fun w hw hc => ?_) ws_βs_len ws_Ds_len ?_ ?_
+    · exact (AList.mem_union.mp hc).elim
+        (fun h1 => vs_ws_disj w (AList.mem_zipToAList h1) hw) (ws_Γ_disj w hw)
+    · rw [Typing.reduce_of_Forall₂' Ds_nemp]
+      exact D_ih typD disj hbvD
+    · refine Typing.context_perm (TypeContext.union_swap_find? vs_zip_ws_disj)
+        (P_ih typP (fun v hv hc => ?_) hbvP)
+      exact (AList.mem_union.mp hc).elim
+        (fun h1 => vs_ws_disj v hv (AList.mem_zipToAList h1)) (disj v hv)
+
+/-- Weakening by a single fresh variable. As with `context_weakening'`, `y ∉ bv e`
+is necessary to preserve binder disjointness. -/
+theorem Typing.context_weakening {Γ} {y} {α β} {e}
+    (h : Γ ⊢ᴮ e : α) (hy : y ∉ Γ) (hbv : y ∉ bv e) : (Γ.insert y β) ⊢ᴮ e : α := by
+  have key := Typing.context_weakening' (vs := [y]) (αs := [β]) h
+    (by intro v hv; rw [List.mem_singleton] at hv; exact hv ▸ hy)
+    (by intro v hv; rw [List.mem_singleton] at hv; exact hv ▸ hbv)
+  rwa [show List.zipToAList [y] [β] ∪ Γ = Γ.insert y β by
+    rw [AList.zipToAList_cons, ← AList.insert_union]; rfl] at key
 
 theorem Typing.context_strengthening {Γ} {y} {α β} {e} : (Γ.insert y β) ⊢ᴮ e : α → y ∉ fv e → Γ ⊢ᴮ e : α := by
   intro h hy
-  induction e generalizing Γ y α β with
+  induction e generalizing Γ y α with
   | var v =>
     apply Typing.varE at h
     rw [fv, List.mem_singleton, ←ne_eq] at hy
@@ -445,120 +853,72 @@ theorem Typing.context_strengthening {Γ} {y} {α β} {e} : (Γ.insert y β) ⊢
     obtain ⟨rfl, vs_nemp, αs, Ds, vs_αs_len, vs_Ds_len, rfl, vs_nodup, typD, typP, vs_Γ_disj⟩ := h
 
     simp only [AList.mem_insert, not_or] at vs_Γ_disj
-    rw [fv, List.mem_append, List.mem_removeAll_iff, not_or] at hy
+    rw [fv, List.mem_append, List.mem_removeAll_iff, not_or, not_and_or, not_not] at hy
+    obtain ⟨y_notin_Ds, y_notin_P⟩ := hy
+    have y_notin_vs : y ∉ vs := fun contra ↦ nomatch vs_Γ_disj y contra
+    apply (Or.resolve_right · y_notin_vs) at y_notin_P
 
     rw [
       List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typD),
       Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff])] at typD
-    specialize D_ih typD hy.1
-    have typP' : (vs.zipToAList αs ∪ Γ).insert y β ⊢ᴮ P : BType.bool := by
-      admit
+    specialize D_ih typD y_notin_Ds
+    have hy_z : y ∉ vs.zipToAList αs := fun hc => y_notin_vs (AList.mem_zipToAList hc)
+    have typP' : (vs.zipToAList αs ∪ Γ).insert y β ⊢ᴮ P : BType.bool :=
+      Typing.context_perm (TypeContext.union_insert_find? hy_z) typP
     apply Typing.all vs_nemp vs_nodup (fun v hv => vs_Γ_disj v hv |>.2) vs_αs_len vs_Ds_len
     · rwa [Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff])]
-    · apply P_ih
-      · exact typP'
-      · rw [not_and'] at hy
-        apply hy.2
-        intro contr
-        specialize vs_Γ_disj y contr
-        nomatch vs_Γ_disj.1
-  | collect vs D P D_ih P_ih => sorry
-  | lambda vs D P D_ih P_ih => sorry
+    · exact P_ih typP' y_notin_P
+  | collect vs D P D_ih P_ih =>
+    apply Typing.collectE at h
+    obtain ⟨αs, Ds, vs_nemp, vs_αs_len, vs_Ds_len, rfl, vs_nodup, rfl, typD, typP, vs_Γ_disj⟩ := h
+    simp only [AList.mem_insert, not_or] at vs_Γ_disj
+    rw [fv, List.mem_append, List.mem_removeAll_iff, not_or, not_and_or, not_not] at hy
+    obtain ⟨y_notin_Ds, y_notin_P⟩ := hy
+    have y_notin_vs : y ∉ vs := fun contra ↦ nomatch vs_Γ_disj y contra
+    apply (Or.resolve_right · y_notin_vs) at y_notin_P
+    rw [
+      List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typD),
+      Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff])] at typD
+    specialize D_ih typD y_notin_Ds
+    have hy_z : y ∉ vs.zipToAList αs := fun hc => y_notin_vs (AList.mem_zipToAList hc)
+    have typP' : (vs.zipToAList αs ∪ Γ).insert y β ⊢ᴮ P : BType.bool :=
+      Typing.context_perm (TypeContext.union_insert_find? hy_z) typP
+    apply Typing.collect vs_nemp vs_nodup (fun v hv => vs_Γ_disj v hv |>.2) vs_αs_len vs_Ds_len
+    · rwa [Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff])]
+    · exact P_ih typP' y_notin_P
+  | lambda vs D P D_ih P_ih =>
+    apply Typing.lambdaE at h
+    obtain ⟨ρ, αs, Ds, vs_nemp, vs_αs_len, vs_Ds_len, rfl, vs_nodup, rfl, typD, typP, vs_Γ_disj⟩ := h
+    simp only [AList.mem_insert, not_or] at vs_Γ_disj
+    rw [fv, List.mem_append, List.mem_removeAll_iff, not_or, not_and_or, not_not] at hy
+    obtain ⟨y_notin_Ds, y_notin_P⟩ := hy
+    have y_notin_vs : y ∉ vs := fun contra ↦ nomatch vs_Γ_disj y contra
+    apply (Or.resolve_right · y_notin_vs) at y_notin_P
+    rw [
+      List.Forall₂_eq_Forall₂' (List.Forall₂.length_eq typD),
+      Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff])] at typD
+    specialize D_ih typD y_notin_Ds
+    have hy_z : y ∉ vs.zipToAList αs := fun hc => y_notin_vs (AList.mem_zipToAList hc)
+    have typP' : (vs.zipToAList αs ∪ Γ).insert y β ⊢ᴮ P : ρ :=
+      Typing.context_perm (TypeContext.union_insert_find? hy_z) typP
+    apply Typing.lambda vs_nemp vs_nodup (fun v hv => vs_Γ_disj v hv |>.2) vs_αs_len vs_Ds_len
+    · rwa [Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff])]
+    · exact P_ih typP' y_notin_P
 
 theorem Typing.context_strengthening' {Γ} {vs : List 𝒱} {αs} {α} {e} : (vs.zipToAList αs ∪ Γ) ⊢ᴮ e : α → (∀ v ∈ vs, v ∉ fv e) → Γ ⊢ᴮ e : α := by
-  admit
+  intro h hv
+  induction vs generalizing αs Γ with
+  | nil =>
+    exact h
+  | cons v₀ vs' ih =>
+    cases αs with
+    | nil =>
+      exact h
+    | cons α₀ αs' =>
+      rw [AList.zipToAList_cons, ← AList.insert_union] at h
+      exact ih (Typing.context_strengthening h (hv v₀ (List.mem_cons_self ..)))
+        (fun v hm => hv v (List.mem_cons_of_mem v₀ hm))
 
-
--- theorem Finmap.zipToFinmap_keys {Γ : TypeContext} {vs : List 𝒱} {αs : List BType} (h : vs.length = αs.length) : (vs.zipToFinmap αs).keys = vs.toAList := by
---   induction vs, αs, h using List.induction₂ with
---   | nil_nil => rfl
---   | cons_cons v vs α αs _ ih =>
---     rw [List.zipToFinmap.eq_def]
---     simp only [List.zipWith_cons_cons, List.toFinset_cons]
---     rw [Finmap.toFinmap_cons, ← List.zipToFinmap.eq_def, ← ih]
---     admit
-
-theorem Typing.typed_by_fv {Γ : TypeContext} {e : Term} {τ : BType} : Γ ⊢ᴮ e : τ → fv e ⊆ Γ.keys := by
-  intro h
-  induction h with
-  | var hv =>
-    unfold fv
-    simp only [List.cons_subset, List.nil_subset, and_true]
-    exact TypeContext.find_in_dom hv
-  | int | bool | «ℤ» | 𝔹 =>
-    simp [fv]
-  | @maplet Γ _ _ _ _ _ _ hx hy
-  | @add Γ _ _ _ _ hx hy
-  | @sub Γ _ _ _ _ hx hy
-  | @mul Γ _ _ _ _ hx hy
-  | @and Γ _ _ _ _ hx hy
-  | @eq  Γ _ _ _ _ _ hx hy
-  | @le Γ _ _ _ _ hx hy
-  | @mem Γ _ _ _ _ _ hx hy
-  | @cprod Γ _ _ _ _ _ _ hx hy
-  | @union Γ _ _ _ _ _ hx hy
-  | @inter Γ _ _ _ _ _ hx hy =>
-    intro v hv; simp [fv] at hv; exact hv.elim (hx ·) (hy ·)
-  | @pow Γ _ _ hx hy | @not Γ _ _ hx =>
-    assumption
-  | @pfun Γ _ _ _ _ _ _ hS hT | @app Γ _ _ _ _ _ _ hS hT =>
-    intro v hv; simp [fv] at hv; exact hv.elim (hS ·) (hT ·)
-  | card hS | min hS | max hS => rwa [fv]
-  | @collect Γ vs αs D P vs_nemp vs_nodup vs_Γ_disj vs_αs_len ihD ihP typP typD_ih typP_ih =>
-    intro v hv; simp [fv] at hv
-    rcases hv with hv_D | hv_P
-    · -- fv of List.reduce (⨯ᴮ) D
-      have : ∀ (acc : Term) (rest : List Term),
-          v ∈ fv (rest.foldl (· ⨯ᴮ ·) acc) → v ∈ fv acc ∨ ∃ D' ∈ rest, v ∈ fv D' := by
-        intro acc rest
-        induction rest generalizing acc with
-        | nil => intro h; exact Or.inl h
-        | cons D rest ih =>
-          intro h; rcases ih _ h with h | ⟨D', hD', hx_D'⟩
-          · rw [fv, List.mem_append] at h
-            exact h.elim Or.inl (fun h => Or.inr ⟨D, List.mem_cons_self .., h⟩)
-          · exact Or.inr ⟨D', List.mem_cons_of_mem _ hD', hx_D'⟩
-      rw [List.reduce] at hv_D
-      rcases this _ _ hv_D with hv_head | ⟨D', hD', hv_D'⟩
-      · have hne : 0 < D.length := List.length_pos_of_ne_nil
-            (by simpa [ihD, ← List.length_pos_iff] using vs_nemp)
-        rw [List.head_eq_getElem] at hv_head
-        exact typD_ih 0 hne hv_head
-      · obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem (List.mem_of_mem_tail hD')
-        exact typD_ih i hi hv_D'
-    · -- fv P removeAll vs
-      rw [List.mem_removeAll_iff] at hv_P
-      have hP : v ∈ (vs.zipToAList αs ∪ Γ) := typP_ih hv_P.1
-      have hv_not_zip : v ∉ vs.zipToAList αs :=
-        fun h => hv_P.2 (AList.mem_zipToAList h)
-      exact AList.mem_union.mp hP |>.elim (absurd · hv_not_zip) id
-  | @all Γ vs αs Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len ihD ihP typP typD_ih typP_ih
-  | @lambda Γ vs αs γ Ds P vs_nemp vs_nodup vs_Γ_disj vs_αs_len ihD ihP typP typD_ih typP_ih =>
-    simp [fv]
-    constructor
-    · -- fv of List.reduce (⨯ᴮ) Ds
-      intro v hv
-      have : ∀ (acc : Term) (rest : List Term),
-          v ∈ fv (rest.foldl (· ⨯ᴮ ·) acc) → v ∈ fv acc ∨ ∃ D' ∈ rest, v ∈ fv D' := by
-        intro acc rest; induction rest generalizing acc with
-        | nil => exact Or.inl
-        | cons D rest ih =>
-          intro h; rcases ih _ h with h | ⟨D', hD', hx_D'⟩
-          · rw [fv, List.mem_append] at h
-            exact h.elim Or.inl (fun h => Or.inr ⟨D, List.mem_cons_self .., h⟩)
-          · exact Or.inr ⟨D', List.mem_cons_of_mem _ hD', hx_D'⟩
-      rw [List.reduce] at hv
-      rcases this _ _ hv with hv_head | ⟨D', hD', hv_D'⟩
-      · have hne : 0 < Ds.length := List.length_pos_of_ne_nil
-            (by simpa [ihD, ← List.length_pos_iff] using vs_nemp)
-        rw [List.head_eq_getElem] at hv_head
-        exact typD_ih 0 hne hv_head
-      · obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem (List.mem_of_mem_tail hD')
-        exact typD_ih i hi hv_D'
-    · -- fv P removeAll vs
-      intro v hv; rw [List.mem_removeAll_iff] at hv
-      have hP : v ∈ (vs.zipToAList αs ∪ Γ) := typP_ih hv.1
-      exact AList.mem_union.mp hP |>.elim (absurd · (fun h => hv.2 (AList.mem_zipToAList h))) id
 
 /-- Bound variables of a well-typed term are not in the typing context. -/
 theorem Typing.bv_notMem_context {Γ : TypeContext} {e : Term} {τ : BType} :
@@ -645,131 +1005,5 @@ theorem Typing.bv_notMem_fv_of_typed {Γ : TypeContext} {e : Term} {τ : BType}
     (h : Γ ⊢ᴮ e : τ) (v : 𝒱) (hbv : v ∈ bv e) : v ∉ fv e := by
   intro hfv
   exact h.bv_notMem_context v hbv (h.typed_by_fv hfv)
-
-/-
-
-theorem Typing.union_find?_iff {Γ Δ : TypeContext} {x : 𝒱} {τ : BType} : (Γ ∪ Δ).find? x = τ ↔ Γ.find? x = τ ∨ (x ∉ Γ ∧ Δ.find? x = τ) := by
-  simp only [AList.lookup_union_eq_some, TypeContext.find?]
-  admit
-
-theorem Typing.union_extend_left {Γ Δ₁ Δ₂ : TypeContext} : Δ₁.find? = Δ₂.find? → ∀ {x : 𝒱}, (Γ ∪ Δ₁).find? x = (Γ ∪ Δ₂).find? x := by
-  admit
-
-theorem Typing.context_perm {Γ Δ : TypeContext} {e : Term} {τ : BType}: (∀ x, Γ.find? x = Δ.find? x) → Γ ⊢ᴮ e : τ → Δ ⊢ᴮ e : τ := by
-  intro h he
-  induction e generalizing τ Γ Δ with
-  | var v =>
-    cases he
-    apply Typing.var
-    rwa [←h]
-  | int _ | bool _ =>
-    cases he
-    first
-    | exact Typing.int
-    | exact Typing.bool
-  | maplet x y xih yih =>
-    rcases he with _ | _ | _ | ⟨hx, hy⟩
-    replace hx := xih h hx
-    replace hy := yih h hy
-    apply Typing.maplet <;> assumption
-  | le x y xih yih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ |  ⟨hx, hy⟩
-    replace hx := xih h hx
-    replace hy := yih h hy
-    apply Typing.le <;> assumption
-  | add x y xih yih =>
-    rcases he with _ | _ | _ | _ | ⟨hx, hy⟩
-    replace hx := xih h hx
-    replace hy := yih h hy
-    apply Typing.add <;> assumption
-  | sub x y xih yih =>
-    rcases he with _ | _ | _ | _ | _ | ⟨hx, hy⟩
-    replace hx := xih h hx
-    replace hy := yih h hy
-    apply Typing.sub <;> assumption
-  | mul x y xih yih =>
-    rcases he with _ | _ | _ | _ | _ | _ | ⟨hx, hy⟩
-    replace hx := xih h hx
-    replace hy := yih h hy
-    apply Typing.mul <;> assumption
-  | and x y xih yih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | ⟨hx, hy⟩
-    replace hx := xih h hx
-    replace hy := yih h hy
-    apply Typing.and <;> assumption
-  | not x xih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | hx
-    replace hx := xih h hx
-    apply Typing.not
-    assumption
-  | eq x y xih yih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hx, hy⟩
-    replace hx := xih h hx
-    replace hy := yih h hy
-    apply Typing.eq <;> assumption
-  | «ℤ» =>
-    cases he
-    exact Typing.ℤ
-  | 𝔹 =>
-    cases he
-    exact Typing.𝔹
-  | mem x S xih Sih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ |_ |  ⟨hx, Sh⟩
-    replace hx := xih h hx
-    replace Sh := Sih h Sh
-    apply Typing.mem <;> assumption
-  | collect vs D P Dih Pih =>
-    admit
-  | all vs D P Dih Pih =>
-    admit
-  | pow S Sih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hS⟩
-    replace hS := Sih h hS
-    apply Typing.pow
-    assumption
-  | cprod S T Sih Tih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hS, hT⟩
-    replace hS := Sih h hS
-    replace hT := Tih h hT
-    apply Typing.cprod <;> assumption
-  | union S T Sih Tih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hS, hT⟩
-    replace hS := Sih h hS
-    replace hT := Tih h hT
-    apply Typing.union <;> assumption
-  | inter S T Sih Tih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hS, hT⟩
-    replace hS := Sih h hS
-    replace hT := Tih h hT
-    apply Typing.inter <;> assumption
-  | pfun S T Sih Tih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hS, hT⟩
-    apply Typing.pfun
-    · exact Sih h hS
-    · exact Tih h hT
-  | lambda v D P Dih Pih =>
-    admit
-  | app f x fih xih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hx, Ph⟩
-    apply Typing.app
-    · exact fih h hx
-    · exact xih h Ph
-  | card S Sih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hS⟩
-    apply Typing.card
-    exact Sih h hS
-  | min S Sih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hS⟩
-    apply Typing.min
-    exact Sih h hS
-  | max S Sih =>
-    rcases he with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | ⟨hS⟩
-    apply Typing.max
-    exact Sih h hS
-
-theorem Typing.context_swap {Γ : TypeContext} {x y} {α β τ} {e} : (Γ.insert x α).insert y β ⊢ᴮ e : τ → x ≠ y → (Γ.insert y β).insert x α ⊢ᴮ e : τ := by
-  admit
-
--/
 
 end B
