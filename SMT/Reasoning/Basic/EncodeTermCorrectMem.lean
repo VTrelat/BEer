@@ -203,7 +203,7 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
     (x.abstract «Δ» (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv))) X α' hX ?_ den_x
   on_goal 2 =>
     use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, α
-    exact @Typing.of_abstract (t := x) («Δ» := «Δ») (Γ := E.context) (τ := α) (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) typ_x
+    exact @Typing.of_abstract (t := x) («Δ» := «Δ») (Γ := E.context) (τ := α) (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) typ_x wf
   dsimp at α_eq
   subst α'
 
@@ -214,7 +214,7 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
     (S.abstract «Δ» (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv))) S' _ hS' ?_ den_S
   on_goal 2 =>
     use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, α.set
-    exact @Typing.of_abstract (t := S) («Δ» := «Δ») (Γ := E.context) (τ := α.set) (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) typ_S
+    exact @Typing.of_abstract (t := S) («Δ» := «Δ») (Γ := E.context) (τ := α.set) (fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) typ_S wf
   dsimp at α_set_eq
   subst α_set_eq
 
@@ -453,7 +453,7 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
           on_goal 2 =>
             use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, α
             exact @Typing.of_abstract (t := x) («Δ» := Δ_alt) (Γ := E.context) (τ := α)
-              (fun v hv => Δ_fv_alt v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) typ_x
+              (fun v hv => Δ_fv_alt v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) typ_x wf_alt
           dsimp at α_alt_eq; subst α_alt_eq
           dsimp at eq_alt
           rw [Option.bind_eq_some_iff] at eq_alt
@@ -464,7 +464,7 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
           on_goal 2 =>
             use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, α.set
             exact @Typing.of_abstract (t := S) («Δ» := Δ_alt) (Γ := E.context) (τ := α.set)
-              (fun v hv => Δ_fv_alt v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) typ_S
+              (fun v hv => Δ_fv_alt v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) typ_S wf_alt
           dsimp at α_set_alt_eq; subst α_set_alt_eq
           dsimp at eq_alt
           rw [ite_cond_eq_true _ _ (eq_true rfl), Option.some_inj] at eq_alt

@@ -211,7 +211,7 @@ theorem encodeTerm_spec.eq_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.T
     ?_ den_x
   on_goal 2 =>
     use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, α
-    exact @Typing.of_abstract (t := x) («Δ» := «Δ») (Γ := E.context) (τ := α) Δ_fv_x typ_x
+    exact @Typing.of_abstract (t := x) («Δ» := «Δ») (Γ := E.context) (τ := α) Δ_fv_x typ_x wf
   dsimp at αx_eq
   subst αx
 
@@ -223,7 +223,7 @@ theorem encodeTerm_spec.eq_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.T
     ?_ den_y
   on_goal 2 =>
     use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, α
-    exact @Typing.of_abstract (t := y) («Δ» := «Δ») (Γ := E.context) (τ := α) Δ_fv_y typ_y
+    exact @Typing.of_abstract (t := y) («Δ» := «Δ») (Γ := E.context) (τ := α) Δ_fv_y typ_y wf
   dsimp at this
   subst βy
 
@@ -440,7 +440,7 @@ theorem encodeTerm_spec.eq_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.T
           on_goal 2 =>
             use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, α
             exact @Typing.of_abstract (t := x) («Δ» := Δ_alt) (Γ := E.context) (τ := α)
-              (fun v hv => Δ_fv_alt v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) typ_x
+              (fun v hv => Δ_fv_alt v (by rw [B.fv, List.mem_append]; exact Or.inl hv)) typ_x wf_alt
           dsimp at α_alt_eq; subst α_alt_eq
           dsimp at eq_alt
           rw [Option.bind_eq_some_iff] at eq_alt
@@ -451,7 +451,7 @@ theorem encodeTerm_spec.eq_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.T
           on_goal 2 =>
             use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, α
             exact @Typing.of_abstract (t := y) («Δ» := Δ_alt) (Γ := E.context) (τ := α)
-              (fun v hv => Δ_fv_alt v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) typ_y
+              (fun v hv => Δ_fv_alt v (by rw [B.fv, List.mem_append]; exact Or.inr hv)) typ_y wf_alt
           dsimp at α_set_alt_eq; subst α_set_alt_eq
           dsimp at eq_alt
           simp only [↓reduceDIte, Option.some.injEq, PSigma.mk.injEq] at eq_alt

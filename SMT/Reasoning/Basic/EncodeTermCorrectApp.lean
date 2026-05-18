@@ -216,7 +216,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
     ?_ den_f
   on_goal 2 =>
     use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, .set (γ ×ᴮ α)
-    exact @Typing.of_abstract (t := f) («Δ» := «Δ») (Γ := E.context) (τ := .set (γ ×ᴮ α)) Δ_fv_f typ_f
+    exact @Typing.of_abstract (t := f) («Δ» := «Δ») (Γ := E.context) (τ := .set (γ ×ᴮ α)) Δ_fv_f typ_f wf
   dsimp at hτF
   subst τF
 
@@ -228,7 +228,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
     ?_ den_x
   on_goal 2 =>
     use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, γ
-    exact @Typing.of_abstract (t := x) («Δ» := «Δ») (Γ := E.context) (τ := γ) Δ_fv_x typ_x
+    exact @Typing.of_abstract (t := x) («Δ» := «Δ») (Γ := E.context) (τ := γ) Δ_fv_x typ_x wf
   dsimp at hτX
   subst τX
 
@@ -729,7 +729,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                   on_goal 2 =>
                     use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, .set (γ ×ᴮ α)
                     exact @Typing.of_abstract (t := f) («Δ» := Δ_alt) (Γ := E.context)
-                      (τ := .set (γ ×ᴮ α)) Δ_fv_alt_f typ_f
+                      (τ := .set (γ ×ᴮ α)) Δ_fv_alt_f typ_f wf_alt
                   dsimp at hτF_alt; subst τF_alt
                   rw [Option.bind_eq_some_iff] at eq_alt
                   obtain ⟨⟨X_alt, τX_alt, hX_alt⟩, den_x_alt, eq_alt2⟩ := eq_alt
@@ -738,7 +738,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                   on_goal 2 =>
                     use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, γ
                     exact @Typing.of_abstract (t := x) («Δ» := Δ_alt) (Γ := E.context) (τ := γ)
-                      Δ_fv_alt_x typ_x
+                      Δ_fv_alt_x typ_x wf_alt
                   dsimp at hτX_alt; subst τX_alt
                   dsimp at eq_alt2
                   rw [if_pos rfl] at eq_alt2
