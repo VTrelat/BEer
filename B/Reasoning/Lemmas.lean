@@ -935,7 +935,8 @@ theorem B.Typing.mem_context_of_mem_fv {Γ : B.TypeContext} {x : 𝒱} {t : Term
 
 
 theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BType} (h : Γ ⊢ᴮ t : τ)
-  (h' : (hx : Γ.lookup x |>.isSome) → Γ ⊢ᴮ e : (Γ.lookup x).get hx) :
+  (h' : (hx : Γ.lookup x |>.isSome) → Γ ⊢ᴮ e : (Γ.lookup x).get hx)
+  (hbv : ∀ v ∈ bv e, v ∉ bv t) :
   Γ ⊢ᴮ t[x := e] : τ := by
   by_cases h_fv : x ∉ fv t
   · rwa [not_mem_fv_subst h_fv]
@@ -991,11 +992,13 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
       | apply Typing.maplet
       | apply Typing.le
       · by_cases h_fv_A : x ∈ fv A
-        · exact A_ih ‹_› h_fv_A α_def h'
+        · exact A_ih ‹_› (fun v hv hc => hbv v hv (by
+            simp only [bv, List.mem_append]; exact Or.inl hc)) h_fv_A α_def h'
         · rw [not_mem_fv_subst h_fv_A]
           assumption
       · by_cases h_fv_B : x ∈ fv B
-        · exact B_ih ‹_› h_fv_B α_def h'
+        · exact B_ih ‹_› (fun v hv hc => hbv v hv (by
+            simp only [bv, List.mem_append]; exact Or.inr hc)) h_fv_B α_def h'
         · rw [not_mem_fv_subst h_fv_B]
           assumption
     | case12 _ ih
@@ -1011,7 +1014,7 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
       | apply Typing.min
       | apply Typing.max
       | apply Typing.card
-      exact ih ‹_› h_fv α_def h'
+      exact ih ‹_› (fun v hv hc => hbv v hv (by simp only [bv]; exact hc)) h_fv α_def h'
     | case25 vs D P x_mem_vs ih =>
       rw [fv, List.mem_append, List.mem_removeAll_iff] at h_fv
       obtain ⟨αs, Ds, vs_nemp, vs_αs_len, vs_Ds_len, rfl, vs_nodup, rfl, typ_Dᵢ, typP, vs_Γ_disj⟩ := Typing.collectE h
@@ -1019,7 +1022,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
       rw [List.Forall₂_eq_Forall₂' (vs_Ds_len.symm.trans vs_αs_len)] at typ_Dᵢ
       by_cases h_fv_vs : x ∈ fv (Ds.reduce (· ⨯ᴮ ·) (by simpa [←List.length_pos_iff, vs_Ds_len] using vs_nemp))
       · have typ_Ds := Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff]) (vs_Ds_len.symm.trans vs_αs_len) |>.mp typ_Dᵢ
-        specialize ih typ_Ds h_fv_vs
+        specialize ih typ_Ds (fun v hv hc => hbv v hv (by
+          simp only [bv, List.mem_append]; exact Or.inl (Or.inr hc))) h_fv_vs
         rw [reduce_subst_eq_subst_reduce e vs Ds vs_nemp vs_Ds_len] at ih ⊢
         apply @Typing.collect Γ vs αs (Ds.map fun Dᵢ => Dᵢ[x := e]) P vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rwa [List.length_map]) _ typP
         intro i hi
@@ -1039,7 +1043,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
       rw [List.Forall₂_eq_Forall₂' (vs_Ds_len.symm.trans vs_αs_len)] at typ_Dᵢ
       by_cases h_fv_vs : x ∈ fv (Ds.reduce (· ⨯ᴮ ·) (by simpa [←List.length_pos_iff, vs_Ds_len] using vs_nemp))
       · have typ_Ds := Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff]) (vs_Ds_len.symm.trans vs_αs_len) |>.mp typ_Dᵢ
-        specialize ihD typ_Ds h_fv_vs
+        specialize ihD typ_Ds (fun v hv hc => hbv v hv (by
+        simp only [bv, List.mem_append]; exact Or.inl (Or.inr hc))) h_fv_vs
         rw [reduce_subst_eq_subst_reduce e vs Ds vs_nemp vs_Ds_len] at ihD ⊢
         apply @Typing.collect Γ vs αs (Ds.map fun Dᵢ => Dᵢ[x := e]) (P[x := e]) vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rwa [List.length_map]) ?_ ?_
         · intro i hi
@@ -1051,7 +1056,7 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
             simpa [List.get_eq_getElem, List.getElem_map] using ihD
           · rw [List.length_map, ←vs_Ds_len, ←vs_αs_len]
         · by_cases h_fv_P : x ∈ fv P
-          · apply @ihP (vs.zipToAList αs ∪ Γ) .bool typP h_fv_P _ (Typing.context_weakening' h' vs_Γ_disj)
+          · apply @ihP (vs.zipToAList αs ∪ Γ) .bool typP (fun v hv hc => hbv v hv (by simp only [bv, List.mem_append]; exact Or.inr hc)) h_fv_P _ (Typing.context_weakening' h' vs_Γ_disj (fun v hv hc => hbv v hc (by simp only [bv, List.mem_append]; exact Or.inl (Or.inl hv))))
             · rw [AList.lookup_union_eq_some]
               right
               and_intros
@@ -1085,7 +1090,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
           · rwa [not_mem_fv_subst h_fv_P]
       · rw [not_mem_fv_subst h_fv_vs]
         by_cases h_fv_P : x ∈ fv P
-        · specialize ihP typP h_fv_P ?_ (Typing.context_weakening' h' vs_Γ_disj)
+        · specialize ihP typP (fun v hv hc => hbv v hv (by
+            simp only [bv, List.mem_append]; exact Or.inr hc)) h_fv_P ?_ (Typing.context_weakening' h' vs_Γ_disj (fun v hv hc => hbv v hc (by simp only [bv, List.mem_append]; exact Or.inl (Or.inl hv))))
           · rw [AList.lookup_union_eq_some]
             right
             and_intros
@@ -1126,7 +1132,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
       rw [List.Forall₂_eq_Forall₂' (vs_Ds_len.symm.trans vs_αs_len)] at typ_Dᵢ
       by_cases h_fv_vs : x ∈ fv (Ds.reduce (· ⨯ᴮ ·) (by simpa [←List.length_pos_iff, vs_Ds_len] using vs_nemp))
       · have typ_Ds := Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff]) (vs_Ds_len.symm.trans vs_αs_len) |>.mp typ_Dᵢ
-        specialize ih typ_Ds h_fv_vs
+        specialize ih typ_Ds (fun v hv hc => hbv v hv (by
+          simp only [bv, List.mem_append]; exact Or.inl (Or.inr hc))) h_fv_vs
         rw [reduce_subst_eq_subst_reduce e vs Ds vs_nemp vs_Ds_len] at ih ⊢
         apply @Typing.lambda Γ vs αs γ (Ds.map fun Dᵢ => Dᵢ[x := e]) P vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rwa [List.length_map]) _ typP
         intro i hi
@@ -1146,7 +1153,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
       rw [List.Forall₂_eq_Forall₂' (vs_Ds_len.symm.trans vs_αs_len)] at typ_Dᵢ
       by_cases h_fv_vs : x ∈ fv (Ds.reduce (· ⨯ᴮ ·) (by simpa [←List.length_pos_iff, vs_Ds_len] using vs_nemp))
       · have typ_Ds := Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff]) (vs_Ds_len.symm.trans vs_αs_len) |>.mp typ_Dᵢ
-        specialize ihD typ_Ds h_fv_vs
+        specialize ihD typ_Ds (fun v hv hc => hbv v hv (by
+        simp only [bv, List.mem_append]; exact Or.inl (Or.inr hc))) h_fv_vs
         rw [reduce_subst_eq_subst_reduce e vs Ds vs_nemp vs_Ds_len] at ihD ⊢
         apply @Typing.lambda Γ vs αs γ (Ds.map fun Dᵢ => Dᵢ[x := e]) (P[x := e]) vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rwa [List.length_map]) ?_ ?_
         · intro i hi
@@ -1158,7 +1166,7 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
             simpa [List.get_eq_getElem, List.getElem_map] using ihD
           · rw [List.length_map, ←vs_Ds_len, ←vs_αs_len]
         · by_cases h_fv_P : x ∈ fv P
-          · apply @ihP (vs.zipToAList αs ∪ Γ) γ typP h_fv_P _ (Typing.context_weakening' h' vs_Γ_disj)
+          · apply @ihP (vs.zipToAList αs ∪ Γ) γ typP (fun v hv hc => hbv v hv (by simp only [bv, List.mem_append]; exact Or.inr hc)) h_fv_P _ (Typing.context_weakening' h' vs_Γ_disj (fun v hv hc => hbv v hc (by simp only [bv, List.mem_append]; exact Or.inl (Or.inl hv))))
             · rw [AList.lookup_union_eq_some]
               right
               and_intros
@@ -1192,7 +1200,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
           · rwa [not_mem_fv_subst h_fv_P]
       · rw [not_mem_fv_subst h_fv_vs]
         by_cases h_fv_P : x ∈ fv P
-        · specialize ihP typP h_fv_P ?_ (Typing.context_weakening' h' vs_Γ_disj)
+        · specialize ihP typP (fun v hv hc => hbv v hv (by
+            simp only [bv, List.mem_append]; exact Or.inr hc)) h_fv_P ?_ (Typing.context_weakening' h' vs_Γ_disj (fun v hv hc => hbv v hc (by simp only [bv, List.mem_append]; exact Or.inl (Or.inl hv))))
           · rw [AList.lookup_union_eq_some]
             right
             and_intros
@@ -1233,7 +1242,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
       rw [List.Forall₂_eq_Forall₂' (vs_Ds_len.symm.trans vs_αs_len)] at typ_Dᵢ
       by_cases h_fv_vs : x ∈ fv (Ds.reduce (· ⨯ᴮ ·) (by simpa [←List.length_pos_iff, vs_Ds_len] using vs_nemp))
       · have typ_Ds := Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff]) (vs_Ds_len.symm.trans vs_αs_len) |>.mp typ_Dᵢ
-        specialize ih typ_Ds h_fv_vs
+        specialize ih typ_Ds (fun v hv hc => hbv v hv (by
+          simp only [bv, List.mem_append]; exact Or.inl (Or.inr hc))) h_fv_vs
         rw [reduce_subst_eq_subst_reduce e vs Ds vs_nemp vs_Ds_len] at ih ⊢
         apply @Typing.all Γ vs αs (Ds.map fun Dᵢ => Dᵢ[x := e]) P vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rwa [List.length_map]) _ typP
         intro i hi
@@ -1253,7 +1263,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
       rw [List.Forall₂_eq_Forall₂' (vs_Ds_len.symm.trans vs_αs_len)] at typ_Dᵢ
       by_cases h_fv_vs : x ∈ fv (Ds.reduce (· ⨯ᴮ ·) (by simpa [←List.length_pos_iff, vs_Ds_len] using vs_nemp))
       · have typ_Ds := Typing.reduce_of_Forall₂' (by rwa [←List.length_pos_iff, ←vs_Ds_len, List.length_pos_iff]) (vs_Ds_len.symm.trans vs_αs_len) |>.mp typ_Dᵢ
-        specialize ihD typ_Ds h_fv_vs
+        specialize ihD typ_Ds (fun v hv hc => hbv v hv (by
+        simp only [bv, List.mem_append]; exact Or.inl (Or.inr hc))) h_fv_vs
         rw [reduce_subst_eq_subst_reduce e vs Ds vs_nemp vs_Ds_len] at ihD ⊢
         apply @Typing.all Γ vs αs (Ds.map fun Dᵢ => Dᵢ[x := e]) (P[x := e]) vs_nemp vs_nodup vs_Γ_disj vs_αs_len (by rwa [List.length_map]) ?_ ?_
         · intro i hi
@@ -1265,7 +1276,7 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
             simpa [List.get_eq_getElem, List.getElem_map] using ihD
           · rw [List.length_map, ←vs_Ds_len, ←vs_αs_len]
         · by_cases h_fv_P : x ∈ fv P
-          · apply ihP typP h_fv_P _ (Typing.context_weakening' h' vs_Γ_disj)
+          · apply ihP typP (fun v hv hc => hbv v hv (by simp only [bv, List.mem_append]; exact Or.inr hc)) h_fv_P _ (Typing.context_weakening' h' vs_Γ_disj (fun v hv hc => hbv v hc (by simp only [bv, List.mem_append]; exact Or.inl (Or.inl hv))))
             · rw [AList.lookup_union_eq_some]
               right
               and_intros
@@ -1299,7 +1310,8 @@ theorem B.Typing.subst {Γ : B.TypeContext} {x : 𝒱} (t e : B.Term) {τ : BTyp
           · rwa [not_mem_fv_subst h_fv_P]
       · rw [not_mem_fv_subst h_fv_vs]
         by_cases h_fv_P : x ∈ fv P
-        · specialize ihP typP h_fv_P ?_ (Typing.context_weakening' h' vs_Γ_disj)
+        · specialize ihP typP (fun v hv hc => hbv v hv (by
+            simp only [bv, List.mem_append]; exact Or.inr hc)) h_fv_P ?_ (Typing.context_weakening' h' vs_Γ_disj (fun v hv hc => hbv v hc (by simp only [bv, List.mem_append]; exact Or.inl (Or.inl hv))))
           · rw [AList.lookup_union_eq_some]
             right
             and_intros

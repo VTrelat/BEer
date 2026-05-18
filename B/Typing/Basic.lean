@@ -252,4 +252,54 @@ theorem TypeContext.find_in_dom {v τ} {Γ : TypeContext} : Γ.find? v = some τ
 
 theorem TypeContext.erase_dom {x} {Γ : TypeContext} : TypeContext.dom (Γ.erase x) = Γ.dom.erase x := AList.keys_erase x Γ
 
+theorem TypeContext.mem_of_find?_eq {Γ Δ : TypeContext} (h : ∀ x, Γ.find? x = Δ.find? x)
+    {v : 𝒱} (hv : v ∈ Δ) : v ∈ Γ := by
+  have hΓΔ := h v
+  unfold TypeContext.find? at hΓΔ
+  rw [← AList.lookup_isSome, hΓΔ, AList.lookup_isSome]
+  exact hv
+
+theorem TypeContext.union_find?_congr {Z Γ Δ : TypeContext}
+    (h : ∀ x, Γ.find? x = Δ.find? x) (x : 𝒱) :
+    TypeContext.find? (Z ∪ Γ) x = TypeContext.find? (Z ∪ Δ) x := by
+  unfold TypeContext.find?
+  by_cases hx : x ∈ Z
+  · rw [AList.lookup_union_left hx, AList.lookup_union_left hx]
+  · rw [AList.lookup_union_right hx, AList.lookup_union_right hx]
+    exact h x
+
+/-- Inserting a variable `y` fresh for `Z` commutes with a left-biased union, *as a
+typing context*: the two contexts agree on every `find?` lookup. The structural
+`AList` equality `Z ∪ Γ.insert y β = (Z ∪ Γ).insert y β` is **false** (entry order
+differs), so this `find?`-level statement is the usable generalisation, consumed
+through `Typing.context_perm`. -/
+theorem TypeContext.union_insert_find? {Z Γ : TypeContext} {y : 𝒱} {β : BType}
+    (hy : y ∉ Z) (x : 𝒱) :
+    TypeContext.find? (Z ∪ Γ.insert y β) x = TypeContext.find? ((Z ∪ Γ).insert y β) x := by
+  unfold TypeContext.find?
+  by_cases hxy : x = y
+  · subst hxy
+    rw [AList.lookup_union_right hy, AList.lookup_insert, AList.lookup_insert]
+  · rw [AList.lookup_insert_ne hxy]
+    by_cases hxz : x ∈ Z
+    · rw [AList.lookup_union_left hxz, AList.lookup_union_left hxz]
+    · rw [AList.lookup_union_right hxz, AList.lookup_union_right hxz,
+        AList.lookup_insert_ne hxy]
+
+/-- Two left-biased unions whose left operands have disjoint key sets may be swapped:
+the two contexts agree on every `find?` lookup. Consumed through `Typing.context_perm`. -/
+theorem TypeContext.union_swap_find? {A B Γ : TypeContext}
+    (hAB : ∀ x, x ∈ A → x ∉ B) (x : 𝒱) :
+    TypeContext.find? (A ∪ (B ∪ Γ)) x = TypeContext.find? (B ∪ (A ∪ Γ)) x := by
+  unfold TypeContext.find?
+  by_cases hA : x ∈ A
+  · rw [AList.lookup_union_left hA, AList.lookup_union_right (hAB x hA),
+      AList.lookup_union_left hA]
+  · rw [AList.lookup_union_right hA]
+    by_cases hB : x ∈ B
+    · rw [AList.lookup_union_left hB, AList.lookup_union_left hB]
+    · rw [AList.lookup_union_right hB, AList.lookup_union_right hB,
+        AList.lookup_union_right hA]
+
+
 end B
