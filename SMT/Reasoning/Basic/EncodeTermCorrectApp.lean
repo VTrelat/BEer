@@ -24,6 +24,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                       ((B.bv f).Nodup) →
                         B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ f →
                         (∀ v ∈ B.fv f, v ∈ Λ) →
+                        B.RenWF E.context «Δ» →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -54,6 +55,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                                                                       ∀ v ∈ _root_.B.fv f, (Δ_alt v).isSome = true)
                                                                     (Δ₀_alt : SMT.RenamingContext.Context),
                                                                     RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt f →
+                                                                    B.RenWF E.context Δ_alt →
                                                                       (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                                                       (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                                         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -87,6 +89,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                       ((B.bv x).Nodup) →
                         B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ x →
                         (∀ v ∈ B.fv x, v ∈ Λ) →
+                        B.RenWF E.context «Δ» →
                         ∀ {n : ℕ},
                           ⦃fun x_1 =>
                             match x_1 with
@@ -117,6 +120,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                                                                       ∀ v ∈ _root_.B.fv x, (Δ_alt v).isSome = true)
                                                                     (Δ₀_alt : SMT.RenamingContext.Context),
                                                                     RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt x →
+                                                                    B.RenWF E.context Δ_alt →
                                                                       (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                                                       (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                                         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -144,6 +148,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
   (bv_nodup : (B.bv (B.Term.app f x)).Nodup)
   (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((B.Term.app f x)))
   (fv_in_Λ : ∀ v ∈ B.fv ((B.Term.app f x)), v ∈ Λ)
+  (wf : B.RenWF E.context «Δ» := by assumption)
   {n : ℕ} :
   ⦃fun x_1 =>
     match x_1 with
@@ -172,6 +177,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                                             (Δ_fv_alt : ∀ v ∈ _root_.B.fv (.app f x), (Δ_alt v).isSome = true)
                                             (Δ₀_alt : SMT.RenamingContext.Context),
                                             RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (.app f x) →
+                                            B.RenWF E.context Δ_alt →
                                               (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                               (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                 ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -210,7 +216,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
     ?_ den_f
   on_goal 2 =>
     use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, .set (γ ×ᴮ α)
-    exact @Typing.of_abstract (_root_.B.Dom) («Δ» := «Δ») ?_ f E.context (.set (γ ×ᴮ α)) Δ_fv_f typ_f
+    exact @Typing.of_abstract (t := f) («Δ» := «Δ») (Γ := E.context) (τ := .set (γ ×ᴮ α)) Δ_fv_f typ_f
   dsimp at hτF
   subst τF
 
@@ -222,7 +228,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
     ?_ den_x
   on_goal 2 =>
     use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, γ
-    exact @Typing.of_abstract (_root_.B.Dom) («Δ» := «Δ») ?_ x E.context γ Δ_fv_x typ_x
+    exact @Typing.of_abstract (t := x) («Δ» := «Δ») (Γ := E.context) (τ := γ) Δ_fv_x typ_x
   dsimp at hτX
   subst τX
 
@@ -263,6 +269,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
       hf_bv_nodup
       (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
       (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
+      wf
       (n := St.env.freshvarsc)
     clear f_ih
     rename_i out_f
@@ -303,6 +310,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
       hx_bv_nodup
       (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_Stf (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
       (fun v hv => AList.mem_of_subset St_eq_Stf (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+      wf
       (n := Stf.env.freshvarsc)
     clear x_ih
     rename_i out_x
@@ -707,7 +715,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                       ⟨Tenc_sub.val, hTenc⟩ from hspec.symm]
                     exact retract_Tenc
                 · -- totality
-                  intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
+                  intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext wf_alt Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
                   -- Decompose B-denotation of (app f x) under alt valuation
                   have Δ_fv_alt_f : ∀ v ∈ B.fv f, (Δ_alt v).isSome = true :=
                     fun v hv => Δ_fv_alt v (by rw [B.fv, List.mem_append]; exact Or.inl hv)
@@ -720,8 +728,8 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                     (t := f.abstract («Δ» := Δ_alt) Δ_fv_alt_f) ?_ den_f_alt
                   on_goal 2 =>
                     use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, .set (γ ×ᴮ α)
-                    exact @Typing.of_abstract (B.Dom) («Δ» := Δ_alt) ?_ f E.context
-                      (.set (γ ×ᴮ α)) Δ_fv_alt_f typ_f
+                    exact @Typing.of_abstract (t := f) («Δ» := Δ_alt) (Γ := E.context)
+                      (τ := .set (γ ×ᴮ α)) Δ_fv_alt_f typ_f
                   dsimp at hτF_alt; subst τF_alt
                   rw [Option.bind_eq_some_iff] at eq_alt
                   obtain ⟨⟨X_alt, τX_alt, hX_alt⟩, den_x_alt, eq_alt2⟩ := eq_alt
@@ -729,7 +737,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                     (t := x.abstract («Δ» := Δ_alt) Δ_fv_alt_x) ?_ den_x_alt
                   on_goal 2 =>
                     use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, γ
-                    exact @Typing.of_abstract (B.Dom) («Δ» := Δ_alt) ?_ x E.context γ
+                    exact @Typing.of_abstract (t := x) («Δ» := Δ_alt) (Γ := E.context) (τ := γ)
                       Δ_fv_alt_x typ_x
                   dsimp at hτX_alt; subst τX_alt
                   dsimp at eq_alt2
@@ -774,7 +782,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                       exact Δ₀_alt_wt v d hv' τ (AList.lookup_of_subset Stf_types_sub_St₈ hτ)
                     obtain ⟨Δ'_alt_f, hcov_alt_f, denT_f_alt, hext_alt_f,
                       Δ'_alt_f_none_out, Δ'_alt_f_wt_out, den_f_alt_enc, hRDom_f_alt, _⟩ :=
-                      f_ih_total Δ_alt Δ_fv_alt_f Δ₀_alt_f Δ₀_alt_ext_f f_none_Stf f_wt_Stf
+                      f_ih_total Δ_alt Δ_fv_alt_f Δ₀_alt_f Δ₀_alt_ext_f wf_alt f_none_Stf f_wt_Stf
                         F_alt hF_alt den_f_alt
                     -- === Step 2: Build hybrid base for x_ih_total ===
                     -- x_ih_total expects vanishing at Stx.env.usedVars.
@@ -832,7 +840,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                     -- Call x_ih_total
                     obtain ⟨Δ'_alt_x, hcov_alt_x, denT_x_alt, hext_alt_x,
                       Δ'_alt_x_none_out, Δ'_alt_x_wt_out, den_x_alt_enc, hRDom_x_alt, Δ'_alt_x_dom_out⟩ :=
-                      x_ih_total Δ_alt Δ_fv_alt_x Δ₀_alt_x Δ₀_alt_x_ext Δ₀_alt_x_none Δ₀_alt_x_wt
+                      x_ih_total Δ_alt Δ_fv_alt_x Δ₀_alt_x Δ₀_alt_x_ext wf_alt Δ₀_alt_x_none Δ₀_alt_x_wt
                         X_alt hX_alt den_x_alt
                     -- === Step 3: Construct g_alt (constant lambda for alt values) ===
                     have ζ_α_isfunc_alt : ZFSet.IsFunc ⟦α⟧ᶻ ⟦α.toSMTType⟧ᶻ

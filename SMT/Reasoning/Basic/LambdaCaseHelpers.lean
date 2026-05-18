@@ -119,6 +119,7 @@ theorem lambda_hbridge.{u}
         (Δ_fv_alt : ∀ v ∈ B.fv P, (Δ_alt v).isSome = true)
         (Δ₀_alt : SMT.RenamingContext.Context),
         RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt P →
+        B.RenWF E_ctx Δ_alt →
         (∀ v ∉ used_St₃, Δ₀_alt v = none) →
         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦β⟧ᶻ),
           ⟦P.abstract Δ_alt Δ_fv_alt⟧ᴮ = some ⟨T_alt, ⟨β, hT_alt⟩⟩ →
@@ -135,6 +136,9 @@ theorem lambda_hbridge.{u}
       ofFinDom x_fin ∈ 𝒟_val →
       ⟦(B.Term.abstract.go P vs «Δ» (fun v hv hvs => Δ_fv_lambda v
         (B.fv.mem_lambda (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ.isSome = true)
+    (P_renwf : ∀ (x_fin : Fin vs.length → B.Dom),
+      (∀ i : Fin vs.length, (x_fin i).snd.fst = τ.get vs.length i) →
+      B.RenWF E_ctx (Function.updates «Δ» vs (List.ofFn fun i => some (x_fin i))))
     : ∀ (xy : ZFSet.{u}) (hx_mem : xy.π₁ ∈ ⟦τ⟧ᶻ) (hy_mem : xy.π₂ ∈ ⟦β⟧ᶻ)
         (hxy_pair : xy = xy.π₁.pair xy.π₂)
         (hxy_π₁_arity : xy.π₁.hasArity vs.length)
@@ -187,6 +191,7 @@ theorem lambda_hbridge.{u}
   have hP_go_den : ⟦(B.Term.abstract.go P vs «Δ» (by
         intro v hv hvs; exact Δ_fv_lambda v (B.fv.mem_lambda (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ
       = some ⟨P_val, ⟨P_ty, hP_val⟩⟩ := by convert hP_den using 2
+  have hwf_P : B.RenWF E_ctx Δ_ext_x := P_renwf x_fin (fun i => (hx_fin_typ i).1)
   have hτPx_β : P_ty = β := by
     rw [denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp x_fin Δ_fv_P_x] at hP_go_den
     exact (denote_welltyped_eq (t := P.abstract Δ_ext_x Δ_fv_P_x)
@@ -290,7 +295,7 @@ theorem lambda_hbridge.{u}
     rw [if_neg hv_not_vs, if_neg hv]
   -- Step F: Invoke P_enc_total
   obtain ⟨Δ_P_x, hcov_Px, denT_x', Δ_P_x_extends, hden_Px, hRDom_x⟩ :=
-    P_enc_total Δ_ext_x Δ_fv_P_x Δ₀_hybrid_x Δ₀_hybrid_ext_P_x Δ₀_hybrid_x_none_St₃
+    P_enc_total Δ_ext_x Δ_fv_P_x Δ₀_hybrid_x Δ₀_hybrid_ext_P_x hwf_P Δ₀_hybrid_x_none_St₃
       P_val hP_val h_den_P_x
   have hdenT_x'_ty : denT_x'.snd.fst = β.toSMTType := hRDom_x.1
   have hdenT_x'_retract : retract β denT_x'.fst = P_val := hRDom_x.2

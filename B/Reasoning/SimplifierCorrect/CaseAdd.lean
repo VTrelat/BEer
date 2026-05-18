@@ -9,7 +9,8 @@ theorem simplifier_correct_aux_add.var.{u_1} {«Δ» : 𝒱 → Option B.Dom} {�
   (fv_y : ∀ v ∈ fv y, («Δ» v).isSome = true) {τ : BType} {X : ZFSet.{u_1}} {hX : X ∈ BType.int.toZFSet}
   {Y : ZFSet.{u_1}} {hY : Y ∈ BType.int.toZFSet} (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) (v : 𝒱)
   (fv_x : ∀ v_1 ∈ fv (B.Term.var v), («Δ» v_1).isSome = true) (wf_t : (B.Term.var v +ᴮ y).WF)
-  (typ_t : Γ ⊢ᴮ B.Term.var v +ᴮ y : τ) (den_x : ⟦(B.Term.var v).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) :
+  (typ_t : Γ ⊢ᴮ B.Term.var v +ᴮ y : τ) (den_x : ⟦(B.Term.var v).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add (B.Term.var v) y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ =
     some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
     rw [Term.abstract, denote, Option.pure_def, Option.some_get] at den_x
@@ -141,7 +142,8 @@ theorem simplifier_correct_aux_add.int.{u_1} {«Δ» : 𝒱 → Option B.Dom} {�
   (fv_y : ∀ v ∈ fv y, («Δ» v).isSome = true) {τ : BType} {X : ZFSet.{u_1}} {hX : X ∈ BType.int.toZFSet}
   {Y : ZFSet.{u_1}} {hY : Y ∈ BType.int.toZFSet} (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) (n : ℤ)
   (fv_x : ∀ v ∈ fv (B.Term.int n), («Δ» v).isSome = true) (wf_t : (B.Term.int n +ᴮ y).WF)
-  (typ_t : Γ ⊢ᴮ B.Term.int n +ᴮ y : τ) (den_x : ⟦(B.Term.int n).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) :
+  (typ_t : Γ ⊢ᴮ B.Term.int n +ᴮ y : τ) (den_x : ⟦(B.Term.int n).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add (B.Term.int n) y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ =
     some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
     rw [Term.abstract, denote, Option.pure_def, Option.some_inj] at den_x
@@ -420,7 +422,8 @@ theorem simplifier_correct_aux_add.add.{u_1} {«Δ» : 𝒱 → Option B.Dom} {�
   {Y : ZFSet.{u_1}} {hY : Y ∈ BType.int.toZFSet} (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
   (a b : B.Term)
   (fv_x : ∀ v ∈ fv (a +ᴮ b), («Δ» v).isSome = true) (wf_t : (a +ᴮ b +ᴮ y).WF) (typ_t : Γ ⊢ᴮ a +ᴮ b +ᴮ y : τ)
-  (den_x : ⟦(a +ᴮ b).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) :
+  (den_x : ⟦(a +ᴮ b).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add (a +ᴮ b) y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ =
     some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
     simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff, PSigma.exists] at den_x
@@ -570,7 +573,8 @@ theorem simplifier_correct_aux_add.sub.{u_1} {«Δ» : 𝒱 → Option B.Dom} {�
   (fv_y : ∀ v ∈ fv y, («Δ» v).isSome = true) {X : ZFSet.{u_1}} {hX : X ∈ BType.int.toZFSet} {Y : ZFSet.{u_1}}
   {hY : Y ∈ BType.int.toZFSet} (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) (a b : B.Term)
   (fv_x : ∀ v ∈ fv (a -ᴮ b), («Δ» v).isSome = true) (wf_t : (a -ᴮ b +ᴮ y).WF) (typ_t : Γ ⊢ᴮ a -ᴮ b +ᴮ y : BType.int)
-  (den_x : ⟦(a -ᴮ b).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) :
+  (den_x : ⟦(a -ᴮ b).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add (a -ᴮ b) y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ =
     some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
   simp_rw [Term.abstract, denote, Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff, PSigma.exists] at den_x
@@ -710,7 +714,8 @@ theorem simplifier_correct_aux_add.mul.{u_1} {«Δ» : 𝒱 → Option B.Dom} {�
   (fv_y : ∀ v ∈ fv y, («Δ» v).isSome = true) {X : ZFSet.{u_1}} {hX : X ∈ BType.int.toZFSet} {Y : ZFSet.{u_1}}
   {hY : Y ∈ BType.int.toZFSet} (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) (a b : B.Term)
   (fv_x : ∀ v ∈ fv (a *ᴮ b), («Δ» v).isSome = true) (wf_t : (a *ᴮ b +ᴮ y).WF) (typ_t : Γ ⊢ᴮ a *ᴮ b +ᴮ y : BType.int)
-  (den_x : ⟦(a *ᴮ b).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) :
+  (den_x : ⟦(a *ᴮ b).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add (a *ᴮ b) y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ =
     some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
   simp_rw [Term.abstract, denote, Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff, PSigma.exists] at den_x
@@ -847,7 +852,8 @@ theorem simplifier_correct_aux_add.card.{u_1} {«Δ» : 𝒱 → Option B.Dom} {
   (fv_y : ∀ v ∈ fv y, («Δ» v).isSome = true) {X : ZFSet.{u_1}} {hX : X ∈ BType.int.toZFSet} {Y : ZFSet.{u_1}}
   {hY : Y ∈ BType.int.toZFSet} (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) (S : B.Term)
   (fv_x : ∀ v ∈ fv (|S|ᴮ), («Δ» v).isSome = true) (wf_t : (|S|ᴮ +ᴮ y).WF) (typ_t : Γ ⊢ᴮ |S|ᴮ +ᴮ y : BType.int)
-  (den_x : ⟦|S|ᴮ.abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) :
+  (den_x : ⟦|S|ᴮ.abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add (|S|ᴮ) y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ =
     some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
   simp_rw [Term.abstract, denote, Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff, PSigma.exists] at den_x
@@ -985,7 +991,8 @@ theorem simplifier_correct_aux_add.app.{u_1} {«Δ» : 𝒱 → Option B.Dom} {�
   (fv_y : ∀ v ∈ fv y, («Δ» v).isSome = true) {X : ZFSet.{u_1}} {hX : X ∈ BType.int.toZFSet} {Y : ZFSet.{u_1}}
   {hY : Y ∈ BType.int.toZFSet} (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) (f x : B.Term)
   (fv_x : ∀ v ∈ fv ((@ᴮf) x), («Δ» v).isSome = true) (wf_t : ((@ᴮf) x +ᴮ y).WF) (typ_t : Γ ⊢ᴮ (@ᴮf) x +ᴮ y : BType.int)
-  (den_x : ⟦((@ᴮf) x).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) :
+  (den_x : ⟦((@ᴮf) x).abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add ((@ᴮf) x) y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ =
     some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
   simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff, PSigma.exists] at den_x
@@ -1115,7 +1122,8 @@ theorem simplifier_correct_aux_add.min.{u_1} {«Δ» : 𝒱 → Option B.Dom} {�
   (fv_y : ∀ v ∈ fv y, («Δ» v).isSome = true) {X : ZFSet.{u_1}} {hX : X ∈ BType.int.toZFSet} {Y : ZFSet.{u_1}}
   {hY : Y ∈ BType.int.toZFSet} (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) (S : B.Term)
   (fv_x : ∀ v ∈ fv S.min, («Δ» v).isSome = true) (wf_t : (S.min +ᴮ y).WF) (typ_t : Γ ⊢ᴮ S.min +ᴮ y : BType.int)
-  (den_x : ⟦S.min.abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) :
+  (den_x : ⟦S.min.abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add S.min y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ =
     some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
   simp_rw [Term.abstract, denote, Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff, PSigma.exists] at den_x
@@ -1246,7 +1254,8 @@ theorem simplifier_correct_aux_add.max.{u_1} {«Δ» : 𝒱 → Option B.Dom} {�
   (fv_y : ∀ v ∈ fv y, («Δ» v).isSome = true) {X : ZFSet.{u_1}} {hX : X ∈ BType.int.toZFSet} {Y : ZFSet.{u_1}}
   {hY : Y ∈ BType.int.toZFSet} (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) (S : B.Term)
   (fv_x : ∀ v ∈ fv S.max, («Δ» v).isSome = true) (wf_t : (S.max +ᴮ y).WF) (typ_t : Γ ⊢ᴮ S.max +ᴮ y : BType.int)
-  (den_x : ⟦S.max.abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) :
+  (den_x : ⟦S.max.abstract «Δ» fv_x⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add S.max y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ =
     some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
   simp_rw [Term.abstract, denote, Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff, PSigma.exists] at den_x
@@ -1381,7 +1390,8 @@ theorem simplifier_partial_correct_aux_add {«Δ» : 𝒱 → Option B.Dom} {Γ 
   (wf_t : (x +ᴮ y).WF) (typ_t : Γ ⊢ᴮ x +ᴮ y : .int)
   {X hX Y hY}
   (den_x : ⟦x.abstract «Δ» fv_x⟧ᴮ = some ⟨X, .int, hX⟩)
-  (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, .int, hY⟩) :
+  (den_y : ⟦y.abstract «Δ» fv_y⟧ᴮ = some ⟨Y, .int, hY⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add x y).abstract «Δ» (fun v hv => Or.casesOn (List.mem_append.mp (fv_simplifier_aux_add hv)) (fv_x v ·) (fv_y v ·))⟧ᴮ = some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
   cases x with
   | bool | maplet | le | and | not | eq | «ℤ» | 𝔹 | mem | collect | pow | cprod | union | inter | lambda | pfun | all =>
@@ -1412,22 +1422,22 @@ theorem simplifier_partial_correct_aux_add' {«Δ» : 𝒱 → Option B.Dom} {Γ
     intro v hv
     apply ht
     rw [fv, List.mem_append]
-    exact Or.inr <| fv_simplifier wf_t.2 hv)⟧ᴮ = some ⟨Y, .int, hY⟩) :
+    exact Or.inr <| fv_simplifier wf_t.2 hv)⟧ᴮ = some ⟨Y, .int, hY⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (x +ᴮ y)).abstract «Δ» (ht · <| fv_simplifier wf_t ·)⟧ᴮ = some ⟨X +ᶻ Y, .int, overloadBinOp_mem hX hY⟩ := by
   unfold simplifier
-  apply simplifier_partial_correct_aux_add (Γ := Γ)
+  apply simplifier_partial_correct_aux_add (Γ := Γ) (den_x := den_x) (den_y := den_y)
   · exact ⟨Term.WF.simplifier wf_t.1, Term.WF.simplifier wf_t.2⟩
   · obtain ⟨-, typ_x, typ_y⟩ := B.Typing.addE typ_t
     apply B.Typing.add
     · exact Typing.simplifier typ_x
     · exact Typing.simplifier typ_y
-  · exact den_x
-  · exact den_y
 
 theorem simplifier_correct_aux_add {«Δ» : 𝒱 → Option B.Dom} {Γ : B.TypeContext} (x y : B.Term)
   (h : ∀ v ∈ fv (simplifier_aux_add x y), («Δ» v).isSome = true)
   (h' : ∀ v ∈ fv (x +ᴮ y), («Δ» v).isSome = true)
-  (wf_t : (x +ᴮ y).WF) {τ : BType} (typ_t : Γ ⊢ᴮ x +ᴮ y : τ) :
+  (wf_t : (x +ᴮ y).WF) {τ : BType} (typ_t : Γ ⊢ᴮ x +ᴮ y : τ)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier_aux_add x y).abstract «Δ» h⟧ᴮ = ⟦(x +ᴮ y).abstract «Δ» h'⟧ᴮ := by
   obtain ⟨rfl, hx, hy⟩ := Typing.addE typ_t
   simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind]

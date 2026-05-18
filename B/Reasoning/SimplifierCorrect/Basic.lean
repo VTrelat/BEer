@@ -302,15 +302,16 @@ theorem simplifier_partial_correct.maplet.{u_1} (x y : B.Term)
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
       Γ ⊢ᴮ x : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
+          ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → B.RenWF Γ «Δ» → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
       Γ ⊢ᴮ y : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
+          ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → B.RenWF Γ «Δ» → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (x ↦ᴮ y), («Δ» v).isSome = true) (wf_t : (x ↦ᴮ y).WF) {Γ : B.TypeContext}
   {τ : BType} (typ_t : Γ ⊢ᴮ x ↦ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
-  (den_t : ⟦(x ↦ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
+  (den_t : ⟦(x ↦ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (x ↦ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   unfold simplifier
   simp_rw [Term.abstract, denote]
@@ -328,13 +329,13 @@ theorem simplifier_partial_correct.maplet.{u_1} (x y : B.Term)
     WFTC.of_abstract, α,
     Typing.of_abstract (fun v hv => by apply ht; rw [fv, List.mem_append]; left; exact hv) ‹_›⟩
     den_x
-  specialize x_ih _ wf_t.1 hx den_x
+  specialize x_ih _ wf_t.1 hx den_x wf
   obtain ⟨⟩ := denote_welltyped_eq
     ⟨Γ.abstract («Δ» := «Δ»),
     WFTC.of_abstract, β,
     Typing.of_abstract (fun v hv => by apply ht; rw [fv, List.mem_append]; right; exact hv) ‹_›⟩
     den_y
-  specialize y_ih _ wf_t.2 hy den_y
+  specialize y_ih _ wf_t.2 hy den_y wf
   rw [x_ih, y_ih]
   simp_rw [Option.bind_some]
 
@@ -343,15 +344,16 @@ theorem simplifier_partial_correct.add.{u_1} (x y : B.Term)
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
       Γ ⊢ᴮ x : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
+          ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → B.RenWF Γ «Δ» → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
       Γ ⊢ᴮ y : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
+          ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → B.RenWF Γ «Δ» → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (x +ᴮ y), («Δ» v).isSome = true) (wf_t : (x +ᴮ y).WF) {Γ : B.TypeContext}
   {τ : BType} (typ_t : Γ ⊢ᴮ x +ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
-  (den_t : ⟦(x +ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
+  (den_t : ⟦(x +ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (x +ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff, PSigma.exists] at den_t
   obtain ⟨X, τX, hX, den_x, eq⟩ := den_t
@@ -375,8 +377,8 @@ theorem simplifier_partial_correct.add.{u_1} (x y : B.Term)
   injection eq
   subst T
 
-  specialize x_ih _ wf_t.1 ‹_› den_x
-  specialize y_ih _ wf_t.2 ‹_› den_y
+  specialize x_ih _ wf_t.1 ‹_› den_x wf
+  specialize y_ih _ wf_t.2 ‹_› den_y wf
 
   rw [simplifier_partial_correct_aux_add' x y ht wf_t typ_t x_ih y_ih]
 
@@ -385,10 +387,11 @@ theorem simplifier_partial_correct.pow.{u_1} (S : B.Term)
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv S, («Δ» v).isSome = true) (wf_t : S.WF) {Γ : B.TypeContext} {τ : BType},
       Γ ⊢ᴮ S : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦S.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
+          ⟦S.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → B.RenWF Γ «Δ» → ⟦(simplifier S).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (𝒫ᴮ S), («Δ» v).isSome = true) (wf_t : ( 𝒫ᴮ S).WF) {Γ : B.TypeContext}
   {τ : BType} (typ_t : Γ ⊢ᴮ 𝒫ᴮ S : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
-  (den_t : ⟦( 𝒫ᴮ S).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
+  (den_t : ⟦( 𝒫ᴮ S).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier ( 𝒫ᴮ S)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   unfold simplifier
   simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
@@ -403,7 +406,7 @@ theorem simplifier_partial_correct.pow.{u_1} (S : B.Term)
   rw [Option.some_inj] at eq
   injection eq
   subst T
-  specialize ih _ wf_t typS den_S
+  specialize ih _ wf_t typS den_S wf
   rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, ih, Option.bind_some]
 
 theorem simplifier_partial_correct.le.{u_1} (x y : B.Term)
@@ -411,15 +414,16 @@ theorem simplifier_partial_correct.le.{u_1} (x y : B.Term)
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
       Γ ⊢ᴮ x : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
+          ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → B.RenWF Γ «Δ» → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
       Γ ⊢ᴮ y : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
+          ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩ → B.RenWF Γ «Δ» → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (x ≤ᴮ y), («Δ» v).isSome = true) (wf_t : (x ≤ᴮ y).WF) {Γ : B.TypeContext}
   {τ : BType} (typ_t : Γ ⊢ᴮ x ≤ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
-  (den_t : ⟦(x ≤ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩) :
+  (den_t : ⟦(x ≤ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (x ≤ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   unfold simplifier
   simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
@@ -442,8 +446,8 @@ theorem simplifier_partial_correct.le.{u_1} (x y : B.Term)
   injection eq
   subst T
 
-  specialize x_ih _ wf_t.1 typx den_x
-  specialize y_ih _ wf_t.2 typy den_y
+  specialize x_ih _ wf_t.1 typx den_x wf
+  specialize y_ih _ wf_t.2 typy den_y wf
   simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
     x_ih, Option.bind_some, y_ih, Option.bind_some]
 
@@ -453,15 +457,16 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv D, («Δ» v).isSome = true) (wf_t : D.WF) {Γ : B.TypeContext} {τ : BType},
       Γ ⊢ᴮ D : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦D.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → ⟦(simplifier D).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
+          ⟦D.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → B.RenWF Γ «Δ» → ⟦(simplifier D).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩)
   (P_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv P, («Δ» v).isSome = true) (wf_t : P.WF) {Γ : B.TypeContext} {τ : BType},
       Γ ⊢ᴮ P : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦P.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → ⟦(simplifier P).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩)
+          ⟦P.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → B.RenWF Γ «Δ» → ⟦(simplifier P).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (B.Term.lambda vs D P), («Δ» v).isSome = true)
   (wf_t : (B.Term.lambda vs D P).WF) {Γ : B.TypeContext} {τ : BType} (typ_t : Γ ⊢ᴮ B.Term.lambda vs D P : τ)
-  {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet} (den_t : ⟦(B.Term.lambda vs D P).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
+  {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet} (den_t : ⟦(B.Term.lambda vs D P).abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (B.Term.lambda vs D P)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
   -- destruct types
   obtain ⟨γ, αs, Ds, vs_nemp, vs_αs_len, vs_Ds_len, rfl, vs_nodup, rfl, typ_Dᵢ, typ_P, vs_Γ_disj⟩ := Typing.lambdaE typ_t
@@ -479,7 +484,7 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
     WFTC.of_abstract, .set _,
     Typing.of_abstract (fun v hv => by apply ht; rw [fv, List.mem_append]; left; exact hv) typ_Dᵢ⟩
     den_D
-  specialize D_ih _ wf_t.1 typ_Dᵢ den_D
+  specialize D_ih _ wf_t.1 typ_Dᵢ den_D wf
 
   dsimp at eq
 
@@ -522,7 +527,10 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
 
     rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P)]
     split_ifs with den_simpP_isSome typ_simpP_det
-    · rw [P_ih, Option.bind_some]
+    · rw [P_ih (B.RenWF.updates_ofFn wf wf_t.2.2.1 vs_Γ_disj vs_αs_len
+        (fun i => _root_.BType.get_reduce
+          (by rw [← List.length_pos_iff, ← vs_αs_len, List.length_pos_iff]; exact vs_nemp)
+          vs_αs_len i)), Option.bind_some]
     · push_neg at typ_simpP_det
       obtain ⟨x, y, hx_typ, hy_typ, x_𝒟, y_𝒟, contr⟩ := typ_simpP_det
       obtain ⟨⟨x₁, α, hx₁⟩, eq₁⟩ := Option.isSome_iff_exists.mp <| denP_isSome hx_typ x_𝒟
@@ -542,12 +550,18 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
       subst β
 
       rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_P)] at eq₁
+      have wf_x : B.RenWF (vs.zipToAList αs ∪ Γ)
+          (Function.updates «Δ» vs (List.ofFn fun i => some (x i))) :=
+        B.RenWF.updates_ofFn wf wf_t.2.2.1 vs_Γ_disj vs_αs_len
+          (fun i => (hx_typ i).1.trans (_root_.BType.get_reduce
+            (by rw [← List.length_pos_iff, ← vs_αs_len, List.length_pos_iff]; exact vs_nemp)
+            vs_αs_len i))
       obtain rfl := denote_welltyped_eq
         ⟨TypeContext.abstract (vs.zipToAList αs ∪ Γ) («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (x i))),
         WFTC.of_abstract, _,
         Typing.of_abstract updates_isSome_fv_P typ_P⟩
         eq₁
-      have := @P_ih' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (x i))) updates_isSome_fv_P wf_t.2.1 _ _ typ_P x₁ hx₁ eq₁
+      have := @P_ih' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (x i))) updates_isSome_fv_P wf_t.2.1 _ _ typ_P x₁ hx₁ eq₁ wf_x
       rw [←denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P)] at this
       rw [eq₁', Option.some_inj] at this
       injection this with eq heq
@@ -557,7 +571,13 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
 
       rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P)] at eq₂'
       rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_P)] at eq₂
-      have := @P_ih' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (y i))) updates_isSome_fv_P wf_t.2.1 _ _ typ_P x₂ hx₂ eq₂
+      have wf_y : B.RenWF (vs.zipToAList αs ∪ Γ)
+          (Function.updates «Δ» vs (List.ofFn fun i => some (y i))) :=
+        B.RenWF.updates_ofFn wf wf_t.2.2.1 vs_Γ_disj vs_αs_len
+          (fun i => (hy_typ i).1.trans (_root_.BType.get_reduce
+            (by rw [← List.length_pos_iff, ← vs_αs_len, List.length_pos_iff]; exact vs_nemp)
+            vs_αs_len i))
+      have := @P_ih' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (y i))) updates_isSome_fv_P wf_t.2.1 _ _ typ_P x₂ hx₂ eq₂ wf_y
       rw [eq₂', Option.some_inj] at this
       injection this with eq heq
       subst eq
@@ -570,6 +590,12 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
 
       rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P)] at den_simP_eq_none
       specialize @P_ih' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (xs i))) updates_isSome_fv_P wf_t.2.1 _ _ typ_P (ZFSet.ofFinDom xs)
+      have wf_xs : B.RenWF (vs.zipToAList αs ∪ Γ)
+          (Function.updates «Δ» vs (List.ofFn fun i => some (xs i))) :=
+        B.RenWF.updates_ofFn wf wf_t.2.2.1 vs_Γ_disj vs_αs_len
+          (fun i => (xs_typ i).1.trans (_root_.BType.get_reduce
+            (by rw [← List.length_pos_iff, ← vs_αs_len, List.length_pos_iff]; exact vs_nemp)
+            vs_αs_len i))
       have contr := simplifier_partial_correct' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (xs i))) updates_isSome_fv_P wf_t.2.1 typ_P den_simP_eq_none
       specialize denP_isSome xs_typ xs_mem_𝒟
       rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_P)] at denP_isSome
@@ -592,7 +618,11 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
       rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P)]
 
       split_ifs with den_simpP_isSome typ_den_simpP_det
-      · apply P_ih updates_isSome_fv_P wf_t.2.1 typ_P at den_P
+      · have den_P := P_ih updates_isSome_fv_P wf_t.2.1 typ_P den_P
+          (B.RenWF.updates_ofFn wf wf_t.2.2.1 vs_Γ_disj vs_αs_len
+            (fun i => _root_.BType.get_reduce
+              (by rw [← List.length_pos_iff, ← vs_αs_len, List.length_pos_iff]; exact vs_nemp)
+              vs_αs_len i))
         simp_rw [den_P, Option.bind_some, Option.some_inj]
         congr 2
         on_goal 3 => apply proof_irrel_heq
@@ -617,13 +647,19 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
             rw [den_P]
             rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_P)] at den_P
 
+            have wf_xy : B.RenWF (vs.zipToAList αs ∪ Γ)
+                (Function.updates «Δ» vs (List.ofFn fun i => some ⟨xy.π₁.get vs.length i, (List.reduce (fun x1 x2 => x1 ×ᴮ x2) αs pf₂).get vs.length i, pf₃ i⟩)) :=
+              B.RenWF.updates_ofFn wf wf_t.2.2.1 vs_Γ_disj vs_αs_len
+                (fun i => _root_.BType.get_reduce
+                  (by rw [← List.length_pos_iff, ← vs_αs_len, List.length_pos_iff]; exact vs_nemp)
+                  vs_αs_len i)
             obtain rfl := denote_welltyped_eq
               ⟨TypeContext.abstract (vs.zipToAList αs ∪ Γ) («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some ⟨xy.π₁.get vs.length i, (List.reduce (fun x1 x2 => x1 ×ᴮ x2) αs pf₂).get vs.length i, pf₃ i⟩)),
               WFTC.of_abstract, _,
               Typing.of_abstract updates_isSome_fv_P typ_P⟩
               den_P
 
-            have := P_ih («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some ⟨xy.π₁.get vs.length i, (List.reduce (fun x1 x2 => x1 ×ᴮ x2) αs pf₂).get vs.length i, pf₃ i⟩)) _ wf_t.2.1 typ_P den_P
+            have := P_ih («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some ⟨xy.π₁.get vs.length i, (List.reduce (fun x1 x2 => x1 ×ᴮ x2) αs pf₂).get vs.length i, pf₃ i⟩)) _ wf_t.2.1 typ_P den_P wf_xy
 
             rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P), this]
       · push_neg at typ_den_simpP_det
@@ -640,14 +676,26 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
 
         rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_P)] at den₁ den₂
 
+        have wf_x : B.RenWF (vs.zipToAList αs ∪ Γ)
+            (Function.updates «Δ» vs (List.ofFn fun i => some (x i))) :=
+          B.RenWF.updates_ofFn wf wf_t.2.2.1 vs_Γ_disj vs_αs_len
+            (fun i => (hx_typ i).1.trans (_root_.BType.get_reduce
+            (by rw [← List.length_pos_iff, ← vs_αs_len, List.length_pos_iff]; exact vs_nemp)
+            vs_αs_len i))
+        have wf_y : B.RenWF (vs.zipToAList αs ∪ Γ)
+            (Function.updates «Δ» vs (List.ofFn fun i => some (y i))) :=
+          B.RenWF.updates_ofFn wf wf_t.2.2.1 vs_Γ_disj vs_αs_len
+            (fun i => (hy_typ i).1.trans (_root_.BType.get_reduce
+            (by rw [← List.length_pos_iff, ← vs_αs_len, List.length_pos_iff]; exact vs_nemp)
+            vs_αs_len i))
         obtain rfl := denote_welltyped_eq
           ⟨TypeContext.abstract (vs.zipToAList αs ∪ Γ) («Δ» := (Function.updates «Δ» vs (List.ofFn fun i => some (x i)))),
           WFTC.of_abstract, _,
           Typing.of_abstract updates_isSome_fv_P typ_P⟩
           den₁
 
-        apply P_ih updates_isSome_fv_P wf_t.2.1 typ_P at den₁
-        apply P_ih updates_isSome_fv_P wf_t.2.1 typ_P at den₂
+        have den₁ := P_ih updates_isSome_fv_P wf_t.2.1 typ_P den₁ wf_x
+        have den₂ := P_ih updates_isSome_fv_P wf_t.2.1 typ_P den₂ wf_y
 
         rw [←denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_simp_P)] at den₁ den₂
 
@@ -662,6 +710,12 @@ theorem simplifier_partial_correct.lambda.{u_1} (vs : List 𝒱) (D P : B.Term)
 
         specialize denP_isSome x_typ x_𝒟
         rw [denote_term_abstract_go_eq_term_abstract (vs_nodup := wf_t.2.2.1) (vs_nemp := vs_nemp) (pf := updates_isSome_fv_P)] at denP_isSome
+        have wf_x : B.RenWF (vs.zipToAList αs ∪ Γ)
+            (Function.updates «Δ» vs (List.ofFn fun i => some (x i))) :=
+          B.RenWF.updates_ofFn wf wf_t.2.2.1 vs_Γ_disj vs_αs_len
+            (fun i => (x_typ i).1.trans (_root_.BType.get_reduce
+            (by rw [← List.length_pos_iff, ← vs_αs_len, List.length_pos_iff]; exact vs_nemp)
+            vs_αs_len i))
         absurd simplifier_partial_correct' («Δ» := Function.updates «Δ» vs (List.ofFn fun i => some (x i))) updates_isSome_fv_P wf_t.2.1 typ_P den_isNone
         rwa [←ne_eq, Option.ne_none_iff_isSome]
 

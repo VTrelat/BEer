@@ -54,53 +54,6 @@ theorem ZFSet.prod_sep_mem_toZFSet {τ γ : BType} {D R : ZFSet} {P : ZFSet → 
 section Denotation
 
 open Classical B.PHOAS in
-def denote_aux.all {n} {D} {P : (Fin n → ZFSet) → B.PHOAS.Term ZFSet} {Γ}
-  (denoteD : (wt : WellTyped D) → Option {x : ZFSet // let ⟨_,τ,_⟩ := wt; x ∈ τ.toZFSet})
-  (denoteP : (z : Fin n → ZFSet) → (wt : WellTyped (P z)) → Option {x : ZFSet // let ⟨_,τ,_⟩ := wt; x ∈ τ.toZFSet})
-  (h : Γ ⊢ᴮ' .all D P : .bool) : Option {x : ZFSet // x ∈ ZFSet.𝔹} := do
-    let αs_Ds := choose (Typing.allE h).2.2; let αs := αs_Ds.1
-    let n_pos := (Typing.allE h).2.1
-    let ⟨𝒟, _⟩ ← denoteD ⟨Γ, .set (Fin.foldl (n-1) (λ d ⟨i, hi⟩ => d ×ᴮ αs ⟨i+1, Nat.add_lt_of_lt_sub hi⟩) (αs ⟨0, n_pos⟩)), PHOAS.Typing.all_dom h⟩
-    let ℙ (z : ZFSet) : ZFSet :=
-      if z.hasArity n then
-        match denoteP (z.get n) ⟨Γ.update (z.get n) αs, .bool, PHOAS.Typing.all_pred h⟩ with
-        | some Pz => Pz
-        | none => ZFSet.zffalse
-      else ZFSet.zffalse
-    return ⟨ZFSet.sInter (ZFSet.𝔹.sep λ y => ∃ x ∈ 𝒟, y = ℙ x), ZFSet.sInter_sep_subset_of_𝔹_mem_𝔹 λ _ => id⟩
-
-open Classical B.PHOAS in
-def denote_aux.lambda {n} {D} {P : (Fin n → ZFSet) → B.PHOAS.Term ZFSet} {Γ} {τ γ : BType}
-  (denoteD : (wt : WellTyped D) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (denoteP : (z : Fin n → ZFSet) → (wt : WellTyped (P z)) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ᴮ' .lambda D P : (τ ×ᴮ γ).set) : Option {x : ZFSet // x ∈ (τ ×ᴮ γ).set.toZFSet} := do
-    let β_αs_Ds := choose (Typing.lambdaE h).2; let β := β_αs_Ds.1; let αs := β_αs_Ds.2.1
-    let ⟨𝒟, h𝒟⟩ ← denoteD ⟨Γ, .set τ, PHOAS.Typing.lambda_dom h⟩
-    let ℙ (xy : ZFSet) := xy.hasArity 2 ∧
-      (let x := xy.π₁
-      let y := xy.π₂
-      x.hasArity n ∧
-        match denoteP (x.get n) ⟨Γ.update (x.get n) αs, β, PHOAS.Typing.lambda_exp h⟩ with
-        | some ⟨Pz, _⟩ => Pz = y
-        | none => False)
-    return ⟨(𝒟.prod γ.toZFSet).sep ℙ, ZFSet.prod_sep_mem_toZFSet h𝒟 (ZFSet.mem_powerset.mpr fun _ => id)⟩
-
-open Classical B.PHOAS in
-def denote_aux.collect {n} {D} {P : (Fin n → ZFSet) → B.PHOAS.Term ZFSet} {Γ} {τ : BType}
-  (denoteD : (wt : WellTyped D) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (denoteP : (z : Fin n → ZFSet) → (wt : WellTyped (P z)) → Option {x : ZFSet // let ⟨_,ξ,_⟩ := wt; x ∈ ξ.toZFSet})
-  (h : Γ ⊢ᴮ' .collect D P : τ.set) : Option {x : ZFSet // x ∈ τ.set.toZFSet} := do
-    let αs_Ds := choose (Typing.collectE h).2; let αs := αs_Ds.1
-    let ⟨𝒟, h𝒟⟩ ← denoteD ⟨Γ, τ.set, PHOAS.Typing.collect_dom (h := h)⟩
-    let ℙ z :=
-      if z.hasArity n then
-        match denoteP (z.get n) ⟨Γ.update (z.get n) αs, .bool, PHOAS.Typing.collect_pred h⟩ with
-        | some ⟨Pz, _⟩ => Pz = ZFSet.zftrue
-        | none => False
-      else False
-    return ⟨𝒟.sep ℙ, (ZFSet.sep_mem_powerset h𝒟)⟩
-
-open Classical B.PHOAS in
 /- NOTE: same as above with an exists (seen as a dependent and) in the condition.
   if hF : ∃ (hf : F.IsPFunc α.toZFSet β.toZFSet), X ∈ F.Dom hf then
     let hf := choose hF
@@ -379,6 +332,19 @@ set_option hygiene false
 local notation "⟦" t "⟧ᴮ" => denote t
 
 abbrev Dom := Σ' (x : ZFSet) (τ : BType), x ∈ τ.toZFSet
+
+/-- The intrinsic type of a `Dom` element is its second component. -/
+instance instHasTypeDom : PHOAS.HasType Dom where
+  type d := d.2.1
+
+@[simp] theorem PHOAS.HasType.type_Dom (d : Dom) : PHOAS.HasType.type d = d.2.1 := rfl
+
+/-- For any tuple of `BType`s there is a `Dom`-tuple realizing exactly those
+    intrinsic types (use the canonical `defaultZFSet` inhabitant of each type).
+    This is the witness needed for typing determinism over `Dom`. -/
+instance instRichDom {n} (αs : Fin n → BType) :
+    Nonempty {v : Fin n → Dom // ∀ i, PHOAS.HasType.type (v i) = αs i} :=
+  ⟨⟨fun i => ⟨(αs i).defaultZFSet, αs i, BType.mem_toZFSet_of_defaultZFSet⟩, fun _ => rfl⟩⟩
 
 def ZFSet.ofFinDom {n : ℕ} (x : Fin n → Dom) : ZFSet :=
   match n with

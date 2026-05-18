@@ -157,6 +157,7 @@ theorem encodeTerm_spec.ℤ_case.{u} (E : B.Env) {Λ : SMT.TypeContext} {α : BT
   (bv_nodup : (B.bv Term.ℤ).Nodup)
   (_respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ Term.ℤ)
   (_fv_in_Λ : ∀ v ∈ B.fv (Term.ℤ), v ∈ Λ)
+  (wf : B.RenWF E.context «Δ» := by assumption)
   {n : ℕ} :
   ⦃fun x =>
     match x with
@@ -185,6 +186,7 @@ theorem encodeTerm_spec.ℤ_case.{u} (E : B.Env) {Λ : SMT.TypeContext} {α : BT
                                             (Δ_fv_alt : ∀ v ∈ B.fv Term.ℤ, (Δ_alt v).isSome = true)
                                             (Δ₀_alt : SMT.RenamingContext.Context),
                                             RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt Term.ℤ →
+                                            B.RenWF E.context Δ_alt →
                                               (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                               (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                 ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -322,7 +324,7 @@ theorem encodeTerm_spec.ℤ_case.{u} (E : B.Env) {Λ : SMT.TypeContext} {α : BT
                 · rw [fapply_lambda (fun _ ↦ ZFBool.zftrue_mem_𝔹) (fapply_mem_range _ _)]
                 · exact lambda_isFunc fun _ ↦ ZFBool.zftrue_mem_𝔹
             · -- Alt universality: ℤ is a closed term, same denotation regardless of Δ_alt
-              intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
+              intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext wf_alt Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
               rw [B.Term.abstract, B.denote, Option.pure_def, Option.some_inj] at den_t_alt
               have hT_val : ZFSet.Int = T_alt := congrArg (·.fst) den_t_alt
               subst hT_val
@@ -669,6 +671,7 @@ theorem encodeTerm_spec.𝔹_case.{u} (E : B.Env) {Λ : SMT.TypeContext} {α : B
   (bv_nodup : (B.bv Term.𝔹).Nodup)
   (_respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ Term.𝔹)
   (_fv_in_Λ : ∀ v ∈ B.fv (Term.𝔹), v ∈ Λ)
+  (wf : B.RenWF E.context «Δ» := by assumption)
   {n : ℕ} :
   ⦃fun x =>
     match x with
@@ -697,6 +700,7 @@ theorem encodeTerm_spec.𝔹_case.{u} (E : B.Env) {Λ : SMT.TypeContext} {α : B
                                             (Δ_fv_alt : ∀ v ∈ B.fv Term.𝔹, (Δ_alt v).isSome = true)
                                             (Δ₀_alt : SMT.RenamingContext.Context),
                                             RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt Term.𝔹 →
+                                            B.RenWF E.context Δ_alt →
                                               (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                               (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                 ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -830,7 +834,7 @@ theorem encodeTerm_spec.𝔹_case.{u} (E : B.Env) {Λ : SMT.TypeContext} {α : B
                 rw [dite_cond_eq_true (eq_true ?_)]
                 · rw [fapply_lambda (fun _ ↦ ZFBool.zftrue_mem_𝔹) (fapply_mem_range _ _)]
                 · exact lambda_isFunc fun _ ↦ ZFBool.zftrue_mem_𝔹
-            · intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
+            · intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext wf_alt Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
               rw [B.Term.abstract, B.denote, Option.pure_def, Option.some_inj] at den_t_alt
               have hT_val : ZFSet.𝔹 = T_alt := congrArg (·.fst) den_t_alt
               subst hT_val
@@ -893,6 +897,7 @@ theorem encodeTerm_spec.var_case.{u} (v : B.𝒱) (E : B.Env) {Λ : SMT.TypeCont
   (bv_nodup : (B.bv (B.Term.var v)).Nodup)
   (respects : B.RenamingContext.RespectsTypeContextOnFV (RenamingContext.toSMT «Δ») Λ (B.Term.var v))
   (fv_in_Λ : ∀ v_1 ∈ B.fv (B.Term.var v), v_1 ∈ Λ)
+  (wf : B.RenWF E.context «Δ» := by assumption)
   {n : ℕ} :
   ⦃fun x =>
     match x with
@@ -921,6 +926,7 @@ theorem encodeTerm_spec.var_case.{u} (v : B.𝒱) (E : B.Env) {Λ : SMT.TypeCont
                                             (Δ_fv_alt : ∀ v_1 ∈ B.fv (B.Term.var v), (Δ_alt v_1).isSome = true)
                                             (Δ₀_alt : SMT.RenamingContext.Context),
                                             RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (B.Term.var v) →
+                                            B.RenWF E.context Δ_alt →
                                               (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                               (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                 ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -1024,7 +1030,7 @@ theorem encodeTerm_spec.var_case.{u} (v : B.𝒱) (E : B.Env) {Λ : SMT.TypeCont
             subst d
             refine ⟨⟨rfl, ?_⟩, ?_⟩
             · exact retract_of_canonical α hT rfl
-            · intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
+            · intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext wf_alt Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
               -- Extract Δ_alt v = some ⟨T_alt, α, hT_alt⟩
               have hΔ_alt_v : Δ_alt v = some ⟨T_alt, ⟨α, hT_alt⟩⟩ := by
                 rw [B.Term.abstract, B.denote] at den_t_alt
@@ -1076,6 +1082,7 @@ theorem encodeTerm_spec.int_case.{u} (i : ℤ) (E : B.Env) {Λ : SMT.TypeContext
   (bv_nodup : (B.bv (B.Term.int i)).Nodup)
   (_respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ (B.Term.int i))
   (_fv_in_Λ : ∀ v ∈ B.fv (B.Term.int i), v ∈ Λ)
+  (wf : B.RenWF E.context «Δ» := by assumption)
   {n : ℕ} :
   ⦃fun x =>
     match x with
@@ -1104,6 +1111,7 @@ theorem encodeTerm_spec.int_case.{u} (i : ℤ) (E : B.Env) {Λ : SMT.TypeContext
                                             (Δ_fv_alt : ∀ v ∈ B.fv (B.Term.int i), (Δ_alt v).isSome = true)
                                             (Δ₀_alt : SMT.RenamingContext.Context),
                                             RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (B.Term.int i) →
+                                            B.RenWF E.context Δ_alt →
                                               (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                               (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                 ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -1162,7 +1170,7 @@ theorem encodeTerm_spec.int_case.{u} (i : ℤ) (E : B.Env) {Λ : SMT.TypeContext
         · rw [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.some_inj]
         · refine ⟨rfl, ?_⟩
           simp [retract]
-        · intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
+        · intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext wf_alt Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
           rw [B.Term.abstract, B.denote, Option.pure_def, Option.some_inj] at den_t_alt
           have hT_val : ZFSet.ofInt i = T_alt := congrArg (·.fst) den_t_alt
           subst hT_val
@@ -1186,6 +1194,7 @@ theorem encodeTerm_spec.bool_case.{u} (b : Bool) (E : B.Env) {Λ : SMT.TypeConte
   (bv_nodup : (B.bv (B.Term.bool b)).Nodup)
   (_respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ (B.Term.bool b))
   (_fv_in_Λ : ∀ v ∈ B.fv (B.Term.bool b), v ∈ Λ)
+  (wf : B.RenWF E.context «Δ» := by assumption)
   {n : ℕ} :
   ⦃fun x =>
     match x with
@@ -1214,6 +1223,7 @@ theorem encodeTerm_spec.bool_case.{u} (b : Bool) (E : B.Env) {Λ : SMT.TypeConte
                                             (Δ_fv_alt : ∀ v ∈ B.fv (B.Term.bool b), (Δ_alt v).isSome = true)
                                             (Δ₀_alt : SMT.RenamingContext.Context),
                                             RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (B.Term.bool b) →
+                                            B.RenWF E.context Δ_alt →
                                               (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                               (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                 ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -1272,7 +1282,7 @@ theorem encodeTerm_spec.bool_case.{u} (b : Bool) (E : B.Env) {Λ : SMT.TypeConte
         · rw [SMT.Term.abstract, SMT.denote, Option.pure_def, Option.some_inj]
         · refine ⟨⟨rfl, ?_⟩, ?_⟩
           · simp [retract]
-          · intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
+          · intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext wf_alt Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
             rw [B.Term.abstract, B.denote, Option.pure_def, Option.some_inj] at den_t_alt
             have hT_val : ↑(ZFBool.ofBool b) = T_alt := congrArg (·.fst) den_t_alt
             subst hT_val

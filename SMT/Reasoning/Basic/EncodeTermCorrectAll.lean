@@ -34,6 +34,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
                       ((B.bv D).Nodup) →
                         B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ D →
                         (∀ v ∈ B.fv D, v ∈ Λ) →
+                        B.RenWF E.context «Δ» →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -63,6 +64,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
                                                                     (Δ_fv_alt : ∀ v ∈ B.fv D, (Δ_alt v).isSome = true)
                                                                     (Δ₀_alt : SMT.RenamingContext.Context),
                                                                     RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt D →
+                                                                    B.RenWF E.context Δ_alt →
                                                                       (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                                                       (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                                         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -96,6 +98,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
                       ((B.bv P).Nodup) →
                         B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ P →
                         (∀ v ∈ B.fv P, v ∈ Λ) →
+                        B.RenWF E.context «Δ» →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -125,6 +128,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
                                                                     (Δ_fv_alt : ∀ v ∈ B.fv P, (Δ_alt v).isSome = true)
                                                                     (Δ₀_alt : SMT.RenamingContext.Context),
                                                                     RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt P →
+                                                                    B.RenWF E.context Δ_alt →
                                                                       (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                                                       (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                                         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -154,6 +158,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
   (bv_nodup : (B.bv (Term.all vs D P)).Nodup)
   (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((Term.all vs D P)))
   (fv_in_Λ : ∀ v ∈ B.fv ((Term.all vs D P)), v ∈ Λ)
+  (wf : B.RenWF E.context «Δ» := by assumption)
   (wd_P : B.Term.WellDefined.{u} P)
   -- Path-A R3e: SPLIT existential_witness_hasflag into two hypotheses for
   -- finer-grained discharge. The original bundled witness packaged three
@@ -258,6 +263,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
                                             (Δ_fv_alt : ∀ v ∈ B.fv (Term.all vs D P), (Δ_alt v).isSome = true)
                                             (Δ₀_alt : SMT.RenamingContext.Context),
                                             RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (Term.all vs D P) →
+                                            B.RenWF E.context Δ_alt →
                                               (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                               (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                 ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -357,6 +363,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       hD_bv_nodup
       (respects.mono_fv (fun v hv => by rw [B.fv]; exact List.mem_append_left _ hv))
       (fun v hv => fv_in_Λ v (by rw [B.fv]; exact List.mem_append_left _ hv))
+      wf
   clear D_ih
   rename_i out_D
   obtain ⟨D_enc, τD⟩ := out_D
@@ -496,6 +503,9 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       set Δ_ext : B.RenamingContext.Context :=
         Function.updates «Δ» vs (List.ofFn fun i => some (x_fin i)) with Δ_ext_def
       have Δ_fv_P := Δ_fv_P_helper vs_nodup Δ_ext_def D P Δ_fv
+      have wf_P : B.RenWF E'.context Δ_ext :=
+        B.RenWF.updates_ofFn wf vs_nodup vs_Γ_disj vs_αs_len
+          (fun i => _root_.BType.get_reduce αs_nemp vs_αs_len i)
       have hx_fin_in_𝒟 : ZFSet.ofFinDom x_fin ∈ 𝒟' := by
         have h_ofFinDom_eq : ZFSet.ofFinDom x_fin = x_raw :=
           ZFSet.ofFinDom_get (List.length_pos_iff.mpr vs_nemp)
@@ -858,7 +868,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           obtain ⟨denT', hden_eq, hrdom⟩ :=
             existence_rdom_witness_hasflag hcov T hT
           refine ⟨denT', hden_eq, hrdom, ?_⟩
-          intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
+          intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt wf_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
           exact totality_witness_hasflag (used' := St₈.env.usedVars) (Λ' := St₈.types) hcov
             Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
       -- non-`.bool` arm of `let ⟨P', .bool⟩ ← encodeTerm P E' | throw`
@@ -875,6 +885,9 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       set Δ_ext : B.RenamingContext.Context :=
         Function.updates «Δ» vs (List.ofFn fun i => some (x_fin_default i)) with Δ_ext_def
       have Δ_fv_P := Δ_fv_P_helper vs_nodup Δ_ext_def D P Δ_fv
+      have wf_P : B.RenWF E'.context Δ_ext :=
+        B.RenWF.updates_ofFn wf vs_nodup vs_Γ_disj vs_αs_len
+          (fun i => _root_.BType.get_reduce αs_nemp vs_αs_len i)
       classical
       by_cases hP_den_cond : ∃ (P_val : ZFSet.{u}) (hP_val : P_val ∈ ⟦BType.bool⟧ᶻ),
           ⟦P.abstract Δ_ext Δ_fv_P⟧ᴮ = some ⟨P_val, BType.bool, hP_val⟩
@@ -1205,7 +1218,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           · obtain ⟨denT', hden_eq, hrdom⟩ :=
               existence_rdom_witness_hasflag hcov T hT
             refine ⟨denT', hden_eq, hrdom, ?_⟩
-            intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
+            intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt wf_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
             exact totality_witness_hasflag (used' := St₈.env.usedVars) (Λ' := St₈.types) hcov
               Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
         -- non-`.bool` arm of `let ⟨P', .bool⟩ ← encodeTerm P E' | throw`
@@ -1328,6 +1341,9 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
     set Δ_ext : B.RenamingContext.Context :=
       Function.updates «Δ» vs (List.ofFn fun i => some (x_fin i)) with Δ_ext_def
     have Δ_fv_P := Δ_fv_P_helper vs_nodup Δ_ext_def D P Δ_fv
+    have wf_P : B.RenWF E'.context Δ_ext :=
+      B.RenWF.updates_ofFn wf vs_nodup vs_Γ_disj vs_αs_len
+        (fun i => _root_.BType.get_reduce αs_nemp vs_αs_len i)
     have hx_fin_in_𝒟 : ZFSet.ofFinDom x_fin ∈ 𝒟' := h_ofFinDom_eq ▸ hx_raw
     have hx_fin_typ : ∀ i, (x_fin i).snd.fst = τ.get vs.length i ∧
         (x_fin i).fst ∈ ⟦τ.get vs.length i⟧ᶻ :=
@@ -1448,6 +1464,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
             intro p hp heq
             exact hvs (heq ▸ (List.of_mem_zip hp).1)
           exact AList.lookup_isSome.mp (Option.isSome_of_mem hτ'_St₃))
+      wf_P
     rename_i out_P
     obtain ⟨P_enc, σP⟩ := out_P
     mrename_i pre
@@ -1750,7 +1767,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
         obtain ⟨denT', hden_eq, hrdom⟩ :=
           existence_rdom_witness_hasflag hcov T hT
         refine ⟨denT', hden_eq, hrdom, ?_⟩
-        intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
+        intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt wf_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
         exact totality_witness_hasflag (used' := St₈.env.usedVars) (Λ' := St₈.types) hcov
           Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
   · -- EMPTY 𝒟' case (no-flag): D denotes empty, all-quantification trivially true
@@ -1765,6 +1782,9 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
     set Δ_ext : B.RenamingContext.Context :=
       Function.updates «Δ» vs (List.ofFn fun i => some (x_fin_default i)) with Δ_ext_def
     have Δ_fv_P := Δ_fv_P_helper vs_nodup Δ_ext_def D P Δ_fv
+    have wf_P : B.RenWF E'.context Δ_ext :=
+      B.RenWF.updates_ofFn wf vs_nodup vs_Γ_disj vs_αs_len
+        (fun i => _root_.BType.get_reduce αs_nemp vs_αs_len i)
     classical
     by_cases hP_den_cond : ∃ (P_val : ZFSet.{u}) (hP_val : P_val ∈ ⟦BType.bool⟧ᶻ),
         ⟦P.abstract Δ_ext Δ_fv_P⟧ᴮ = some ⟨P_val, BType.bool, hP_val⟩
@@ -1876,6 +1896,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
               intro p hp heq
               exact hvs (heq ▸ (List.of_mem_zip hp).1)
             exact AList.lookup_isSome.mp (Option.isSome_of_mem hτ'_St₃))
+        wf_P
       rename_i out_P
       obtain ⟨P_enc, σP⟩ := out_P
       mrename_i pre
@@ -2150,7 +2171,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           obtain ⟨denT', hden_eq, hrdom⟩ :=
             existence_rdom_witness_hasflag hcov T hT
           refine ⟨denT', hden_eq, hrdom, ?_⟩
-          intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
+          intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt wf_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
           exact totality_witness_hasflag (used' := St₈.env.usedVars) (Λ' := St₈.types) hcov
             Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
     · -- Phase A2: P doesn't denote at default → contradiction via B-side totality

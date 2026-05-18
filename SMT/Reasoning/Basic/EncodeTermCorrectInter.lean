@@ -1103,6 +1103,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
                       ((_root_.B.bv A).Nodup) →
                         _root_.B.RenamingContext.RespectsTypeContextOnFV (_root_.B.RenamingContext.toSMT «Δ») Λ A →
                         (∀ v ∈ _root_.B.fv A, v ∈ Λ) →
+                        _root_.B.RenWF E.context «Δ» →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -1133,6 +1134,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
                                                                       ∀ v ∈ _root_.B.fv A, (Δ_alt v).isSome = true)
                                                                     (Δ₀_alt : SMT.RenamingContext.Context),
                                                                     RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt A →
+                                                                    _root_.B.RenWF E.context Δ_alt →
                                                                       (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                                                       (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                                         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -1166,6 +1168,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
                       ((_root_.B.bv B).Nodup) →
                         _root_.B.RenamingContext.RespectsTypeContextOnFV (_root_.B.RenamingContext.toSMT «Δ») Λ B →
                         (∀ v ∈ _root_.B.fv B, v ∈ Λ) →
+                        _root_.B.RenWF E.context «Δ» →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -1196,6 +1199,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
                                                                       ∀ v ∈ _root_.B.fv B, (Δ_alt v).isSome = true)
                                                                     (Δ₀_alt : SMT.RenamingContext.Context),
                                                                     RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt B →
+                                                                    _root_.B.RenWF E.context Δ_alt →
                                                                       (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                                                       (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                                         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -1223,6 +1227,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
   (bv_nodup : (_root_.B.bv (A ∩ᴮ B)).Nodup)
   (respects : _root_.B.RenamingContext.RespectsTypeContextOnFV (_root_.B.RenamingContext.toSMT «Δ») Λ ((A ∩ᴮ B)))
   (fv_in_Λ : ∀ v ∈ _root_.B.fv ((A ∩ᴮ B)), v ∈ Λ)
+  (wf : _root_.B.RenWF E.context «Δ» := by assumption)
   {n : ℕ} :
   ⦃fun x =>
     match x with
@@ -1251,6 +1256,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
                                             (Δ_fv_alt : ∀ v ∈ _root_.B.fv (A ∩ᴮ B), (Δ_alt v).isSome = true)
                                             (Δ₀_alt : SMT.RenamingContext.Context),
                                             RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (A ∩ᴮ B) →
+                                            _root_.B.RenWF E.context Δ_alt →
                                               (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                               (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                 ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -1281,30 +1287,25 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
   rw [_root_.B.Term.abstract, _root_.B.denote, Option.pure_def, Option.bind_eq_bind,
     Option.bind_eq_some_iff] at den_t
   obtain ⟨⟨A', α', hA'⟩, den_A, eq⟩ := den_t
-  have αx_eq := denote_welltyped_eq
-    (t := A.abstract («Δ» := «Δ») Δ_fv_A)
-    ?_ den_A
-  on_goal 2 =>
-    use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, α.set
-    exact @Typing.of_abstract (_root_.B.Dom) («Δ» := «Δ») ?_ A E.context _ Δ_fv_A typ_A
-  dsimp at αx_eq
-  subst α'
-
-  dsimp at eq
-  rw [Option.bind_eq_some_iff] at eq
+  -- `B.denote` of `∩ᴮ'` forces both operand tags to `.set _` (`| failure`
+  -- otherwise) and returns `.set α`; matching the known result type pins the
+  -- operand types — no `of_abstract` needed.
+  cases α' <;> first | rw [Option.bind_eq_some_iff] at eq | exact absurd eq (by simp)
+  rename_i αi
   obtain ⟨⟨B', β', hB'⟩, den_B, eq⟩ := eq
-  have := denote_welltyped_eq
-    (t := B.abstract («Δ» := «Δ») Δ_fv_B)
-    ?_ den_B
-  on_goal 2 =>
-    use E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, α.set
-    exact @Typing.of_abstract (_root_.B.Dom) («Δ» := «Δ») ?_ B E.context _ Δ_fv_B typ_B
-  dsimp at this
-  subst β'
-
-  dsimp at eq
-  rw [dif_pos rfl, Option.some_inj] at eq
-  obtain ⟨⟩ := eq
+  cases β' <;> [exact absurd eq (by simp); exact absurd eq (by simp); skip; exact absurd eq (by simp)]
+  rename_i βi
+  dsimp only at eq
+  split at eq
+  on_goal 2 => exact absurd eq (by simp)
+  rename_i hαβ
+  rw [Option.some_inj] at eq
+  injection eq with T_eq hτeq
+  subst T_eq
+  simp only [heq_eq_eq, PSigma.mk.injEq, BType.set.injEq] at hτeq
+  obtain ⟨hτeq, _⟩ := hτeq
+  subst αi
+  subst βi
 
   have Δ₀_ext_A : RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» A := by
     apply RenamingContext.extendsOnSourceFV_of_fv_subset _ Δ₀_ext
@@ -1341,6 +1342,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
     hA_bv_nodup
     (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
     (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
+    wf
     (n := St₀.env.freshvarsc)
   clear A_ih
 
@@ -1383,6 +1385,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
       hB_bv_nodup
       (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St₀_sub_St₁ (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
       (fun v hv => AList.mem_of_subset St₀_sub_St₁ (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+      wf
       (n := St₁.env.freshvarsc)
     clear B_ih
 
@@ -1534,33 +1537,29 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
               · rw [hretract_lambda α rfl, retract_Aenc'_eq_A', retract_Benc'_eq_B']
                 rfl
             · -- ih_total: alt universality
-              intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
+              intro Δ_alt Δ_fv_alt Δ₀_alt Δ₀_alt_ext wf_alt Δ₀_alt_none_out Δ₀_alt_wt T_alt hT_alt den_t_alt
               -- Decompose B-denotation of (A ∩ᴮ B) under alt valuation
               rw [_root_.B.Term.abstract, _root_.B.denote, Option.pure_def, Option.bind_eq_bind,
                 Option.bind_eq_some_iff] at den_t_alt
               obtain ⟨⟨A_alt, α_alt', hA_alt⟩, den_A_alt, eq_alt⟩ := den_t_alt
-              have α_alt_eq := @denote_welltyped_eq
-                (A.abstract Δ_alt (fun v hv => Δ_fv_alt v (by rw [_root_.B.fv, List.mem_append]; exact Or.inl hv)))
-                A_alt α_alt' hA_alt ?_ den_A_alt
-              on_goal 2 =>
-                use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, α.set
-                exact @Typing.of_abstract (_root_.B.Dom) («Δ» := Δ_alt) ?_ A E.context α.set
-                  (fun v hv => Δ_fv_alt v (by rw [_root_.B.fv, List.mem_append]; exact Or.inl hv)) typ_A
-              dsimp at α_alt_eq; subst α_alt_eq
-              dsimp at eq_alt
-              rw [Option.bind_eq_some_iff] at eq_alt
-              obtain ⟨⟨B_alt, _, hB_alt⟩, den_B_alt, eq_alt⟩ := eq_alt
-              have β_alt_eq := @denote_welltyped_eq
-                (_root_.B.Term.abstract B Δ_alt (fun v hv => Δ_fv_alt v (by rw [_root_.B.fv, List.mem_append]; exact Or.inr hv)))
-                B_alt _ hB_alt ?_ den_B_alt
-              on_goal 2 =>
-                use E.context.abstract («Δ» := Δ_alt), WFTC.of_abstract, α.set
-                exact @Typing.of_abstract (_root_.B.Dom) («Δ» := Δ_alt) ?_ B E.context α.set
-                  (fun v hv => Δ_fv_alt v (by rw [_root_.B.fv, List.mem_append]; exact Or.inr hv)) typ_B
-              dsimp at β_alt_eq; subst β_alt_eq
-              dsimp at eq_alt
-              rw [dif_pos rfl, Option.some_inj] at eq_alt
-              obtain ⟨⟩ := eq_alt
+              -- `B.denote` of `∩ᴮ'` forces both operand tags to `.set _` and
+              -- returns `.set α`; matching the known result type pins them.
+              cases α_alt' <;> first | rw [Option.bind_eq_some_iff] at eq_alt | exact absurd eq_alt (by simp)
+              rename_i αi
+              obtain ⟨⟨B_alt, β_alt', hB_alt⟩, den_B_alt, eq_alt⟩ := eq_alt
+              cases β_alt' <;> [exact absurd eq_alt (by simp); exact absurd eq_alt (by simp); skip; exact absurd eq_alt (by simp)]
+              rename_i βi
+              dsimp only at eq_alt
+              split at eq_alt
+              on_goal 2 => exact absurd eq_alt (by simp)
+              rename_i hαβ
+              rw [Option.some_inj] at eq_alt
+              injection eq_alt with T_eq hτeq
+              subst T_eq
+              simp only [heq_eq_eq, PSigma.mk.injEq, BType.set.injEq] at hτeq
+              obtain ⟨hτeq, _⟩ := hτeq
+              subst αi
+              subst βi
               -- Build restricted base for A IH
               set Δ₀_alt_A : SMT.RenamingContext.Context :=
                 fun v => if v ∈ St₁.env.usedVars then Δ₀_alt v else none with Δ₀_alt_A_def
@@ -1591,7 +1590,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
                 Δ'_alt_A_none_out, Δ'_alt_A_wt_out, den_A_alt_enc, hRDom_A_alt, _⟩ :=
                 A_ih_total Δ_alt
                   (fun v hv => Δ_fv_alt v (by rw [_root_.B.fv, List.mem_append]; exact Or.inl hv))
-                  Δ₀_alt_A Δ₀_alt_A_ext Δ₀_alt_A_none Δ₀_alt_A_wt A_alt hA_alt den_A_alt
+                  Δ₀_alt_A Δ₀_alt_A_ext wf_alt Δ₀_alt_A_none Δ₀_alt_A_wt A_alt hA_alt den_A_alt
               -- Build hybrid base for B IH; zero out variables not in St₂.env.usedVars
               set Δ₀_alt_B : SMT.RenamingContext.Context :=
                 fun v => if v ∈ St₂.env.usedVars
@@ -1647,7 +1646,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
                 Δ'_alt_B_none_out, Δ'_alt_B_wt_out, den_B_alt_enc, hRDom_B_alt, Δ'_alt_B_dom_out⟩ :=
                 B_ih_total Δ_alt
                   (fun v hv => Δ_fv_alt v (by rw [_root_.B.fv, List.mem_append]; exact Or.inr hv))
-                  Δ₀_alt_B Δ₀_alt_B_ext Δ₀_alt_B_none Δ₀_alt_B_wt B_alt hB_alt den_B_alt
+                  Δ₀_alt_B Δ₀_alt_B_ext wf_alt Δ₀_alt_B_none Δ₀_alt_B_wt B_alt hB_alt den_B_alt
               -- Define final Δ'_alt = priority merge(Δ₀_alt, Δ'_alt_B)
               set Δ'_alt : SMT.RenamingContext.Context :=
                 fun v => match Δ₀_alt v with | some d => some d | none => Δ'_alt_B v

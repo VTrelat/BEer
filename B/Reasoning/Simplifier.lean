@@ -45,7 +45,8 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
   (ht : ∀ v ∈ fv t, («Δ» v).isSome = true)
   (wf_t : t.WF) {Γ : TypeContext} {τ : BType} (typ_t : Γ ⊢ᴮ t : τ)
   {T hTτ}
-  (den_t : ⟦t.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩) :
+  (den_t : ⟦t.abstract «Δ» ht⟧ᴮ = some ⟨T, τ, hTτ⟩)
+  (wf : B.RenWF Γ «Δ» := by first | assumption | exact (_root_.B.coh_of_wf (by assumption))) :
   ⟦(simplifier t).abstract («Δ» := «Δ») (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, τ, hTτ⟩ := by
     induction t generalizing «Δ» Γ T τ hTτ with
     | var | int | bool | «ℤ» | 𝔹 => exact den_t
@@ -80,7 +81,7 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
       rw [Option.some_inj] at eq
       injection eq
       subst T
-      specialize ih _ wf_t typS den_S
+      specialize ih _ wf_t typS den_S wf
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, ih,
         Option.bind_some, dite_cond_eq_true (eq_true S'_fin_nemp)]
       try rfl
@@ -116,8 +117,8 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
       injection eq
       subst T
 
-      specialize x_ih _ wf_t.1 typx den_x
-      specialize y_ih _ wf_t.2 typy den_y
+      specialize x_ih _ wf_t.1 typx den_x wf
+      specialize y_ih _ wf_t.2 typy den_y wf
 
       simp only [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
         x_ih, Option.bind_some, y_ih, Option.bind_some, dite_true]
@@ -144,8 +145,8 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
       simp only [Option.some_inj] at eq
       injection eq
       subst T
-      specialize x_ih _ wf_t.1 typx den_x
-      specialize y_ih _ wf_t.2 typy den_y
+      specialize x_ih _ wf_t.1 typx den_x wf
+      specialize y_ih _ wf_t.2 typy den_y wf
       simp only [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
         x_ih, Option.bind_some, y_ih, Option.bind_some]
     | and x y x_ih y_ih =>
@@ -206,8 +207,8 @@ theorem simplifier_partial_correct {t : Term} {«Δ»}
       rw [Option.some_inj] at eq
       injection eq
       subst T
-      specialize f_ih _ wf_t.1 typf den_f
-      specialize x_ih _ wf_t.2 typx den_x
+      specialize f_ih _ wf_t.1 typf den_f wf
+      specialize x_ih _ wf_t.2 typx den_x wf
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
         f_ih, Option.bind_some, x_ih, Option.bind_some]
       rw [dite_cond_eq_true (eq_true trivial), dite_cond_eq_true (eq_true F_pfunc),

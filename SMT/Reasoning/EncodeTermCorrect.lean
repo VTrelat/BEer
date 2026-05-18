@@ -20,6 +20,7 @@ theorem encodeTerm_spec.{u} (fv_sub_typings : B.FvSubTypings)
   (bv_nodup : (B.bv t).Nodup)
   (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ t)
   (fv_in_Λ : ∀ v ∈ B.fv t, v ∈ Λ)
+  (wf : B.RenWF E.context «Δ» := by assumption)
   -- Path-A R3e: SPLIT existential witness into two finer-grained hypotheses:
   -- existence + RDom (sharing same `denT'`) and Δ-universal totality
   -- (independent of `denT'`). Each is parameterized over `vs`, `D`, `P` so
@@ -105,6 +106,7 @@ theorem encodeTerm_spec.{u} (fv_sub_typings : B.FvSubTypings)
     (∀ (Δ_alt : B.RenamingContext.Context) (Δ_fv_alt : ∀ v ∈ B.fv t, (Δ_alt v).isSome = true)
         (Δ₀_alt : SMT.RenamingContext.Context),
         RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt t →
+        B.RenWF E.context Δ_alt →
         (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
         (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -141,5 +143,5 @@ theorem encodeTerm_spec.{u} (fv_sub_typings : B.FvSubTypings)
   | pfun A B A_ih B_ih       => exact encodeTerm_spec.pfun_case fv_sub_typings A B (A_ih wd_t.1) (B_ih wd_t.2) E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup respects fv_in_Λ
   | app f x f_ih x_ih        => exact encodeTerm_spec.app_case fv_sub_typings f x (f_ih wd_t.1) (x_ih wd_t.2.1) E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup respects fv_in_Λ
   | collect vs D P D_ih P_ih => exact encodeTerm_spec.collect_case fv_sub_typings vs D P (D_ih wd_t.1) (P_ih wd_t.2) E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup respects fv_in_Λ
-  | all vs D P D_ih P_ih     => exact encodeTerm_spec.all_case fv_sub_typings vs D P (D_ih wd_t.1) (P_ih wd_t.2) E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup respects fv_in_Λ wd_t.2 (existence_rdom_witness_hasflag vs D P) (totality_witness_hasflag vs D P)
+  | all vs D P D_ih P_ih     => exact encodeTerm_spec.all_case fv_sub_typings vs D P (D_ih wd_t.1) (P_ih wd_t.2) E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup respects fv_in_Λ wf wd_t.2 (existence_rdom_witness_hasflag vs D P) (totality_witness_hasflag vs D P)
   | lambda vs D P D_ih P_ih  => exact encodeTerm_spec.lambda_case fv_sub_typings vs D P (D_ih wd_t.1) (P_ih wd_t.2) E typ_t Δ_fv Δ₀_ext Δ₀_none_out den_t vars_used Λ_inv bv_nodup respects fv_in_Λ

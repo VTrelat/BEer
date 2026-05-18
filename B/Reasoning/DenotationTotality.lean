@@ -440,7 +440,7 @@ theorem denote_exists_of_typing
         (∀ i, (x i).2.1 = α i) →
         ∃ D : B.Dom, ⟦P x⟧ᴮ = some D ∧ D.snd.fst = .bool := by
       intro x hx
-      exact typP_ih x (hwt.update hx) (hwd.2 x)
+      exact typP_ih x hx (hwt.update hx) (hwd.2 x)
     -- Step 4: Translate type-tag witness (matching τ.get) into the (matching α) form
     -- needed by body_den_of_typed.
     have type_tag_eq : ∀ i, τ.get (m + 1) i = α i :=
@@ -608,7 +608,7 @@ theorem denote_exists_of_typing
         (∀ i, (x i).2.1 = α i) →
         ∃ D : B.Dom, ⟦P x⟧ᴮ = some D ∧ D.snd.fst = .bool := by
       intro x hx
-      exact typP_ih x (hwt.update hx) (hwd.2 x)
+      exact typP_ih x hx (hwt.update hx) (hwd.2 x)
     -- Step 4: Translate type-tag witness into the (matching α) form.
     have type_tag_eq : ∀ i, τ.get (m + 1) i = α i :=
       fun _ => BType.get_of_foldl
@@ -711,7 +711,7 @@ theorem denote_exists_of_typing
         (∀ i, (x i).2.1 = α i) →
         ∃ D : B.Dom, ⟦E x⟧ᴮ = some D ∧ D.snd.fst = γ := by
       intro x hx
-      exact typE_ih x (hwt.update hx) (hwd.2 x)
+      exact typE_ih x hx (hwt.update hx) (hwd.2 x)
     -- Step 4: Translate type-tag witness into the (matching α) form.
     have type_tag_eq : ∀ i, τ.get (m + 1) i = α i :=
       fun _ => BType.get_of_foldl
@@ -1068,7 +1068,8 @@ theorem denote_exists_of_typing
     («Δ» : B.𝒱 → Option B.Dom)
     (Δ_isSome : ∀ v ∈ B.fv t, («Δ» v).isSome = true)
     (hcompat : B.PHOAS.WellTypedCtx (Γ.abstract («Δ» := «Δ»)))
-    (hwd : B.PHOAS.WellDefined (t.abstract «Δ» Δ_isSome)) :
+    (hwd : B.PHOAS.WellDefined (t.abstract «Δ» Δ_isSome))
+    (wf : B.RenWF Γ «Δ» := by assumption) :
     ∃ T : ZFSet, ∃ hT : T ∈ τ.toZFSet,
       ⟦t.abstract «Δ» Δ_isSome⟧ᴮ = some ⟨T, τ, hT⟩ := by
   have htyp_phoas : Γ.abstract («Δ» := «Δ») ⊢ᴮ' t.abstract «Δ» Δ_isSome : τ :=

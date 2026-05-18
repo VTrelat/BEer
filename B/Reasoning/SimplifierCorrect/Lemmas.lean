@@ -15,7 +15,8 @@ theorem isSome_fv_simplifier_of_fv_isSome {t : Term} {«Δ» : 𝒱 → Option D
 theorem simplifier_partial_correct' {t : Term} {«Δ»}
   (ht : ∀ v ∈ fv t, («Δ» v).isSome = true)
   (wf_t : t.WF) {Γ : B.TypeContext} {τ : BType} (typ_t : Γ ⊢ᴮ t : τ)
-  (h : ⟦(simplifier t).abstract («Δ» := «Δ») (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = none) :
+  (h : ⟦(simplifier t).abstract («Δ» := «Δ») (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = none)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦t.abstract «Δ» ht⟧ᴮ = none := by
   induction t generalizing «Δ» Γ τ with
   | «ℤ»
@@ -28,8 +29,8 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
     obtain ⟨_, _, rfl, typx, typy⟩ := Typing.mapletE typ_t
     simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_none_iff] at h ⊢
     intro X den_x Y den_y
-    specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typx
-    specialize y_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typy
+    replace x_ih := fun hh => x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typx hh wf
+    replace y_ih := fun hh => y_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typy hh wf
     rw [←Decidable.not_imp_not, ←ne_eq, Option.ne_none_iff_exists, ←ne_eq, Option.ne_none_iff_exists] at x_ih y_ih
     obtain ⟨simpX, den_simpx⟩ := x_ih ⟨X, den_x.symm⟩
     obtain ⟨simpY, den_simpy⟩ := y_ih ⟨Y, den_y.symm⟩
@@ -52,8 +53,8 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
       WFTC.of_abstract, .int,
       Typing.of_abstract (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) typy⟩
       den_y
-    specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typx
-    specialize y_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typy
+    replace x_ih := fun hh => x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typx hh wf
+    replace y_ih := fun hh => y_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typy hh wf
     rw [←Decidable.not_imp_not, ←ne_eq, Option.ne_none_iff_exists, ←ne_eq, Option.ne_none_iff_exists] at x_ih y_ih
     obtain ⟨⟨simpX, _, hsimpX⟩, den_simpx⟩ := x_ih ⟨_, den_x.symm⟩
     obtain ⟨⟨simpY, _, hsimpY⟩, den_simpy⟩ := y_ih ⟨_, den_y.symm⟩
@@ -143,9 +144,9 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
     unfold simplifier at h
     rcases key (simplifier x) (simplifier y) (Typing.simplifier typx) (Typing.simplifier typy)
         _ hsx_fv hsy_fv h with hsx | hsy
-    · have hx : ⟦x.abstract «Δ» hx_fv⟧ᴮ = none := x_ih hx_fv wf_t.1 typx hsx
+    · have hx : ⟦x.abstract «Δ» hx_fv⟧ᴮ = none := x_ih hx_fv wf_t.1 typx hsx wf
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, hx, Option.bind_none]
-    · have hy : ⟦y.abstract «Δ» hy_fv⟧ᴮ = none := y_ih hy_fv wf_t.2 typy hsy
+    · have hy : ⟦y.abstract «Δ» hy_fv⟧ᴮ = none := y_ih hy_fv wf_t.2 typy hsy wf
       rw [Option.eq_none_iff_forall_ne_some]
       rintro ⟨Z, _, hZ⟩ den_t
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
@@ -230,9 +231,9 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
     unfold simplifier at h
     rcases key (simplifier x) (simplifier y) (Typing.simplifier typx) (Typing.simplifier typy)
         _ hsx_fv hsy_fv h with hsx | hsy
-    · have hx : ⟦x.abstract «Δ» hx_fv⟧ᴮ = none := x_ih hx_fv wf_t.1 typx hsx
+    · have hx : ⟦x.abstract «Δ» hx_fv⟧ᴮ = none := x_ih hx_fv wf_t.1 typx hsx wf
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, hx, Option.bind_none]
-    · have hy : ⟦y.abstract «Δ» hy_fv⟧ᴮ = none := y_ih hy_fv wf_t.2 typy hsy
+    · have hy : ⟦y.abstract «Δ» hy_fv⟧ᴮ = none := y_ih hy_fv wf_t.2 typy hsy wf
       rw [Option.eq_none_iff_forall_ne_some]
       rintro ⟨Z, _, hZ⟩ den_t
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
@@ -261,8 +262,8 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
       WFTC.of_abstract, .int,
       Typing.of_abstract (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) typy⟩
       den_y
-    specialize x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typx
-    specialize y_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typy
+    replace x_ih := fun hh => x_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typx hh wf
+    replace y_ih := fun hh => y_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typy hh wf
     rw [←Decidable.not_imp_not, ←ne_eq, Option.ne_none_iff_exists, ←ne_eq, Option.ne_none_iff_exists] at x_ih y_ih
     obtain ⟨⟨simpX, _, hsimpX⟩, den_simpx⟩ := x_ih ⟨_, den_x.symm⟩
     obtain ⟨⟨simpY, _, hsimpY⟩, den_simpy⟩ := y_ih ⟨_, den_y.symm⟩
@@ -326,9 +327,9 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
     unfold simplifier at h
     rcases key (simplifier x) (simplifier y) (Typing.simplifier typx) (Typing.simplifier typy)
         _ hsx_fv hsy_fv h with hsx | hsy
-    · have hx : ⟦x.abstract «Δ» hx_fv⟧ᴮ = none := x_ih hx_fv wf_t.1 typx hsx
+    · have hx : ⟦x.abstract «Δ» hx_fv⟧ᴮ = none := x_ih hx_fv wf_t.1 typx hsx wf
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, hx, Option.bind_none]
-    · have hy : ⟦y.abstract «Δ» hy_fv⟧ᴮ = none := y_ih hy_fv wf_t.2 typy hsy
+    · have hy : ⟦y.abstract «Δ» hy_fv⟧ᴮ = none := y_ih hy_fv wf_t.2 typy hsy wf
       rw [Option.eq_none_iff_forall_ne_some]
       rintro ⟨Z, _, hZ⟩ den_t
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
@@ -371,7 +372,7 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
       unfold simplifier at h
       exact key (simplifier x) (Typing.simplifier typx) _ _ h
     have hx : ⟦x.abstract «Δ» (fun v hv => ht v (by rw [fv]; exact hv))⟧ᴮ = none :=
-      ih (fun v hv => ht v (by rw [fv]; exact hv)) wf_t typx hsimpx
+      ih (fun v hv => ht v (by rw [fv]; exact hv)) wf_t typx hsimpx wf
     simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, hx, Option.bind_none]
   | eq x y x_ih y_ih =>
     obtain ⟨rfl, α, typx, typy⟩ := Typing.eqE typ_t
@@ -456,9 +457,9 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
     unfold simplifier at h
     rcases key (simplifier x) (simplifier y) (Typing.simplifier typx) (Typing.simplifier typy)
         _ hsx_fv hsy_fv h with hsx | hsy
-    · have hx : ⟦x.abstract «Δ» hx_fv⟧ᴮ = none := x_ih hx_fv wf_t.1 typx hsx
+    · have hx : ⟦x.abstract «Δ» hx_fv⟧ᴮ = none := x_ih hx_fv wf_t.1 typx hsx wf
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, hx, Option.bind_none]
-    · have hy : ⟦y.abstract «Δ» hy_fv⟧ᴮ = none := y_ih hy_fv wf_t.2 typy hsy
+    · have hy : ⟦y.abstract «Δ» hy_fv⟧ᴮ = none := y_ih hy_fv wf_t.2 typy hsy wf
       rw [Option.eq_none_iff_forall_ne_some]
       rintro ⟨Z, _, hZ⟩ den_t
       simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind,
@@ -493,7 +494,7 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
       WFTC.of_abstract, .set _,
       Typing.of_abstract (fun v hv => by apply ht; rw [fv]; exact hv) typS⟩
       den_S
-    specialize ih (fun v hv => by apply ht; rw [fv]; exact hv) wf_t typS
+    replace ih := fun hh => ih (fun v hv => by apply ht; rw [fv]; exact hv) wf_t typS hh wf
     rw [←Decidable.not_imp_not, ←ne_eq, Option.ne_none_iff_exists, ←ne_eq, Option.ne_none_iff_exists] at ih
     obtain ⟨⟨simpS, _, hsimpS⟩, den_simpS⟩ := ih ⟨_, den_S.symm⟩
     obtain rfl := denote_welltyped_eq
@@ -520,8 +521,8 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
       WFTC.of_abstract, .set β,
       Typing.of_abstract (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) typT⟩
       den_T
-    specialize S_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typS
-    specialize T_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typT
+    replace S_ih := fun hh => S_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typS hh wf
+    replace T_ih := fun hh => T_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typT hh wf
     rw [←Decidable.not_imp_not, ←ne_eq, Option.ne_none_iff_exists, ←ne_eq, Option.ne_none_iff_exists] at S_ih T_ih
     obtain ⟨⟨simpS, _, hsimpS⟩, den_simpS⟩ := S_ih ⟨_, den_S.symm⟩
     obtain ⟨⟨simpT, _, hsimpT⟩, den_simpT⟩ := T_ih ⟨_, den_T.symm⟩
@@ -556,8 +557,8 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
       WFTC.of_abstract, .set α,
       Typing.of_abstract (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) typT⟩
       den_T
-    specialize S_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typS
-    specialize T_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typT
+    replace S_ih := fun hh => S_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typS hh wf
+    replace T_ih := fun hh => T_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typT hh wf
     rw [←Decidable.not_imp_not, ←ne_eq, Option.ne_none_iff_exists, ←ne_eq, Option.ne_none_iff_exists] at S_ih T_ih
     obtain ⟨⟨simpS, _, hsimpS⟩, den_simpS⟩ := S_ih ⟨_, den_S.symm⟩
     obtain ⟨⟨simpT, _, hsimpT⟩, den_simpT⟩ := T_ih ⟨_, den_T.symm⟩
@@ -593,8 +594,8 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
       WFTC.of_abstract, .set α,
       Typing.of_abstract (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) typT⟩
       den_T
-    specialize S_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typS
-    specialize T_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typT
+    replace S_ih := fun hh => S_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typS hh wf
+    replace T_ih := fun hh => T_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typT hh wf
     rw [←Decidable.not_imp_not, ←ne_eq, Option.ne_none_iff_exists, ←ne_eq, Option.ne_none_iff_exists] at S_ih T_ih
     obtain ⟨⟨simpS, _, hsimpS⟩, den_simpS⟩ := S_ih ⟨_, den_S.symm⟩
     obtain ⟨⟨simpT, _, hsimpT⟩, den_simpT⟩ := T_ih ⟨_, den_T.symm⟩
@@ -648,8 +649,8 @@ theorem simplifier_partial_correct' {t : Term} {«Δ»}
       WFTC.of_abstract, .set β,
       Typing.of_abstract (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) typB⟩
       den_B
-    specialize A_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typA
-    specialize B_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typB
+    replace A_ih := fun hh => A_ih (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv)) wf_t.1 typA hh wf
+    replace B_ih := fun hh => B_ih (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv)) wf_t.2 typB hh wf
     rw [←Decidable.not_imp_not, ←ne_eq, Option.ne_none_iff_exists, ←ne_eq, Option.ne_none_iff_exists] at A_ih B_ih
     obtain ⟨⟨simpA, _, hsimpA⟩, den_simpA⟩ := A_ih ⟨_, den_A.symm⟩
     obtain ⟨⟨simpB, _, hsimpB⟩, den_simpB⟩ := B_ih ⟨_, den_B.symm⟩
