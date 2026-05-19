@@ -23,6 +23,9 @@ root = "Main"
 name = "B"
 
 [[lean_lib]]
+name = "SMT"
+
+[[lean_lib]]
 name = "Correctness"
 
 [[lean_lib]]
