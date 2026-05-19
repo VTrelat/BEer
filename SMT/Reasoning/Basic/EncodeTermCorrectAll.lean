@@ -1586,8 +1586,7 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
         exact St₅_sub_St₈_used hv_used_St₅
     · exact SMT.encoder_all_result_well_typed _ _ _ _
     · -- 7. preservation
-      intro v v_used v_not_St₀ v_not_vars
-      intro hv_St₈
+      intro v v_used v_not_St₀ v_not_vars hv_St₈
       obtain ⟨τ_v, hτ_v⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_St₈)
       have h_St₈ : ⟨v, τ_v⟩ ∈ St₈.types.entries := AList.mem_lookup_iff.1 hτ_v
       rw [St₈_types] at h_St₈
