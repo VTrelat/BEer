@@ -20,22 +20,7 @@ theorem encodeTerm_spec.{u} (fv_sub_typings : B.FvSubTypings)
   (bv_nodup : (B.bv t).Nodup)
   (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ t)
   (fv_in_Λ : ∀ v ∈ B.fv t, v ∈ Λ)
-  (wf : B.RenWF E.context «Δ» := by assumption)
-  -- Path-A R3e: SPLIT existential witness into two finer-grained hypotheses:
-  -- existence + RDom (sharing same `denT'`) and Δ-universal totality
-  -- (independent of `denT'`). Each is parameterized over `vs`, `D`, `P` so
-  -- it can be reused across inductive cases of `t`. Universally quantified
-  -- over the binder body so it applies at every has-flag `all` site,
-  -- including nested ones via the IH.
-  --
-  -- HISTORICAL NOTE (audit follow-up): three companion clauses were previously
-  -- declared on this signature but never consumed by `encodeTerm_spec.all_case`
-  -- — they have been removed: (1) `cast_preimage_witness_hasflag` (R3e2-split),
-  -- (2) `pfun_inv` (R1 E.po-functional invariant on flagged binders), and
-  -- (3) `hzmem_iff_witness_hasflag` (R3e2-split Δ-universal adequacy clause
-  -- feeding `hbridge_hasflag`). They were intended as building blocks for
-  -- future inline-discharge of `existence_rdom_witness_hasflag`; see the
-  -- companion historical note in `EncodeTermCorrectAll.lean`.
+  (wf : B.RenWF E.context «Δ»)
   (existence_rdom_witness_hasflag :
     ∀ (_vs_inner : List B.𝒱) (_D_inner _P_inner : B.Term)
       {zs : List SMT.𝒱} {τs : List SMTType}
