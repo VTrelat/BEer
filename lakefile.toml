@@ -1,5 +1,5 @@
 name = "B"
-defaultTargets = ["Encoder", "POGReader"]
+defaultTargets = ["Encoder", "POGReader", "Correctness"]
 
 [leanOptions]
 pp.proofs.withType = false
@@ -23,7 +23,7 @@ root = "Main"
 name = "B"
 
 [[lean_lib]]
-name = "SMT"
+name = "Correctness"
 
 [[lean_lib]]
 name = "Extra"
