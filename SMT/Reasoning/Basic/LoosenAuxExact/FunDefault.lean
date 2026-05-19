@@ -1,11 +1,58 @@
 import SMT.Reasoning.Defs
 import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
+import SMT.Reasoning.Basic.DenotationTotality
 import Encoder.Loosening.Rules
 
 open Std.Do SMT ZFSet Classical
 
 set_option maxHeartbeats 2000000
+
+/-- Transport an FV-restricted respects relation to a subterm under a context extension,
+when the larger term is well-typed in the base context (so its FVs sit in the base). -/
+private theorem respectsTypeContextOnFV_transport
+    {«Δ» : SMT.RenamingContext.Context} {Γ Γ' : SMT.TypeContext} {t s : SMT.Term} {τ : SMTType}
+    (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Γ t)
+    (typ_t : Γ ⊢ˢ t : τ)
+    (sub : Γ ⊆ Γ')
+    (sub_fv : ∀ v ∈ SMT.fv s, v ∈ SMT.fv t) :
+    SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Γ' s := by
+  intro v σ hv hlk
+  have hv_t : v ∈ SMT.fv t := sub_fv v hv
+  have hv_Γ : v ∈ Γ := SMT.Typing.mem_context_of_mem_fv typ_t hv_t
+  obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_Γ)
+  have hσ'_Γ' : Γ'.lookup v = some σ' := AList.lookup_of_subset sub hσ'
+  rw [hσ'_Γ'] at hlk
+  cases hlk
+  exact respects hv_t hσ'
+
+/-- Build an FV-restricted respects relation for `.app t (.var x)` over an extended context
+`AList.insert x α Γ`, given a respects relation for `t` over `Γ` (with `t` well-typed in `Γ`,
+`x ∉ Γ`) and the `x`-binding's type tag. -/
+private theorem respectsTypeContextOnFV_app_var
+    {«Δ» : SMT.RenamingContext.Context} {Γ : SMT.TypeContext} {t : SMT.Term}
+    {x : SMT.𝒱} {α τ : SMTType} {Xarg : SMT.Dom}
+    (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Γ t)
+    (typ_t : Γ ⊢ˢ t : τ)
+    (x_fresh : x ∉ Γ)
+    (hXarg_ty : Xarg.snd.fst = α) :
+    SMT.RenamingContext.RespectsTypeContextOnFV
+      (Function.update «Δ» x (some Xarg)) (AList.insert x α Γ)
+      (SMT.Term.app t (.var x)) := by
+  intro v σ hv hlk
+  simp only [SMT.fv, List.mem_append, List.mem_singleton] at hv
+  by_cases hvx : v = x
+  · subst hvx
+    rw [AList.lookup_insert] at hlk
+    cases hlk
+    exact ⟨Xarg, Function.update_self _ _ _, hXarg_ty⟩
+  · rw [AList.lookup_insert_ne hvx] at hlk
+    have hv_t : v ∈ SMT.fv t := by
+      rcases hv with hv | hv
+      · exact hv
+      · exact absurd hv hvx
+    obtain ⟨d, hd, hd_ty⟩ := respects hv_t hlk
+    exact ⟨d, by rw [Function.update_of_ne hvx]; exact hd, hd_ty⟩
 
 private theorem funUnaryTarget
     {α : SMTType} {y : ZFSet}
@@ -230,6 +277,7 @@ theorem defaultSpecMSpec.{u} :
                 ∀ («Δ₀» : RenamingContext.Context.{u})
                   (ht₀ : RenamingContext.CoversFV «Δ₀» t)
                   (Y : SMT.Dom.{u}),
+                  RenamingContext.RespectsTypeContextOnFV «Δ₀» Γ t →
                   ⟦t.abstract «Δ₀» ht₀⟧ˢ = some Y →
                     ∃ (hφ : RenamingContext.CoversFV «Δ₀» spec) (Φ : SMT.Dom.{u}),
                       ⟦spec.abstract «Δ₀» hφ⟧ˢ = some Φ ∧
@@ -255,7 +303,7 @@ theorem defaultSpecMSpec.{u} :
       · exact SMT.Typing.eq _ _ _ _ typ_t (SMT.Typing.int _ _)
       · intro v hv
         simpa [fv] using hv
-      · intro «Δ₀» ht₀ Y den_t
+      · intro «Δ₀» ht₀ Y respects den_t
         have hφ : RenamingContext.CoversFV «Δ₀» (t =ˢ .int 0) := by
           intro v hv
           simp [SMT.fv] at hv
@@ -270,11 +318,11 @@ theorem defaultSpecMSpec.{u} :
         · refine ⟨hφ, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
           · simpa [SMT.Term.abstract, SMTType.defaultZFSet] using
               (denote_eq_eq_zftrue_of_fst_eq den_t hden_zero
-                (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)) hdef)
+                (RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)) hdef)
           · intro
             rfl
         · obtain ⟨Φ, hdenΦ, hΦ_ty⟩ := denote_eq_some_of_some den_t hden_zero
-            (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+            (RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects))
           exact ⟨hφ, Φ, by simpa [SMT.Term.abstract] using hdenΦ, hΦ_ty, fun h => (hdef h).elim⟩
   | bool =>
       mintro pre ∀St₁
@@ -294,7 +342,7 @@ theorem defaultSpecMSpec.{u} :
       · exact SMT.Typing.eq _ _ _ _ typ_t (SMT.Typing.bool _ false)
       · intro v hv
         simpa [fv] using hv
-      · intro «Δ₀» ht₀ Y den_t
+      · intro «Δ₀» ht₀ Y respects den_t
         have hφ : RenamingContext.CoversFV «Δ₀» (t =ˢ .bool false) := by
           intro v hv
           simp [SMT.fv] at hv
@@ -310,11 +358,11 @@ theorem defaultSpecMSpec.{u} :
         · refine ⟨hφ, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
           · simpa [SMT.Term.abstract, SMTType.defaultZFSet] using
               (denote_eq_eq_zftrue_of_fst_eq den_t hden_false
-                (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)) hdef)
+                (RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)) hdef)
           · intro
             rfl
         · obtain ⟨Φ, hdenΦ, hΦ_ty⟩ := denote_eq_some_of_some den_t hden_false
-            (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+            (RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects))
           exact ⟨hφ, Φ, by simpa [SMT.Term.abstract] using hdenΦ, hΦ_ty, fun h => (hdef h).elim⟩
   | unit =>
       mintro pre ∀St₁
@@ -334,7 +382,7 @@ theorem defaultSpecMSpec.{u} :
       · exact SMT.Typing.bool _ true
       · intro v hv
         simpa [fv] using hv
-      · intro «Δ₀» ht₀ Y den_t
+      · intro «Δ₀» ht₀ Y _respects den_t
         refine ⟨?_, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
         · intro v hv
           simp [fv] at hv
@@ -360,7 +408,7 @@ theorem defaultSpecMSpec.{u} :
       · exact SMT.Typing.eq _ _ _ _ typ_t (SMT.Typing.none _ _)
       · intro v hv
         simpa [noneCast, SMT.fv] using hv
-      · intro «Δ₀» ht₀ Y den_t
+      · intro «Δ₀» ht₀ Y respects den_t
         have hφ : RenamingContext.CoversFV «Δ₀» (t =ˢ none$τ) := by
           intro v hv
           exact ht₀ v (by simpa [noneCast, SMT.fv] using hv)
@@ -374,11 +422,11 @@ theorem defaultSpecMSpec.{u} :
         · refine ⟨hφ, ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl, ?_⟩
           · simpa [SMT.Term.abstract] using
               (denote_eq_eq_zftrue_of_fst_eq den_t hden_none
-                (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)) hdef)
+                (RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)) hdef)
           · intro
             rfl
         · obtain ⟨Φ, hdenΦ, hΦ_ty⟩ := denote_eq_some_of_some den_t hden_none
-            (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+            (RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects))
           exact ⟨hφ, Φ, by simpa [SMT.Term.abstract] using hdenΦ, hΦ_ty, fun h => (hdef h).elim⟩
   | pair α β ihα ihβ =>
       unfold defaultSpecM
@@ -405,6 +453,7 @@ theorem defaultSpecMSpec.{u} :
               ∀ («Δ₀» : RenamingContext.Context)
                 (ht₀ : RenamingContext.CoversFV «Δ₀» (Term.fst t))
                 (Y : SMT.Dom),
+                RenamingContext.RespectsTypeContextOnFV «Δ₀» Γ (Term.fst t) →
                 ⟦(Term.fst t).abstract «Δ₀» ht₀⟧ˢ = some Y →
                   ∃ (hφ : RenamingContext.CoversFV «Δ₀» hfst) (Φ : SMT.Dom),
                     ⟦hfst.abstract «Δ₀» hφ⟧ˢ = some Φ ∧
@@ -452,6 +501,7 @@ theorem defaultSpecMSpec.{u} :
                   ∀ («Δ₀» : RenamingContext.Context)
                     (ht₀ : RenamingContext.CoversFV «Δ₀» (Term.snd t))
                     (Y : SMT.Dom),
+                    RenamingContext.RespectsTypeContextOnFV «Δ₀» St₂.types (Term.snd t) →
                     ⟦(Term.snd t).abstract «Δ₀» ht₀⟧ˢ = some Y →
                       ∃ (hφ : RenamingContext.CoversFV «Δ₀» hsnd) (Φ : SMT.Dom),
                         ⟦hsnd.abstract «Δ₀» hφ⟧ˢ = some Φ ∧
@@ -473,6 +523,7 @@ theorem defaultSpecMSpec.{u} :
                   ∀ («Δ₀» : RenamingContext.Context)
                     (ht₀ : RenamingContext.CoversFV «Δ₀» t)
                     (Y : SMT.Dom),
+                    RenamingContext.RespectsTypeContextOnFV «Δ₀» Γ t →
                     ⟦t.abstract «Δ₀» ht₀⟧ˢ = some Y →
                       ∃ (hφ : RenamingContext.CoversFV «Δ₀» (hfst ∧ˢ hsnd)) (Φ : SMT.Dom),
                         ⟦(hfst ∧ˢ hsnd).abstract «Δ₀» hφ⟧ˢ = some Φ ∧
@@ -506,7 +557,7 @@ theorem defaultSpecMSpec.{u} :
             rcases (by simpa [SMT.fv, List.mem_append] using hv) with hv | hv
             · simpa [SMT.fv] using fv_hfst hv
             · simpa [SMT.fv] using fv_hsnd hv
-          · intro «Δ₀» ht₀ Y den_t
+          · intro «Δ₀» ht₀ Y respects den_t
             have ht_fst₀ : RenamingContext.CoversFV «Δ₀» (Term.fst t) := by
               intro v hv
               exact ht₀ v (by simpa [SMT.fv] using hv)
@@ -514,7 +565,7 @@ theorem defaultSpecMSpec.{u} :
               intro v hv
               exact ht₀ v (by simpa [SMT.fv] using hv)
             have hY_ty : Y.snd.fst = α.pair β :=
-              denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+              RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)
             have hY_mem : Y.fst ∈ ⟦α.pair β⟧ᶻ := by
               simpa [hY_ty] using Y.snd.snd
             have hY_prod : Y.fst ∈ ⟦α⟧ᶻ.prod ⟦β⟧ᶻ := by
@@ -538,8 +589,15 @@ theorem defaultSpecMSpec.{u} :
                   cases hY_ty
                   rw [SMT.Term.abstract.eq_def, SMT.denote, den_t]
                   dsimp [Ysnd]
-            obtain ⟨hφfst, Φfst, hdenΦfst, hΦfst_ty, hΦfst_def⟩ := den_hfst «Δ₀» ht_fst₀ Yfst hden_fst_t
-            obtain ⟨hφsnd, Φsnd, hdenΦsnd, hΦsnd_ty, hΦsnd_def⟩ := den_hsnd «Δ₀» ht_snd₀ Ysnd hden_snd_t
+            have respects_fst : RenamingContext.RespectsTypeContextOnFV «Δ₀» Γ (Term.fst t) :=
+              fun v σ hv hlk => respects (by simpa [SMT.fv] using hv) hlk
+            have respects_snd : RenamingContext.RespectsTypeContextOnFV «Δ₀» St₂.types (Term.snd t) :=
+              respectsTypeContextOnFV_transport (respects := respects) (typ_t := typ_t)
+                (sub := sub₂) (sub_fv := fun v hv => by simpa [SMT.fv] using hv)
+            obtain ⟨hφfst, Φfst, hdenΦfst, hΦfst_ty, hΦfst_def⟩ :=
+              den_hfst «Δ₀» ht_fst₀ Yfst respects_fst hden_fst_t
+            obtain ⟨hφsnd, Φsnd, hdenΦsnd, hΦsnd_ty, hΦsnd_def⟩ :=
+              den_hsnd «Δ₀» ht_snd₀ Ysnd respects_snd hden_snd_t
             have hφ : RenamingContext.CoversFV «Δ₀» (hfst ∧ˢ hsnd) := by
               intro v hv
               rcases (by simpa [SMT.fv, List.mem_append] using hv) with hv | hv
@@ -579,6 +637,7 @@ theorem defaultSpecMSpec.{u} :
                     ∀ («Δ₀» : RenamingContext.Context)
                       (ht₀ : RenamingContext.CoversFV «Δ₀» t)
                       (Y : SMT.Dom),
+                      RenamingContext.RespectsTypeContextOnFV «Δ₀» Γ t →
                       ⟦t.abstract «Δ₀» ht₀⟧ˢ = some Y →
                         ∃ (hφ : RenamingContext.CoversFV «Δ₀» (hfst ∧ˢ hsnd)) (Φ : SMT.Dom),
                           ⟦(hfst ∧ˢ hsnd).abstract «Δ₀» hφ⟧ˢ = some Φ ∧
@@ -649,6 +708,7 @@ theorem defaultSpecMSpec.{u} :
                   ∀ (Δ₀ : RenamingContext.Context)
                     (ht₀ : RenamingContext.CoversFV Δ₀ (Term.app t (.var x)))
                     (Y : SMT.Dom),
+                    RenamingContext.RespectsTypeContextOnFV Δ₀ St₂.types (Term.app t (.var x)) →
                     ⟦(Term.app t (.var x)).abstract Δ₀ ht₀⟧ˢ = some Y →
                       ∃ (hφ : RenamingContext.CoversFV Δ₀ a) (Φ : SMT.Dom),
                         ⟦a.abstract Δ₀ hφ⟧ˢ = some Φ ∧
@@ -670,6 +730,7 @@ theorem defaultSpecMSpec.{u} :
                   ∀ (Δ₀ : RenamingContext.Context)
                     (ht₀ : RenamingContext.CoversFV Δ₀ t)
                     (Y : SMT.Dom),
+                    RenamingContext.RespectsTypeContextOnFV Δ₀ St₁.types t →
                     ⟦t.abstract Δ₀ ht₀⟧ˢ = some Y →
                       ∃ (hφ : RenamingContext.CoversFV Δ₀ (Term.forall [x] [α] a)) (Φ : SMT.Dom),
                         ⟦(Term.forall [x] [α] a).abstract Δ₀ hφ⟧ˢ = some Φ ∧
@@ -749,12 +810,21 @@ theorem defaultSpecMSpec.{u} :
             rcases hv' with hv_t | hv_x
             · exact hv_t
             · exact (hxv hv_x).elim
-          · intro Δ₀ ht₀ Y den_t
+          · intro Δ₀ ht₀ Y respects den_t
             have x_not_mem_fv_t : x ∉ fv t := by
               intro hx_mem
               exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hx_mem)
             have hY_ty : Y.snd.fst = α.fun β :=
-              denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+              RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)
+            have respects_app :
+                ∀ (Xarg : SMT.Dom), Xarg.snd.fst = α →
+                  RenamingContext.RespectsTypeContextOnFV
+                    (Function.update Δ₀ x (some Xarg)) St₂.types (Term.app t (.var x)) := by
+              intro Xarg hXarg_ty
+              rw [St₂_types_eq]
+              exact respectsTypeContextOnFV_app_var
+                (respects := respects) (typ_t := typ_t) (x_fresh := x_fresh)
+                (hXarg_ty := hXarg_ty)
             have hY_func : ZFSet.IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ Y.fst := by
               rw [←ZFSet.mem_funs]
               simpa [hY_ty] using Y.snd.snd
@@ -855,7 +925,8 @@ theorem defaultSpecMSpec.{u} :
                   (hY_ty := hY_ty) (hY_func := hY_func)
                   Xarg hXarg_ty hXarg_mem
               obtain ⟨hφa, Dspec, hden_spec, hDspec_ty, hDspec_def⟩ :=
-                den_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp hden_app
+                den_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
+                  (respects_app Xarg hXarg_ty) hden_app
               rw [hgo_forall x_1 hx_1]
               exact Option.isSome_of_eq_some hden_spec
             have hbody_total' :
@@ -1040,7 +1111,8 @@ theorem defaultSpecMSpec.{u} :
                       (hY_ty := hY_ty) (hY_func := hY_func)
                       Xarg rfl hx_1
                   obtain ⟨hφa, Dspec, hden_spec, hDspec_ty, hDspec_def⟩ :=
-                    den_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp hden_app
+                    den_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
+                      (respects_app Xarg rfl) hden_app
                   have hDapp_def : Dapp.fst = β.defaultZFSet := by
                     have hYeq_default :
                         Y = ⟨(α.fun β).defaultZFSet, α.fun β,
@@ -1096,6 +1168,7 @@ theorem defaultSpecMSpec.{u} :
                     ∀ (Δ₀ : RenamingContext.Context)
                       (ht₀ : RenamingContext.CoversFV Δ₀ t)
                       (Y : SMT.Dom),
+                      RenamingContext.RespectsTypeContextOnFV Δ₀ St₁.types t →
                       ⟦t.abstract Δ₀ ht₀⟧ˢ = some Y →
                         ∃ (hφ : RenamingContext.CoversFV Δ₀ (Term.forall [x] [α] a)) (Φ : SMT.Dom),
                           ⟦(Term.forall [x] [α] a).abstract Δ₀ hφ⟧ˢ = some Φ ∧
@@ -1124,6 +1197,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 ∀ («Δ₀» : RenamingContext.Context.{u})
                   (ht₀ : RenamingContext.CoversFV «Δ₀» t)
                   (Y : SMT.Dom.{u}),
+                  RenamingContext.RespectsTypeContextOnFV «Δ₀» Γ t →
                   ⟦t.abstract «Δ₀» ht₀⟧ˢ = some Y →
                     ∀ (hφ : RenamingContext.CoversFV «Δ₀» spec)
                       {Φ : SMT.Dom.{u}},
@@ -1149,7 +1223,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
       · exact SMT.Typing.eq _ _ _ _ typ_t (SMT.Typing.int _ _)
       · intro v hv
         simpa [SMT.fv] using hv
-      · intro Δ₀ ht₀ Y den_t hφ Φ hdenΦ htrue
+      · intro Δ₀ ht₀ Y respects den_t hφ Φ hdenΦ htrue
         have hden_zero :
             ⟦(.int 0 : Term).abstract Δ₀ (by
                 intro v hv
@@ -1157,7 +1231,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
               some ⟨ZFSet.ofInt 0, .int, ZFSet.mem_ofInt_Int 0⟩ := by
           rw [SMT.Term.abstract, SMT.denote, Option.pure_def]
         exact denote_eq_true_implies_fst_eq den_t hden_zero
-          (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+          (RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects))
           (by simpa [SMT.Term.abstract] using hdenΦ) htrue
   | bool =>
       mintro pre ∀St₁
@@ -1176,7 +1250,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
       · exact SMT.Typing.eq _ _ _ _ typ_t (SMT.Typing.bool _ false)
       · intro v hv
         simpa [SMT.fv] using hv
-      · intro Δ₀ ht₀ Y den_t hφ Φ hdenΦ htrue
+      · intro Δ₀ ht₀ Y respects den_t hφ Φ hdenΦ htrue
         have hden_false :
             ⟦(.bool false : Term).abstract Δ₀ (by
                 intro v hv
@@ -1185,7 +1259,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
           rw [SMT.Term.abstract, SMT.denote, Option.pure_def]
           rfl
         exact denote_eq_true_implies_fst_eq den_t hden_false
-          (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+          (RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects))
           (by simpa [SMT.Term.abstract] using hdenΦ) htrue
   | unit =>
       mintro pre ∀St₁
@@ -1204,10 +1278,10 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
       · exact SMT.Typing.bool _ true
       · intro v hv
         simpa [SMT.fv] using hv
-      · intro Δ₀ ht₀ Y den_t hφ Φ hdenΦ htrue
+      · intro Δ₀ ht₀ Y respects den_t hφ Φ hdenΦ htrue
         obtain ⟨y, τ, hy⟩ := Y
         have hY_ty : τ = SMTType.unit :=
-          denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+          RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)
         cases hY_ty
         rw [SMTType.defaultZFSet]
         rw [SMTType.toZFSet] at hy
@@ -1229,7 +1303,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
       · exact SMT.Typing.eq _ _ _ _ typ_t (SMT.Typing.none _ _)
       · intro v hv
         simpa [noneCast, SMT.fv] using hv
-      · intro Δ₀ ht₀ Y den_t hφ Φ hdenΦ htrue
+      · intro Δ₀ ht₀ Y respects den_t hφ Φ hdenΦ htrue
         have hden_none :
             ⟦(none$τ).abstract Δ₀ (by
                 intro v hv
@@ -1238,7 +1312,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 SMTType.mem_toZFSet_of_defaultZFSet⟩ := by
           simpa [noneCast, SMTType.defaultZFSet, SMT.Term.abstract, SMT.denote]
         exact denote_eq_true_implies_fst_eq den_t hden_none
-          (denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t))
+          (RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects))
           (by simpa [SMT.Term.abstract] using hdenΦ) htrue
   | pair α β ihα ihβ =>
       mintro pre ∀St₁
@@ -1264,6 +1338,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                   ∀ («Δ₀» : RenamingContext.Context)
                     (ht₀ : RenamingContext.CoversFV «Δ₀» t)
                     (Y : SMT.Dom),
+                    RenamingContext.RespectsTypeContextOnFV «Δ₀» St₁.types t →
                     ⟦t.abstract «Δ₀» ht₀⟧ˢ = some Y →
                       ∀ (hφ : RenamingContext.CoversFV «Δ₀» spec)
                         {Φ : SMT.Dom},
@@ -1293,6 +1368,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                   ∀ («Δ₀» : RenamingContext.Context)
                     (ht₀ : RenamingContext.CoversFV «Δ₀» (Term.fst t))
                     (Y : SMT.Dom),
+                    RenamingContext.RespectsTypeContextOnFV «Δ₀» St₁.types (Term.fst t) →
                     ⟦(Term.fst t).abstract «Δ₀» ht₀⟧ˢ = some Y →
                       ∀ (hφ : RenamingContext.CoversFV «Δ₀» hfst)
                         {Φ : SMT.Dom},
@@ -1340,6 +1416,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                     ∀ («Δ₀» : RenamingContext.Context)
                       (ht₀ : RenamingContext.CoversFV «Δ₀» (Term.snd t))
                       (Y : SMT.Dom),
+                      RenamingContext.RespectsTypeContextOnFV «Δ₀» St₂.types (Term.snd t) →
                       ⟦(Term.snd t).abstract «Δ₀» ht₀⟧ˢ = some Y →
                         ∀ (hφ : RenamingContext.CoversFV «Δ₀» hsnd)
                           {Φ : SMT.Dom},
@@ -1361,6 +1438,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                     ∀ («Δ₀» : RenamingContext.Context)
                       (ht₀ : RenamingContext.CoversFV «Δ₀» t)
                       (Y : SMT.Dom),
+                      RenamingContext.RespectsTypeContextOnFV «Δ₀» St₁.types t →
                       ⟦t.abstract «Δ₀» ht₀⟧ˢ = some Y →
                         ∀ (hφ : RenamingContext.CoversFV «Δ₀» (hfst ∧ˢ hsnd))
                           {Φ : SMT.Dom},
@@ -1386,6 +1464,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                         ∀ («Δ₀» : RenamingContext.Context)
                           (ht₀ : RenamingContext.CoversFV «Δ₀» (Term.snd t))
                           (Y : SMT.Dom),
+                          RenamingContext.RespectsTypeContextOnFV «Δ₀» St₂.types (Term.snd t) →
                           ⟦(Term.snd t).abstract «Δ₀» ht₀⟧ˢ = some Y →
                             ∀ (hφ : RenamingContext.CoversFV «Δ₀» hsnd)
                               {Φ : SMT.Dom},
@@ -1416,7 +1495,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
               rcases (by simpa [SMT.fv, List.mem_append] using hv) with hv | hv
               · simpa [SMT.fv] using fv_hfst hv
               · simpa [SMT.fv] using fv_hsnd hv
-            · intro «Δ₀» ht₀ Y den_t hφ Φ hdenΦ htrue
+            · intro «Δ₀» ht₀ Y respects den_t hφ Φ hdenΦ htrue
               have ht_fst₀ : RenamingContext.CoversFV «Δ₀» (Term.fst t) := by
                 intro v hv
                 exact ht₀ v (by simpa [SMT.fv] using hv)
@@ -1424,7 +1503,12 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 intro v hv
                 exact ht₀ v (by simpa [SMT.fv] using hv)
               have hY_ty : Y.snd.fst = α.pair β :=
-                denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+                RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)
+              have respects_fst : RenamingContext.RespectsTypeContextOnFV «Δ₀» St₁.types (Term.fst t) :=
+                fun v σ hv hlk => respects (by simpa [SMT.fv] using hv) hlk
+              have respects_snd : RenamingContext.RespectsTypeContextOnFV «Δ₀» St₂.types (Term.snd t) :=
+                respectsTypeContextOnFV_transport (respects := respects) (typ_t := typ_t)
+                  (sub := sub₂) (sub_fv := fun v hv => by simpa [SMT.fv] using hv)
               have hY_mem : Y.fst ∈ ⟦α.pair β⟧ᶻ := by
                 simpa [hY_ty] using Y.snd.snd
               have hY_prod : Y.fst ∈ ⟦α⟧ᶻ.prod ⟦β⟧ᶻ := by
@@ -1456,21 +1540,33 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
               have hφsnd : RenamingContext.CoversFV «Δ₀» hsnd := by
                 intro v hv
                 exact hφ v (by simpa [SMT.fv, List.mem_append] using Or.inr hv)
+              have respects_hfst :
+                  RenamingContext.RespectsTypeContextOnFV «Δ₀» St₃.types hfst :=
+                respectsTypeContextOnFV_transport (respects := respects) (typ_t := typ_t)
+                  (sub := fun _ h => sub₃ (sub₂ h))
+                  (sub_fv := fun v hv => by simpa [SMT.fv] using fv_hfst hv)
+              have respects_hsnd :
+                  RenamingContext.RespectsTypeContextOnFV «Δ₀» St₃.types hsnd :=
+                respectsTypeContextOnFV_transport (respects := respects) (typ_t := typ_t)
+                  (sub := fun _ h => sub₃ (sub₂ h))
+                  (sub_fv := fun v hv => by simpa [SMT.fv] using fv_hsnd hv)
               obtain ⟨Dfst, Dsnd, hdenDfst, hDfst_true, hdenDsnd, hDsnd_true⟩ :=
                 denoteAndTrueComponents
                   (fun hdenDfst =>
-                    denote_type_eq_of_typing
-                      (typ_t := SMT.Typing.weakening (h := sub₃) typ_hfst) (hden := hdenDfst))
+                    RenamingContext.denote_type_of_typing_fv
+                      (htyp := SMT.Typing.weakening (h := sub₃) typ_hfst)
+                      (hden := hdenDfst) (hcompat := respects_hfst))
                   (fun hdenDsnd =>
-                    denote_type_eq_of_typing (typ_t := typ_hsnd) (hden := hdenDsnd))
+                    RenamingContext.denote_type_of_typing_fv (htyp := typ_hsnd) (hden := hdenDsnd)
+                      (hcompat := respects_hsnd))
                   (p := hfst.abstract «Δ₀» hφfst)
                   (q := hsnd.abstract «Δ₀» hφsnd)
                   (hden := by simpa [SMT.Term.abstract] using hdenΦ)
                   htrue
               have hfst_def : Yfst.fst = α.defaultZFSet := by
-                exact den_hfst «Δ₀» ht_fst₀ Yfst hden_fst_t hφfst hdenDfst hDfst_true
+                exact den_hfst «Δ₀» ht_fst₀ Yfst respects_fst hden_fst_t hφfst hdenDfst hDfst_true
               have hsnd_def : Ysnd.fst = β.defaultZFSet := by
-                exact den_hsnd «Δ₀» ht_snd₀ Ysnd hden_snd_t hφsnd hdenDsnd hDsnd_true
+                exact den_hsnd «Δ₀» ht_snd₀ Ysnd respects_snd hden_snd_t hφsnd hdenDsnd hDsnd_true
               dsimp [Yfst, Ysnd] at hfst_def hsnd_def
               rw [hY_eta, SMTType.defaultZFSet, hfst_def, hsnd_def]
           simpa [Std.Do.PostCond.mayThrow] using
@@ -1489,6 +1585,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                       ∀ («Δ₀» : RenamingContext.Context)
                         (ht₀ : RenamingContext.CoversFV «Δ₀» t)
                         (Y : SMT.Dom),
+                        RenamingContext.RespectsTypeContextOnFV «Δ₀» St₁.types t →
                         ⟦t.abstract «Δ₀» ht₀⟧ˢ = some Y →
                           ∀ (hφ : RenamingContext.CoversFV «Δ₀» (hfst ∧ˢ hsnd))
                             {Φ : SMT.Dom},
@@ -1621,12 +1718,21 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
             rcases hv' with hv_t | hv_x
             · exact hv_t
             · exact (hxv hv_x).elim
-          · intro Δ₀ ht₀ Y den_t hφ Φ hdenΦ htrue
+          · intro Δ₀ ht₀ Y respects den_t hφ Φ hdenΦ htrue
             have x_not_mem_fv_t : x ∉ fv t := by
               intro hx_mem
               exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hx_mem)
             have hY_ty : Y.snd.fst = α.fun β :=
-              denote_type_eq_of_typing (typ_t := typ_t) (hden := den_t)
+              RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)
+            have respects_app :
+                ∀ (Xarg : SMT.Dom), Xarg.snd.fst = α →
+                  RenamingContext.RespectsTypeContextOnFV
+                    (Function.update Δ₀ x (some Xarg)) St₂.types (Term.app t (.var x)) := by
+              intro Xarg hXarg_ty
+              rw [St₂_types_eq]
+              exact respectsTypeContextOnFV_app_var
+                (respects := respects) (typ_t := typ_t) (x_fresh := x_fresh)
+                (hXarg_ty := hXarg_ty)
             have hY_func : ZFSet.IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ Y.fst := by
               rw [←ZFSet.mem_funs]
               simpa [hY_ty] using Y.snd.snd
@@ -1727,7 +1833,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                   (hY_ty := hY_ty) (hY_func := hY_func)
                   Xarg hXarg_ty hXarg_mem
               obtain ⟨hφa, Dspec, hden_spec, hDspec_ty, hDspec_def⟩ :=
-                spec_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp hden_app
+                spec_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
+                  (respects_app Xarg hXarg_ty) hden_app
               rw [hgo_forall x_1 hx_1]
               exact Option.isSome_of_eq_some hden_spec
             have hbody_total' :
@@ -1846,7 +1953,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                     (hY_ty := hY_ty) (hY_func := hY_func)
                     Xarg rfl hx_1
                 obtain ⟨hφa, Dspec, hden_spec, hDspec_ty, hDspec_def⟩ :=
-                  spec_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp hden_app
+                  spec_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
+                    (respects_app Xarg rfl) hden_app
                 have hgo_Xarg := hgo_forall (fun _ => Xarg) (by
                   intro i
                   have hi0 : i = ⟨0, by simp⟩ := by
@@ -1908,7 +2016,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                   (hY_ty := hY_ty) (hY_func := hY_func)
                   Xarg rfl hx_1
               obtain ⟨hφa, Dspec, hden_spec, hDspec_ty, hDspec_def⟩ :=
-                spec_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp hden_app
+                spec_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
+                  (respects_app Xarg rfl) hden_app
               have hgo_Xarg := hgo_forall (fun _ => Xarg) (by
                 intro i
                 have hi0 : i = ⟨0, by simp⟩ := by
@@ -1946,7 +2055,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                           exact (Option.get_fst_eq_of_isSome).symm
                   _ = zftrue := hbody_true'
               have hDapp_default : Dapp.fst = β.defaultZFSet := by
-                exact conv_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp hden_app hφa hden_spec hbody_true
+                exact conv_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
+                  (respects_app Xarg rfl) hden_app hφa hden_spec hbody_true
               apply Subtype.ext
               calc
                 (ZFSet.fapply Y.fst (ZFSet.is_func_is_pfunc hY_func)

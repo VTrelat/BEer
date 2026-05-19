@@ -2,20 +2,20 @@ import B.HOTyping.Rules
 
 open B B.PHOAS
 
-abbrev WellTyped.{u} {𝒱 : Type u} [DecidableEq 𝒱] (t : Term 𝒱) :=
+abbrev WellTyped.{u} {𝒱 : Type u} [DecidableEq 𝒱] [B.PHOAS.HasType 𝒱] (t : Term 𝒱) :=
   Σ' (Γ : TypeContext 𝒱) (τ : BType), Γ ⊢ᴮ' t : τ
 
 namespace PHOAS.Typing
 open PHOAS Typing
 
-theorem toTerm_sound {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {γ : BType} : Γ ⊢ᴮ' γ.toTerm' : γ.set := by
+theorem toTerm_sound {𝒱} [DecidableEq 𝒱] [HasType 𝒱] {Γ : TypeContext 𝒱} {γ : BType} : Γ ⊢ᴮ' γ.toTerm' : γ.set := by
   induction γ with
   | int => exact «ℤ»
   | bool => exact 𝔹
   | set α ih => exact pow ih
   | prod α β α_ih β_ih => exact cprod α_ih β_ih
 
-theorem foldl_aux {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n : ℕ} (α : Fin (n + 1) → BType) (D : Fin (n + 1) → PHOAS.Term 𝒱) (typD : ∀ (i : Fin (n + 1)), Γ ⊢ᴮ' D i : (α i).set) :
+theorem foldl_aux {𝒱} [DecidableEq 𝒱] [HasType 𝒱] {Γ : TypeContext 𝒱} {n : ℕ} (α : Fin (n + 1) → BType) (D : Fin (n + 1) → PHOAS.Term 𝒱) (typD : ∀ (i : Fin (n + 1)), Γ ⊢ᴮ' D i : (α i).set) :
   Γ ⊢ᴮ' Fin.foldl n (λ d ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i + 1, Nat.add_lt_add_right hi 1⟩) (D 0) : (Fin.foldl n (fun d ⟨i, hi⟩ => d ×ᴮ α ⟨i + 1, Nat.add_lt_add_right hi 1⟩) (α 0)).set := by
   dsimp
   induction n with
@@ -33,7 +33,7 @@ theorem foldl_aux {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n : ℕ} (�
       exact typD ⟨i, Nat.lt_add_right 1 hi⟩
     · exact typD ⟨n + 1, Nat.lt_add_one (n + 1)⟩
 
-theorem foldl_aux' {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n : ℕ} (n_pos : 0 < n) (α : Fin n → BType) (D : Fin n → PHOAS.Term 𝒱) (typD : ∀ i : Fin n, Γ ⊢ᴮ' D i : (α i).set) :
+theorem foldl_aux' {𝒱} [DecidableEq 𝒱] [HasType 𝒱] {Γ : TypeContext 𝒱} {n : ℕ} (n_pos : 0 < n) (α : Fin n → BType) (D : Fin n → PHOAS.Term 𝒱) (typD : ∀ i : Fin n, Γ ⊢ᴮ' D i : (α i).set) :
   Γ ⊢ᴮ' Fin.foldl (n - 1) (λ d ⟨i, hi⟩ => d ⨯ᴮ' D ⟨i + 1, Nat.add_lt_of_lt_sub hi⟩) (D ⟨0, n_pos⟩) : (Fin.foldl (n - 1) (fun d ⟨i, hi⟩ => d ×ᴮ α ⟨i + 1, Nat.add_lt_of_lt_sub hi⟩) (α ⟨0, n_pos⟩)).set := by
   dsimp
   induction n with
@@ -56,7 +56,7 @@ theorem foldl_aux' {𝒱} [DecidableEq 𝒱] {Γ : TypeContext 𝒱} {n : ℕ} (
         exact typD ⟨i, Nat.lt_add_right 1 hi⟩
       · exact typD ⟨n + 1, Nat.lt_add_one (n + 1)⟩
 
-theorem collect_dom {𝒱} [DecidableEq 𝒱] (n : ℕ) (D : PHOAS.Term 𝒱) (P : (Fin n → 𝒱) → PHOAS.Term 𝒱) (Γ : TypeContext 𝒱) (τ : BType) {h : Γ ⊢ᴮ' D.collect P : τ} : Γ ⊢ᴮ' D : τ := by
+theorem collect_dom {𝒱} [DecidableEq 𝒱] [HasType 𝒱] (n : ℕ) (D : PHOAS.Term 𝒱) (P : (Fin n → 𝒱) → PHOAS.Term 𝒱) (Γ : TypeContext 𝒱) (τ : BType) {h : Γ ⊢ᴮ' D.collect P : τ} : Γ ⊢ᴮ' D : τ := by
   rcases h
   rename_i α D n_pos typD typP
   obtain ⟨n, rfl⟩ :=  Nat.exists_eq_add_one.mpr n_pos
@@ -72,13 +72,15 @@ theorem collect_dom {𝒱} [DecidableEq 𝒱] (n : ℕ) (D : PHOAS.Term 𝒱) (P
 
 
 open Classical in
-theorem collect_pred {𝒱} {Γ n z} {D : PHOAS.Term 𝒱} {P : (Fin n → 𝒱) → PHOAS.Term 𝒱} {τ : BType} :
-  (h : Γ ⊢ᴮ' D.collect P : τ.set) → Γ.update z (choose (Typing.collectE h).2 |>.1) ⊢ᴮ' P z : BType.bool := by
-  intro h
+theorem collect_pred {𝒱} [DecidableEq 𝒱] [HasType 𝒱] {Γ n z} {D : PHOAS.Term 𝒱} {P : (Fin n → 𝒱) → PHOAS.Term 𝒱} {τ : BType} :
+  (h : Γ ⊢ᴮ' D.collect P : τ.set) →
+  (∀ i, HasType.type (z i) = (choose (Typing.collectE h).2 |>.1) i) →
+  Γ.update z (choose (Typing.collectE h).2 |>.1) ⊢ᴮ' P z : BType.bool := by
+  intro h z_resp
   let ⟨⟨_,_,_,typP⟩,_⟩ := choose_spec (Typing.collectE h).2
-  exact typP z
+  exact typP z z_resp
 
-theorem lambda_dom {𝒱} [DecidableEq 𝒱] {n : ℕ} {D : PHOAS.Term 𝒱} {E : (Fin n → 𝒱) → PHOAS.Term 𝒱} {Γ : TypeContext 𝒱} {τ γ : BType}
+theorem lambda_dom {𝒱} [DecidableEq 𝒱] [HasType 𝒱] {n : ℕ} {D : PHOAS.Term 𝒱} {E : (Fin n → 𝒱) → PHOAS.Term 𝒱} {Γ : TypeContext 𝒱} {τ γ : BType}
   (h : Γ ⊢ᴮ' .lambda D E : .set (τ ×ᴮ γ)) : Γ ⊢ᴮ' D : .set τ := by
     rcases h
     rename_i α D n_pos typD typE
@@ -94,20 +96,24 @@ theorem lambda_dom {𝒱} [DecidableEq 𝒱] {n : ℕ} {D : PHOAS.Term 𝒱} {E 
       apply foldl_aux α D typD
 
 open Classical in
-theorem lambda_exp {𝒱} [DecidableEq 𝒱] {n : ℕ} {D : PHOAS.Term 𝒱} {E : (Fin n → 𝒱) → PHOAS.Term 𝒱} {Γ : TypeContext 𝒱} {τ γ : BType}
-  (h : Γ ⊢ᴮ' .lambda D E : .set (τ ×ᴮ γ)) {z} : Γ.update z (choose (Typing.lambdaE h).2 |>.2.1) ⊢ᴮ' E z : (choose (Typing.lambdaE h).2 |>.1) := by
+theorem lambda_exp {𝒱} [DecidableEq 𝒱] [HasType 𝒱] {n : ℕ} {D : PHOAS.Term 𝒱} {E : (Fin n → 𝒱) → PHOAS.Term 𝒱} {Γ : TypeContext 𝒱} {τ γ : BType}
+  (h : Γ ⊢ᴮ' .lambda D E : .set (τ ×ᴮ γ)) {z}
+  (z_resp : ∀ i, HasType.type (z i) = (choose (Typing.lambdaE h).2 |>.2.1) i) :
+  Γ.update z (choose (Typing.lambdaE h).2 |>.2.1) ⊢ᴮ' E z : (choose (Typing.lambdaE h).2 |>.1) := by
   let ⟨⟨_,_,_,typE⟩,_⟩ := choose_spec (Typing.lambdaE h).2
-  apply typE z
+  apply typE z z_resp
 
 open Classical in
-theorem all_pred {𝒱} [DecidableEq 𝒱] {Γ n z} {D : PHOAS.Term 𝒱} {P : (Fin n → 𝒱) → PHOAS.Term 𝒱} :
-  (h : Γ ⊢ᴮ' D.all P : .bool) → Γ.update z (choose (Typing.allE h).2.2 |>.1) ⊢ᴮ' P z : BType.bool := by
-  intro h
+theorem all_pred {𝒱} [DecidableEq 𝒱] [HasType 𝒱] {Γ n z} {D : PHOAS.Term 𝒱} {P : (Fin n → 𝒱) → PHOAS.Term 𝒱} :
+  (h : Γ ⊢ᴮ' D.all P : .bool) →
+  (∀ i, HasType.type (z i) = (choose (Typing.allE h).2.2 |>.1) i) →
+  Γ.update z (choose (Typing.allE h).2.2 |>.1) ⊢ᴮ' P z : BType.bool := by
+  intro h z_resp
   let ⟨_,_,typP⟩ := choose_spec (Typing.allE h).2.2
-  exact typP z
+  exact typP z z_resp
 
 open Classical in
-theorem all_dom {𝒱} [DecidableEq 𝒱] {Γ n} {D : PHOAS.Term 𝒱} {P : (Fin n → 𝒱) → PHOAS.Term 𝒱} :
+theorem all_dom {𝒱} [DecidableEq 𝒱] [HasType 𝒱] {Γ n} {D : PHOAS.Term 𝒱} {P : (Fin n → 𝒱) → PHOAS.Term 𝒱} :
   (h : Γ ⊢ᴮ' D.all P : .bool) →
   let αs_Ds := choose (Typing.allE h).2.2
   let αs := αs_Ds.1
@@ -158,7 +164,9 @@ theorem foldl_cprod_inj' {𝒱} [DecidableEq 𝒱] {n : ℕ} {A B : Fin (n + 1) 
   | zero => exact this.1
   | succ i => exact this.2 ⟨i, Nat.succ_lt_succ_iff.mp hi⟩
 
-theorem det {𝒱} [DecidableEq 𝒱] [Nonempty (Π n, Fin n → 𝒱)] {Γ : PHOAS.TypeContext 𝒱} {t : PHOAS.Term 𝒱} {τ σ : BType}
+theorem det {𝒱} [DecidableEq 𝒱] [HasType 𝒱]
+  [I : ∀ {n} (αs : Fin n → BType), Nonempty {v : Fin n → 𝒱 // ∀ i, HasType.type (v i) = αs i}]
+  {Γ : PHOAS.TypeContext 𝒱} {t : PHOAS.Term 𝒱} {τ σ : BType}
   (hτ : Γ ⊢ᴮ' t : τ) (hσ : Γ ⊢ᴮ' t : σ) : τ = σ := by
   induction hτ generalizing σ with
   | var ih =>
@@ -257,8 +265,8 @@ theorem det {𝒱} [DecidableEq 𝒱] [Nonempty (Π n, Fin n → 𝒱)] {Γ : PH
     congr
 
     rw [this] at typE_ih
-    rename Nonempty _ => inst
-    exact typE_ih _ (typE' <| Nonempty.some inst (n+1))
+    obtain ⟨v, v_resp⟩ := (I αs).some
+    exact typE_ih v v_resp (typE' v v_resp)
 
 
 end PHOAS.Typing

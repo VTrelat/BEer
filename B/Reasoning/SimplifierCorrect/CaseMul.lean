@@ -4,16 +4,17 @@ open Classical B PHOAS ZFSet
 
 set_option maxHeartbeats 300000 in
 theorem simplifier_partial_correct.mul.var.{u_1} {y : B.Term} {«Δ» : 𝒱 → Option B.Dom} {Γ : B.TypeContext}
-  (typ_y : Γ ⊢ y : BType.int) {X Y : ZFSet.{u_1}}
+  (typ_y : Γ ⊢ᴮ y : BType.int) {X Y : ZFSet.{u_1}}
   {hTτ : X *ᶻ Y ∈ BType.int.toZFSet} {v : 𝒱}
   (ht : ∀ v_1 ∈ fv (B.Term.var v *ᴮ y), («Δ» v_1).isSome = true) (wf_t : (B.Term.var v *ᴮ y).WF)
-  (typ_t : Γ ⊢ B.Term.var v *ᴮ y : BType.int) (hX : X ∈ BType.int.toZFSet)
+  (typ_t : Γ ⊢ᴮ B.Term.var v *ᴮ y : BType.int) (hX : X ∈ BType.int.toZFSet)
   (den_x : ⟦(B.Term.var v).abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv))⟧ᴮ = some ⟨X, BType.int, hX⟩) (hY : Y ∈ BType.int.toZFSet)
   (den_y : ⟦y.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv))⟧ᴮ = some ⟨Y, BType.int, hY⟩)
   {x_pf : ∀ v_1 ∈ fv (simplifier (B.Term.var v)), («Δ» v_1).isSome = true}
   (x_ih : ⟦(simplifier (B.Term.var v)).abstract «Δ» x_pf⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
   {y_pf : ∀ v ∈ fv (simplifier y), («Δ» v).isSome = true}
-  (y_ih : ⟦(simplifier y).abstract «Δ» y_pf⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) :
+  (y_ih : ⟦(simplifier y).abstract «Δ» y_pf⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (B.Term.var v *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ =
     some ⟨X *ᶻ Y, ⟨BType.int, hTτ⟩⟩ := by
   cases y with
@@ -244,16 +245,17 @@ theorem simplifier_partial_correct.mul.var.{u_1} {y : B.Term} {«Δ» : 𝒱 →
 
 set_option maxHeartbeats 300000 in
 theorem simplifier_partial_correct.mul.int.{u_1} {y : B.Term} {«Δ» : 𝒱 → Option B.Dom} {Γ : B.TypeContext}
-  (typ_y : Γ ⊢ y : BType.int) {X Y : ZFSet.{u_1}}
+  (typ_y : Γ ⊢ᴮ y : BType.int) {X Y : ZFSet.{u_1}}
   {hTτ : overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y ∈ BType.int.toZFSet} {n : ℤ}
   (ht : ∀ v ∈ fv (B.Term.int n *ᴮ y), («Δ» v).isSome = true) (wf_t : (B.Term.int n *ᴮ y).WF)
-  (typ_t : Γ ⊢ B.Term.int n *ᴮ y : BType.int) (typ_x : Γ ⊢ B.Term.int n : BType.int) (hX : X ∈ BType.int.toZFSet)
+  (typ_t : Γ ⊢ᴮ B.Term.int n *ᴮ y : BType.int) (typ_x : Γ ⊢ᴮ B.Term.int n : BType.int) (hX : X ∈ BType.int.toZFSet)
   (den_x : ⟦(B.Term.int n).abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv))⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) (hY : Y ∈ BType.int.toZFSet)
   (den_y : ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
   {x_pf : ∀ v ∈ fv (simplifier (B.Term.int n)), («Δ» v).isSome = true}
   (x_ih : ⟦(simplifier (B.Term.int n)).abstract «Δ» x_pf⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
   {y_pf : ∀ v ∈ fv (simplifier y), («Δ» v).isSome = true}
-  (y_ih : ⟦(simplifier y).abstract «Δ» y_pf⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) :
+  (y_ih : ⟦(simplifier y).abstract «Δ» y_pf⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (B.Term.int n *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ =
   some ⟨overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y, ⟨BType.int, hTτ⟩⟩ := by
   unfold simplifier
@@ -504,13 +506,14 @@ theorem simplifier_partial_correct.mul.add.{u_1} {y : B.Term} {«Δ» : 𝒱 →
   {X Y : ZFSet.{u_1}}
   {hTτ : overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y ∈ BType.int.toZFSet} {a b : B.Term}
   (ht : ∀ v ∈ fv ((a +ᴮ b) *ᴮ y), («Δ» v).isSome = true) (wf_t : ((a +ᴮ b) *ᴮ y).WF)
-  (typ_x : Γ ⊢ a +ᴮ b : BType.int) (hX : X ∈ BType.int.toZFSet)
+  (typ_x : Γ ⊢ᴮ a +ᴮ b : BType.int) (hX : X ∈ BType.int.toZFSet)
   (den_x : ⟦(a +ᴮ b).abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv))⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) (hY : Y ∈ BType.int.toZFSet)
   (den_y : ⟦y.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv))⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
   {pf : ∀ v ∈ fv (simplifier (a +ᴮ b)), («Δ» v).isSome = true}
   (x_ih : ⟦(simplifier (a +ᴮ b)).abstract «Δ» pf⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
   {pf_1 : ∀ v ∈ fv (simplifier y), («Δ» v).isSome = true}
-  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) :
+  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier ((a +ᴮ b) *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ =
     some ⟨overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y, ⟨BType.int, hTτ⟩⟩ := by
   unfold simplifier
@@ -692,13 +695,14 @@ theorem simplifier_partial_correct.mul.sub.{u_1} {y : B.Term} {«Δ» : 𝒱 →
   {X Y : ZFSet.{u_1}}
   {hTτ : overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y ∈ BType.int.toZFSet} {a b : B.Term}
   (ht : ∀ v ∈ fv ((a -ᴮ b) *ᴮ y), («Δ» v).isSome = true) (wf_t : ((a -ᴮ b) *ᴮ y).WF)
-  (typ_x : Γ ⊢ a -ᴮ b : BType.int) (hX : X ∈ BType.int.toZFSet)
+  (typ_x : Γ ⊢ᴮ a -ᴮ b : BType.int) (hX : X ∈ BType.int.toZFSet)
   (den_x : ⟦(a -ᴮ b).abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv))⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩) (hY : Y ∈ BType.int.toZFSet)
   (den_y : ⟦y.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv))⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
   {pf : ∀ v ∈ fv (simplifier (a -ᴮ b)), («Δ» v).isSome = true}
   (x_ih : ⟦(simplifier (a -ᴮ b)).abstract «Δ» pf⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
   {pf_1 : ∀ v ∈ fv (simplifier y), («Δ» v).isSome = true}
-  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) :
+  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier ((a -ᴮ b) *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ =
   some ⟨overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y, BType.int, hTτ⟩ := by
   unfold simplifier
@@ -857,13 +861,14 @@ theorem simplifier_partial_correct.mul.mul.{u_1} {y : B.Term} {«Δ» : 𝒱 →
   {X Y : ZFSet.{u_1}}
   {hTτ : overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y ∈ BType.int.toZFSet} {a b : B.Term}
   (ht : ∀ v ∈ fv (a *ᴮ b *ᴮ y), («Δ» v).isSome = true) (wf_t : (a *ᴮ b *ᴮ y).WF)
-  (typ_x : Γ ⊢ a *ᴮ b : BType.int) (hX : X ∈ BType.int.toZFSet)
+  (typ_x : Γ ⊢ᴮ a *ᴮ b : BType.int) (hX : X ∈ BType.int.toZFSet)
   (den_x : ⟦(a *ᴮ b).abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv))⟧ᴮ = some ⟨X, BType.int, hX⟩) (hY : Y ∈ BType.int.toZFSet)
   (den_y : ⟦y.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv))⟧ᴮ = some ⟨Y, BType.int, hY⟩)
   {pf : ∀ v ∈ fv (simplifier (a *ᴮ b)), («Δ» v).isSome = true}
   (x_ih : ⟦(simplifier (a *ᴮ b)).abstract «Δ» pf⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
   {pf_1 : ∀ v ∈ fv (simplifier y), («Δ» v).isSome = true}
-  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) :
+  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (a *ᴮ b *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ =
   some ⟨overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y, BType.int, hTτ⟩ := by
   unfold simplifier
@@ -1042,13 +1047,14 @@ theorem simplifier_partial_correct.mul.card.{u_1} {y : B.Term} {«Δ» : 𝒱 �
   {X Y : ZFSet.{u_1}}
   {hTτ : overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y ∈ BType.int.toZFSet} {S : B.Term}
   (ht : ∀ v ∈ fv (|S|ᴮ *ᴮ y), («Δ» v).isSome = true) (wf_t : (|S|ᴮ *ᴮ y).WF)
-  (typ_x : Γ ⊢ |S|ᴮ : BType.int) (hX : X ∈ BType.int.toZFSet)
+  (typ_x : Γ ⊢ᴮ |S|ᴮ : BType.int) (hX : X ∈ BType.int.toZFSet)
   (den_x : ⟦|S|ᴮ.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv))⟧ᴮ = some ⟨X, BType.int, hX⟩) (hY : Y ∈ BType.int.toZFSet)
   (den_y : ⟦y.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv))⟧ᴮ = some ⟨Y, BType.int, hY⟩)
   {pf : ∀ v ∈ fv (simplifier (|S|ᴮ)), («Δ» v).isSome = true}
   (x_ih : ⟦(simplifier (|S|ᴮ)).abstract «Δ» pf⟧ᴮ = some ⟨X, ⟨BType.int, hX⟩⟩)
   {pf_1 : ∀ v ∈ fv (simplifier y), («Δ» v).isSome = true}
-  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩) :
+  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, ⟨BType.int, hY⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (|S|ᴮ *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨X *ᶻ Y, BType.int, hTτ⟩ := by
   unfold simplifier
   by_cases eq0 : simplifier (|S|ᴮ) = .int 0
@@ -1205,13 +1211,14 @@ theorem simplifier_partial_correct.mul.app.{u_1} {y : B.Term} {«Δ» : 𝒱 →
   {X Y : ZFSet.{u_1}}
   {hTτ : overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y ∈ BType.int.toZFSet} {f x : B.Term}
   (ht : ∀ v ∈ fv ((@ᴮf) x *ᴮ y), («Δ» v).isSome = true) (wf_t : ((@ᴮf) x *ᴮ y).WF)
-  (typ_x : Γ ⊢ (@ᴮf) x : BType.int) (hX : X ∈ BType.int.toZFSet)
+  (typ_x : Γ ⊢ᴮ (@ᴮf) x : BType.int) (hX : X ∈ BType.int.toZFSet)
   (den_x : ⟦((@ᴮf) x).abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv))⟧ᴮ = some ⟨X, BType.int, hX⟩) (hY : Y ∈ BType.int.toZFSet)
   (den_y : ⟦y.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv))⟧ᴮ = some ⟨Y, BType.int, hY⟩)
   {pf : ∀ v ∈ fv (simplifier ((@ᴮf) x)), («Δ» v).isSome = true}
   (x_ih : ⟦(simplifier ((@ᴮf) x)).abstract «Δ» pf⟧ᴮ = some ⟨X, BType.int, hX⟩)
   {pf_1 : ∀ v ∈ fv (simplifier y), («Δ» v).isSome = true}
-  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, BType.int, hY⟩) :
+  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, BType.int, hY⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier ((@ᴮf) x *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨X *ᶻ Y, BType.int, hTτ⟩ := by
   unfold simplifier
   by_cases eq0 : simplifier (.app f x) = .int 0
@@ -1368,13 +1375,14 @@ theorem simplifier_partial_correct.mul.min.{u_1} {y : B.Term} {«Δ» : 𝒱 →
   {X Y : ZFSet.{u_1}}
   {hTτ : overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y ∈ BType.int.toZFSet} {S : B.Term}
   (ht : ∀ v ∈ fv (S.min *ᴮ y), («Δ» v).isSome = true) (wf_t : (S.min *ᴮ y).WF)
-  (typ_x : Γ ⊢ S.min : BType.int) (hX : X ∈ BType.int.toZFSet)
+  (typ_x : Γ ⊢ᴮ S.min : BType.int) (hX : X ∈ BType.int.toZFSet)
   (den_x : ⟦S.min.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv))⟧ᴮ = some ⟨X, BType.int, hX⟩) (hY : Y ∈ BType.int.toZFSet)
   (den_y : ⟦y.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv))⟧ᴮ = some ⟨Y, BType.int, hY⟩)
   {pf : ∀ v ∈ fv (simplifier S.min), («Δ» v).isSome = true}
   (x_ih : ⟦(simplifier S.min).abstract «Δ» pf⟧ᴮ = some ⟨X, BType.int, hX⟩)
   {pf_1 : ∀ v ∈ fv (simplifier y), («Δ» v).isSome = true}
-  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, BType.int, hY⟩) :
+  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, BType.int, hY⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (S.min *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨X *ᶻ Y, BType.int, hTτ⟩ := by
   unfold simplifier
   by_cases eq0 : simplifier S.min = .int 0
@@ -1531,13 +1539,14 @@ theorem simplifier_partial_correct.mul.max.{u_1} {y : B.Term} {«Δ» : 𝒱 →
   {X Y : ZFSet.{u_1}}
   {hTτ : overloadBinOp_Int (fun x1 x2 => x1 * x2) X Y ∈ BType.int.toZFSet} {S : B.Term}
   (ht : ∀ v ∈ fv (S.max *ᴮ y), («Δ» v).isSome = true) (wf_t : (S.max *ᴮ y).WF)
-  (typ_x : Γ ⊢ S.max : BType.int) (hX : X ∈ BType.int.toZFSet)
+  (typ_x : Γ ⊢ᴮ S.max : BType.int) (hX : X ∈ BType.int.toZFSet)
   (den_x : ⟦S.max.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; left; exact hv))⟧ᴮ = some ⟨X, BType.int, hX⟩) (hY : Y ∈ BType.int.toZFSet)
   (den_y : ⟦y.abstract «Δ» (fun v hv => ht v (by rw [fv, List.mem_append]; right; exact hv))⟧ᴮ = some ⟨Y, BType.int, hY⟩)
   {pf : ∀ v ∈ fv (simplifier S.max), («Δ» v).isSome = true}
   (x_ih : ⟦(simplifier S.max).abstract «Δ» pf⟧ᴮ = some ⟨X, BType.int, hX⟩)
   {pf_1 : ∀ v ∈ fv (simplifier y), («Δ» v).isSome = true}
-  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, BType.int, hY⟩) :
+  (y_ih : ⟦(simplifier y).abstract «Δ» pf_1⟧ᴮ = some ⟨Y, BType.int, hY⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (S.max *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨X *ᶻ Y, BType.int, hTτ⟩ := by
   unfold simplifier
   by_cases eq0 : simplifier S.max = .int 0
@@ -1693,17 +1702,18 @@ theorem simplifier_partial_correct.mul.max.{u_1} {y : B.Term} {«Δ» : 𝒱 →
 theorem simplifier_partial_correct.mul.{u_1} (x y : B.Term)
   (x_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv x, («Δ» v).isSome = true) (wf_t : x.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ x : τ →
+      Γ ⊢ᴮ x : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩)
+          ⟦x.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → B.RenWF Γ «Δ» → ⟦(simplifier x).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩)
   (y_ih :
     ∀ {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv y, («Δ» v).isSome = true) (wf_t : y.WF) {Γ : B.TypeContext} {τ : BType},
-      Γ ⊢ y : τ →
+      Γ ⊢ᴮ y : τ →
         ∀ {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet},
-          ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩)
+          ⟦y.abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ → B.RenWF Γ «Δ» → ⟦(simplifier y).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩)
   {«Δ» : 𝒱 → Option B.Dom} (ht : ∀ v ∈ fv (x *ᴮ y), («Δ» v).isSome = true) (wf_t : (x *ᴮ y).WF) {Γ : B.TypeContext}
-  {τ : BType} (typ_t : Γ ⊢ x *ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
-  (den_t : ⟦(x *ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩) :
+  {τ : BType} (typ_t : Γ ⊢ᴮ x *ᴮ y : τ) {T : ZFSet.{u_1}} {hTτ : T ∈ τ.toZFSet}
+  (den_t : ⟦(x *ᴮ y).abstract «Δ» ht⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩)
+  (wf : B.RenWF Γ «Δ» := by assumption) :
   ⟦(simplifier (x *ᴮ y)).abstract «Δ» (isSome_fv_simplifier_of_fv_isSome wf_t ht)⟧ᴮ = some ⟨T, ⟨τ, hTτ⟩⟩ := by
   simp_rw [Term.abstract, denote, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff, PSigma.exists] at den_t
 
@@ -1727,8 +1737,8 @@ theorem simplifier_partial_correct.mul.{u_1} (x y : B.Term)
   injection eq
   subst T
 
-  specialize x_ih _ wf_t.1 typ_x den_x
-  specialize y_ih _ wf_t.2 typ_y den_y
+  specialize x_ih _ wf_t.1 typ_x den_x wf
+  specialize y_ih _ wf_t.2 typ_y den_y wf
 
   -- all assumptions have been used
 

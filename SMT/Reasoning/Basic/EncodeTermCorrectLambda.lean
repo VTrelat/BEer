@@ -509,12 +509,16 @@ private theorem lambda_chosen_totality.{u}
     (typ_t : E_ctx ⊢ᴮ B.Term.lambda vs D P : (τ ×ᴮ β).set)
     (typ_D : E_ctx ⊢ᴮ D : .set τ)
     (typP : (vs.zipToAList αs ∪ E_ctx) ⊢ᴮ P : β)
+    (P_renwf : ∀ (Δ_a : B.RenamingContext.Context.{u}) (f_a : Fin vs.length → B.Dom.{u}),
+      B.RenWF E_ctx Δ_a →
+      (∀ i : Fin vs.length, (f_a i).snd.fst = τ.get vs.length i) →
+      B.RenWF (vs.zipToAList αs ∪ E_ctx)
+        (Function.updates Δ_a vs (List.ofFn fun i => some (f_a i))))
     (typ_D_enc : Γ_D ⊢ˢ D_enc : τ.toSMTType.fun SMTType.bool)
     (typ_P_enc : Γ_P ⊢ˢ P_enc : β.toSMTType)
     (τ_hasArity : τ.hasArity vs.length)
     (vs_not_D_fv : ∀ v ∈ vs, v ∉ B.fv D)
     (vs_disj_Γ_D : ∀ v ∈ vs, v ∉ Γ_D)
-    (vs_disj_Γ' : ∀ v ∈ vs, v ∉ Γ')
     (vs_used_P : ∀ v ∈ vs, v ∈ used_P)
     (vs_lookup_Γ_P : ∀ (i : Fin vs.length),
       AList.lookup vs[i] Γ_P = some ((τ.toSMTType.fromProdl (vs.length - 1))[i]'(by
@@ -545,6 +549,7 @@ private theorem lambda_chosen_totality.{u}
       ∀ (Δ_alt : B.RenamingContext.Context) (Δ_fv_alt : ∀ v ∈ B.fv D, (Δ_alt v).isSome = true)
         (Δ₀_alt : SMT.RenamingContext.Context),
         SMT.RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt D →
+        B.RenWF E_ctx Δ_alt →
           (∀ v ∉ used_D, Δ₀_alt v = none) →
             (∀ (v : SMT.𝒱) (d : SMT.Dom),
                 Δ₀_alt v = some d → ∀ (τ : SMTType), AList.lookup v Γ_D = some τ → d.snd.fst = τ) →
@@ -565,6 +570,7 @@ private theorem lambda_chosen_totality.{u}
       ∀ (Δ_alt : B.RenamingContext.Context) (Δ_fv_alt : ∀ v ∈ B.fv P, (Δ_alt v).isSome = true)
         (Δ₀_alt : SMT.RenamingContext.Context),
         SMT.RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt P →
+        B.RenWF (vs.zipToAList αs ∪ E_ctx) Δ_alt →
           (∀ v ∉ used_P, Δ₀_alt v = none) →
             (∀ (v : SMT.𝒱) (d : SMT.Dom),
                 Δ₀_alt v = some d → ∀ (τ : SMTType), AList.lookup v Γ_P = some τ → d.snd.fst = τ) →
@@ -598,6 +604,7 @@ private theorem lambda_chosen_totality.{u}
       (Δ_fv_alt : ∀ v ∈ B.fv (B.Term.lambda vs D P), (Δ_alt v).isSome = true)
       (Δ₀_alt : SMT.RenamingContext.Context),
       SMT.RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (B.Term.lambda vs D P) →
+      B.RenWF E_ctx Δ_alt →
         (∀ v ∉ used', Δ₀_alt v = none) →
           (∀ (v : SMT.𝒱) (d : SMT.Dom),
               Δ₀_alt v = some d → ∀ (τ_v : SMTType), AList.lookup v Γ' = some τ_v → d.snd.fst = τ_v) →
@@ -623,7 +630,7 @@ private theorem lambda_chosen_totality.{u}
                                     Δ'_alt hcov_alt⟧ˢ = some denT_alt ∧
                               (⟨T_alt, ⟨(τ ×ᴮ β).set, hT_alt⟩⟩ : B.Dom) ≘ᶻ denT_alt ∧
                                 ∀ (v : SMT.𝒱), Δ'_alt v ≠ none → v ∈ Γ' := by
-  intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
+  intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt wf_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
   -- Extract B-level D denotation from lambda denotation
   -- Lambda's B-side denotation begins with ⟨𝒟, .set τ, h𝒟⟩ ← ⟦D⟧ᴮ | failure,
   -- so we can pattern-match exactly as collect does for D-extraction.
@@ -724,7 +731,7 @@ private theorem lambda_chosen_totality.{u}
       Δ_D_alt_wt_out, hden_D_alt, hRDom_D_alt, Δ_D_alt_dom⟩ :=
     D_total Δ_alt
       (fun v hv => Δ_fv_alt v (B.fv.mem_lambda (.inl hv)))
-      Δ₀_alt_D hext_alt_D hnone_alt_D hwt_alt_D
+      Δ₀_alt_D hext_alt_D wf_alt hnone_alt_D hwt_alt_D
       𝒟_alt h𝒟_alt hden_D_alt_eq
   -- Build Δ'_alt cascade = Δ₀_alt → Δ_D_alt → Δ'.
   -- Mirrors collect's pattern (EncodeTermCorrectCollect.lean:3338-3343),
@@ -903,6 +910,9 @@ private theorem lambda_chosen_totality.{u}
           some ⟨P_val, ⟨P_ty, hP_val⟩⟩ := by
         rw [← denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp f_alt Δ_fv_alt_P]
         convert hP_den using 2
+      have hwf_P : B.RenWF (vs.zipToAList αs ∪ E_ctx)
+          (Function.updates Δ_alt vs (List.ofFn fun i => some (f_alt i))) :=
+        P_renwf Δ_alt f_alt wf_alt (fun i => (hf_alt_typ i).1)
       have hτP_β : P_ty = β := by
         exact (denote_welltyped_eq
           (t := P.abstract (Function.updates Δ_alt vs
@@ -937,6 +947,9 @@ private theorem lambda_chosen_totality.{u}
           some ⟨P_val, ⟨P_ty, hP_val⟩⟩ := by
         rw [← denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp f_alt Δ_fv_alt_P]
         convert hP_den using 2
+      have hwf_P : B.RenWF (vs.zipToAList αs ∪ E_ctx)
+          (Function.updates Δ_alt vs (List.ofFn fun i => some (f_alt i))) :=
+        P_renwf Δ_alt f_alt wf_alt (fun i => (hf_alt_typ i).1)
       have hτP_β : P_ty = β := by
         exact (denote_welltyped_eq
           (t := P.abstract (Function.updates Δ_alt vs
@@ -960,6 +973,8 @@ private theorem lambda_chosen_totality.{u}
     split_ifs with hvs
     · simp [List.getElem_ofFn]
     · exact Δ_fv_alt v (B.fv.mem_lambda (.inr ⟨hv, hvs⟩))
+  have hwf_P_alt : B.RenWF (vs.zipToAList αs ∪ E_ctx) Δ_ext_alt :=
+    P_renwf Δ_alt f_alt wf_alt (fun i => (hf_alt_typ i).1)
   -- Lift hP_go_den_alt to a P.abstract denotation.
   have h_den_P_alt : ⟦P.abstract Δ_ext_alt Δ_fv_P_alt⟧ᴮ =
       some ⟨P_val_alt, ⟨β, hP_val_alt⟩⟩ := by
@@ -1053,7 +1068,7 @@ private theorem lambda_chosen_totality.{u}
   -- Step 3: Invoke P_enc_total.
   obtain ⟨Δ_P_alt, hcov_P_alt, denT_P_alt, Δ_P_alt_extends, Δ_P_alt_none_out_used_P,
       Δ_P_alt_wt_out, hden_P_alt, hRDom_P_alt, Δ_P_alt_dom⟩ :=
-    P_enc_total Δ_ext_alt Δ_fv_P_alt Δ₀_hybrid_alt Δ₀_hybrid_ext_P_alt
+    P_enc_total Δ_ext_alt Δ_fv_P_alt Δ₀_hybrid_alt Δ₀_hybrid_ext_P_alt hwf_P_alt
       Δ₀_hybrid_alt_none_used_P Δ₀_hybrid_alt_wt P_val_alt hP_val_alt h_den_P_alt
   -- =========================================================================
   -- Build h_typ_alt typing for the lambda under Γ', use
@@ -1282,7 +1297,7 @@ private theorem lambda_chosen_totality.{u}
       have hv_used_D : v ∈ used_D := by
         by_contra hv_not
         rw [Δ_D_alt_none_out v hv_not] at hd_D
-        exact Option.noConfusion hd_D
+        nomatch hd_D
       -- Case split on v ∈ B.fv D vs not.
       by_cases hv_fv_D : v ∈ B.fv D
       · -- v ∈ B.fv D ⇒ Δ_alt v is some, both Δ₀_alt and Δ_D_alt equal canonical(Δ_alt v).
@@ -1437,6 +1452,9 @@ private theorem lambda_chosen_totality.{u}
           rw [← denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp f_alt Δ_fv_alt_P]
           convert hP_den_alt_choose using 2
         obtain ⟨P_v, P_t, hP_v⟩ := P_dom_alt
+        have hwf_P_choose : B.RenWF (vs.zipToAList αs ∪ E_ctx)
+            (Function.updates Δ_alt vs (List.ofFn fun i => some (f_alt i))) :=
+          P_renwf Δ_alt f_alt wf_alt (fun i => rfl)
         have h_wt := denote_welltyped_eq
           (t := P.abstract (Function.updates Δ_alt vs
             (List.ofFn fun i => some (f_alt i))) Δ_fv_alt_P)
@@ -1597,6 +1615,7 @@ private theorem lambda_chosen_totality.{u}
               (Δ_fv_a : ∀ v ∈ B.fv P, (Δ_a v).isSome = true)
               (Δ₀_a : SMT.RenamingContext.Context),
               SMT.RenamingContext.ExtendsOnSourceFV Δ₀_a Δ_a P →
+              B.RenWF (vs.zipToAList αs ∪ E_ctx) Δ_a →
               (∀ v ∉ used_P, Δ₀_a v = none) →
               ∀ (T_a : ZFSet) (hT_a : T_a ∈ ⟦β⟧ᶻ),
                 ⟦P.abstract Δ_a Δ_fv_a⟧ᴮ = some ⟨T_a, ⟨β, hT_a⟩⟩ →
@@ -1606,9 +1625,9 @@ private theorem lambda_chosen_totality.{u}
                   SMT.RenamingContext.Extends Δ'_a Δ₀_a ∧
                   ⟦P_enc.abstract Δ'_a hcov_a⟧ˢ = some denT_a ∧
                   (⟨T_a, ⟨β, hT_a⟩⟩ : B.Dom) ≘ᶻ denT_a := by
-          intro Δ_a Δ_fv_a Δ₀_a hext' hnone' T_a hT_a hden'
+          intro Δ_a Δ_fv_a Δ₀_a hext' wf' hnone' T_a hT_a hden'
           obtain ⟨Δ'_out, hcov_out, denT_out, hext_out, _, _, hden_out, hRDom_out, _⟩ :=
-            P_enc_total Δ_a Δ_fv_a Δ₀_a hext' hnone'
+            P_enc_total Δ_a Δ_fv_a Δ₀_a hext' wf' hnone'
               (SMT.RenamingContext.ExtendsOnSourceFV.wt hext' typ_P_enc) T_a hT_a hden'
           exact ⟨Δ'_out, hcov_out, denT_out, hext_out, hden_out, hRDom_out⟩
         -- Now case-split on xy.π₁ ∈ 𝒟_alt.
@@ -1730,6 +1749,7 @@ private theorem lambda_chosen_totality.{u}
               fv_P_enc_used_P
               P_enc_total_simple
               (fun hx hxD => h_den_E hx hxD)
+              (fun x_fin htyp => P_renwf Δ_alt x_fin wf_alt htyp)
               xy hx_mem hy_mem hxy_pair' hxy_π₁_arity hxy_𝒟
               body_val hbody_val
             -- Convert the iff.
@@ -2008,12 +2028,16 @@ private theorem lambda_defaults_totality.{u}
     (typ_t : E_ctx ⊢ᴮ B.Term.lambda vs D P : (τ ×ᴮ β).set)
     (typ_D : E_ctx ⊢ᴮ D : .set τ)
     (typP : (vs.zipToAList αs ∪ E_ctx) ⊢ᴮ P : β)
+    (P_renwf : ∀ (Δ_a : B.RenamingContext.Context.{u}) (f_a : Fin vs.length → B.Dom.{u}),
+      B.RenWF E_ctx Δ_a →
+      (∀ i : Fin vs.length, (f_a i).snd.fst = τ.get vs.length i) →
+      B.RenWF (vs.zipToAList αs ∪ E_ctx)
+        (Function.updates Δ_a vs (List.ofFn fun i => some (f_a i))))
     (typ_D_enc : Γ_D ⊢ˢ D_enc : τ.toSMTType.fun SMTType.bool)
     (typ_P_enc : Γ_P ⊢ˢ P_enc : β.toSMTType)
     (τ_hasArity : τ.hasArity vs.length)
     (vs_not_D_fv : ∀ v ∈ vs, v ∉ B.fv D)
     (vs_disj_Γ_D : ∀ v ∈ vs, v ∉ Γ_D)
-    (vs_disj_Γ' : ∀ v ∈ vs, v ∉ Γ')
     (vs_used_P : ∀ v ∈ vs, v ∈ used_P)
     (vs_lookup_Γ_P : ∀ (i : Fin vs.length),
       AList.lookup vs[i] Γ_P = some ((τ.toSMTType.fromProdl (vs.length - 1))[i]'(by
@@ -2044,6 +2068,7 @@ private theorem lambda_defaults_totality.{u}
       ∀ (Δ_alt : B.RenamingContext.Context) (Δ_fv_alt : ∀ v ∈ B.fv D, (Δ_alt v).isSome = true)
         (Δ₀_alt : SMT.RenamingContext.Context),
         SMT.RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt D →
+        B.RenWF E_ctx Δ_alt →
           (∀ v ∉ used_D, Δ₀_alt v = none) →
             (∀ (v : SMT.𝒱) (d : SMT.Dom),
                 Δ₀_alt v = some d → ∀ (τ : SMTType), AList.lookup v Γ_D = some τ → d.snd.fst = τ) →
@@ -2064,6 +2089,7 @@ private theorem lambda_defaults_totality.{u}
       ∀ (Δ_alt : B.RenamingContext.Context) (Δ_fv_alt : ∀ v ∈ B.fv P, (Δ_alt v).isSome = true)
         (Δ₀_alt : SMT.RenamingContext.Context),
         SMT.RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt P →
+        B.RenWF (vs.zipToAList αs ∪ E_ctx) Δ_alt →
           (∀ v ∉ used_P, Δ₀_alt v = none) →
             (∀ (v : SMT.𝒱) (d : SMT.Dom),
                 Δ₀_alt v = some d → ∀ (τ : SMTType), AList.lookup v Γ_P = some τ → d.snd.fst = τ) →
@@ -2097,6 +2123,7 @@ private theorem lambda_defaults_totality.{u}
       (Δ_fv_alt : ∀ v ∈ B.fv (B.Term.lambda vs D P), (Δ_alt v).isSome = true)
       (Δ₀_alt : SMT.RenamingContext.Context),
       SMT.RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (B.Term.lambda vs D P) →
+      B.RenWF E_ctx Δ_alt →
         (∀ v ∉ used', Δ₀_alt v = none) →
           (∀ (v : SMT.𝒱) (d : SMT.Dom),
               Δ₀_alt v = some d → ∀ (τ_v : SMTType), AList.lookup v Γ' = some τ_v → d.snd.fst = τ_v) →
@@ -2126,8 +2153,8 @@ private theorem lambda_defaults_totality.{u}
     (D := D) (P := P)
     (D_enc := D_enc) (P_enc := P_enc) (z := z) (Δ' := Δ') (denT' := denT')
     (Γ_D := Γ_D) (Γ_P := Γ_P) (Γ' := Γ') (used_D := used_D) (used_P := used_P)
-    (used' := used') vs_nemp vs_nodup h_toSMT typ_t typ_D typP typ_D_enc typ_P_enc
-    τ_hasArity vs_not_D_fv vs_disj_Γ_D vs_disj_Γ' vs_used_P vs_lookup_Γ_P z_not_Γ_P
+    (used' := used') vs_nemp vs_nodup h_toSMT typ_t typ_D typP P_renwf typ_D_enc typ_P_enc
+    τ_hasArity vs_not_D_fv vs_disj_Γ_D vs_used_P vs_lookup_Γ_P z_not_Γ_P
     z_not_Γ' z_not_used_P z_not_fv_D z_not_fv_P z_not_vs hcov_lambda hden_eq hden_ty
     Δ'_none_out_used' Δ'_dom_Γ' Δ'_wt_Γ' D_total P_enc_total Γ_D_lookup_sub_Γ'
     Γ_D_lookup_sub_Γ_P Γ'_lookup_sub_Γ_P
@@ -2149,6 +2176,10 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                   ⟦D.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
                     (∀ v ∈ D.vars, v ∈ used) →
                       (∀ v ∈ D.vars, v ∈ Λ → v ∈ E.context) →
+                      ((B.bv D).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ D →
+                        (∀ v ∈ B.fv D, v ∈ Λ) →
+                        B.RenWF E.context «Δ» →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -2165,7 +2196,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                                           CoversUsedVars E'.usedVars D ∧
                                             σ = α.toSMTType ∧
                                               Γ' ⊢ˢ t' : σ ∧
-                                                (∀ v ∈ used, v ∉ Λ → v ∉ B.fv D → v ∉ Γ') ∧
+                                                (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars D → v ∉ Γ') ∧
                                                   ∃ Δ',
                                                     ∃ (Δ'_covers : RenamingContext.CoversFV Δ' t'),
                                                       RenamingContext.Extends Δ' Δ₀ ∧
@@ -2178,6 +2209,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                                                                     (Δ_fv_alt : ∀ v ∈ B.fv D, (Δ_alt v).isSome = true)
                                                                     (Δ₀_alt : SMT.RenamingContext.Context),
                                                                     RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt D →
+                                                                    B.RenWF E.context Δ_alt →
                                                                       (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                                                       (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                                         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -2208,6 +2240,10 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                   ⟦P.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
                     (∀ v ∈ P.vars, v ∈ used) →
                       (∀ v ∈ P.vars, v ∈ Λ → v ∈ E.context) →
+                      ((B.bv P).Nodup) →
+                        B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ P →
+                        (∀ v ∈ B.fv P, v ∈ Λ) →
+                        B.RenWF E.context «Δ» →
                         ∀ {n : ℕ},
                           ⦃fun x =>
                             match x with
@@ -2224,7 +2260,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                                           CoversUsedVars E'.usedVars P ∧
                                             σ = α.toSMTType ∧
                                               Γ' ⊢ˢ t' : σ ∧
-                                                (∀ v ∈ used, v ∉ Λ → v ∉ B.fv P → v ∉ Γ') ∧
+                                                (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars P → v ∉ Γ') ∧
                                                   ∃ Δ',
                                                     ∃ (Δ'_covers : RenamingContext.CoversFV Δ' t'),
                                                       RenamingContext.Extends Δ' Δ₀ ∧
@@ -2237,6 +2273,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                                                                     (Δ_fv_alt : ∀ v ∈ B.fv P, (Δ_alt v).isSome = true)
                                                                     (Δ₀_alt : SMT.RenamingContext.Context),
                                                                     RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt P →
+                                                                    B.RenWF E.context Δ_alt →
                                                                       (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                                                       (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                                         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -2262,7 +2299,12 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
   {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
   (den_t : ⟦(Term.lambda vs D P).abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩)
   (vars_used : ∀ v ∈ (Term.lambda vs D P).vars, v ∈ used)
-  (Λ_inv : ∀ v ∈ (Term.lambda vs D P).vars, v ∈ Λ → v ∈ E.context) {n : ℕ} :
+  (Λ_inv : ∀ v ∈ (Term.lambda vs D P).vars, v ∈ Λ → v ∈ E.context)
+  (bv_nodup : (B.bv (Term.lambda vs D P)).Nodup)
+  (respects : B.RenamingContext.RespectsTypeContextOnFV (B.RenamingContext.toSMT «Δ») Λ ((Term.lambda vs D P)))
+  (fv_in_Λ : ∀ v ∈ B.fv ((Term.lambda vs D P)), v ∈ Λ)
+  (wf : B.RenWF E.context «Δ» := by assumption)
+  {n : ℕ} :
   ⦃fun x =>
     match x with
     | { env := E0, types := Λ' } => ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧ AList.keys Λ ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
@@ -2277,7 +2319,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                   CoversUsedVars E'.usedVars (Term.lambda vs D P) ∧
                     σ = α.toSMTType ∧
                       Γ' ⊢ˢ t' : σ ∧
-                        (∀ v ∈ used, v ∉ Λ → v ∉ B.fv (Term.lambda vs D P) → v ∉ Γ') ∧
+                        (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars (Term.lambda vs D P) → v ∉ Γ') ∧
                           ∃ Δ',
                             ∃ (Δ'_covers : RenamingContext.CoversFV Δ' t'),
                               RenamingContext.Extends Δ' Δ₀ ∧
@@ -2290,6 +2332,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                                             (Δ_fv_alt : ∀ v ∈ B.fv (Term.lambda vs D P), (Δ_alt v).isSome = true)
                                             (Δ₀_alt : SMT.RenamingContext.Context),
                                             RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (Term.lambda vs D P) →
+                                            B.RenWF E.context Δ_alt →
                                               (∀ v ∉ E'.usedVars, Δ₀_alt v = none) →
                                               (∀ v (d : SMT.Dom), Δ₀_alt v = some d → ∀ τ, Γ'.lookup v = some τ → d.snd.fst = τ) →
                                                 ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦α⟧ᶻ),
@@ -2381,11 +2424,25 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
     rcases v_in_D_vars with hv | hv
     · left; left; exact hv
     · right; right; left; exact hv
+  have hD_bv_nodup : (B.bv D).Nodup := by
+    have h := bv_nodup
+    simp only [B.bv] at h
+    rw [List.nodup_append, List.nodup_append] at h
+    exact h.1.2.1
+  have hP_bv_nodup : (B.bv P).Nodup := by
+    have h := bv_nodup
+    simp only [B.bv] at h
+    rw [List.nodup_append] at h
+    exact h.2.1
   mspec D_ih (E := E) (Λ := St₀.types) (α := .set τ) typ_D
       («Δ» := «Δ») Δ_fv_D
       (Δ₀ := Δ₀) Δ₀_ext_D (used := used) Δ₀_none_out (T := 𝒟) (hT := h𝒟)
       den_D vars_used_D (n := St₀.env.freshvarsc)
       St₀_types_sub_E_ctx_on_D_vars
+      hD_bv_nodup
+      (respects.mono_fv (fun v hv => by rw [B.fv]; exact List.mem_append_left _ hv))
+      (fun v hv => fv_in_Λ v (by rw [B.fv]; exact List.mem_append_left _ hv))
+      wf
   clear D_ih
   rename_i out_D
   obtain ⟨D_enc, τD⟩ := out_D
@@ -2474,6 +2531,9 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
       split_ifs with hvs
       · simp only [List.getElem_ofFn, Option.isSome_some]
       · exact Δ_fv v (fv.mem_lambda (.inr ⟨hv, hvs⟩))
+    have wf_P : B.RenWF E'.context Δ_ext :=
+      B.RenWF.updates_ofFn wf vs_nodup vs_Γ_disj vs_αs_len
+        (fun i => _root_.BType.get_reduce αs_nemp vs_αs_len i)
     set Δ_D_ext : SMT.RenamingContext.Context :=
       Function.updates Δ_D vs
         (List.ofFn fun (i : Fin vs.length) => B.RenamingContext.toSMT Δ_ext vs[i])
@@ -2529,16 +2589,109 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
             · right; simp only [B.bv, List.mem_append]
               right; exact h_bv
           exact Λ_inv v v_lambda v_St₀
-        · have v_fv_D : v ∈ B.fv D := by
+        · have v_vars_D : v ∈ B.Term.vars D := by
             by_contra h
             exact absurd v_in_St₁ (D_preserves_types v v_used v_St₀ h)
-          exact AList.lookup_isSome.mp (B.Typing.mem_context_of_mem_fv typ_D v_fv_D)
+          rcases B.Term.mem_vars_iff.mp v_vars_D with h | h
+          · exact AList.lookup_isSome.mp (B.Typing.mem_context_of_mem_fv typ_D h)
+          · -- v ∈ B.bv D. Case split on P.vars: fv P or bv P.
+            rcases B.Term.mem_vars_iff.mp v_in_P_vars with hv_fv_P | hv_bv_P
+            · have h_in_E' : ((vs.zipToAList αs ∪ E.context).lookup v).isSome :=
+                B.Typing.mem_context_of_mem_fv typP hv_fv_P
+              have h_in_union : v ∈ vs.zipToAList αs ∪ E.context :=
+                AList.lookup_isSome.mp h_in_E'
+              rcases AList.mem_union.mp h_in_union with h_vs_in | h_E_in
+              · exact absurd (AList.mem_zipToAList h_vs_in) v_in_vs
+              · exact h_E_in
+            · exfalso
+              have hbn := bv_nodup
+              simp only [B.bv] at hbn
+              rw [List.nodup_append] at hbn
+              have hin : v ∈ vs ++ B.bv D := List.mem_append.mpr (Or.inr h)
+              exact hbn.2.2 v hin v hv_bv_P rfl
     -- Apply P_ih (same as defaults branch)
     mspec P_ih (E := E') (Λ := St₂.types) (α := β) typP
       («Δ» := Δ_ext) Δ_fv_P
       (Δ₀ := Δ_D_ext) Δ₀_ext_P (used := St₂.env.usedVars) Δ_D_ext_none_St₂
       (T := P_val) (hT := P_mem_typ) den_P vars_used_P_St₂ (n := St₂.env.freshvarsc)
       St₂_types_sub_E_ctx_on_P_vars
+      hP_bv_nodup
+      (by
+        intro v σ_v hv hτ_v
+        by_cases hvs : v ∈ vs
+        · have hv_idx : vs.idxOf v < vs.length := List.idxOf_lt_length_of_mem hvs
+          have hv_eq : vs[vs.idxOf v] = v := List.getElem_idxOf hv_idx
+          have hΔ_ext_v : Δ_ext v = some (f ⟨vs.idxOf v, hv_idx⟩) := by
+            rw [Δ_ext_def, Function.updates_eq_if (by rw [List.length_ofFn]) vs_nodup, dif_pos hvs]
+            simp only [List.getElem_ofFn]
+          have hToSMT_isSome : (B.RenamingContext.toSMT Δ_ext v).isSome = true := by
+            unfold B.RenamingContext.toSMT
+            rw [hΔ_ext_v]; simp
+          obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp hToSMT_isSome
+          refine ⟨d, hd, ?_⟩
+          have hd' := hd
+          rw [B.RenamingContext.toSMT, Option.pure_def, Option.bind_eq_bind,
+            hΔ_ext_v, Option.bind_some] at hd'
+          have hd_inj := Option.some_injective _ hd'
+          have hd_ty : d.snd.fst = (τ.get vs.length ⟨vs.idxOf v, hv_idx⟩).toSMTType := by
+            rw [← hd_inj]
+          set τs := τ.toSMTType.fromProdl (vs.length - 1) with τs_def
+          have hτs_len : τs.length = vs.length := fromProdl_length_of_hasArity τ_hasArity
+          have hv_idx_τ : vs.idxOf v < τs.length := hτs_len ▸ hv_idx
+          have h_St₂ : St₂.types.lookup v = some τs[vs.idxOf v] := by
+            have h := foldl_insert_lookup_zip (Γ := St₁.types) vs_nodup hv_idx hv_idx_τ
+            rwa [← St₂_types, List.getElem_idxOf hv_idx] at h
+          rw [h_St₂] at hτ_v
+          cases hτ_v
+          rw [hd_ty]
+          exact toSMTType_get_eq_fromProdl_getElem τ_hasArity hv_idx
+        · have hv_lambda : v ∈ B.fv (Term.lambda vs D P) := by
+            rw [B.fv]; rw [List.mem_append]; right
+            rw [List.mem_removeAll_iff]; exact ⟨hv, hvs⟩
+          have hΔ_ext_eq : Δ_ext v = «Δ» v := by
+            rw [Δ_ext_def, Function.updates_eq_if (by rw [List.length_ofFn]) vs_nodup, dif_neg hvs]
+          have hToSMT_eq : (B.RenamingContext.toSMT Δ_ext) v
+              = (B.RenamingContext.toSMT «Δ») v := by
+            unfold B.RenamingContext.toSMT
+            rw [hΔ_ext_eq]
+          have hv_Λ : v ∈ St₀.types := fv_in_Λ v hv_lambda
+          obtain ⟨τ', hτ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_Λ)
+          have hτ'_St₁ : St₁.types.lookup v = some τ' :=
+            AList.lookup_of_subset St₀_sub_St₁ hτ'
+          have hτ'_St₂ : St₂.types.lookup v = some τ' := by
+            rw [St₂_types]
+            apply foldl_insert_preserves_lookup hτ'_St₁
+            intro p hp heq
+            exact hvs (heq ▸ (List.of_mem_zip hp).1)
+          have hσ_v_eq : τ' = σ_v :=
+            Option.some_inj.mp (hτ'_St₂.symm.trans hτ_v)
+          rw [hσ_v_eq] at hτ'
+          rw [hToSMT_eq]
+          exact respects hv_lambda hτ')
+      (by
+        intro v hv
+        by_cases hvs : v ∈ vs
+        · have hv_idx : vs.idxOf v < vs.length := List.idxOf_lt_length_of_mem hvs
+          set τs := τ.toSMTType.fromProdl (vs.length - 1) with τs_def
+          have hτs_len : τs.length = vs.length := fromProdl_length_of_hasArity τ_hasArity
+          have hv_idx_τ : vs.idxOf v < τs.length := hτs_len ▸ hv_idx
+          have h_St₂ : St₂.types.lookup v = some τs[vs.idxOf v] := by
+            have h := foldl_insert_lookup_zip (Γ := St₁.types) vs_nodup hv_idx hv_idx_τ
+            rwa [← St₂_types, List.getElem_idxOf hv_idx] at h
+          exact AList.lookup_isSome.mp (Option.isSome_of_mem h_St₂)
+        · have hv_lambda : v ∈ B.fv (Term.lambda vs D P) := by
+            rw [B.fv]; rw [List.mem_append]; right
+            rw [List.mem_removeAll_iff]; exact ⟨hv, hvs⟩
+          have hv_Λ : v ∈ St₀.types := fv_in_Λ v hv_lambda
+          have hv_St₁ : v ∈ St₁.types := AList.mem_of_subset St₀_sub_St₁ hv_Λ
+          obtain ⟨τ', hτ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_St₁)
+          have hτ'_St₂ : St₂.types.lookup v = some τ' := by
+            rw [St₂_types]
+            apply foldl_insert_preserves_lookup hτ'
+            intro p hp heq
+            exact hvs (heq ▸ (List.of_mem_zip hp).1)
+          exact AList.lookup_isSome.mp (Option.isSome_of_mem hτ'_St₂))
+      wf_P
     clear P_ih
     rename_i out_P
     obtain ⟨P_enc, σP⟩ := out_P
@@ -2561,11 +2714,10 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
     mintro ∀St₄
     mpure pre
     obtain ⟨St₄_types, z_fresh, St₄_fvc, St₄_used, z_not_used⟩ := pre
-    mspec SMT.eraseVars_forIn_spec (vars := vs)
-    mrename_i pre_erase_vs
-    mintro ∀St₅
-    mpure pre_erase_vs
-    obtain ⟨St₅_types, St₅_fvc, St₅_used⟩ := pre_erase_vs
+    let St₅ : EncoderState := St₄
+    have St₅_types : St₅.types = St₄.types := rfl
+    have St₅_fvc : St₅.env.freshvarsc = St₄.env.freshvarsc := rfl
+    have St₅_used : St₅.env.usedVars = St₄.env.usedVars := rfl
     mspec SMT.eraseFromContext_spec
     mrename_i pre_erase_z
     mintro ∀St₆
@@ -2586,7 +2738,14 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         B.Typing.mem_context_of_mem_fv typ_D hv_fv
     have vs_disj_St₁ : ∀ v ∈ vs, v ∉ St₁.types := by
       intro v hv
-      apply D_preserves_types v (vars_used_vs v hv) _ (vs_not_D_fv v hv)
+      have hv_vars_D : v ∉ B.Term.vars D :=
+        B.Term.notMem_vars_iff.mpr ⟨vs_not_D_fv v hv, by
+          have h := bv_nodup
+          simp only [B.bv] at h
+          rw [List.nodup_append, List.nodup_append] at h
+          intro h_bv
+          exact h.1.2.2 v hv v h_bv rfl⟩
+      apply D_preserves_types v (vars_used_vs v hv) _ hv_vars_D
       intro hv_St₀
       have hv_lambda : v ∈ (Term.lambda vs D P).vars := by
         unfold B.Term.vars; rw [List.mem_union_iff]; right
@@ -2600,11 +2759,10 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         exact vs_disj_St₁ v (List.mem_fst_of_mem_zip hv)
       · exact List.nodup_map_fst_of_nodup_zip vs_nodup
     have St₆_sub_St₃ : St₆.types ⊆ St₃.types := by
-      rw [St₆_types, St₅_types, St₄_types]
+      rw [St₆_types, St₄_types]
       intro ⟨k, v⟩ hkv
       have hk_ne_z : k ≠ z := AList.fst_ne_of_mem_erase_entries hkv
-      have hkv_foldl := AList.erase_entries_subset z _ hkv
-      have hkv_ins := AList.foldl_erase_entries_subset vs _ hkv_foldl
+      have hkv_ins := AList.erase_entries_subset z _ hkv
       rw [AList.entries_insert_of_notMem z_fresh] at hkv_ins
       exact (List.mem_cons.mp hkv_ins).elim
         (fun h => absurd (congrArg Sigma.fst h) hk_ne_z) id
@@ -2632,7 +2790,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         Typing.strengthening_of_fv_subset St₆_sub_St₃ h_typ_St₃ (by
           have h_surv : ∀ v, v ∈ St₃.types → v ∉ vs → v ≠ z → v ∈ St₆.types := by
             intro v hv_St₃ hv_not_vs hv_ne_z
-            rw [St₆_types, St₅_types, St₄_types]
+            rw [St₆_types, St₄_types]
             obtain ⟨τ_v, hτ_v⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.2 hv_St₃)
             have hentry := AList.mem_lookup_iff.1 hτ_v
             have h_ins : ⟨v, τ_v⟩ ∈ (AList.insert z (τ.toSMTType.pair β.toSMTType)
@@ -2640,8 +2798,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
               rw [AList.entries_insert_of_notMem z_fresh]
               exact List.mem_cons_of_mem _ hentry
             exact AList.mem_keys.mpr (List.mem_map.mpr ⟨⟨v, τ_v⟩,
-              List.mem_kerase_of_ne_key hv_ne_z
-                (AList.mem_foldl_erase_of_not_mem_keys h_ins hv_not_vs), rfl⟩)
+              List.mem_kerase_of_ne_key hv_ne_z h_ins, rfl⟩)
           intro v hv_lam
           simp only [SMT.fv] at hv_lam
           unfold List.removeAll at hv_lam
@@ -2775,7 +2932,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         (St₂_sub_St₃ (St₁_sub_St₂_used (used_sub_St₁ hv)))
     · -- 2. St₀.types ⊆ St₆.types
       intro ⟨k, τ_k⟩ hk_St₀
-      rw [St₆_types, St₅_types, St₄_types]
+      rw [St₆_types, St₄_types]
       have hk_not_vs : k ∉ vs := by
         intro hk_in_vs
         have hk_St₀_mem : k ∈ St₀.types :=
@@ -2794,8 +2951,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         rw [AList.entries_insert_of_notMem z_fresh, List.mem_cons]
         right
         exact St₁_sub_St₃_types (St₀_sub_St₁ hk_St₀)
-      have hk_foldl := AList.mem_foldl_erase_of_not_mem_keys hk_St₃_kerase hk_not_vs
-      exact List.mem_kerase_of_ne_key hk_ne_z hk_foldl
+      exact List.mem_kerase_of_ne_key hk_ne_z hk_St₃_kerase
     · -- 3. AList.keys St₆.types ⊆ St₆.env.usedVars
       rw [St₆_used_chain]
       intro v hv
@@ -2813,27 +2969,14 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
       · exact covers_P v (List.mem_filter.mp hv_P).1
     · -- 6. typing (extracted as h_typ_St₆)
       exact h_typ_St₆
-    · -- 7. preserves types (same as defaults branch)
+    · -- 7. preserves types
       intro v v_used v_notMem_St₀ v_notMem_vars v_mem_St₆
-      simp only [B.fv, List.mem_append, not_or] at v_notMem_vars
-      have v_notMem_fvD := v_notMem_vars.1
+      obtain ⟨v_notMem_vars_D, v_notMem_vars_P, hv_not_vs⟩ :=
+        B.Term.notMem_vars_lambda.mp v_notMem_vars
       have v_mem_St₃ : v ∈ St₃.types :=
         typeContext_mem_of_subset St₆_sub_St₃ v_mem_St₆
-      have hv_not_vs : v ∉ vs := by
-        intro hv_vs
-        have : v ∉ St₆.types := by
-          rw [St₆_types]; intro h_erase_z
-          have h_in_St₅ : v ∈ St₅.types := (AList.mem_erase.mp h_erase_z).2
-          rw [St₅_types] at h_in_St₅
-          exact absurd h_in_St₅ (AList.not_mem_foldl_erase_of_mem hv_vs vs_nodup)
-        exact this v_mem_St₆
-      have v_notMem_fvP : v ∉ B.fv P := by
-        intro hv_fvP
-        apply v_notMem_vars.2
-        unfold List.removeAll; rw [List.mem_filter]
-        exact ⟨hv_fvP, by simp [hv_not_vs]⟩
       exfalso
-      have v_notMem_St₁ := D_preserves_types v v_used v_notMem_St₀ v_notMem_fvD
+      have v_notMem_St₁ := D_preserves_types v v_used v_notMem_St₀ v_notMem_vars_D
       have v_notMem_St₂ : v ∉ St₂.types := by
         rw [St₂_types]; intro h
         exact v_notMem_St₁ (AList.mem_of_mem_foldl_insert' h (by
@@ -2841,7 +2984,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
           obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmem
           exact hv_not_vs (List.of_mem_zip hab).1))
       exact P_preserves_types v (St₁_sub_St₂_used (used_sub_St₁ v_used))
-        v_notMem_St₂ v_notMem_fvP v_mem_St₃
+        v_notMem_St₂ v_notMem_vars_P v_mem_St₃
     · -- 8. existential block: define Δ' using Δ_D for vs, else Δ_P (same as defaults)
       set Δ' : SMT.RenamingContext.Context := fun v =>
         if v ∈ vs then Δ_D v else Δ_P v with Δ'_def
@@ -3224,6 +3367,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                   (Δ_fv_alt : ∀ v ∈ B.fv P, (Δ_alt v).isSome = true)
                   (Δ₀_alt : SMT.RenamingContext.Context),
                   SMT.RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt P →
+                  B.RenWF E'.context Δ_alt →
                   (∀ v ∉ St₃.env.usedVars, Δ₀_alt v = none) →
                   ∀ (T_alt : ZFSet) (hT_alt : T_alt ∈ ⟦β⟧ᶻ),
                     ⟦P.abstract Δ_alt Δ_fv_alt⟧ᴮ = some ⟨T_alt, ⟨β, hT_alt⟩⟩ →
@@ -3233,9 +3377,9 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                       SMT.RenamingContext.Extends Δ'_alt Δ₀_alt ∧
                       ⟦P_enc.abstract Δ'_alt hcov_alt⟧ˢ = some denT_alt ∧
                       (⟨T_alt, ⟨β, hT_alt⟩⟩ : B.Dom) ≘ᶻ denT_alt := by
-              intro Δ_alt Δ_fv_alt Δ₀_alt hext' hnone' T_alt hT_alt hden'
+              intro Δ_alt Δ_fv_alt Δ₀_alt hext' wf' hnone' T_alt hT_alt hden'
               obtain ⟨Δ'_out, hcov_out, denT_out, hext_out, _, _, hden_out, hRDom_out, _⟩ :=
-                P_enc_total Δ_alt Δ_fv_alt Δ₀_alt hext' hnone'
+                P_enc_total Δ_alt Δ_fv_alt Δ₀_alt hext' wf' hnone'
                   (SMT.RenamingContext.ExtendsOnSourceFV.wt hext' typ_P_enc) T_alt hT_alt hden'
               exact ⟨Δ'_out, hcov_out, denT_out, hext_out, hden_out, hRDom_out⟩
             -- Now apply lambda_hbridge.
@@ -3320,6 +3464,8 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                   (fun v hv => St₃_keys_sub (Typing.mem_context_of_mem_fv typ_P_enc hv))
                   P_enc_total_simple
                   (fun hx hxD => h_den_E hx (h𝒟_eq ▸ hxD))
+                  (fun x_fin htyp => B.RenWF.updates_ofFn wf vs_nodup vs_Γ_disj vs_αs_len
+                    (fun i => (htyp i).trans (_root_.BType.get_reduce αs_nemp vs_αs_len i)))
                   xy hx_mem hy_mem hxy_pair' hxy_π₁_arity hxy_𝒟'
                   body_val hbody_val
                 -- Convert the iff.
@@ -3518,7 +3664,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
           -- `lambda_defaults_totality` for the defaults branch.
           -- Context-relationship helpers: St₁ ⊆ St₆ (entries survive).
           have St₁_sub_St₆ : St₁.types ⊆ St₆.types := by
-            rw [St₆_types, St₅_types, St₄_types]
+            rw [St₆_types, St₄_types]
             intro ⟨k, τ_k⟩ hk_St₁
             have hk_St₃ := St₁_sub_St₃_types hk_St₁
             have hk_not_vs : k ∉ vs := fun hk_in_vs =>
@@ -3532,8 +3678,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                 (τ.toSMTType.pair β.toSMTType) St₃.types).entries := by
               rw [AList.entries_insert_of_notMem z_fresh, List.mem_cons]
               exact Or.inr hk_St₃
-            exact List.mem_kerase_of_ne_key hk_ne_z
-              (AList.mem_foldl_erase_of_not_mem_keys hk_ins hk_not_vs)
+            exact List.mem_kerase_of_ne_key hk_ne_z hk_ins
           have St₁_sub_St₆_used : St₁.env.usedVars ⊆ St₆.env.usedVars := by
             intro v hv
             rw [St₆_used_chain]
@@ -3546,15 +3691,14 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
               intro rfl
               have hv_St₃ : v ∈ St₃.types := AList.lookup_isSome.mp (h3 ▸ rfl : (St₃.types.lookup v).isSome = true)
               exact z_fresh hv_St₃
-            rw [St₆_types, St₅_types, St₄_types]
+            rw [St₆_types, St₄_types]
             have hentry_St₃ : ⟨v, τ_v⟩ ∈ St₃.types.entries :=
               AList.mem_lookup_iff.1 h3
             have h_ins : ⟨v, τ_v⟩ ∈ (AList.insert z
                 (τ.toSMTType.pair β.toSMTType) St₃.types).entries := by
               rw [AList.entries_insert_of_notMem z_fresh]
               exact List.mem_cons_of_mem _ hentry_St₃
-            have hentry_St₆ := List.mem_kerase_of_ne_key hv_ne_z
-                (AList.mem_foldl_erase_of_not_mem_keys h_ins hv_not_vs)
+            have hentry_St₆ := List.mem_kerase_of_ne_key hv_ne_z h_ins
             exact AList.mem_lookup_iff.2 hentry_St₆
           have St₃_sub_St₆_used : St₃.env.usedVars ⊆ St₆.env.usedVars := by
             intro v hv; rw [St₆_used_chain]
@@ -3567,7 +3711,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
             have hv_ne_z : v ≠ z := by
               intro rfl
               exact z_fresh hv
-            rw [St₆_types, St₅_types, St₄_types]
+            rw [St₆_types, St₄_types]
             obtain ⟨τ_v, hτ_v⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.2 hv)
             have hentry := AList.mem_lookup_iff.1 hτ_v
             have h_ins : ⟨v, τ_v⟩ ∈ (AList.insert z
@@ -3575,8 +3719,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
               rw [AList.entries_insert_of_notMem z_fresh]
               exact List.mem_cons_of_mem _ hentry
             exact AList.mem_keys.mpr (List.mem_map.mpr ⟨⟨v, τ_v⟩,
-              List.mem_kerase_of_ne_key hv_ne_z
-                (AList.mem_foldl_erase_of_not_mem_keys h_ins hv_not_vs), rfl⟩)
+              List.mem_kerase_of_ne_key hv_ne_z h_ins, rfl⟩)
           have z_not_fv_D_aux : z ∉ SMT.fv D_enc := by
             intro hz_fv_D
             have hz_St₁ := Typing.mem_context_of_mem_fv typ_D_enc hz_fv_D
@@ -3586,14 +3729,6 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
             fun hz => z_fresh (Typing.mem_context_of_mem_fv typ_P_enc hz)
           have z_not_vs_aux : z ∉ vs := fun hz =>
             z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used (used_sub_St₁ (vars_used_vs z hz))))
-          -- v ∈ St₆.types ⇒ v ∉ vs (St₆.types = erase z (foldl erase vs (insert z _ St₃)))
-          have St₆_not_vs : ∀ v, v ∈ St₆.types → v ∉ vs := by
-            intro v hv hvs
-            rw [St₆_types, St₅_types] at hv
-            have hv_St₅ : v ∈ AList.erase z (List.foldl (fun Γ w => AList.erase w Γ)
-                St₄.types vs) := hv
-            have hv_foldl := (AList.mem_erase.mp hv_St₅).2
-            exact AList.not_mem_foldl_erase_of_mem hvs vs_nodup hv_foldl
           -- Δ'_dom_Γ' : ∀ v, Δ' v ≠ none → v ∈ St₆.types
           have Δ'_dom_Γ' : ∀ v, Δ' v ≠ none → v ∈ St₆.types := by
             intro v hv_ne
@@ -3610,17 +3745,18 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
           have Δ'_wt_Γ' : ∀ v (d : SMT.Dom), Δ' v = some d →
               ∀ τ_v, AList.lookup v St₆.types = some τ_v → d.snd.fst = τ_v := by
             intro v d hv τ_v hlookup
-            -- v ∈ St₆.types, so v ∉ vs
-            have hv_in_St₆ : v ∈ St₆.types :=
-              AList.lookup_isSome.mp (hlookup ▸ rfl : (St₆.types.lookup v).isSome = true)
-            have hv_not_vs : v ∉ vs := St₆_not_vs v hv_in_St₆
-            -- Δ' v = Δ_P v
-            have hΔ'_eq : Δ' v = Δ_P v := by rw [Δ'_def]; simp [hv_not_vs]
-            have hd_P : Δ_P v = some d := hΔ'_eq ▸ hv
-            -- lookup v St₃.types = some τ_v via St₆_sub_St₃
-            have hlookup_St₃ : AList.lookup v St₃.types = some τ_v :=
-              AList.mem_lookup_iff.2 (St₆_sub_St₃ (AList.mem_lookup_iff.1 hlookup))
-            exact Δ_P_wt v d hd_P τ_v hlookup_St₃
+            by_cases hvs : v ∈ vs
+            · -- v ∈ vs ⇒ Δ' v = Δ_D v ⇒ v ∈ St₁ via Δ_D_dom, but vs_disj_St₁: contradiction
+              exfalso
+              have hΔ'_eq : Δ' v = Δ_D v := by rw [Δ'_def]; simp [hvs]
+              have hΔ_D : Δ_D v = some d := hΔ'_eq ▸ hv
+              exact vs_disj_St₁ v hvs
+                (Δ_D_dom v (Option.ne_none_iff_exists.mpr ⟨d, hΔ_D.symm⟩))
+            · have hΔ'_eq : Δ' v = Δ_P v := by rw [Δ'_def]; simp [hvs]
+              have hd_P : Δ_P v = some d := hΔ'_eq ▸ hv
+              have hlookup_St₃ : AList.lookup v St₃.types = some τ_v :=
+                AList.mem_lookup_iff.2 (St₆_sub_St₃ (AList.mem_lookup_iff.1 hlookup))
+              exact Δ_P_wt v d hd_P τ_v hlookup_St₃
           have vs_used_St₃ : ∀ v ∈ vs, v ∈ St₃.env.usedVars :=
             fun v hv => St₂_sub_St₃ (St₁_sub_St₂_used (used_sub_St₁ (vars_used_vs v hv)))
           have vs_lookup_St₃ : ∀ (i : Fin vs.length),
@@ -3635,8 +3771,6 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
               rw [St₂_types]; exact foldl_insert_lookup_zip vs_nodup hi hi_τs
             exact AList.mem_lookup_iff.2
               (St₂_sub_St₃_types (AList.mem_lookup_iff.1 h_St₂_lookup))
-          have vs_disj_St₆ : ∀ v ∈ vs, v ∉ St₆.types := fun v hv h_in =>
-            St₆_not_vs v h_in hv
           have z_not_St₆ : z ∉ St₆.types := by
             rw [St₆_types]
             intro h_erase
@@ -3648,8 +3782,11 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
             (Γ_D := St₁.types) (used_D := St₁.env.usedVars)
             (Γ_P := St₃.types) (used_P := St₃.env.usedVars)
             (Γ' := St₆.types) (used' := St₆.env.usedVars)
-            vs_nemp vs_nodup rfl typ_t typ_D typP typ_D_enc typ_P_enc
-            τ_hasArity vs_not_D_fv vs_disj_St₁ vs_disj_St₆ vs_used_St₃ vs_lookup_St₃
+            vs_nemp vs_nodup rfl typ_t typ_D typP
+            (fun Δ_a f_a hwf_a htyp_a => B.RenWF.updates_ofFn hwf_a vs_nodup vs_Γ_disj vs_αs_len
+              (fun i => (htyp_a i).trans (_root_.BType.get_reduce αs_nemp vs_αs_len i)))
+            typ_D_enc typ_P_enc
+            τ_hasArity vs_not_D_fv vs_disj_St₁ vs_used_St₃ vs_lookup_St₃
             z_fresh z_not_St₆ z_not_used
             z_not_fv_D_aux z_not_fv_P_aux z_not_vs_aux
             hcov_lambda hden_eq hden_ty Δ'_none_out Δ'_dom_Γ' Δ'_wt_Γ'
@@ -3680,6 +3817,9 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
       split_ifs with hvs
       · simp only [List.getElem_ofFn, Option.isSome_some]
       · exact Δ_fv v (fv.mem_lambda (.inr ⟨hv, hvs⟩))
+    have wf_P : B.RenWF E'.context Δ_ext :=
+      B.RenWF.updates_ofFn wf vs_nodup vs_Γ_disj vs_αs_len
+        (fun i => _root_.BType.get_reduce αs_nemp vs_αs_len i)
     set Δ_D_ext : SMT.RenamingContext.Context :=
       Function.updates Δ_D vs
         (List.ofFn fun (i : Fin vs.length) => B.RenamingContext.toSMT Δ_ext vs[i])
@@ -3733,16 +3873,109 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
             · right; simp only [B.bv, List.mem_append]
               right; exact h_bv
           exact Λ_inv v v_lambda v_St₀
-        · have v_fv_D : v ∈ B.fv D := by
+        · have v_vars_D : v ∈ B.Term.vars D := by
             by_contra h
             exact absurd v_in_St₁ (D_preserves_types v v_used v_St₀ h)
-          exact AList.lookup_isSome.mp (B.Typing.mem_context_of_mem_fv typ_D v_fv_D)
+          rcases B.Term.mem_vars_iff.mp v_vars_D with h | h
+          · exact AList.lookup_isSome.mp (B.Typing.mem_context_of_mem_fv typ_D h)
+          · -- v ∈ B.bv D. Case split on P.vars: fv P or bv P.
+            rcases B.Term.mem_vars_iff.mp v_in_P_vars with hv_fv_P | hv_bv_P
+            · have h_in_E' : ((vs.zipToAList αs ∪ E.context).lookup v).isSome :=
+                B.Typing.mem_context_of_mem_fv typP hv_fv_P
+              have h_in_union : v ∈ vs.zipToAList αs ∪ E.context :=
+                AList.lookup_isSome.mp h_in_E'
+              rcases AList.mem_union.mp h_in_union with h_vs_in | h_E_in
+              · exact absurd (AList.mem_zipToAList h_vs_in) v_in_vs
+              · exact h_E_in
+            · exfalso
+              have hbn := bv_nodup
+              simp only [B.bv] at hbn
+              rw [List.nodup_append] at hbn
+              have hin : v ∈ vs ++ B.bv D := List.mem_append.mpr (Or.inr h)
+              exact hbn.2.2 v hin v hv_bv_P rfl
     -- Apply P_ih
     mspec P_ih (E := E') (Λ := St₂.types) (α := β) typP
       («Δ» := Δ_ext) Δ_fv_P
       (Δ₀ := Δ_D_ext) Δ₀_ext_P (used := St₂.env.usedVars) Δ_D_ext_none_St₂
       (T := P_val) (hT := P_mem_typ) den_P vars_used_P_St₂ (n := St₂.env.freshvarsc)
       St₂_types_sub_E_ctx_on_P_vars
+      hP_bv_nodup
+      (by
+        intro v σ_v hv hτ_v
+        by_cases hvs : v ∈ vs
+        · have hv_idx : vs.idxOf v < vs.length := List.idxOf_lt_length_of_mem hvs
+          have hv_eq : vs[vs.idxOf v] = v := List.getElem_idxOf hv_idx
+          have hΔ_ext_v : Δ_ext v = some (f ⟨vs.idxOf v, hv_idx⟩) := by
+            rw [Δ_ext_def, Function.updates_eq_if (by rw [List.length_ofFn]) vs_nodup, dif_pos hvs]
+            simp only [List.getElem_ofFn]
+          have hToSMT_isSome : (B.RenamingContext.toSMT Δ_ext v).isSome = true := by
+            unfold B.RenamingContext.toSMT
+            rw [hΔ_ext_v]; simp
+          obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp hToSMT_isSome
+          refine ⟨d, hd, ?_⟩
+          have hd' := hd
+          rw [B.RenamingContext.toSMT, Option.pure_def, Option.bind_eq_bind,
+            hΔ_ext_v, Option.bind_some] at hd'
+          have hd_inj := Option.some_injective _ hd'
+          have hd_ty : d.snd.fst = (τ.get vs.length ⟨vs.idxOf v, hv_idx⟩).toSMTType := by
+            rw [← hd_inj]
+          set τs := τ.toSMTType.fromProdl (vs.length - 1) with τs_def
+          have hτs_len : τs.length = vs.length := fromProdl_length_of_hasArity τ_hasArity
+          have hv_idx_τ : vs.idxOf v < τs.length := hτs_len ▸ hv_idx
+          have h_St₂ : St₂.types.lookup v = some τs[vs.idxOf v] := by
+            have h := foldl_insert_lookup_zip (Γ := St₁.types) vs_nodup hv_idx hv_idx_τ
+            rwa [← St₂_types, List.getElem_idxOf hv_idx] at h
+          rw [h_St₂] at hτ_v
+          cases hτ_v
+          rw [hd_ty]
+          exact toSMTType_get_eq_fromProdl_getElem τ_hasArity hv_idx
+        · have hv_lambda : v ∈ B.fv (Term.lambda vs D P) := by
+            rw [B.fv]; rw [List.mem_append]; right
+            rw [List.mem_removeAll_iff]; exact ⟨hv, hvs⟩
+          have hΔ_ext_eq : Δ_ext v = «Δ» v := by
+            rw [Δ_ext_def, Function.updates_eq_if (by rw [List.length_ofFn]) vs_nodup, dif_neg hvs]
+          have hToSMT_eq : (B.RenamingContext.toSMT Δ_ext) v
+              = (B.RenamingContext.toSMT «Δ») v := by
+            unfold B.RenamingContext.toSMT
+            rw [hΔ_ext_eq]
+          have hv_Λ : v ∈ St₀.types := fv_in_Λ v hv_lambda
+          obtain ⟨τ', hτ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_Λ)
+          have hτ'_St₁ : St₁.types.lookup v = some τ' :=
+            AList.lookup_of_subset St₀_sub_St₁ hτ'
+          have hτ'_St₂ : St₂.types.lookup v = some τ' := by
+            rw [St₂_types]
+            apply foldl_insert_preserves_lookup hτ'_St₁
+            intro p hp heq
+            exact hvs (heq ▸ (List.of_mem_zip hp).1)
+          have hσ_v_eq : τ' = σ_v :=
+            Option.some_inj.mp (hτ'_St₂.symm.trans hτ_v)
+          rw [hσ_v_eq] at hτ'
+          rw [hToSMT_eq]
+          exact respects hv_lambda hτ')
+      (by
+        intro v hv
+        by_cases hvs : v ∈ vs
+        · have hv_idx : vs.idxOf v < vs.length := List.idxOf_lt_length_of_mem hvs
+          set τs := τ.toSMTType.fromProdl (vs.length - 1) with τs_def
+          have hτs_len : τs.length = vs.length := fromProdl_length_of_hasArity τ_hasArity
+          have hv_idx_τ : vs.idxOf v < τs.length := hτs_len ▸ hv_idx
+          have h_St₂ : St₂.types.lookup v = some τs[vs.idxOf v] := by
+            have h := foldl_insert_lookup_zip (Γ := St₁.types) vs_nodup hv_idx hv_idx_τ
+            rwa [← St₂_types, List.getElem_idxOf hv_idx] at h
+          exact AList.lookup_isSome.mp (Option.isSome_of_mem h_St₂)
+        · have hv_lambda : v ∈ B.fv (Term.lambda vs D P) := by
+            rw [B.fv]; rw [List.mem_append]; right
+            rw [List.mem_removeAll_iff]; exact ⟨hv, hvs⟩
+          have hv_Λ : v ∈ St₀.types := fv_in_Λ v hv_lambda
+          have hv_St₁ : v ∈ St₁.types := AList.mem_of_subset St₀_sub_St₁ hv_Λ
+          obtain ⟨τ', hτ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_St₁)
+          have hτ'_St₂ : St₂.types.lookup v = some τ' := by
+            rw [St₂_types]
+            apply foldl_insert_preserves_lookup hτ'
+            intro p hp heq
+            exact hvs (heq ▸ (List.of_mem_zip hp).1)
+          exact AList.lookup_isSome.mp (Option.isSome_of_mem hτ'_St₂))
+      wf_P
     clear P_ih
     rename_i out_P
     obtain ⟨P_enc, σP⟩ := out_P
@@ -3766,12 +3999,10 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
     mintro ∀St₄
     mpure pre
     obtain ⟨St₄_types, z_fresh, St₄_fvc, St₄_used, z_not_used⟩ := pre
-    -- Erase vs, then erase z
-    mspec SMT.eraseVars_forIn_spec (vars := vs)
-    mrename_i pre_erase_vs
-    mintro ∀St₅
-    mpure pre_erase_vs
-    obtain ⟨St₅_types, St₅_fvc, St₅_used⟩ := pre_erase_vs
+    let St₅ : EncoderState := St₄
+    have St₅_types : St₅.types = St₄.types := rfl
+    have St₅_fvc : St₅.env.freshvarsc = St₄.env.freshvarsc := rfl
+    have St₅_used : St₅.env.usedVars = St₄.env.usedVars := rfl
     mspec SMT.eraseFromContext_spec
     mrename_i pre_erase_z
     mintro ∀St₆
@@ -3793,7 +4024,14 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         B.Typing.mem_context_of_mem_fv typ_D hv_fv
     have vs_disj_St₁ : ∀ v ∈ vs, v ∉ St₁.types := by
       intro v hv
-      apply D_preserves_types v (vars_used_vs v hv) _ (vs_not_D_fv v hv)
+      have hv_vars_D : v ∉ B.Term.vars D :=
+        B.Term.notMem_vars_iff.mpr ⟨vs_not_D_fv v hv, by
+          have h := bv_nodup
+          simp only [B.bv] at h
+          rw [List.nodup_append, List.nodup_append] at h
+          intro h_bv
+          exact h.1.2.2 v hv v h_bv rfl⟩
+      apply D_preserves_types v (vars_used_vs v hv) _ hv_vars_D
       intro hv_St₀
       have hv_lambda : v ∈ (Term.lambda vs D P).vars := by
         unfold B.Term.vars; rw [List.mem_union_iff]; right
@@ -3807,11 +4045,10 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         exact vs_disj_St₁ v (List.mem_fst_of_mem_zip hv)
       · exact List.nodup_map_fst_of_nodup_zip vs_nodup
     have St₆_sub_St₃ : St₆.types ⊆ St₃.types := by
-      rw [St₆_types, St₅_types, St₄_types]
+      rw [St₆_types, St₄_types]
       intro ⟨k, v⟩ hkv
       have hk_ne_z : k ≠ z := AList.fst_ne_of_mem_erase_entries hkv
-      have hkv_foldl := AList.erase_entries_subset z _ hkv
-      have hkv_ins := AList.foldl_erase_entries_subset vs _ hkv_foldl
+      have hkv_ins := AList.erase_entries_subset z _ hkv
       rw [AList.entries_insert_of_notMem z_fresh] at hkv_ins
       exact (List.mem_cons.mp hkv_ins).elim
         (fun h => absurd (congrArg Sigma.fst h) hk_ne_z) id
@@ -3839,7 +4076,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         Typing.strengthening_of_fv_subset St₆_sub_St₃ h_typ_St₃ (by
           have h_surv : ∀ v, v ∈ St₃.types → v ∉ vs → v ≠ z → v ∈ St₆.types := by
             intro v hv_St₃ hv_not_vs hv_ne_z
-            rw [St₆_types, St₅_types, St₄_types]
+            rw [St₆_types, St₄_types]
             obtain ⟨τ_v, hτ_v⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.2 hv_St₃)
             have hentry := AList.mem_lookup_iff.1 hτ_v
             have h_ins : ⟨v, τ_v⟩ ∈ (AList.insert z (τ.toSMTType.pair β.toSMTType)
@@ -3847,8 +4084,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
               rw [AList.entries_insert_of_notMem z_fresh]
               exact List.mem_cons_of_mem _ hentry
             exact AList.mem_keys.mpr (List.mem_map.mpr ⟨⟨v, τ_v⟩,
-              List.mem_kerase_of_ne_key hv_ne_z
-                (AList.mem_foldl_erase_of_not_mem_keys h_ins hv_not_vs), rfl⟩)
+              List.mem_kerase_of_ne_key hv_ne_z h_ins, rfl⟩)
           intro v hv_lam
           simp only [SMT.fv] at hv_lam
           unfold List.removeAll at hv_lam
@@ -3982,7 +4218,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         (St₂_sub_St₃ (St₁_sub_St₂_used (used_sub_St₁ hv)))
     · -- 2. St₀.types ⊆ St₆.types
       intro ⟨k, τ_k⟩ hk_St₀
-      rw [St₆_types, St₅_types, St₄_types]
+      rw [St₆_types, St₄_types]
       have hk_not_vs : k ∉ vs := by
         intro hk_in_vs
         have hk_St₀_mem : k ∈ St₀.types :=
@@ -4001,8 +4237,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
         rw [AList.entries_insert_of_notMem z_fresh, List.mem_cons]
         right
         exact St₁_sub_St₃_types (St₀_sub_St₁ hk_St₀)
-      have hk_foldl := AList.mem_foldl_erase_of_not_mem_keys hk_St₃_kerase hk_not_vs
-      exact List.mem_kerase_of_ne_key hk_ne_z hk_foldl
+      exact List.mem_kerase_of_ne_key hk_ne_z hk_St₃_kerase
     · -- 3. AList.keys St₆.types ⊆ St₆.env.usedVars
       rw [St₆_used_chain]
       intro v hv
@@ -4022,25 +4257,12 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
       exact h_typ_St₆
     · -- 7. preserves types
       intro v v_used v_notMem_St₀ v_notMem_vars v_mem_St₆
-      simp only [B.fv, List.mem_append, not_or] at v_notMem_vars
-      have v_notMem_fvD := v_notMem_vars.1
+      obtain ⟨v_notMem_vars_D, v_notMem_vars_P, hv_not_vs⟩ :=
+        B.Term.notMem_vars_lambda.mp v_notMem_vars
       have v_mem_St₃ : v ∈ St₃.types :=
         typeContext_mem_of_subset St₆_sub_St₃ v_mem_St₆
-      have hv_not_vs : v ∉ vs := by
-        intro hv_vs
-        have : v ∉ St₆.types := by
-          rw [St₆_types]; intro h_erase_z
-          have h_in_St₅ : v ∈ St₅.types := (AList.mem_erase.mp h_erase_z).2
-          rw [St₅_types] at h_in_St₅
-          exact absurd h_in_St₅ (AList.not_mem_foldl_erase_of_mem hv_vs vs_nodup)
-        exact this v_mem_St₆
-      have v_notMem_fvP : v ∉ B.fv P := by
-        intro hv_fvP
-        apply v_notMem_vars.2
-        unfold List.removeAll; rw [List.mem_filter]
-        exact ⟨hv_fvP, by simp [hv_not_vs]⟩
       exfalso
-      have v_notMem_St₁ := D_preserves_types v v_used v_notMem_St₀ v_notMem_fvD
+      have v_notMem_St₁ := D_preserves_types v v_used v_notMem_St₀ v_notMem_vars_D
       have v_notMem_St₂ : v ∉ St₂.types := by
         rw [St₂_types]; intro h
         exact v_notMem_St₁ (AList.mem_of_mem_foldl_insert' h (by
@@ -4048,7 +4270,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
           obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmem
           exact hv_not_vs (List.of_mem_zip hab).1))
       exact P_preserves_types v (St₁_sub_St₂_used (used_sub_St₁ v_used))
-        v_notMem_St₂ v_notMem_fvP v_mem_St₃
+        v_notMem_St₂ v_notMem_vars_P v_mem_St₃
     · -- 8. existential block: define Δ' using Δ_D for vs, else Δ_P
       set Δ' : SMT.RenamingContext.Context := fun v =>
         if v ∈ vs then Δ_D v else Δ_P v with Δ'_def
@@ -4403,7 +4625,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
           -- `collect_case`'s totality branch.
           -- Context-relationship helpers: St₁ ⊆ St₆ (entries survive).
           have St₁_sub_St₆ : St₁.types ⊆ St₆.types := by
-            rw [St₆_types, St₅_types, St₄_types]
+            rw [St₆_types, St₄_types]
             intro ⟨k, τ_k⟩ hk_St₁
             have hk_St₃ := St₁_sub_St₃_types hk_St₁
             have hk_not_vs : k ∉ vs := fun hk_in_vs =>
@@ -4417,8 +4639,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
                 (τ.toSMTType.pair β.toSMTType) St₃.types).entries := by
               rw [AList.entries_insert_of_notMem z_fresh, List.mem_cons]
               exact Or.inr hk_St₃
-            exact List.mem_kerase_of_ne_key hk_ne_z
-              (AList.mem_foldl_erase_of_not_mem_keys hk_ins hk_not_vs)
+            exact List.mem_kerase_of_ne_key hk_ne_z hk_ins
           have St₁_sub_St₆_used : St₁.env.usedVars ⊆ St₆.env.usedVars := by
             intro v hv
             rw [St₆_used_chain]
@@ -4431,15 +4652,14 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
               intro rfl
               have hv_St₃ : v ∈ St₃.types := AList.lookup_isSome.mp (h3 ▸ rfl : (St₃.types.lookup v).isSome = true)
               exact z_fresh hv_St₃
-            rw [St₆_types, St₅_types, St₄_types]
+            rw [St₆_types, St₄_types]
             have hentry_St₃ : ⟨v, τ_v⟩ ∈ St₃.types.entries :=
               AList.mem_lookup_iff.1 h3
             have h_ins : ⟨v, τ_v⟩ ∈ (AList.insert z
                 (τ.toSMTType.pair β.toSMTType) St₃.types).entries := by
               rw [AList.entries_insert_of_notMem z_fresh]
               exact List.mem_cons_of_mem _ hentry_St₃
-            have hentry_St₆ := List.mem_kerase_of_ne_key hv_ne_z
-                (AList.mem_foldl_erase_of_not_mem_keys h_ins hv_not_vs)
+            have hentry_St₆ := List.mem_kerase_of_ne_key hv_ne_z h_ins
             exact AList.mem_lookup_iff.2 hentry_St₆
           have St₃_sub_St₆_used : St₃.env.usedVars ⊆ St₆.env.usedVars := by
             intro v hv; rw [St₆_used_chain]
@@ -4452,7 +4672,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
             have hv_ne_z : v ≠ z := by
               intro rfl
               exact z_fresh hv
-            rw [St₆_types, St₅_types, St₄_types]
+            rw [St₆_types, St₄_types]
             obtain ⟨τ_v, hτ_v⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.2 hv)
             have hentry := AList.mem_lookup_iff.1 hτ_v
             have h_ins : ⟨v, τ_v⟩ ∈ (AList.insert z
@@ -4460,8 +4680,7 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
               rw [AList.entries_insert_of_notMem z_fresh]
               exact List.mem_cons_of_mem _ hentry
             exact AList.mem_keys.mpr (List.mem_map.mpr ⟨⟨v, τ_v⟩,
-              List.mem_kerase_of_ne_key hv_ne_z
-                (AList.mem_foldl_erase_of_not_mem_keys h_ins hv_not_vs), rfl⟩)
+              List.mem_kerase_of_ne_key hv_ne_z h_ins, rfl⟩)
           have z_not_fv_D_aux : z ∉ SMT.fv D_enc := by
             intro hz_fv_D
             have hz_St₁ := Typing.mem_context_of_mem_fv typ_D_enc hz_fv_D
@@ -4471,14 +4690,6 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
             fun hz => z_fresh (Typing.mem_context_of_mem_fv typ_P_enc hz)
           have z_not_vs_aux : z ∉ vs := fun hz =>
             z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used (used_sub_St₁ (vars_used_vs z hz))))
-          -- v ∈ St₆.types ⇒ v ∉ vs (St₆.types = erase z (foldl erase vs (insert z _ St₃)))
-          have St₆_not_vs : ∀ v, v ∈ St₆.types → v ∉ vs := by
-            intro v hv hvs
-            rw [St₆_types, St₅_types] at hv
-            have hv_St₅ : v ∈ AList.erase z (List.foldl (fun Γ w => AList.erase w Γ)
-                St₄.types vs) := hv
-            have hv_foldl := (AList.mem_erase.mp hv_St₅).2
-            exact AList.not_mem_foldl_erase_of_mem hvs vs_nodup hv_foldl
           -- Δ'_dom_Γ' : ∀ v, Δ' v ≠ none → v ∈ St₆.types
           have Δ'_dom_Γ' : ∀ v, Δ' v ≠ none → v ∈ St₆.types := by
             intro v hv_ne
@@ -4495,17 +4706,17 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
           have Δ'_wt_Γ' : ∀ v (d : SMT.Dom), Δ' v = some d →
               ∀ τ_v, AList.lookup v St₆.types = some τ_v → d.snd.fst = τ_v := by
             intro v d hv τ_v hlookup
-            -- v ∈ St₆.types, so v ∉ vs
-            have hv_in_St₆ : v ∈ St₆.types :=
-              AList.lookup_isSome.mp (hlookup ▸ rfl : (St₆.types.lookup v).isSome = true)
-            have hv_not_vs : v ∉ vs := St₆_not_vs v hv_in_St₆
-            -- Δ' v = Δ_P v
-            have hΔ'_eq : Δ' v = Δ_P v := by rw [Δ'_def]; simp [hv_not_vs]
-            have hd_P : Δ_P v = some d := hΔ'_eq ▸ hv
-            -- lookup v St₃.types = some τ_v via St₆_sub_St₃
-            have hlookup_St₃ : AList.lookup v St₃.types = some τ_v :=
-              AList.mem_lookup_iff.2 (St₆_sub_St₃ (AList.mem_lookup_iff.1 hlookup))
-            exact Δ_P_wt v d hd_P τ_v hlookup_St₃
+            by_cases hvs : v ∈ vs
+            · exfalso
+              have hΔ'_eq : Δ' v = Δ_D v := by rw [Δ'_def]; simp [hvs]
+              have hΔ_D : Δ_D v = some d := hΔ'_eq ▸ hv
+              exact vs_disj_St₁ v hvs
+                (Δ_D_dom v (Option.ne_none_iff_exists.mpr ⟨d, hΔ_D.symm⟩))
+            · have hΔ'_eq : Δ' v = Δ_P v := by rw [Δ'_def]; simp [hvs]
+              have hd_P : Δ_P v = some d := hΔ'_eq ▸ hv
+              have hlookup_St₃ : AList.lookup v St₃.types = some τ_v :=
+                AList.mem_lookup_iff.2 (St₆_sub_St₃ (AList.mem_lookup_iff.1 hlookup))
+              exact Δ_P_wt v d hd_P τ_v hlookup_St₃
           have vs_used_St₃ : ∀ v ∈ vs, v ∈ St₃.env.usedVars :=
             fun v hv => St₂_sub_St₃ (St₁_sub_St₂_used (used_sub_St₁ (vars_used_vs v hv)))
           have vs_lookup_St₃ : ∀ (i : Fin vs.length),
@@ -4520,8 +4731,6 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
               rw [St₂_types]; exact foldl_insert_lookup_zip vs_nodup hi hi_τs
             exact AList.mem_lookup_iff.2
               (St₂_sub_St₃_types (AList.mem_lookup_iff.1 h_St₂_lookup))
-          have vs_disj_St₆ : ∀ v ∈ vs, v ∉ St₆.types := fun v hv h_in =>
-            St₆_not_vs v h_in hv
           have z_not_St₆ : z ∉ St₆.types := by
             rw [St₆_types]
             intro h_erase
@@ -4533,8 +4742,11 @@ theorem encodeTerm_spec.lambda_case.{u} (fv_sub_typings : B.FvSubTypings)
             (Γ_D := St₁.types) (used_D := St₁.env.usedVars)
             (Γ_P := St₃.types) (used_P := St₃.env.usedVars)
             (Γ' := St₆.types) (used' := St₆.env.usedVars)
-            vs_nemp vs_nodup rfl typ_t typ_D typP typ_D_enc typ_P_enc
-            τ_hasArity vs_not_D_fv vs_disj_St₁ vs_disj_St₆ vs_used_St₃ vs_lookup_St₃
+            vs_nemp vs_nodup rfl typ_t typ_D typP
+            (fun Δ_a f_a hwf_a htyp_a => B.RenWF.updates_ofFn hwf_a vs_nodup vs_Γ_disj vs_αs_len
+              (fun i => (htyp_a i).trans (_root_.BType.get_reduce αs_nemp vs_αs_len i)))
+            typ_D_enc typ_P_enc
+            τ_hasArity vs_not_D_fv vs_disj_St₁ vs_used_St₃ vs_lookup_St₃
             z_fresh z_not_St₆ z_not_used
             z_not_fv_D_aux z_not_fv_P_aux z_not_vs_aux
             hcov_lambda hden_eq hden_ty Δ'_none_out Δ'_dom_Γ' Δ'_wt_Γ'

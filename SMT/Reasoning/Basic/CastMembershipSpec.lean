@@ -28,6 +28,21 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
   have hcov_dummy : ∀ t : SMT.Term, SMT.RenamingContext.CoversFV.{0} Δdummy t := by
     intro t v hv
     simp [Δdummy]
+  -- Helper: build a Λ-respecting context that defaults to dummy for unrelated vars
+  let Δresp : SMT.TypeContext → SMT.RenamingContext.Context.{0} := fun Γ v =>
+    match Γ.lookup v with
+    | some τ => some ⟨τ.defaultZFSet, τ, SMT.SMTType.mem_toZFSet_of_defaultZFSet⟩
+    | none => some ⟨ZFSet.zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩
+  have hcov_resp : ∀ (Γ : SMT.TypeContext) (t : SMT.Term),
+      SMT.RenamingContext.CoversFV.{0} (Δresp Γ) t := by
+    intro Γ t v _
+    simp only [Δresp]
+    split <;> simp
+  have hresp_fv : ∀ (Γ : SMT.TypeContext) (t : SMT.Term),
+      SMT.RenamingContext.RespectsTypeContextOnFV.{0} (Δresp Γ) Γ t := by
+    intro Γ t v σ _ hlk
+    refine ⟨⟨σ.defaultZFSet, σ, SMT.SMTType.mem_toZFSet_of_defaultZFSet⟩, ?_, rfl⟩
+    simp only [Δresp, hlk]
   induction β generalizing α x S Λ n used with
   | bool | int | unit | option | pair =>
     mintro pre ∀St
@@ -79,7 +94,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             (SMT.Typing.app _ _ _ _ _ typ_S_bool typ_x) hcompat hcov_t
       · -- Branch 2: α ⊑ τ. Encoder does loosenAux on x then declareConst x! τ.
         mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-          typ_x τ_le_α.toCastPath (Δdummy) (hcov_dummy x)
+          typ_x τ_le_α.toCastPath (Δresp St.types) (hcov_resp _ x) (hresp_fv _ x)
         next out =>
         obtain ⟨x!, x!_spec⟩ := out
         mrename_i pre
@@ -142,7 +157,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
       · -- Branch 3: τ ⊑ α. Encoder does loosenAux on S with chpred then declareConst S! (α.fun .bool).
         rename_i h
         mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-          typ_S_bool (castPath.chpred h.toCastPath) (Δdummy) (hcov_dummy S)
+          typ_S_bool (castPath.chpred h.toCastPath) (Δresp St.types) (hcov_resp _ S) (hresp_fv _ S)
         next out =>
         obtain ⟨S!, S!_spec⟩ := out
         mrename_i pre
@@ -216,7 +231,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
           simp [hσ, hα]
         split_ifs with hαL hβL hβR hαR hβL2 hβR2
         · mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-            typ_x_pair (.pair hαL.toCastPath hβL.toCastPath) (Δdummy) (hcov_dummy x)
+            typ_x_pair (.pair hαL.toCastPath hβL.toCastPath) (Δresp St.types) (hcov_resp _ x) (hresp_fv _ x)
           next out =>
           obtain ⟨x!, x!_spec⟩ := out
           mrename_i pre
@@ -285,7 +300,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             apply SMT.Typing.fst
             exact typ_x_pair
           mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-            typ_fst_x hαL.toCastPath (Δdummy) (hcov_dummy (.fst x))
+            typ_fst_x hαL.toCastPath (Δresp St.types) (hcov_resp _ (.fst x)) (hresp_fv _ (.fst x))
           next out =>
           obtain ⟨x!, x!_spec⟩ := out
           mrename_i pre
@@ -306,7 +321,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
           mspec loosenAux_prf_spec (Λ := St2.types) (n := St2.env.freshvarsc) (used := St2.env.usedVars)
             typ_S_opt_St2
             (.fun (not_eq_of_beq_eq_false rfl) (castPath.reflexive τ) (.opt hβR.toCastPath))
-            (Δdummy) (hcov_dummy S)
+            (Δresp St2.types) (hcov_resp _ S) (hresp_fv _ S)
           · mpure_intro
             and_intros
             · trivial
@@ -455,7 +470,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             apply SMT.Typing.snd
             exact typ_x_pair
           mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-            typ_snd_x hβL2.toCastPath (Δdummy) (hcov_dummy (.snd x))
+            typ_snd_x hβL2.toCastPath (Δresp St.types) (hcov_resp _ (.snd x)) (hresp_fv _ (.snd x))
           next out =>
           obtain ⟨y!, y!_spec⟩ := out
           mrename_i pre
@@ -476,7 +491,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
           mspec loosenAux_prf_spec (Λ := St2.types) (n := St2.env.freshvarsc) (used := St2.env.usedVars)
             typ_S_opt_St2
             (.fun (not_eq_of_beq_eq_false rfl) hαR.toCastPath (castPath.reflexive (.option β')))
-            (Δdummy) (hcov_dummy S)
+            (Δresp St2.types) (hcov_resp _ S) (hresp_fv _ S)
           · mpure_intro
             and_intros
             · trivial
@@ -623,7 +638,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
         · mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
             typ_S_opt
             (.fun (not_eq_of_beq_eq_false rfl) hαR.toCastPath (.opt hβR2.toCastPath))
-            (Δdummy) (hcov_dummy S)
+            (Δresp St.types) (hcov_resp _ S) (hresp_fv _ S)
           rename_i out
           mrename_i pre
           mintro ∀St1
@@ -762,6 +777,7 @@ theorem castMembership_branch2_spec.{u}
          x! ∉ used ∧
          (∀ («Δctx» : SMT.RenamingContext.Context.{u})
             (hx : SMT.RenamingContext.CoversFV «Δctx» x)
+            (_respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δctx» Λ x)
             (pf : ∀ (x_! : SMT.𝒱) (X! : SMT.Dom),
               ∀ v ∈ SMT.fv (SMT.Term.var x_!),
                 (Function.update «Δctx» x_! (some X!) v).isSome = true),
@@ -843,8 +859,14 @@ theorem castMembership_branch2_spec.{u}
     exact preserves1 v hv_used hv_notΛ
   · intro Δctx hcov_t hcompat
     exact SMT.RenamingContext.denote_exists_of_typing typ_full hcompat hcov_t
-  · -- Δ-universal adequacy clause.
-    refine ⟨x!, x!_spec, rfl, x!_fresh, ?_, hadq_univ⟩
-    -- x! ∉ used: we have x!_not_used : x! ∉ St.env.usedVars = used.
-    rw [St_used_eq] at x!_not_used
-    exact x!_not_used
+  · -- Δ-universal adequacy clause. `hadq_univ` (from the strengthened
+    -- `loosenAux_prf_spec_univ`) additionally yields the loosened-value type
+    -- tag `X!.2.1 = τ`; this branch's clause does not expose it, so we drop it.
+    refine ⟨x!, x!_spec, rfl, x!_fresh, ?_, ?_⟩
+    · -- x! ∉ used: we have x!_not_used : x! ∉ St.env.usedVars = used.
+      rw [St_used_eq] at x!_not_used
+      exact x!_not_used
+    · intro Δctx hx respects pf X hX_den
+      obtain ⟨Φ, X!, hvar, hφ, hspec, _hX!ty, hΦty, hcast, htot⟩ :=
+        hadq_univ Δctx hx respects pf X hX_den
+      exact ⟨Φ, X!, hvar, hφ, hspec, hΦty, hcast, htot⟩

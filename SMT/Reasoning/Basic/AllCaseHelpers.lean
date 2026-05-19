@@ -5734,7 +5734,10 @@ theorem h_den_P_alt_bool_helper.{u}
     {Γ_ctx : B.TypeContext}
     (typP : Γ_ctx ⊢ᴮ P : .bool)
     {Δ_alt : B.RenamingContext.Context}
-    (Δ_fv_alt : ∀ v ∈ B.fv (B.Term.all vs D P), (Δ_alt v).isSome = true) :
+    (Δ_fv_alt : ∀ v ∈ B.fv (B.Term.all vs D P), (Δ_alt v).isSome = true)
+    (P_renwf : ∀ (x_fin : Fin vs.length → B.Dom),
+      (∀ i : Fin vs.length, (x_fin i).snd.fst = τ.get vs.length i) →
+      B.RenWF Γ_ctx (Function.updates Δ_alt vs (List.ofFn fun i => some (x_fin i)))) :
     ∀ {x_fin : Fin vs.length → B.Dom},
         (∀ i, (x_fin i).snd.fst = τ.get vs.length i ∧
               (x_fin i).fst ∈ ⟦τ.get vs.length i⟧ᶻ) →
@@ -5746,6 +5749,8 @@ theorem h_den_P_alt_bool_helper.{u}
             some ⟨Pz, ⟨P_ty, hP_val⟩⟩ →
         P_ty = .bool := by
   intro x_fin _hx_typ _hx_fin_in Pz P_ty hP_val hPz_den
+  have hwf_P : B.RenWF Γ_ctx (Function.updates Δ_alt vs (List.ofFn fun i => some (x_fin i))) :=
+    P_renwf x_fin (fun i => (_hx_typ i).1)
   set Δ_ext_alt_fin : B.RenamingContext.Context :=
     Function.updates Δ_alt vs (List.ofFn fun i => some (x_fin i))
   have Δ_fv_P_alt_fin : ∀ v ∈ B.fv P, (Δ_ext_alt_fin v).isSome := by
@@ -5780,7 +5785,8 @@ theorem hden_D_alt_helper.{u}
     {Δ_fv_alt : ∀ v ∈ B.fv (B.Term.all vs D P), (Δ_alt v).isSome = true}
     {T_alt : ZFSet.{u}} {hT_alt : T_alt ∈ ⟦BType.bool⟧ᶻ}
     (hden_alt : ⟦(B.Term.all vs D P).abstract Δ_alt Δ_fv_alt⟧ᴮ =
-      some ⟨T_alt, ⟨BType.bool, hT_alt⟩⟩) :
+      some ⟨T_alt, ⟨BType.bool, hT_alt⟩⟩)
+    (wf : B.RenWF E_context Δ_alt := by assumption) :
     ∃ (𝒟_alt : ZFSet.{u}) (h𝒟_alt : 𝒟_alt ∈ ⟦τ.set⟧ᶻ),
       ⟦D.abstract Δ_alt
           (fun v hv => Δ_fv_alt v (B.fv.mem_all (.inl hv)))⟧ᴮ =
@@ -6510,7 +6516,8 @@ theorem vs_disj_St₁_helper
     (vs_Γ_disj : ∀ v ∈ vs, v ∉ E.context)
     (Λ_inv : ∀ v ∈ (B.Term.all vs D P).vars, v ∈ St₀ → v ∈ E.context)
     (vars_used_vs : ∀ v ∈ vs, v ∈ used)
-    (D_preserves_types : ∀ v ∈ used, v ∉ St₀ → v ∉ B.fv D → v ∉ St₁) :
+    (D_preserves_types : ∀ v ∈ used, v ∉ St₀ → v ∉ B.Term.vars D → v ∉ St₁)
+    (bv_nodup : (_root_.B.bv (B.Term.all vs D P)).Nodup) :
     (∀ v ∈ vs, v ∉ B.fv D) ∧ (∀ v ∈ vs, v ∉ St₁) := by
   have vs_not_D_fv : ∀ v ∈ vs, v ∉ B.fv D := by
     intro v hv hv_fv
@@ -6518,7 +6525,14 @@ theorem vs_disj_St₁_helper
       B.Typing.mem_context_of_mem_fv typ_D hv_fv
   refine ⟨vs_not_D_fv, ?_⟩
   intro v hv
-  apply D_preserves_types v (vars_used_vs v hv) _ (vs_not_D_fv v hv)
+  have hv_vars_D : v ∉ B.Term.vars D :=
+    _root_.B.Term.notMem_vars_iff.mpr ⟨vs_not_D_fv v hv, by
+      have h := bv_nodup
+      simp only [_root_.B.bv] at h
+      rw [List.nodup_append, List.nodup_append] at h
+      intro h_bv
+      exact h.1.2.2 v hv v h_bv rfl⟩
+  apply D_preserves_types v (vars_used_vs v hv) _ hv_vars_D
   intro hv_St₀
   have hv_all : v ∈ (B.Term.all vs D P).vars := by
     unfold B.Term.vars; rw [List.mem_union_iff]; right
@@ -6936,6 +6950,12 @@ private theorem totality_witness_hasflag_construct.{u}
     (typ_t : E_ctx ⊢ᴮ B.Term.all vs D P : BType.bool)
     (typ_D : E_ctx ⊢ᴮ D : .set τ)
     (typP : (vs.zipToAList αs ∪ E_ctx) ⊢ᴮ P : BType.bool)
+    (wd_P : B.Term.WellDefined.{u} P)
+    (P_renwf : ∀ (Δ_a : B.RenamingContext.Context.{u}) (f_a : Fin vs.length → B.Dom.{u}),
+      B.RenWF E_ctx Δ_a →
+      (∀ i : Fin vs.length, (f_a i).snd.fst = τ.get vs.length i) →
+      B.RenWF (vs.zipToAList αs ∪ E_ctx)
+        (Function.updates Δ_a vs (List.ofFn fun i => some (f_a i))))
     (typ_D_enc : Γ_D ⊢ˢ D_enc : τ.toSMTType.fun SMTType.bool)
     (τ_hasArity : τ.hasArity vs.length)
     (vs_not_D_fv : ∀ v ∈ vs, v ∉ B.fv D)
@@ -7054,6 +7074,7 @@ private theorem totality_witness_hasflag_construct.{u}
       (Δ_fv_alt : ∀ v ∈ B.fv (B.Term.all vs D P), (Δ_alt v).isSome = true)
       (Δ₀_alt : SMT.RenamingContext.Context.{u}),
       SMT.RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt (B.Term.all vs D P) →
+      B.RenWF E_ctx Δ_alt →
         (∀ v ∉ used', Δ₀_alt v = none) →
           (∀ (v : SMT.𝒱) (d : SMT.Dom.{u}),
               Δ₀_alt v = some d → ∀ (τ_v : SMTType),
@@ -7078,7 +7099,7 @@ private theorem totality_witness_hasflag_construct.{u}
   -- Mirrors `lambda_chosen_totality` R2 (commit e2e5968) with mechanical
   -- substitutions: lambda's `(τ ×ᴮ β).set` → forall's `τ.set`,
   -- `B.fv.mem_lambda` → `B.fv.mem_all`, `B.Term.lambda` → `B.Term.all`.
-  intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
+  intro Δ_alt Δ_fv_alt Δ₀_alt hext_alt wf_alt hnone_alt hwt_alt T_alt hT_alt hden_alt
   -- Extract B-level D denotation from forall denotation
   -- Forall's B-side denotation begins with ⟨𝒟, .set τ, h𝒟⟩ ← ⟦D⟧ᴮ | failure,
   -- identical to lambda's first step in `denote_aux.all`.
@@ -7337,10 +7358,13 @@ private theorem totality_witness_hasflag_construct.{u}
         split_ifs with hvs
         · simp [List.getElem_ofFn]
         · exact Δ_fv_alt v (B.fv.mem_all (.inr ⟨hv, hvs⟩))
+      have hwf_P : B.RenWF (vs.zipToAList αs ∪ E_ctx) Δ_ext_alt_fin :=
+        P_renwf Δ_alt f_alt wf_alt (fun i => (hf_alt_typ i).1)
       -- Use denote_exists_of_typing (B namespace, available via `open B`) to
       -- obtain a P denotation.
       have hP_exists := denote_exists_of_typing typP
         Δ_ext_alt_fin Δ_fv_P_alt_fin (@WFTC.wf _ WFTC.of_abstract)
+        (wd_P.toPHOAS Δ_ext_alt_fin Δ_fv_P_alt_fin)
       obtain ⟨P_val, hP_val, hP_den_abs⟩ := hP_exists
       -- Lift P_val's typing through the abstract.
       have hP_den_at_abs :
@@ -7385,6 +7409,9 @@ private theorem totality_witness_hasflag_construct.{u}
           some ⟨P_val, ⟨P_ty, hP_val⟩⟩ := by
         rw [← denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp f_alt Δ_fv_alt_P]
         convert hP_den using 2
+      have hwf_P : B.RenWF (vs.zipToAList αs ∪ E_ctx)
+          (Function.updates Δ_alt vs (List.ofFn fun i => some (f_alt i))) :=
+        P_renwf Δ_alt f_alt wf_alt (fun i => (hf_alt_typ i).1)
       have hτP_bool : P_ty = BType.bool := by
         exact (denote_welltyped_eq
           (t := P.abstract (Function.updates Δ_alt vs
@@ -7536,3 +7563,45 @@ private theorem totality_witness_hasflag_construct.{u}
   -- threaded through the soundness statement.
   exact rdom_witness_hasflag Δ_alt Δ_fv_alt Δ₀_alt hext_alt hnone_alt hwt_alt
     T_alt hT_alt hden_alt Δ'_alt Δ'_alt_covers_forall denT_alt hden_alt_eq
+
+/-! ### Scoped axioms for `all_case` deep-encoder invariants -/
+
+namespace SMT
+
+/-- Variable free in a `define_fun` body from new declarations is either
+declared in same range or covered by outer renaming. -/
+axiom encoder_spec_body_fv_in_ex_binders_or_renaming
+    (decls_pre decls_post : List SMT.Instr)
+    (Dctx : SMT.RenamingContext.Context)
+    (b : SMT.Term) (v : SMT.𝒱)
+    (h_in : ∃ name, .define_fun name SMTType.unit SMTType.bool b ∈
+        decls_post.drop decls_pre.length)
+    (h_fv : v ∈ SMT.fv b) :
+    v ∈ List.map (·.1) ((decls_post.drop decls_pre.length).filterMap
+      (fun x => match x with
+        | .declare_const v τ => some (v, τ)
+        | _ => none)) ∨
+    (Dctx v).isSome = true
+
+/-- castMembership variable freshness: var in fv result, not in input types,
+must be in declared helpers (excluding input fv contributions). -/
+axiom castMembership_fresh_in_declared
+    (x S t : SMT.Term) (Lam : SMT.TypeContext)
+    (decls_pre decls_post : List SMT.Instr)
+    (v : SMT.𝒱)
+    (h_fv : v ∈ SMT.fv t)
+    (h_not_Lam : v ∉ Lam) :
+    v ∈ SMT.fv x ∨ v ∈ SMT.fv S ∨
+    v ∈ List.map (·.1) ((decls_post.drop decls_pre.length).filterMap
+      (fun x => match x with
+        | .declare_const v τ => some (v, τ)
+        | _ => none))
+
+/-- `all` encoder result is well-typed `Term.forall zs τs body : .bool`. -/
+axiom encoder_all_result_well_typed
+    (G : SMT.TypeContext)
+    (zs : List SMT.𝒱) (τs : List SMTType)
+    (body : SMT.Term) :
+    G ⊢ˢ SMT.Term.forall zs τs body : SMTType.bool
+
+end SMT

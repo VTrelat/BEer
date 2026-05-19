@@ -1,6 +1,7 @@
 import SMT.Reasoning.Defs
 import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
+import SMT.Reasoning.Basic.DenotationTotality
 import SMT.Reasoning.Basic.LoosenAuxExact.FunDefault
 
 open Std.Do SMT ZFSet Classical
@@ -13,8 +14,9 @@ abbrev FunExactIH.{u}
     {τ τ' : SMTType} (p : τ ⇝ τ') : Prop :=
   ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
     Λ ⊢ˢ x : τ →
-      ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x)
-        (pf₀ : FunPf «Δ₀»),
+      ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
+        SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x →
+      ∀ (pf₀ : FunPf «Δ₀»),
         ⦃fun x =>
           match x with
           | { env := E, types := Λ' } =>
@@ -53,6 +55,7 @@ abbrev FunExactIH.{u}
                                                       (Function.update «Δ₀» x! (some X!))
                                                       hφ⟧ˢ =
                                                     some Φ),
+                                                X!.snd.fst = τ' ∧
                                                 Φ.snd.fst = SMTType.bool ∧
                                                   (Φ.fst = zftrue ∧
                                                     X.fst.pair X!.fst ∈ (castZF_of_path p).1) ∧
@@ -73,6 +76,47 @@ abbrev FunExactIH.{u}
                                                                 ΦY.fst = zftrue →
                                                                   X.fst.pair Y.fst ∈
                                                                     (castZF_of_path p).1⌝⦄
+
+/-- The SMT denotation of a negation `¬ˢ' t`, when defined, always carries the
+`bool` SMT type tag (structural from the `¬ˢ'` denotation arm). Since
+`PHOAS.Term.exists` unfolds to `¬ˢ' (.forall ..)`, this also pins the tag of any
+`exists`/`forall`-shaped term's denotation. -/
+theorem denote_not_ty {t : SMT.PHOAS.Term SMT.Dom} {D : SMT.Dom}
+    (h : ⟦¬ˢ' t⟧ˢ = some D) : D.2.1 = SMTType.bool := by
+  rw [SMT.denote] at h
+  rw [Option.bind_eq_bind] at h
+  cases hd : ⟦t⟧ˢ with
+  | none => rw [hd, Option.bind_none] at h; exact absurd h (by simp)
+  | some Dt =>
+      obtain ⟨v, τ, hv⟩ := Dt
+      rw [hd, Option.bind_some] at h
+      cases τ <;> dsimp only at h
+      · rw [Option.pure_def, Option.some.injEq] at h; obtain rfl := h; rfl
+      all_goals (rw [Option.failure_eq_none] at h; exact absurd h (by simp))
+
+/-- The SMT denotation of a universally-quantified term `PHOAS.Term.forall τs P`,
+when defined, always carries the `bool` SMT type tag (structural from the
+`forall` denotation arm). -/
+theorem denote_forall_ty {n : ℕ} {τs : Fin n → SMTType}
+    {P : (Fin n → SMT.Dom) → SMT.PHOAS.Term SMT.Dom} {D : SMT.Dom}
+    (h : ⟦SMT.PHOAS.Term.forall τs P⟧ˢ = some D) : D.2.1 = SMTType.bool := by
+  rw [SMT.denote] at h
+  split at h
+  · split at h
+    · rw [Option.pure_def, Option.some.injEq] at h
+      obtain rfl := h
+      rfl
+    · exact absurd h (by rw [Option.failure_eq_none]; simp)
+  · exact absurd h (by rw [Option.failure_eq_none]; simp)
+
+/-- The SMT denotation of an existentially-quantified term
+`PHOAS.Term.exists τs P`, when defined, always carries the `bool` SMT type tag:
+`PHOAS.Term.exists` unfolds to `¬ˢ' (.forall ..)`. -/
+theorem denote_exists_ty {n : ℕ} {τs : Fin n → SMTType}
+    {P : (Fin n → SMT.Dom) → SMT.PHOAS.Term SMT.Dom} {D : SMT.Dom}
+    (h : ⟦SMT.PHOAS.Term.exists τs P⟧ˢ = some D) : D.2.1 = SMTType.bool := by
+  rw [SMT.PHOAS.Term.exists] at h
+  exact denote_not_ty h
 
 theorem typeContext_insert_swap_entries
     {Γ : TypeContext} {x y : 𝒱} {τx τy : SMTType}
@@ -548,6 +592,81 @@ theorem funSpecTermFvSubset
       exact Or.inr (List.mem_singleton.mpr hv_x!)
     · rw [fv, List.mem_singleton] at hv_a!
       exact False.elim (hv_not_a! hv_a!)
+
+/-- Transport `RespectsTypeContextOnFV` across two renaming contexts that agree
+on the free variables of the indexed term. -/
+theorem funRespectsFVCongr.{u}
+    {Dc Dc' : RenamingContext.Context.{u}} {Γ : TypeContext} {t : Term}
+    (resp : SMT.RenamingContext.RespectsTypeContextOnFV Dc Γ t)
+    (hag : ∀ v ∈ fv t, Dc v = Dc' v) :
+    SMT.RenamingContext.RespectsTypeContextOnFV Dc' Γ t := by
+  intro v σ hv hlk
+  obtain ⟨d, hd, hd_ty⟩ := resp hv hlk
+  exact ⟨d, (hag v hv) ▸ hd, hd_ty⟩
+
+/-- FV-restricted type compatibility for a unary loosening spec term `a!_spec`,
+denoted under a renaming context that binds the argument variable `a` and the
+loosened variable `a!`. The spec term's free variables are confined to `{a, a!}`
+(by `fv_spec`), so the type tags of the two bound values (`hx_ty`, `hw_ty`)
+suffice; nothing about the base context is needed. -/
+theorem funUnarySpecRespectsFV.{u}
+    {a!_spec : Term} {a a! x! : 𝒱} {α α' γ : SMTType}
+    {Δbase : RenamingContext.Context.{u}} {x₀ w : SMT.Dom.{u}}
+    {Γ : TypeContext}
+    (fv_spec : fv a!_spec ⊆ fv (Term.var a) ∪ {a!})
+    (a_ne_a! : a ≠ a!)
+    (hx_ty : x₀.snd.fst = α)
+    (hw_ty : w.snd.fst = α') :
+    SMT.RenamingContext.RespectsTypeContextOnFV
+      (Function.update (Function.update Δbase a! (some w)) a (some x₀))
+      (AList.insert a α (AList.insert a! α' (AList.insert x! γ Γ)))
+      a!_spec := by
+  intro v σ hv hlk
+  have hv' := fv_spec hv
+  rw [List.mem_union_iff] at hv'
+  rcases hv' with hva | hva!
+  · have hv_eq : v = a := by rwa [fv, List.mem_singleton] at hva
+    subst hv_eq
+    rw [AList.lookup_insert] at hlk
+    cases hlk
+    exact ⟨x₀, Function.update_self _ _ _, hx_ty⟩
+  · have hv_eq : v = a! := by simpa [Singleton.singleton] using hva!
+    subst hv_eq
+    rw [AList.lookup_insert_ne a_ne_a!.symm, AList.lookup_insert] at hlk
+    cases hlk
+    refine ⟨w, ?_, hw_ty⟩
+    rw [Function.update_of_ne a_ne_a!.symm, Function.update_self]
+
+/-- Variant of `funUnarySpecRespectsFV` where the loosened variable `a!` is the
+outermost binding both in the renaming context and the type context — the shape
+produced by `loosenAux` for the existential-body spec. -/
+theorem funUnarySpecRespectsFV'.{u}
+    {a!_spec : Term} {a a! x! : 𝒱} {α α' γ : SMTType}
+    {Δbase : RenamingContext.Context.{u}} {x₀ w : SMT.Dom.{u}}
+    {Γ : TypeContext}
+    (fv_spec : fv a!_spec ⊆ fv (Term.var a) ∪ {a!})
+    (a_ne_a! : a ≠ a!)
+    (hx_ty : x₀.snd.fst = α)
+    (hw_ty : w.snd.fst = α') :
+    SMT.RenamingContext.RespectsTypeContextOnFV
+      (Function.update (Function.update Δbase a (some x₀)) a! (some w))
+      (AList.insert a! α' (AList.insert a α (AList.insert x! γ Γ)))
+      a!_spec := by
+  intro v σ hv hlk
+  have hv' := fv_spec hv
+  rw [List.mem_union_iff] at hv'
+  rcases hv' with hva | hva!
+  · have hv_eq : v = a := by rwa [fv, List.mem_singleton] at hva
+    subst hv_eq
+    rw [AList.lookup_insert_ne a_ne_a!, AList.lookup_insert] at hlk
+    cases hlk
+    refine ⟨x₀, ?_, hx_ty⟩
+    rw [Function.update_of_ne a_ne_a!, Function.update_self]
+  · have hv_eq : v = a! := by simpa [Singleton.singleton] using hva!
+    subst hv_eq
+    rw [AList.lookup_insert] at hlk
+    cases hlk
+    exact ⟨w, Function.update_self _ _ _, hw_ty⟩
 
 theorem funSpecTermCoversUpdate.{u}
     {«Δ» : RenamingContext.Context.{u}}
@@ -1096,6 +1215,7 @@ theorem funDenVarExactAt.{u}
                 (Function.update (Function.update «Δ» z (some x₀)) z! (some X₀!))
                 hφ⟧ˢ =
               some Φ),
+          X₀!.snd.fst = τ' ∧
           Φ.snd.fst = SMTType.bool ∧
             (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
               ∀ (Y : SMT.Dom),
@@ -1128,9 +1248,19 @@ theorem funDenVarExactAt.{u}
     subst hv
     rw [Function.update_self]
     rfl
+  have respects_var_z_x₀ :
+      SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ St₁.types (.var z) := by
+    intro v σ hv hlk
+    rw [SMT.fv, List.mem_singleton] at hv
+    subst hv
+    cases typ_var_z with
+    | var _ _ _ h_lookup_z =>
+      rw [hlk] at h_lookup_z
+      cases h_lookup_z
+      exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
   have ih_var_z_x₀ := p_ih
     (Λ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
-    (name := name) (x := .var z) typ_var_z Δx₀ hcov_var_z_x₀ pf_var_z_x₀
+    (name := name) (x := .var z) typ_var_z Δx₀ hcov_var_z_x₀ respects_var_z_x₀ pf_var_z_x₀
   have post_x₀ := ih_var_z_x₀ St₁ (by exact ⟨rfl, rfl, sub, rfl⟩)
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post_x₀
   rw [hrun] at post_x₀
@@ -1142,6 +1272,63 @@ theorem funDenVarExactAt.{u}
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hden_z_x₀⟩ := post_x₀
   exact hden_z_x₀ x₀ hden_var_z_x₀
 
+/-- The denotation of an abstracted equality term, when defined, always carries the
+`bool` SMT type tag (structural from the `=ˢ'` denotation arm). -/
+theorem denote_eq_abstract_bool.{u}
+    {t₁ t₂ : SMT.Term} {«Δ» : RenamingContext.Context.{u}}
+    {hcov : RenamingContext.CoversFV «Δ» (t₁ =ˢ t₂)}
+    {D : SMT.Dom.{u}}
+    (hden : ⟦(t₁ =ˢ t₂).abstract «Δ» hcov⟧ˢ = some D) :
+    D.snd.fst = SMTType.bool := by
+  rw [SMT.Term.abstract] at hden
+  cases h₁ : ⟦t₁.abstract «Δ» (fun v hv => hcov v (SMT.fv.mem_eq (.inl hv)))⟧ˢ with
+  | none =>
+      rw [SMT.denote, h₁] at hden
+      simp at hden
+  | some D₁ =>
+    cases h₂ : ⟦t₂.abstract «Δ» (fun v hv => hcov v (SMT.fv.mem_eq (.inr hv)))⟧ˢ with
+    | none =>
+        rw [SMT.denote, h₁, h₂] at hden
+        obtain ⟨X₁, α₁, hX₁⟩ := D₁
+        simp at hden
+    | some D₂ =>
+      rw [SMT.denote, h₁, h₂] at hden
+      obtain ⟨X₁, α₁, hX₁⟩ := D₁
+      obtain ⟨X₂, α₂, hX₂⟩ := D₂
+      simp only [Option.bind_eq_bind, Option.bind_some] at hden
+      by_cases hαβ : α₁ = α₂
+      · rw [dif_pos hαβ] at hden
+        have hD := Option.some.inj hden
+        rw [← hD]
+      · rw [dif_neg hαβ] at hden
+        exact absurd hden (by simp)
+
+/-- Build an FV-restricted respects relation for `.app (.var x) (.var a)` over a
+doubly-updated renaming context, from the type tags of the bindings. -/
+theorem respectsAppVarVar.{u}
+    {«Δ» : RenamingContext.Context.{u}} {Γ : SMT.TypeContext}
+    {x a : 𝒱} {τx τa : SMTType} {Xd Ad : SMT.Dom.{u}}
+    (hx_ne_a : x ≠ a)
+    (hx_lookup : Γ.lookup x = some τx)
+    (ha_lookup : Γ.lookup a = some τa)
+    (hXd_ty : Xd.snd.fst = τx)
+    (hAd_ty : Ad.snd.fst = τa) :
+    RenamingContext.RespectsTypeContextOnFV
+      (Function.update (Function.update «Δ» x (some Xd)) a (some Ad)) Γ
+      (Term.app (.var x) (.var a)) := by
+  intro v σ hv hlk
+  simp only [SMT.fv, List.mem_append, List.mem_singleton] at hv
+  rcases hv with hvx | hva
+  · subst hvx
+    rw [hx_lookup] at hlk
+    cases hlk
+    refine ⟨Xd, ?_, hXd_ty⟩
+    rw [Function.update_of_ne hx_ne_a, Function.update_self]
+  · subst hva
+    rw [ha_lookup] at hlk
+    cases hlk
+    exact ⟨Ad, Function.update_self _ _ _, hAd_ty⟩
+
 theorem funDefaultSpecAt.{u}
     {«Δ» : RenamingContext.Context.{u}}
     {τ : SMTType}
@@ -1149,6 +1336,7 @@ theorem funDefaultSpecAt.{u}
     (sub : AList.keys St₁.types ⊆ St₁.env.usedVars)
     (typ_t : St₁.types ⊢ˢ t : τ)
     (ht : RenamingContext.CoversFV «Δ» t)
+    (respects : RenamingContext.RespectsTypeContextOnFV «Δ» St₁.types t)
     (hrun : Id.run ((defaultSpecM name τ t) St₁) = Except.ok (spec, St₂)) :
     ∀ (Y : SMT.Dom.{u}) (den_t : ⟦t.abstract «Δ» ht⟧ˢ = some Y),
       ∃ (hφ : RenamingContext.CoversFV «Δ» spec) (Φ : SMT.Dom.{u}),
@@ -1163,7 +1351,7 @@ theorem funDefaultSpecAt.{u}
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post
   rw [hrun] at post
   obtain ⟨_, _, _, _, _, _, _, hden_spec⟩ := post
-  exact hden_spec «Δ» ht Y den_t
+  exact hden_spec «Δ» ht Y respects den_t
 
 theorem funVarDenTrueAtCast.{u}
     {«Δ» : RenamingContext.Context.{u}}
@@ -1241,7 +1429,7 @@ theorem funVarSpecTotalAt.{u}
         (Function.update (Function.update «Δ» z (some x₀)) z! (some wy0))
         hφY⟧ˢ.isSome =
       true := by
-  obtain ⟨_, _, _, _, _, _, _, htot⟩ :=
+  obtain ⟨_, _, _, _, _, _, _, _, htot⟩ :=
     funDenVarExactAt
       («Δ» := «Δ») (p := p) p_ih
       (sub := sub) (typ_var_z := typ_var_z) (hrun := hrun)
@@ -1271,7 +1459,7 @@ theorem funVarSpecTrueImpliesCast.{u}
         some ΦY)
     (htrue : ΦY.fst = zftrue) :
     x₀.fst.pair wy0.fst ∈ (castZF_of_path p).1 := by
-  obtain ⟨_, _, _, _, _, _, _, htot⟩ :=
+  obtain ⟨_, _, _, _, _, _, _, _, htot⟩ :=
     funDenVarExactAt
       («Δ» := «Δ») (p := p) p_ih
       (sub := sub) (typ_var_z := typ_var_z) (hrun := hrun)
@@ -1300,14 +1488,13 @@ theorem funVarSpecTrueAtCast.{u}
           hφY⟧ˢ =
         some ΦY ∧
       ΦY.fst = zftrue := by
-  obtain ⟨Φ, X₀!, hden_var, hφ, hden, _, htrue_cast, _⟩ :=
+  obtain ⟨Φ, X₀!, hden_var, hφ, hden, hX₀_ty, _, htrue_cast, _⟩ :=
     funDenVarExactAt
       («Δ» := «Δ») (p := p) p_ih
       (sub := sub) (typ_var_z := typ_var_z) (hrun := hrun)
       x₀ hx₀_ty
   obtain ⟨htrue, hcast_X₀!⟩ := htrue_cast
-  have hX₀_ty : X₀!.snd.fst = τ' := by
-    exact denote_type_eq_of_typing (typ_t := typ_var_z!) (hden := hden_var)
+  -- `X₀!`'s type tag is now supplied by the strengthened `funDenVarExactAt`.
   exact funVarDenTrueAtCast
     («Δ» := Function.update «Δ» z (some x₀))
     (p := p)
@@ -1327,6 +1514,7 @@ theorem funDefaultTrueImpliesDefaultAt.{u}
     (sub : AList.keys St₁.types ⊆ St₁.env.usedVars)
     (typ_t : St₁.types ⊢ˢ t : τ)
     (ht : RenamingContext.CoversFV «Δ» t)
+    (respects : RenamingContext.RespectsTypeContextOnFV «Δ» St₁.types t)
     (hrun : Id.run ((defaultSpecM name τ t) St₁) = Except.ok (spec, St₂)) :
     ∀ (Y : SMT.Dom.{u}) (den_t : ⟦t.abstract «Δ» ht⟧ˢ = some Y)
       (hφ : RenamingContext.CoversFV «Δ» spec) {Φ : SMT.Dom.{u}},
@@ -1341,7 +1529,7 @@ theorem funDefaultTrueImpliesDefaultAt.{u}
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post
   rw [hrun] at post
   obtain ⟨_, _, _, _, _, _, hconv⟩ := post
-  exact hconv «Δ» ht Y den_t hφ hdenΦ htrue
+  exact hconv «Δ» ht Y respects den_t hφ hdenΦ htrue
 
 theorem funRunVarSpec
     {τ τ' : SMTType} {p : τ ⇝ τ'}
@@ -2285,7 +2473,12 @@ theorem funUnaryForallEqZffalse.{u}
   obtain ⟨Φ, hden_forall⟩ := Option.isSome_iff_exists.mp hsome_forall
   have hΦ_ty :
       Φ.snd.fst = SMTType.bool := by
-    exact denote_type_eq_of_typing (typ_t := typ_forall) (hden := hden_forall)
+    -- The denotation of a `forall` node is always boolean, independent of the
+    -- typing context: unfold `abstract`/`denote` and read off the tag.
+    rw [SMT.Term.abstract] at hden_forall; split_ifs at hden_forall with hlen
+    · simp only [SMT.denote] at hden_forall; split_ifs at hden_forall
+      · simp only [Option.pure_def, Option.some_inj] at hden_forall; cases hden_forall; rfl
+    · simp at hlen
   have hΦ_false :
       Φ.fst = zffalse := by
     have hΦ_bool : Φ.fst ∈ 𝔹 := by
@@ -2725,7 +2918,16 @@ theorem funExistsABTotalAt.{u}
                   ⟦((@ˢx) (Term.var a)).abstract (Function.update ΔY a (some x₀)) hcov_xa⟧ˢ =
                     some Dxa)
     (typ_a_ctx : Γa ⊢ˢ a!_spec : SMTType.bool)
-    (typ_b_ctx : Γb ⊢ˢ b!_spec : SMTType.bool) :
+    (typ_b_ctx : Γb ⊢ˢ b!_spec : SMTType.bool)
+    (respects_a :
+      ∀ x₀ : SMT.Dom.{u}, x₀.snd.fst = α →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update ΔY a (some x₀)) a! (some wy0)) Γa a!_spec)
+    (respects_b :
+      ∀ y₀ : SMT.Dom.{u}, y₀.snd.fst = β →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update (Function.update ΔY a! (some wy0)) b (some y₀)) b! (some DappX))
+          Γb b!_spec) :
     ⟦(Term.exists [a, b] [α, β] (((@ˢx) (Term.var a) =ˢ Term.var b) ∧ˢ (a!_spec ∧ˢ b!_spec))).abstract
         (Function.update (Function.update ΔY a! (some wy0)) b! (some DappX))
         hφ_exists_ab⟧ˢ.isSome =
@@ -2943,9 +3145,54 @@ theorem funExistsABTotalAt.{u}
     obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
     obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
     have hDa_ty : Da.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a)
+      have hresp_w :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δw Γa a!_spec := by
+        refine funRespectsFVCongr
+          (resp := respects_a (w ⟨0, by simp⟩) (hw ⟨0, by simp⟩).1) ?_
+        intro v hv
+        have hv' := fv_a!_spec hv
+        rw [List.mem_union_iff] at hv'
+        rcases hv' with hva | hva!
+        · rw [fv, List.mem_singleton] at hva
+          subst hva
+          dsimp [Δw, Δb0]
+          rw [Function.update_of_ne a_ne_a!, Function.update_self,
+            Function.update_of_ne b_ne_a.symm, Function.update_self]
+        · have hv_eq : v = a! := by
+            change v ∈ ([a!] : List 𝒱) at hva!
+            rw [List.mem_singleton] at hva!
+            exact hva!
+          subst hv_eq
+          dsimp [Δw, Δb0]
+          rw [Function.update_self, Function.update_of_ne a!_ne_b,
+            Function.update_of_ne a_ne_a!.symm, Function.update_of_ne a!_ne_b!,
+            Function.update_self]
+      exact SMT.RenamingContext.denote_type_of_typing_fv
+        (htyp := typ_a_ctx) (hden := hden_a) (hcompat := hresp_w)
     have hDb_ty : Db.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b)
+      have hresp_w :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δw Γb b!_spec := by
+        refine funRespectsFVCongr
+          (resp := respects_b (w ⟨1, by simp⟩) (hw ⟨1, by simp⟩).1) ?_
+        intro v hv
+        have hv' := fv_b!_spec hv
+        rw [List.mem_union_iff] at hv'
+        rcases hv' with hvb | hvb!
+        · rw [fv, List.mem_singleton] at hvb
+          subst hvb
+          dsimp [Δw, Δb0]
+          rw [Function.update_self, Function.update_of_ne b_ne_b!,
+            Function.update_self]
+        · have hv_eq : v = b! := by
+            change v ∈ ([b!] : List 𝒱) at hvb!
+            rw [List.mem_singleton] at hvb!
+            exact hvb!
+          subst hv_eq
+          dsimp [Δw, Δb0]
+          rw [Function.update_of_ne b_ne_b!.symm, Function.update_of_ne a_ne_b!.symm,
+            Function.update_self, Function.update_self]
+      exact SMT.RenamingContext.denote_type_of_typing_fv
+        (htyp := typ_b_ctx) (hden := hden_b) (hcompat := hresp_w)
     have hcov_app_w :
         RenamingContext.CoversFV Δw ((@ˢx) (Term.var a)) := by
       have hcov_body_w := hcov_body_upd (w ⟨0, by simp⟩) (w ⟨1, by simp⟩)
@@ -3135,6 +3382,15 @@ theorem funExistsABTrueAtRange.{u}
                     some Dxa)
     (typ_a_ctx : Γa ⊢ˢ a!_spec : SMTType.bool)
     (typ_b_ctx : Γb ⊢ˢ b!_spec : SMTType.bool)
+    (respects_a :
+      ∀ x₀ : SMT.Dom.{u}, x₀.snd.fst = α →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update ΔY a (some x₀)) a! (some wy0)) Γa a!_spec)
+    (respects_b :
+      ∀ y₀ : SMT.Dom.{u}, y₀.snd.fst = β →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update (Function.update ΔY a! (some wy0)) b (some y₀)) b! (some DappX))
+          Γb b!_spec)
     (hx₀_ty : wx₀.snd.fst = α)
     (hx₀_mem : wx₀.fst ∈ ⟦α⟧ᶻ)
     (hy₀_ty : y₀.snd.fst = β)
@@ -3369,9 +3625,50 @@ theorem funExistsABTrueAtRange.{u}
     obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
     obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
     have hDa_ty : Da.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a)
+      have hresp_w :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δw Γa a!_spec := by
+        refine funRespectsFVCongr
+          (resp := respects_a (w ⟨0, by simp⟩) (hw ⟨0, by simp⟩).1) ?_
+        intro v hv
+        have hv' := fv_a!_spec hv
+        rw [List.mem_union_iff] at hv'
+        rcases hv' with hva | hva!
+        · rw [fv, List.mem_singleton] at hva
+          subst hva
+          dsimp [Δw, Δb0]
+          rw [Function.update_of_ne a_ne_a!, Function.update_self,
+            Function.update_of_ne b_ne_a.symm, Function.update_self]
+        · have hv_eq : v = a! := by
+            simpa [Singleton.singleton] using hva!
+          subst hv_eq
+          dsimp [Δw, Δb0]
+          rw [Function.update_self, Function.update_of_ne a!_ne_b,
+            Function.update_of_ne a_ne_a!.symm, Function.update_of_ne a!_ne_b!,
+            Function.update_self]
+      exact SMT.RenamingContext.denote_type_of_typing_fv
+        (htyp := typ_a_ctx) (hden := hden_a) (hcompat := hresp_w)
     have hDb_ty : Db.snd.fst = SMTType.bool := by
-      exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b)
+      have hresp_w :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δw Γb b!_spec := by
+        refine funRespectsFVCongr
+          (resp := respects_b (w ⟨1, by simp⟩) (hw ⟨1, by simp⟩).1) ?_
+        intro v hv
+        have hv' := fv_b!_spec hv
+        rw [List.mem_union_iff] at hv'
+        rcases hv' with hvb | hvb!
+        · rw [fv, List.mem_singleton] at hvb
+          subst hvb
+          dsimp [Δw, Δb0]
+          rw [Function.update_self, Function.update_of_ne b_ne_b!,
+            Function.update_self]
+        · have hv_eq : v = b! := by
+            simpa [Singleton.singleton] using hvb!
+          subst hv_eq
+          dsimp [Δw, Δb0]
+          rw [Function.update_of_ne b_ne_b!.symm, Function.update_of_ne a_ne_b!.symm,
+            Function.update_self, Function.update_self]
+      exact SMT.RenamingContext.denote_type_of_typing_fv
+        (htyp := typ_b_ctx) (hden := hden_b) (hcompat := hresp_w)
     have hcov_app_w :
         RenamingContext.CoversFV Δw ((@ˢx) (Term.var a)) := by
       have hcov_body_w := hcov_body_upd (w ⟨0, by simp⟩) (w ⟨1, by simp⟩)
@@ -3514,9 +3811,11 @@ theorem funExistsABTrueAtRange.{u}
     obtain ⟨Dbody, hden_body, _hDbody_ty⟩ := den_body_some hw
     exact Option.isSome_of_eq_some hden_body
   have hΦa_ty : Φa.snd.fst = SMTType.bool := by
-    exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a0)
+    exact SMT.RenamingContext.denote_type_of_typing_fv
+      (htyp := typ_a_ctx) (hden := hden_a0) (hcompat := respects_a wx₀ hx₀_ty)
   have hΦb_ty : Φb.snd.fst = SMTType.bool := by
-    exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b0)
+    exact SMT.RenamingContext.denote_type_of_typing_fv
+      (htyp := typ_b_ctx) (hden := hden_b0) (hcompat := respects_b y₀ hy₀_ty)
   let D : ZFSet := ⟦α⟧ᶻ.prod ⟦β⟧ᶻ
   let bodyF : ZFSet → ZFSet := fun y =>
     if hy : y.hasArity [a, b].length ∧
@@ -4040,6 +4339,15 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
               y₀.fst.pair wy1.fst ∈ castβ)
     (typ_a_ctx : Γa ⊢ˢ a!_spec : SMTType.bool)
     (typ_b_ctx : Γb ⊢ˢ b!_spec : SMTType.bool)
+    (respects_a :
+      ∀ x₀ : SMT.Dom.{u}, x₀.snd.fst = α →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update Δx a (some x₀)) a! (some wy0)) Γa a!_spec)
+    (respects_b :
+      ∀ y₀ : SMT.Dom.{u}, y₀.snd.fst = β →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update (Function.update Δx a! (some wy0)) b (some y₀)) b! (some wy1))
+          Γb b!_spec)
     (hwy0_ty : wy0.snd.fst = α')
     (hwy1_ty : wy1.snd.fst = β')
     (x₀r : ZFSet)
@@ -4280,9 +4588,54 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
       obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
       obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
       have hDa_ty : Da.snd.fst = SMTType.bool := by
-        exact denote_type_eq_of_typing (typ_t := typ_a_ctx) (hden := hden_a)
+        have hresp_w :
+            SMT.RenamingContext.RespectsTypeContextOnFV Δw Γa a!_spec := by
+          refine funRespectsFVCongr
+            (resp := respects_a (w ⟨0, by simp⟩) (hw ⟨0, by simp⟩).1) ?_
+          intro v hv
+          have hv' := fv_a!_spec hv
+          rw [List.mem_union_iff] at hv'
+          rcases hv' with hva | hva!
+          · rw [fv, List.mem_singleton] at hva
+            subst hva
+            dsimp [Δw, Δb0]
+            rw [Function.update_of_ne a_ne_a!, Function.update_self,
+              Function.update_of_ne b_ne_a.symm, Function.update_self]
+          · have hv_eq : v = a! := by
+              change v ∈ ([a!] : List 𝒱) at hva!
+              rw [List.mem_singleton] at hva!
+              exact hva!
+            subst hv_eq
+            dsimp [Δw, Δb0]
+            rw [Function.update_self, Function.update_of_ne a!_ne_b,
+              Function.update_of_ne a_ne_a!.symm, Function.update_of_ne a!_ne_b!,
+              Function.update_self]
+        exact SMT.RenamingContext.denote_type_of_typing_fv
+          (htyp := typ_a_ctx) (hden := hden_a) (hcompat := hresp_w)
       have hDb_ty : Db.snd.fst = SMTType.bool := by
-        exact denote_type_eq_of_typing (typ_t := typ_b_ctx) (hden := hden_b)
+        have hresp_w :
+            SMT.RenamingContext.RespectsTypeContextOnFV Δw Γb b!_spec := by
+          refine funRespectsFVCongr
+            (resp := respects_b (w ⟨1, by simp⟩) (hw ⟨1, by simp⟩).1) ?_
+          intro v hv
+          have hv' := fv_b!_spec hv
+          rw [List.mem_union_iff] at hv'
+          rcases hv' with hvb | hvb!
+          · rw [fv, List.mem_singleton] at hvb
+            subst hvb
+            dsimp [Δw, Δb0]
+            rw [Function.update_self, Function.update_of_ne b_ne_b!,
+              Function.update_self]
+          · have hv_eq : v = b! := by
+              change v ∈ ([b!] : List 𝒱) at hvb!
+              rw [List.mem_singleton] at hvb!
+              exact hvb!
+            subst hv_eq
+            dsimp [Δw, Δb0]
+            rw [Function.update_of_ne b_ne_b!.symm, Function.update_of_ne a_ne_b!.symm,
+              Function.update_self, Function.update_self]
+        exact SMT.RenamingContext.denote_type_of_typing_fv
+          (htyp := typ_b_ctx) (hden := hden_b) (hcompat := hresp_w)
       have hcov_app_w :
           RenamingContext.CoversFV Δw ((@ˢx) (Term.var a)) := by
         have hcov_body_w := hcov_body_upd (w ⟨0, by simp⟩) (w ⟨1, by simp⟩)
@@ -4587,11 +4940,13 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
         obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
         obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
         have hDa_ty : Da.snd.fst = SMTType.bool := by
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a_ctx) (hden := hden_a)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a_ctx) (hcompat := respects_a wx₁ rfl)
+            (hden := hden_a_goal_eq ▸ hden_a)
         have hDb_ty : Db.snd.fst = SMTType.bool := by
-          exact denote_type_eq_of_typing
-            (typ_t := typ_b_ctx) (hden := hden_b)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_b_ctx) (hcompat := respects_b yy₁ rfl)
+            (hden := hden_b_goal_eq ▸ hden_b)
         obtain ⟨Dspec, hden_specs, hDspec_ty⟩ :=
           denote_and_some_bool_of_some_bool hden_a hDa_ty hden_b hDb_ty
         obtain ⟨hcov_xa, Dxa, hDxa_ty, hDxa_val, hden_xa⟩ :=
@@ -4687,12 +5042,14 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
                     (q := b!_spec.abstract Δgoal hφb_goal)
                     (typ_p_bool := by
                       intro D hden
-                      exact denote_type_eq_of_typing
-                        (typ_t := typ_a_ctx) (hden := hden))
+                      exact SMT.RenamingContext.denote_type_of_typing_fv
+                        (htyp := typ_a_ctx) (hcompat := respects_a wx₁ rfl)
+                        (hden := hden_a_goal_eq ▸ hden))
                     (typ_q_bool := by
                       intro D hden
-                      exact denote_type_eq_of_typing
-                        (typ_t := typ_b_ctx) (hden := hden))
+                      exact SMT.RenamingContext.denote_type_of_typing_fv
+                        (htyp := typ_b_ctx) (hcompat := respects_b yy₁ rfl)
+                        (hden := hden_b_goal_eq ▸ hden))
                     hden_specs hDspec_true
                 have hden_a_true_at :
                     ⟦a!_spec.abstract
@@ -5021,11 +5378,13 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
           obtain ⟨Da, hden_a⟩ := Option.isSome_iff_exists.mp hsome_a
           obtain ⟨Db, hden_b⟩ := Option.isSome_iff_exists.mp hsome_b
           have hDa_ty : Da.snd.fst = SMTType.bool := by
-            exact denote_type_eq_of_typing
-              (typ_t := typ_a_ctx) (hden := hden_a)
+            exact SMT.RenamingContext.denote_type_of_typing_fv
+              (htyp := typ_a_ctx) (hcompat := respects_a wx₁ rfl)
+              (hden := hden_a_goal_eq ▸ hden_a)
           have hDb_ty : Db.snd.fst = SMTType.bool := by
-            exact denote_type_eq_of_typing
-              (typ_t := typ_b_ctx) (hden := hden_b)
+            exact SMT.RenamingContext.denote_type_of_typing_fv
+              (htyp := typ_b_ctx) (hcompat := respects_b yy₁ rfl)
+              (hden := hden_b_goal_eq ▸ hden_b)
           obtain ⟨Dspec, hden_specs, hDspec_ty⟩ :=
             denote_and_some_bool_of_some_bool hden_a hDa_ty hden_b hDb_ty
           obtain ⟨hcov_xa, Dxa, hDxa_ty, hDxa_val, hden_xa⟩ :=
@@ -5121,12 +5480,14 @@ theorem funBBodyTrueOfEqFalseAtRange.{u}
                       (q := b!_spec.abstract Δgoal hφb_goal)
                       (typ_p_bool := by
                         intro D hden
-                        exact denote_type_eq_of_typing
-                          (typ_t := typ_a_ctx) (hden := hden))
+                        exact SMT.RenamingContext.denote_type_of_typing_fv
+                          (htyp := typ_a_ctx) (hcompat := respects_a wx₁ rfl)
+                          (hden := hden_a_goal_eq ▸ hden))
                       (typ_q_bool := by
                         intro D hden
-                        exact denote_type_eq_of_typing
-                          (typ_t := typ_b_ctx) (hden := hden))
+                        exact SMT.RenamingContext.denote_type_of_typing_fv
+                          (htyp := typ_b_ctx) (hcompat := respects_b yy₁ rfl)
+                          (hden := hden_b_goal_eq ▸ hden))
                       hden_specs hDspec_true
                   have hden_a_true_at :
                       ⟦a!_spec.abstract
@@ -5547,6 +5908,8 @@ theorem funDenSpecTrueAtCast.{u}
               some Dapp)
     (default_spec_at :
       ∀ (Yfun wy0 Dapp : SMT.Dom.{u})
+        (hYfun_ty : Yfun.snd.fst = α'.fun β')
+        (hwy0_ty : wy0.snd.fst = α')
         (hden_app :
           ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
               (Function.update (Function.update Δctx x! (some Yfun)) a! (some wy0))
@@ -5734,8 +6097,9 @@ theorem funDenSpecTrueAtCast.{u}
           simpa [hctx_swap x₁, proof_irrel_heq] using
             a_spec_total_at X! x₁ wy0 hx₁_ty hwy0_ty
         · intro x₁ hx₁_ty D hden_a'
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a')
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a')
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₁_ty hwy0_ty)
         · simpa [hctx_swap wx₀, proof_irrel_heq, wx₀] using hden_a
         · exact hΦa_true
       have hφ_forall_b :
@@ -6001,6 +6365,17 @@ theorem funDenSpecTrueAtCast.{u}
                   exact ⟨hcov_xa', Dxa, hDxa_ty, hden_xa'⟩)
                 (typ_a_ctx := typ_a!_spec_ctx_base)
                 (typ_b_ctx := typ_b!_spec_ctx_base)
+                (respects_a := by
+                  intro x₀ hx₀_ty
+                  exact funUnarySpecRespectsFV' fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
+                (respects_b := by
+                  intro y₀ hy₀_ty
+                  have b_ne_b! : b ≠ b! := by
+                    intro h
+                    exact b!_not_base (h ▸ by
+                      rw [AList.mem_insert]
+                      exact Or.inl rfl)
+                  exact funUnarySpecRespectsFV' fv_b!_spec b_ne_b! hy₀_ty hwy1_ty)
                 (hx₀_ty := rfl)
                 (hx₀_mem := hx₀_mem)
                 (hy₀_ty := hy₀_ty)
@@ -6166,6 +6541,17 @@ theorem funDenSpecTrueAtCast.{u}
                     hφb hdenΦb htrueΦb)
                 (typ_a_ctx := typ_a!_spec_ctx_base)
                 (typ_b_ctx := typ_b!_spec_ctx_base)
+                (respects_a := by
+                  intro x₀ hx₀_ty
+                  exact funUnarySpecRespectsFV' fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
+                (respects_b := by
+                  intro y₀ hy₀_ty
+                  have b_ne_b! : b ≠ b! := by
+                    intro h
+                    exact b!_not_base (h ▸ by
+                      rw [AList.mem_insert]
+                      exact Or.inl rfl)
+                  exact funUnarySpecRespectsFV' fv_b!_spec b_ne_b! hy₀_ty hwy1_ty)
                 (hwy0_ty := hwy0_ty)
                 (hwy1_ty := hwy1_ty)
                 (x₀r := x₀)
@@ -6183,8 +6569,8 @@ theorem funDenSpecTrueAtCast.{u}
           obtain ⟨D, hden_body, _⟩ := hbody_true_b_at wy1 hwy1_ty
           exact Option.isSome_of_eq_some hden_body
         · intro wy1 hwy1_ty D hden_body
-          exact denote_type_eq_of_typing
-            (typ_t := typ_bBody_base') (hden := hden_body)
+          simp only [bBody, funBBodyTerm] at hden_body
+          exact denote_eq_abstract_bool hden_body
         · intro wy1 hwy1_ty
           exact hbody_true_b_at wy1 hwy1_ty
       refine ⟨⟨zftrue, SMTType.bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩, ?_, rfl⟩
@@ -6283,8 +6669,9 @@ theorem funDenSpecTrueAtCast.{u}
           simpa [hctx_swap x₀, proof_irrel_heq] using
             a_spec_total_at X! x₀ wy0 hx₀_ty hwy0_ty
         · intro x₀ hx₀_ty D hden_a
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a)
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
         · intro x₀ hx₀_ty D hden_a hDa_true
           have hφa :
               RenamingContext.CoversFV
@@ -6303,7 +6690,7 @@ theorem funDenSpecTrueAtCast.{u}
         rw [hDapp_val]
         exact hX!_app_default wy0 hwy0_ty hy_ran
       obtain ⟨hφd, Φd, hdenΦd, _, hΦd_true_if⟩ :=
-        default_spec_at X! wy0 Dapp hden_app
+        default_spec_at X! wy0 Dapp hX!_ty hwy0_ty hden_app
       have hΦd_true : Φd.fst = zftrue := by
         exact hΦd_true_if hDapp_default
       have hφ_forall_b :
@@ -6354,7 +6741,33 @@ theorem funDenSpecTrueAtCast.{u}
     obtain ⟨D, hden_body, _⟩ := hbody_true_at wy0 hwy0_ty
     exact Option.isSome_of_eq_some hden_body
   · intro wy0 hwy0_ty D hden_body
-    exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body)
+    -- `aBody` is `.ite exists_a (.forall ..) hdefault`; the `.ite` denotation is
+    -- whichever branch is taken. The `.forall` branch is structurally `bool`
+    -- (`denote_forall_ty`); the `hdefault` branch is `bool` via `default_spec_at`.
+    have hden_body' := hden_body
+    rw [SMT.Term.abstract, SMT.denote] at hden_body'
+    rw [Option.bind_eq_bind] at hden_body'
+    cases hc : ⟦exists_a.abstract (Function.update Δx a! (some wy0)) _⟧ˢ with
+    | none => rw [hc] at hden_body'; exact absurd hden_body' (by simp)
+    | some Dc =>
+        obtain ⟨Cv, Cτ, Chv⟩ := Dc
+        cases Cτ <;> rw [hc, Option.bind_some] at hden_body' <;>
+          dsimp only at hden_body' <;>
+          (try (rw [Option.failure_eq_none] at hden_body'; exact absurd hden_body' (by simp)))
+        by_cases hcond : ZFSet.ZFBool.toBool ⟨Cv, Chv⟩ = true
+        · rw [if_pos hcond] at hden_body'
+          rw [SMT.Term.abstract] at hden_body'
+          exact denote_forall_ty hden_body'
+        · rw [if_neg hcond] at hden_body'
+          obtain ⟨Dapp, hDapp_ty, hDapp_val, hden_app⟩ :=
+            den_app_at X! wy0 hX!_ty hX!_func hwy0_ty
+          obtain ⟨hφd, Φd, hdenΦd, hΦd_ty, _⟩ :=
+            default_spec_at X! wy0 Dapp hX!_ty hwy0_ty hden_app
+          have hDΦd : D = Φd := by
+            have := hden_body'.symm.trans hdenΦd
+            exact (Option.some.inj this)
+          rw [hDΦd]
+          exact hΦd_ty
   · intro wy0 hwy0_ty
     exact hbody_true_at wy0 hwy0_ty
 
@@ -6594,6 +7007,8 @@ theorem funSpecTrueImpliesCastAt.{u}
               some Dapp)
     (default_spec_at :
       ∀ (Yfun wy0 Dapp : SMT.Dom.{u})
+        (hYfun_ty : Yfun.snd.fst = α'.fun β')
+        (hwy0_ty : wy0.snd.fst = α')
         (hden_app :
           ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
               (Function.update (Function.update Δctx x! (some Yfun)) a! (some wy0))
@@ -6622,6 +7037,8 @@ theorem funSpecTrueImpliesCastAt.{u}
           (Dapp.fst = β'.defaultZFSet → Φd.fst = zftrue))
     (default_true_implies_default_at :
       ∀ (Yfun wy0 Dapp : SMT.Dom.{u})
+        (hYfun_ty : Yfun.snd.fst = α'.fun β')
+        (hwy0_ty : wy0.snd.fst = α')
         (hden_app :
           ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
               (Function.update (Function.update Δctx x! (some Yfun)) a! (some wy0))
@@ -6913,6 +7330,17 @@ theorem funSpecTrueImpliesCastAt.{u}
         exact ⟨hcov_xa, Dxa, hDxa_ty, hden_xa⟩)
       (typ_a_ctx := typ_a!_spec_ctx_base)
       (typ_b_ctx := typ_b!_spec_ctx_base)
+      (respects_a := by
+        intro x₀ hx₀_ty
+        exact funUnarySpecRespectsFV' fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
+      (respects_b := by
+        intro y₀ hy₀_ty
+        have b_ne_b! : b ≠ b! := by
+          intro h
+          exact b!_not_base (h ▸ by
+            rw [AList.mem_insert]
+            exact Or.inl rfl)
+        exact funUnarySpecRespectsFV' fv_b!_spec b_ne_b! hy₀_ty hwy1_ty)
   have hbody_ty_b_at :
       ∀ wy0 wy1 : SMT.Dom,
         wy0.snd.fst = α' →
@@ -6924,7 +7352,8 @@ theorem funSpecTrueImpliesCastAt.{u}
                 some D →
                 D.snd.fst = SMTType.bool := by
     intro wy0 wy1 hwy0_ty hwy1_ty D hden_body
-    exact denote_type_eq_of_typing (typ_t := typ_bBody_base') (hden := hden_body)
+    simp only [bBody, funBBodyTerm] at hden_body
+    exact denote_eq_abstract_bool hden_body
   have hbody_total_b_at :
       ∀ wy0 wy1 : SMT.Dom,
         wy0.snd.fst = α' →
@@ -7004,8 +7433,12 @@ theorem funSpecTrueImpliesCastAt.{u}
       obtain ⟨hσ_bool, _, _, _⟩ := SMT.Typing.eqE typ_eq_ctx
       exact hσ_bool
     have hDexists_ty : Dexists.snd.fst = SMTType.bool := by
-      cases hσ_bool
-      exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists)
+      -- `exists_ab` is a `Term.exists`; its abstraction is `PHOAS.Term.exists`,
+      -- which unfolds to `¬ˢ' (.forall ..)`, so its denotation tag is `bool`.
+      have hden_exists' := hden_exists
+      simp only [exists_ab, funExistsABTerm, SMT.Term.abstract, List.length_cons,
+        List.length_nil, Nat.reduceAdd, ↓reduceDIte] at hden_exists'
+      exact denote_exists_ty hden_exists'
     obtain ⟨Dout, hden_out, _⟩ :=
       denote_eq_some_of_some hden_eq hden_exists (by rw [hDeq_ty, hDexists_ty])
     exact Option.isSome_of_eq_some (by
@@ -7052,8 +7485,9 @@ theorem funSpecTrueImpliesCastAt.{u}
             simpa [hctx_swap_at wy0 x₁, proof_irrel_heq] using
               a_spec_total_at Y x₁ wy0 hx₁_ty hwy0_ty
           · intro x₁ hx₁_ty D hden_a'
-            exact denote_type_eq_of_typing
-              (typ_t := typ_a!_spec_swap) (hden := hden_a')
+            exact SMT.RenamingContext.denote_type_of_typing_fv
+              (htyp := typ_a!_spec_swap) (hden := hden_a')
+              (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₁_ty hwy0_ty)
           · simpa [hctx_swap_at wy0 wx₀, proof_irrel_heq, wx₀] using hden_a
         have hden_forall_b_some :
             ⟦(Term.forall [b!] [β'] bBody).abstract
@@ -7104,8 +7538,9 @@ theorem funSpecTrueImpliesCastAt.{u}
             simpa [hctx_swap_at wy0 x₀, proof_irrel_heq] using
               a_spec_total_at Y x₀ wy0 hx₀_ty hwy0_ty
           · intro x₀ hx₀_ty D hden_a
-            exact denote_type_eq_of_typing
-              (typ_t := typ_a!_spec_swap) (hden := hden_a)
+            exact SMT.RenamingContext.denote_type_of_typing_fv
+              (htyp := typ_a!_spec_swap) (hden := hden_a)
+              (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
           · intro x₀ hx₀_ty D hden_a hDa_true
             have hφa :
                 RenamingContext.CoversFV
@@ -7122,7 +7557,7 @@ theorem funSpecTrueImpliesCastAt.{u}
         obtain ⟨Dapp, _, _, hden_app⟩ :=
           den_app_at Y wy0 hY_ty hY_func hwy0_ty
         obtain ⟨hφd, Φd, hdenΦd, _, _⟩ :=
-          default_spec_at Y wy0 Dapp hden_app
+          default_spec_at Y wy0 Dapp hY_ty hwy0_ty hden_app
         dsimp [aBody]
         rw [SMT.Term.abstract, SMT.denote, hden_exists_a_false]
         change
@@ -7149,7 +7584,33 @@ theorem funSpecTrueImpliesCastAt.{u}
             ⟦aBody.abstract (Function.update ΔY a! (some wy0)) (hcov_aBody_updY wy0)⟧ˢ = some D →
               D.snd.fst = SMTType.bool := by
       intro wy0 hwy0_ty D hden_body
-      exact denote_type_eq_of_typing (typ_t := typ_aBody_base) (hden := hden_body)
+      -- `aBody` is `.ite exists_a (.forall ..) hdefault`; the `.ite` denotation is
+      -- whichever branch is taken. The `.forall` branch is structurally `bool`
+      -- (`denote_forall_ty`); the `hdefault` branch is `bool` via `default_spec_at`.
+      have hden_body' := hden_body
+      rw [SMT.Term.abstract, SMT.denote] at hden_body'
+      rw [Option.bind_eq_bind] at hden_body'
+      cases hc : ⟦exists_a.abstract (Function.update ΔY a! (some wy0)) _⟧ˢ with
+      | none => rw [hc] at hden_body'; exact absurd hden_body' (by simp)
+      | some Dc =>
+          obtain ⟨Cv, Cτ, Chv⟩ := Dc
+          cases Cτ <;> rw [hc, Option.bind_some] at hden_body' <;>
+            dsimp only at hden_body' <;>
+            (try (rw [Option.failure_eq_none] at hden_body'; exact absurd hden_body' (by simp)))
+          by_cases hcond : ZFSet.ZFBool.toBool ⟨Cv, Chv⟩ = true
+          · rw [if_pos hcond] at hden_body'
+            rw [SMT.Term.abstract] at hden_body'
+            exact denote_forall_ty hden_body'
+          · rw [if_neg hcond] at hden_body'
+            obtain ⟨Dapp, hDapp_ty, hDapp_val, hden_app⟩ :=
+              den_app_at Y wy0 hY_ty hY_func hwy0_ty
+            obtain ⟨hφd, Φd, hdenΦd, hΦd_ty, _⟩ :=
+              default_spec_at Y wy0 Dapp hY_ty hwy0_ty hden_app
+            have hDΦd : D = Φd := by
+              have := hden_body'.symm.trans hdenΦd
+              exact (Option.some.inj this)
+            rw [hDΦd]
+            exact hΦd_ty
     change
       @ᶻY.fst
         ⟨wy0.fst, by
@@ -7190,8 +7651,9 @@ theorem funSpecTrueImpliesCastAt.{u}
           simpa [hctx_swap_at wy0 x₁, proof_irrel_heq] using
             a_spec_total_at Y x₁ wy0 hx₁_ty hwy0_ty
         · intro x₁ hx₁_ty D hden_a'
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a')
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a')
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₁_ty hwy0_ty)
         · simpa [hctx_swap_at wy0 wx₀, proof_irrel_heq, wx₀] using hden_a
       obtain ⟨Dbody, hden_body, hDbody_true⟩ :=
         funUnaryForallTrueImpliesAt
@@ -7362,6 +7824,17 @@ theorem funSpecTrueImpliesCastAt.{u}
             exact ⟨hcov_xa, Dxa, hDxa_ty, hden_xa⟩)
           (typ_a_ctx := typ_a!_spec_ctx_base)
           (typ_b_ctx := typ_b!_spec_ctx_base)
+          (respects_a := by
+            intro x₀ hx₀_ty
+            exact funUnarySpecRespectsFV' fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
+          (respects_b := by
+            intro y₀ hy₀_ty
+            have b_ne_b! : b ≠ b! := by
+              intro h
+              exact b!_not_base (h ▸ by
+                rw [AList.mem_insert]
+                exact Or.inl rfl)
+            exact funUnarySpecRespectsFV' fv_b!_spec b_ne_b! hy₀_ty hDappX_ty)
           (hx₀_ty := rfl)
           (hx₀_mem := hx₀_mem)
           (hy₀_ty := hy₀_ty)
@@ -7429,8 +7902,9 @@ theorem funSpecTrueImpliesCastAt.{u}
           simpa [hctx_swap_at wy0 x₀, proof_irrel_heq] using
             a_spec_total_at Y x₀ wy0 hx₀_ty hwy0_ty
         · intro x₀ hx₀_ty D hden_a
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a)
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
         · intro x₀ hx₀_ty D hden_a hDa_true
           have hφa :
               RenamingContext.CoversFV
@@ -7447,7 +7921,7 @@ theorem funSpecTrueImpliesCastAt.{u}
       obtain ⟨Dapp, _, hDapp_val, hden_app⟩ :=
         den_app_at Y wy0 hY_ty hY_func hwy0_ty
       obtain ⟨hφd, Φd, hdenΦd, _, _⟩ :=
-        default_spec_at Y wy0 Dapp hden_app
+        default_spec_at Y wy0 Dapp hY_ty hwy0_ty hden_app
       have hden_default_body :
           ⟦hdefault.abstract (Function.update ΔY a! (some wy0)) hφd⟧ˢ =
             some Dbody := by
@@ -7475,7 +7949,7 @@ theorem funSpecTrueImpliesCastAt.{u}
           exact Option.some.inj (hdenΦd.symm.trans hden_default_body)
         exact hEq ▸ hDbody_true
       have hY_default : Dapp.fst = β'.defaultZFSet := by
-        exact default_true_implies_default_at Y wy0 Dapp hden_app hφd hdenΦd hΦd_true
+        exact default_true_implies_default_at Y wy0 Dapp hY_ty hwy0_ty hden_app hφd hdenΦd hΦd_true
       apply Subtype.ext
       calc
         (↑(@ᶻY.fst
@@ -7651,6 +8125,7 @@ theorem funSpecTotalAt.{u}
               some Dapp)
     (default_spec_at :
       ∀ (wy0 Dapp : SMT.Dom.{u})
+        (hwy0_ty : wy0.snd.fst = α')
         (hden_app :
           ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
               (Function.update (Function.update Δctx x! (some Y)) a! (some wy0))
@@ -7938,6 +8413,17 @@ theorem funSpecTotalAt.{u}
         exact ⟨hcov_xa, Dxa, hDxa_ty, hden_xa⟩)
       (typ_a_ctx := typ_a!_spec_ctx_base)
       (typ_b_ctx := typ_b!_spec_ctx_base)
+      (respects_a := by
+        intro x₀ hx₀_ty
+        exact funUnarySpecRespectsFV' fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
+      (respects_b := by
+        intro y₀ hy₀_ty
+        have b_ne_b! : b ≠ b! := by
+          intro h
+          exact b!_not_base (h ▸ by
+            rw [AList.mem_insert]
+            exact Or.inl rfl)
+        exact funUnarySpecRespectsFV' fv_b!_spec b_ne_b! hy₀_ty hwy1_ty)
   have hbody_total_b_at :
       ∀ wy0 wy1 : SMT.Dom.{u},
         wy0.snd.fst = α' →
@@ -8017,8 +8503,12 @@ theorem funSpecTotalAt.{u}
       obtain ⟨hσ_bool, _, _, _⟩ := SMT.Typing.eqE typ_eq_ctx
       exact hσ_bool
     have hDexists_ty : Dexists.snd.fst = SMTType.bool := by
-      cases hσ_bool
-      exact denote_type_eq_of_typing (typ_t := typ_exists_ab_ctx) (hden := hden_exists)
+      -- `exists_ab` is a `Term.exists`; its abstraction is `PHOAS.Term.exists`,
+      -- which unfolds to `¬ˢ' (.forall ..)`, so its denotation tag is `bool`.
+      have hden_exists' := hden_exists
+      simp only [exists_ab, funExistsABTerm, SMT.Term.abstract, List.length_cons,
+        List.length_nil, Nat.reduceAdd, ↓reduceDIte] at hden_exists'
+      exact denote_exists_ty hden_exists'
     obtain ⟨Dout, hden_out, _⟩ :=
       denote_eq_some_of_some hden_eq hden_exists (by rw [hDeq_ty, hDexists_ty])
     exact Option.isSome_of_eq_some (by
@@ -8059,8 +8549,9 @@ theorem funSpecTotalAt.{u}
           simpa [hctx_swap_at wy0 x₁, proof_irrel_heq] using
             a_spec_total_at x₁ wy0 hx₁_ty hwy0_ty
         · intro x₁ hx₁_ty D hden_a'
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a')
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a')
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₁_ty hwy0_ty)
         · simpa [hctx_swap_at wy0 wx₀, proof_irrel_heq, wx₀] using hden_a
       have hden_forall_b_some :
           ⟦(Term.forall [b!] [β'] bBody).abstract
@@ -8111,8 +8602,9 @@ theorem funSpecTotalAt.{u}
           simpa [hctx_swap_at wy0 x₀, proof_irrel_heq] using
             a_spec_total_at x₀ wy0 hx₀_ty hwy0_ty
         · intro x₀ hx₀_ty D hden_a
-          exact denote_type_eq_of_typing
-            (typ_t := typ_a!_spec_swap) (hden := hden_a)
+          exact SMT.RenamingContext.denote_type_of_typing_fv
+            (htyp := typ_a!_spec_swap) (hden := hden_a)
+            (hcompat := funUnarySpecRespectsFV fv_a!_spec a_ne_a! hx₀_ty hwy0_ty)
         · intro x₀ hx₀_ty D hden_a hDa_true
           have hφa :
               RenamingContext.CoversFV
@@ -8128,7 +8620,7 @@ theorem funSpecTotalAt.{u}
       obtain ⟨Dapp, _, _, hden_app⟩ :=
         den_app_at wy0 hwy0_ty
       obtain ⟨hφd, Φd, hdenΦd, _, _⟩ :=
-        default_spec_at wy0 Dapp hden_app
+        default_spec_at wy0 Dapp hwy0_ty hden_app
       dsimp [aBody]
       rw [SMT.Term.abstract, SMT.denote, hden_exists_a_false]
       change

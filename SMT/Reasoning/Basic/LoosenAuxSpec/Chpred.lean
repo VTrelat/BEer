@@ -321,6 +321,7 @@ private theorem chpredDenSpecSomeAt
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = α' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = α' →
@@ -355,7 +356,7 @@ private theorem chpredDenSpecSomeAt
             hφY⟧ˢ =
           some Φ ∧
         Φ.snd.fst = SMTType.bool := by
-  obtain ⟨_, _, _, _, _, _, _, htot0⟩ := den_z_at x₀ hx₀_ty hx₀_mem
+  obtain ⟨_, _, _, _, _, _, _, _, htot0⟩ := den_z_at x₀ hx₀_ty hx₀_mem
   let Δbase : SMT.RenamingContext.Context :=
     Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some wy0)
   have hφ_base : SMT.RenamingContext.CoversFV Δbase z!_spec := by
@@ -424,7 +425,32 @@ private theorem chpredDenSpecSomeAt
     simpa [SMT.RenamingContext.denote] using hspec_isSome
   obtain ⟨Φ, hdenΦ⟩ := Option.isSome_iff_exists.mp hspec_some_goal
   refine ⟨hφ_goal, Φ, hdenΦ, ?_⟩
-  exact denote_type_eq_of_typing (typ_t := typ_z!_spec_body) (hden := hdenΦ)
+  -- FV-restricted type compatibility suffices: `z!_spec`'s free variables are
+  -- among `{z, z!}`, both bound by the `z`/`z!` inserts of the body type-context.
+  refine SMT.RenamingContext.denote_type_of_typing_fv
+    typ_z!_spec_body ?_ hφ_goal hdenΦ
+  intro v σ hv hlk
+  have hv' := fv_z!_spec hv
+  rw [List.mem_union_iff] at hv'
+  rcases hv' with hvz | hvz!
+  · have hvz' : v = z := by simpa [fv] using hvz
+    subst v
+    rw [AList.lookup_insert] at hlk
+    cases hlk
+    refine ⟨x₀, ?_, hx₀_ty⟩
+    show Function.update
+      (Function.update (Function.update «Δ» x! (some Yfun)) z! (some wy0))
+      z (some x₀) z = some x₀
+    rw [Function.update_self]
+  · have hvz!' : v = z! := List.mem_singleton.mp hvz!
+    subst v
+    rw [AList.lookup_insert_ne z_ne_z!.symm, AList.lookup_insert] at hlk
+    cases hlk
+    refine ⟨wy0, ?_, hwy0_ty⟩
+    show Function.update
+      (Function.update (Function.update «Δ» x! (some Yfun)) z! (some wy0))
+      z (some x₀) z! = some wy0
+    rw [Function.update_of_ne z_ne_z!.symm, Function.update_self]
 
 private theorem chpredDenSpecTrueAtCast
     {Γ : TypeContext} {«Δ» : RenamingContext.Context} {z!_spec : Term}
@@ -447,6 +473,7 @@ private theorem chpredDenSpecTrueAtCast
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = α' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ cast) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = α' →
@@ -484,15 +511,14 @@ private theorem chpredDenSpecTrueAtCast
             hφY⟧ˢ =
           some Φ ∧
         Φ.fst = zftrue := by
-  obtain ⟨Φ0, X₀!, hden_var_z!, hφ0, hden0, _, hΦ0_true_cast, _⟩ := den_z_at x₀ hx₀_ty hx₀_mem
+  obtain ⟨Φ0, X₀!, hden_var_z!, hφ0, hden0, hX₀_ty, _, hΦ0_true_cast, _⟩ := den_z_at x₀ hx₀_ty hx₀_mem
   obtain ⟨hΦ0_true, hcast0⟩ := hΦ0_true_cast
   have hcast_pfunc :
       cast.IsPFunc ⟦α⟧ᶻ ⟦α'⟧ᶻ :=
     ZFSet.is_func_is_pfunc hcast
   have hx₀_cast_dom : x₀.fst ∈ cast.Dom := by
     simpa [ZFSet.is_func_dom_eq hcast] using hx₀_mem
-  have hX₀_ty : X₀!.snd.fst = α' :=
-    denote_type_eq_of_typing (typ_t := typ_z!) (hden := hden_var_z!)
+  -- `X₀!`'s type tag is now supplied by the strengthened `den_z_at` adequacy clause.
   have hX₀_val :
       X₀!.fst = (@ᶻcast ⟨x₀.fst, hx₀_cast_dom⟩) := by
     symm
@@ -612,6 +638,7 @@ private theorem chpredBodyTotal
               ⟦z!_spec.abstract
                 (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                 some Φ),
+            X₀!.snd.fst = α' ∧
             Φ.snd.fst = SMTType.bool ∧
               (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
                 ∀ (Y : SMT.Dom), Y.snd.fst = α' →
@@ -711,6 +738,12 @@ private theorem chpredBodyTyOf
     (typ_exists :
       (AList.insert z! α' Γ) ⊢ˢ
         (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec)) : SMTType.bool)
+    (respects_exists :
+      ∀ (Yfun W : SMT.Dom), W.snd.fst = α' →
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          (Function.update (Function.update «Δ» x! (some Yfun)) z! (some W))
+          (AList.insert z! α' Γ)
+          (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec)))
     (hbody_total :
       ∀ (Yfun : SMT.Dom)
         (x_1 : Fin [z!].length → SMT.Dom)
@@ -739,8 +772,12 @@ private theorem chpredBodyTyOf
         some D0 := by
     rw [←hgo_exists Yfun x_1 hx_1]
     exact hden_body
+  have hW_ty : (x_1 ⟨0, by simp⟩).snd.fst = α' := by
+    simpa using (hx_1 ⟨0, by simp⟩).1
   have hD0_ty : D0.snd.fst = SMTType.bool :=
-    denote_type_eq_of_typing (typ_t := typ_exists) (hden := hden_exists)
+    SMT.RenamingContext.denote_type_of_typing_fv typ_exists
+      (respects_exists Yfun (x_1 ⟨0, by simp⟩) hW_ty)
+      (hexists_cov Yfun (x_1 ⟨0, by simp⟩)) hden_exists
   have hget_eq :
       (⟦(Term.abstract.go
           (Term.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec))
@@ -2076,6 +2113,7 @@ private theorem chpredLambdaWitness
         x₀.fst.pair Y.fst ∈ (castZF_of_path p).1) :
     ∃ X! : SMT.Dom,
       X.fst.pair X!.fst ∈ (castZF_of_path p.chpred).1 ∧
+      X!.snd.fst = α'.fun SMTType.bool ∧
       ⟦((λˢ [z!]) [α'] (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec))).abstract
           (Function.update «Δ» x! (some X!)) (hcov_lambda_upd X!)⟧ˢ =
         some X! := by
@@ -2117,7 +2155,7 @@ private theorem chpredLambdaWitness
         X hX_mem hX_func hcov_lambda_upd hgo_cov hexists_cov hgo_exists
         hbody_total hbody_ty_of den_app_at den_spec_some_at den_spec_true_at_cast
         den_spec_true_implies_cast den_z_exact_at)
-  refine ⟨X!, ?_, hden_lambda_X!⟩
+  refine ⟨X!, ?_, rfl, hden_lambda_X!⟩
   rw [castZF_of_path, castZF_chpred, ZFSet.lambda_spec]
   refine ⟨hX_mem, hX!zf_mem, ?_⟩
   rw [dif_pos hX_func]
@@ -2130,6 +2168,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
         ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x)
+          (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x)
           (pf₀ : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ₀» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
@@ -2161,6 +2200,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                                                   RenamingContext.CoversFV (Function.update «Δ₀» x! (some X!)) x!_spec)
                                                   (denφ :
                                                   ⟦x!_spec.abstract (Function.update «Δ₀» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path p).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -2173,7 +2213,8 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                                                                     hφY⟧ˢ.isSome =
                                                               true⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun SMTType.bool)
-  (hx : RenamingContext.CoversFV «Δ» x) :
+  (hx : RenamingContext.CoversFV «Δ» x)
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃fun x =>
     match x with
     | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -2200,6 +2241,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                                         ∃ (_ : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec) (_
                                           : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                          X!.snd.fst = α'.fun SMTType.bool ∧
                                           Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path p.chpred).1) ∧
                                               ∀ (Y : SMT.Dom),
@@ -2242,8 +2284,19 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
         rw [fv, List.mem_singleton] at hv
         subst hv
         simp [Function.update]
+      have respects_var_z :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δz St₃.types (.var z) := by
+        intro v σ hv hlk
+        rw [SMT.fv, List.mem_singleton] at hv
+        subst hv
+        cases typ_var_z_St₃ with
+        | var _ _ _ h_lookup_z =>
+          rw [hlk] at h_lookup_z
+          cases h_lookup_z
+          refine ⟨⟨α.defaultZFSet, α, SMTType.mem_toZFSet_of_defaultZFSet⟩, ?_, rfl⟩
+          simp [Δz]
       have ih_var_z := ih (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-        (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δz hcov_var_z pf_var_z
+        (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δz hcov_var_z respects_var_z pf_var_z
       have run_var_z_spec :
           ⦃fun st => ⌜st = St₃⌝⦄
             loosenAux_prf s!"{name}_char_pred" p (.var z)
@@ -2411,7 +2464,8 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               · exact (hv_ne_z (by simpa [fv] using hvz)).elim
               · exact (hv_ne_z! (List.mem_singleton.mp hvz!)).elim
         · intro X denx
-          have hX_ty : X.snd.fst = α.fun SMTType.bool := denote_type_eq_of_typing typ_x denx
+          have hX_ty : X.snd.fst = α.fun SMTType.bool :=
+            SMT.RenamingContext.denote_type_of_typing_fv typ_x respects hx denx
           have hX_mem : X.fst ∈ ⟦α.fun SMTType.bool⟧ᶻ := by
             simpa [hX_ty] using X.snd.snd
           have x!_not_mem_fv_x : x! ∉ SMT.fv x := by
@@ -2453,6 +2507,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                     ⟦z!_spec.abstract
                       (Function.update (fun v => if v = z then some x₀ else «Δ» v) z! (some X₀!)) hφ⟧ˢ =
                       some Φ),
+                  X₀!.snd.fst = α' ∧
                   Φ.snd.fst = SMTType.bool ∧
                     (Φ.fst = zftrue ∧ x₀.fst.pair X₀!.fst ∈ (castZF_of_path p).1) ∧
                       ∀ (Y : SMT.Dom),
@@ -2476,8 +2531,18 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               rw [fv, List.mem_singleton] at hv
               subst hv
               simp [Function.update]
+            have respects_var_z_x₀ :
+                SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ St₃.types (.var z) := by
+              intro v σ hv hlk
+              rw [SMT.fv, List.mem_singleton] at hv
+              subst hv
+              cases typ_var_z_St₃ with
+              | var _ _ _ h_lookup_z =>
+                rw [hlk] at h_lookup_z
+                cases h_lookup_z
+                exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
             have ih_var_z_x₀ := ih (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δx₀ hcov_var_z_x₀ pf_var_z_x₀
+              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δx₀ hcov_var_z_x₀ respects_var_z_x₀ pf_var_z_x₀
             have post_x₀ := ih_var_z_x₀ St₃ (by
               dsimp
               refine ⟨rfl, rfl, ?_, rfl⟩
@@ -2534,9 +2599,20 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               rw [fv, List.mem_singleton] at hv
               subst hv
               simp [Function.update]
+            have respects_var_z_x₀ :
+                SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ St₃.types (.var z) := by
+              intro v σ hv hlk
+              rw [SMT.fv, List.mem_singleton] at hv
+              subst hv
+              cases typ_var_z_St₃ with
+              | var _ _ _ h_lookup_z =>
+                rw [hlk] at h_lookup_z
+                cases h_lookup_z
+                exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
             have exact_var_z_x₀ := loosenAux_prf_exact
               (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
               (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ p Δx₀ hcov_var_z_x₀
+              respects_var_z_x₀
             have post_x₀ := exact_var_z_x₀ St₃ (by
               dsimp
               refine ⟨rfl, rfl, ?_, rfl⟩
@@ -2565,7 +2641,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
               apply Option.get_of_eq_some
               simp [Δx₀]
             obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hden_z_x₀⟩ := post_x₀
-            obtain ⟨_, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
+            obtain ⟨_, _, _, _, _, _, _, _, htot_x₀⟩ := hden_z_x₀ x₀ hden_var_z_x₀
             exact (htot_x₀ Y hY_ty hφY).2 hdenY htrue
           have hfv_spec_sub :
               SMT.fv
@@ -2780,9 +2856,35 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                   (hgo_cov Yfun)).uncurry x_1⟧ˢ.get
                   (hbody_total Yfun x_1 hx_1)).snd.fst =
                 SMTType.bool := by
+            have respects_exists_St₂ :
+                ∀ (Yfun W : SMT.Dom), W.snd.fst = α' →
+                  SMT.RenamingContext.RespectsTypeContextOnFV
+                    (Function.update (Function.update «Δ» x! (some Yfun)) z! (some W))
+                    (AList.insert z! α' St₂.types)
+                    (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec)) := by
+              intro Yfun' W hW_ty v σ hv hlk
+              have hv' := hfv_exists_sub hv
+              rw [List.mem_union_iff] at hv'
+              rcases hv' with hvx | hvz!
+              · -- `v ∈ fv x`: distinct from the fresh `x!`, `z!`; use the top-level `respects`.
+                have hv_ne_x! : v ≠ x! := fun h => x!_not_mem_fv_x (h ▸ hvx)
+                have hv_ne_z! : v ≠ z! := fun h => z!_not_mem_fv_x (h ▸ hvx)
+                rw [AList.lookup_insert_ne hv_ne_z!, St₂_types_eq,
+                  AList.lookup_insert_ne hv_ne_x!] at hlk
+                obtain ⟨d, hd_eq, hd_ty⟩ := respects hvx hlk
+                refine ⟨d, ?_, hd_ty⟩
+                rw [Function.update_of_ne hv_ne_z!, Function.update_of_ne hv_ne_x!]
+                exact hd_eq
+              · -- `v = z!`: bound to `W`, whose tag is `α'` by hypothesis.
+                have hvz!' : v = z! := List.mem_singleton.mp hvz!
+                subst v
+                rw [AList.lookup_insert] at hlk
+                cases hlk
+                exact ⟨W, by rw [Function.update_self], hW_ty⟩
             exact chpredBodyTyOf
               («Δ» := «Δ») (hgo_cov := hgo_cov) (hexists_cov := hexists_cov)
               (hgo_exists := hgo_exists) (typ_exists := typ_exists')
+              (respects_exists := respects_exists_St₂)
               (hbody_total := hbody_total) Yfun x_1 hx_1
           let evalBody
               (Yfun : SMT.Dom)
@@ -2949,7 +3051,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                   (h1 := hφY) (h2 := hφ_base) hag_spec
               simpa [SMT.RenamingContext.denote] using hden_eq.symm.trans hdenY
             exact den_z_exact_at x₀ hx₀_ty hx₀_mem hwy0_ty hφ_base hden_base htrue
-          obtain ⟨X!, hcast_mem, hden_lambda_X!⟩ :=
+          obtain ⟨X!, hcast_mem, hX!_ty, hden_lambda_X!⟩ :=
             chpredLambdaWitness
               (Γ := St₄.types) («Δ» := «Δ») (x := x) (z!_spec := z!_spec)
               (x! := x!) (z := z) (z! := z!)
@@ -2965,7 +3067,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
             apply Option.get_of_eq_some
             exact Function.update_self _ _ _
           let Φtrue : SMT.Dom := ⟨zftrue, .bool, ZFSet.ZFBool.zftrue_mem_𝔹⟩
-          refine ⟨Φtrue, X!, ?_, ?_, ?_, rfl, ?_⟩
+          refine ⟨Φtrue, X!, ?_, ?_, ?_, hX!_ty, rfl, ?_⟩
           · exact hvar_X!
           · intro v hv
             by_cases hvx : v = x!
@@ -3015,8 +3117,18 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                 · exfalso
                   exact hlen_pos (by simp)
               obtain ⟨Dlam, hDlam_raw⟩ := Option.isSome_iff_exists.mp hlam_some
-              have hDlam_ty : Dlam.snd.fst = α'.fun SMTType.bool :=
-                denote_type_eq_of_typing (typ_t := typ_lambda) (hden := hDlam_raw)
+              have hDlam_ty : Dlam.snd.fst = α'.fun SMTType.bool := by
+                -- The lambda's free variables sit inside `fv x` (`hfv_lambda_sub`); on
+                -- those, `Function.update «Δ» x! _` agrees with `«Δ»`, and `St₂.types`
+                -- agrees with `St₁.types`, so the top-level FV-respects `respects` applies.
+                refine SMT.RenamingContext.denote_type_of_typing_fv
+                  typ_lambda ?_ _ hDlam_raw
+                intro v σ hv hlk
+                have hv_x : v ∈ SMT.fv x := hfv_lambda_sub hv
+                have hv_ne : v ≠ x! := fun h => x!_not_mem_fv_x (h ▸ hv_x)
+                rw [St₂_types_eq, AList.lookup_insert_ne hv_ne] at hlk
+                obtain ⟨d, hd_eq, hd_ty⟩ := respects hv_x hlk
+                exact ⟨d, by rw [Function.update_of_ne hv_ne]; exact hd_eq, hd_ty⟩
               have hEq_ty : Y.snd.fst = Dlam.snd.fst := by
                 rw [hY, hDlam_ty]
               obtain ⟨Deq, hDeq_raw, hDeq_ty⟩ :=

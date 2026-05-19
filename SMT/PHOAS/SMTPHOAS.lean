@@ -2,6 +2,7 @@ import SMT.PHOAS.Basic
 import SMT.Syntax
 import Mathlib.Logic.Function.OfArity
 import Mathlib.Data.Fin.Tuple.Curry
+import Extra.Utils
 
 mutual
   /--
@@ -82,3 +83,39 @@ mutual
         t.abstract Δ (Δ_fv t List.mem_cons_self)
       else SMT.Term.abstractList ts Δ (fun t' ht v hv ↦ Δ_fv t' (List.mem_cons_of_mem t ht) v hv) (i.pred h)
 end
+
+namespace SMT
+
+theorem Term.abstract.go.alt_def₂ (vs : List 𝒱) (P : SMT.Term) {α} {Δctx : 𝒱 → _root_.Option α}
+  (αs : List α) (vs_αs_len : vs.length = αs.length)
+  (Δ_isSome : ∀ v ∈ fv P, v ∉ vs → (Δctx v).isSome = true)
+  (tmp₁ :
+    ∀ v ∈ fv P, (Function.updates Δctx vs (List.map (Option.some ·) αs) v).isSome = true) :
+  ((Term.abstract.go P vs Δctx Δ_isSome).uncurry fun ⟨i, hi⟩ => αs[i]'(by rwa [←vs_αs_len])) =
+  (P.abstract (Function.updates Δctx vs (αs.map (Option.some ·))) tmp₁) := by
+  induction vs, αs, vs_αs_len using List.induction₂ generalizing Δctx with
+  | nil_nil =>
+    simp only [List.length_nil, List.map_nil, Term.abstract.go, Function.updates, Function.OfArity.uncurry, Function.FromTypes.uncurry]
+  | cons_cons v₀ vs α₀ αs len_eq ih =>
+    cases vs with
+    | nil =>
+      obtain ⟨⟩ : αs = [] := by rw [←List.length_eq_zero_iff, ←len_eq, List.length_nil]
+      simp only [Function.OfArity.uncurry, List.length_cons, List.length_nil, Nat.reduceAdd,
+        Term.abstract.go, Matrix.head_fin_const, Fin.val_eq_zero, List.getElem_cons_zero,
+        Function.FromTypes.uncurry_apply_succ, Function.FromTypes.uncurry, List.map_cons,
+        List.map_nil, Function.updates]
+    | cons v₁ vs =>
+      obtain ⟨α₁, αs, rfl⟩ := List.exists_cons_of_length_eq_add_one len_eq.symm
+      conv =>
+        lhs
+        simp only [List.reduce_cons_cons]
+        rw [Term.abstract.go, Function.OfArity.uncurry, Function.FromTypes.uncurry]
+        simp only [List.length_cons, Fin.coe_ofNat_eq_mod, Nat.zero_mod, List.getElem_cons_zero,
+          Function.FromTypes.uncurry_apply_succ]
+      conv =>
+        rhs
+        simp [List.map_cons, Function.updates]
+      simp_rw [List.length_cons, List.map_cons] at ih
+      exact ih _ tmp₁
+
+end SMT

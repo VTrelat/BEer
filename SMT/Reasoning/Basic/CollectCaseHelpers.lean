@@ -168,7 +168,7 @@ theorem toDestPair_typing_gen (Γ : SMT.TypeContext) :
         simp only [List.singleton_append, List.getElem?_cons_succ] at hget
         have hj' : j' < acc.length := by
           by_contra h; push_neg at h
-          rw [List.getElem?_eq_none (by omega)] at hget; exact Option.noConfusion hget
+          rw [List.getElem?_eq_none (by omega)] at hget; nomatch hget
         have hj'_t : j' < σs_acc.length := by omega
         refine ⟨by simp; omega, ?_⟩
         rw [List.getElem?_eq_getElem hj'_t] at hget
@@ -1228,6 +1228,7 @@ theorem collect_hbridge.{u}
         (Δ_fv_alt : ∀ v ∈ B.fv P, (Δ_alt v).isSome = true)
         (Δ₀_alt : SMT.RenamingContext.Context),
         RenamingContext.ExtendsOnSourceFV Δ₀_alt Δ_alt P →
+        B.RenWF E_ctx Δ_alt →
         (∀ v ∉ used_St₃, Δ₀_alt v = none) →
         ∀ (T_alt : ZFSet.{u}) (hT_alt : T_alt ∈ ⟦BType.bool⟧ᶻ),
           ⟦P.abstract Δ_alt Δ_fv_alt⟧ᴮ = some ⟨T_alt, ⟨BType.bool, hT_alt⟩⟩ →
@@ -1244,6 +1245,10 @@ theorem collect_hbridge.{u}
       ofFinDom x_fin ∈ 𝒟_val →
       ⟦(B.Term.abstract.go P vs «Δ» (fun v hv hvs => Δ_fv_collect v
         (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ.isSome = true)
+    -- coherence of the binder-extended renaming with E_ctx
+    (P_renwf : ∀ (x_fin : Fin vs.length → B.Dom),
+      (∀ i : Fin vs.length, (x_fin i).snd.fst = τ.get vs.length i) →
+      B.RenWF E_ctx (Function.updates «Δ» vs (List.ofFn fun i => some (x_fin i))))
     : ∀ (x : ZFSet.{u}) (hx_mem : x ∈ ⟦τ⟧ᶻ) (hx_𝒟 : x ∈ 𝒟_val),
       let Wx : SMT.Dom := ⟨(ZFSet.fapply (BType.canonicalIsoSMTType τ).1
         (ZFSet.is_func_is_pfunc (BType.canonicalIsoSMTType τ).2.1)
@@ -1289,6 +1294,7 @@ theorem collect_hbridge.{u}
   have hP_go_den : ⟦(B.Term.abstract.go P vs «Δ» (by
         intro v hv hvs; exact Δ_fv_collect v (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ
       = some ⟨P_val, ⟨P_ty, hP_val⟩⟩ := by convert hP_den using 2
+  have hwf_P : B.RenWF E_ctx Δ_ext_x := P_renwf x_fin (fun i => (hx_fin_typ i).1)
   have hτPx_bool : P_ty = BType.bool := by
     rw [denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp x_fin Δ_fv_P_x] at hP_go_den
     exact (denote_welltyped_eq (t := P.abstract Δ_ext_x Δ_fv_P_x)
@@ -1359,7 +1365,7 @@ theorem collect_hbridge.{u}
     rw [if_neg hv_not_vs, if_neg hv]
   -- Step F: Invoke P_enc_total with Δ₀_hybrid_x as base
   obtain ⟨Δ_P_x, hcov_Px, denT_x', Δ_P_x_extends, hden_Px, hRDom_x⟩ :=
-    P_enc_total Δ_ext_x Δ_fv_P_x Δ₀_hybrid_x Δ₀_hybrid_ext_P_x Δ₀_hybrid_x_none_St₃
+    P_enc_total Δ_ext_x Δ_fv_P_x Δ₀_hybrid_x Δ₀_hybrid_ext_P_x hwf_P Δ₀_hybrid_x_none_St₃
       P_val hP_val h_den_P_x
   -- Step G: Extract denT_x'.fst = P_val from RDom
   have hdenT_x'_fst_eq : denT_x'.fst = P_val := hRDom_x.2

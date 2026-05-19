@@ -112,12 +112,13 @@ theorem TypeContext.entries_subset_insert_of_notMem {Γ : TypeContext} {v : 𝒱
   intro e he
   exact List.mem_cons_of_mem _ he
 
-open Classical in
-noncomputable def TypeContext.abstract (Γ : TypeContext) {𝒯} [DecidableEq 𝒯] («Δ» : SMT.𝒱 → Option 𝒯) :
-  PHOAS.TypeContext 𝒯 := fun x : 𝒯 =>
-    if h : ∃ k, «Δ» k = .some x ∧ k ∈ Γ then
-      Γ.lookup <| choose h
-    else .none
+theorem TypeContext.update_concat (Γ : TypeContext) (xs : List 𝒱) (ys : List SMTType)
+    (x : 𝒱) (y : SMTType) (hlen : xs.length = ys.length) :
+    Γ.update (xs ++ [x]) (ys ++ [y]) (by simp [hlen]) =
+      (Γ.update xs ys hlen).insert x y := by
+  -- TODO: prove via Fin.foldl_succ_last with index casting from (xs ++ [x]).length to xs.length + 1.
+  sorry
+
 
 section
 set_option hygiene false

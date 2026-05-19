@@ -13,6 +13,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
         ∀ («Δ₀» : RenamingContext.Context) (hx : RenamingContext.CoversFV «Δ₀» x)
+          (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x)
           (pf₀ : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ₀» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
@@ -44,6 +45,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
                                                   RenamingContext.CoversFV (Function.update «Δ₀» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ₀» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path pα).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -59,6 +61,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : β →
         ∀ («Δ₀» : RenamingContext.Context) (hx : RenamingContext.CoversFV «Δ₀» x)
+          (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x)
           (pf₀ : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ₀» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
@@ -90,6 +93,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
                                                   RenamingContext.CoversFV (Function.update «Δ₀» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ₀» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = β' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ (castZF_of_path pβ).1) ∧
                                                       ∀ (Y : SMT.Dom),
@@ -102,7 +106,8 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
                                                                     hφY⟧ˢ.isSome =
                                                               true⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun β)
-  (hx : RenamingContext.CoversFV «Δ» x) :
+  (hx : RenamingContext.CoversFV «Δ» x)
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃fun ⟨E, Λ'⟩ ↦ ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
     loosenAux_prf name (castPath.fun hβ pα pβ) x ⦃⇓? ⟨x!, x!_spec⟩ ⟨E', Γ'⟩  =>
           ⌜n ≤ E'.freshvarsc ∧
@@ -123,6 +128,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
                                         ∃ (_denx! : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                           (_denφ : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                            X!.snd.fst = α'.fun β' ∧
                                             Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧
                                                 X.fst.pair X!.fst ∈ (castZF_of_path (castPath.fun hβ pα pβ)).1) ∧
@@ -138,7 +144,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
   mpure pre
   mspec loosenAux_prf_exact
     (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-    (typ_x := typ_x) (𝕔 := castPath.fun hβ pα pβ) («Δ» := «Δ») hx
+    (typ_x := typ_x) (𝕔 := castPath.fun hβ pα pβ) («Δ» := «Δ») hx (respects := respects)
   rename_i out
   obtain ⟨x!, x!_spec⟩ := out
   mrename_i pre
@@ -160,8 +166,8 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
   and_intros <;> try assumption
   intro X denx
   specialize h X denx
-  obtain ⟨Φ, X!, denx!, hφ, denφ, hΦ_ty, hΦ_true_cast, hrest⟩ := h
-  use Φ, X!, denx!, hφ, denφ, hΦ_ty, hΦ_true_cast
+  obtain ⟨Φ, X!, denx!, hφ, denφ, hX!_ty, hΦ_ty, hΦ_true_cast, hrest⟩ := h
+  use Φ, X!, denx!, hφ, denφ, hX!_ty, hΦ_ty, hΦ_true_cast
   intro Y hY_ty hφY
   specialize hrest Y hY_ty hφY
   exact hrest.1

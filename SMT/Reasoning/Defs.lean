@@ -606,14 +606,6 @@ def RValuation (Ξ : B.𝒱 → Option B.Dom) (Θ : SMT.𝒱 → Option SMT.Dom)
   | some d, some d' => d ≘ᶻ d'
   | _, _ => False
 
-
--- theorem BType_iso_prod_of_iso {α β : BType} : ⟦α⟧ᶻ.funs ⟦β⟧ᶻ ≅ᶻ ⟦α.toSMTType⟧ᶻ.funs ⟦β.toSMTType⟧ᶻ := by
---   have ⟨ζ, ζ_isfunc, ζ_bij⟩ := BType_iso_SMTType α
---   have ⟨ξ, ξ_isfunc, ξ_bij⟩ := BType_iso_SMTType β
---   obtain ⟨Φ_isfunc, Φ_bij⟩ := ZFSet.composition_fprod_Image_bijective (A := ⟦α⟧ᶻ) (B := ⟦β⟧ᶻ) (φ_bij := ζ_bij) (ψ_bij := ξ_bij)
---   exists ?_
---   admit
-
 /--
 Given a renaming context for B variables `Δ : B.𝒱 → Option B.Dom`, a renaming context for SMT
 variables can be constructed isomorphically, so that variables themselves are mapped to isomorphic
@@ -722,100 +714,6 @@ theorem RValuation_toSMT (Ξ : B.𝒱 → Option B.Dom) :
     rw [RDom]
     apply And.intro rfl
     rw [retract_of_canonical τ hV]
-
-namespace Function
-
-theorem updates_of_not_mem {α β} [DecidableEq α]
-  (f : α → β) (xs : List α) (ys : List β) (k : α)
-  (hk : k ∉ xs) : (Function.updates f xs ys) k = f k := by
-  induction xs generalizing f ys with
-  | nil => simp [Function.updates]
-  | cons x xs ih =>
-    cases ys with
-    | nil => simp [Function.updates]
-    | cons y ys =>
-      simp at hk
-      simp [Function.updates]
-      rw [ih (Function.update f x y) ys hk.2]
-      simp [Function.update, hk.1]
-
-theorem updates_eq_of_mem_map_some {α β} [DecidableEq α]
-  (f g : α → _root_.Option β) (xs : List α) (ys : List β) (k : α)
-  (hmem : k ∈ xs) (hlen : xs.length = ys.length) :
-  (Function.updates f xs (ys.map _root_.Option.some)) k =
-  (Function.updates g xs (ys.map _root_.Option.some)) k := by
-  induction xs generalizing f g ys with
-  | nil => cases hmem
-  | cons x xs ih =>
-    cases ys with
-    | nil => simp at hlen
-    | cons y ys =>
-      simp at hlen
-      simp [Function.updates] at hmem ⊢
-      rcases hmem with rfl | hmem
-      · by_cases hkxs : k ∈ xs
-        · exact ih (Function.update f k (_root_.Option.some y)) (Function.update g k (_root_.Option.some y)) ys hkxs hlen
-        · rw [Function.updates_of_not_mem (f := Function.update f k (_root_.Option.some y)) (xs := xs) (ys := ys.map _root_.Option.some) (k := k) hkxs]
-          rw [Function.updates_of_not_mem (f := Function.update g k (_root_.Option.some y)) (xs := xs) (ys := ys.map _root_.Option.some) (k := k) hkxs]
-          simp [Function.update]
-      · exact ih (Function.update f x (_root_.Option.some y)) (Function.update g x (_root_.Option.some y)) ys hmem hlen
-
-theorem updates_isSome_of_mem_map_some {α β} [DecidableEq α]
-  (f : α → _root_.Option β) (xs : List α) (ys : List β) (k : α)
-  (hmem : k ∈ xs) (hlen : xs.length = ys.length) :
-  ((Function.updates f xs (ys.map _root_.Option.some)) k).isSome = true := by
-  induction xs generalizing f ys with
-  | nil => cases hmem
-  | cons x xs ih =>
-    cases ys with
-    | nil => simp at hlen
-    | cons y ys =>
-      simp at hlen
-      simp [Function.updates] at hmem ⊢
-      rcases hmem with rfl | hmem
-      · by_cases hkxs : k ∈ xs
-        · exact ih (Function.update f k (_root_.Option.some y)) ys hkxs hlen
-        · rw [Function.updates_of_not_mem (f := Function.update f k (_root_.Option.some y)) (xs := xs) (ys := ys.map _root_.Option.some) (k := k) hkxs]
-          simp [Function.update]
-      · exact ih (Function.update f x (_root_.Option.some y)) ys hmem hlen
-
-end Function
-
-namespace SMT
-
-theorem Term.abstract.go.alt_def₂ (vs : List 𝒱) (P : SMT.Term) {α} {Δctx : 𝒱 → _root_.Option α}
-  (αs : List α) (vs_αs_len : vs.length = αs.length)
-  (Δ_isSome : ∀ v ∈ fv P, v ∉ vs → (Δctx v).isSome = true)
-  (tmp₁ :
-    ∀ v ∈ fv P, (Function.updates Δctx vs (List.map (Option.some ·) αs) v).isSome = true) :
-  ((Term.abstract.go P vs Δctx Δ_isSome).uncurry fun ⟨i, hi⟩ => αs[i]'(by rwa [←vs_αs_len])) =
-  (P.abstract (Function.updates Δctx vs (αs.map (Option.some ·))) tmp₁) := by
-  induction vs, αs, vs_αs_len using List.induction₂ generalizing Δctx with
-  | nil_nil =>
-    simp only [List.length_nil, List.map_nil, Term.abstract.go, Function.updates, Function.OfArity.uncurry, Function.FromTypes.uncurry]
-  | cons_cons v₀ vs α₀ αs len_eq ih =>
-    cases vs with
-    | nil =>
-      obtain ⟨⟩ : αs = [] := by rw [←List.length_eq_zero_iff, ←len_eq, List.length_nil]
-      simp only [Function.OfArity.uncurry, List.length_cons, List.length_nil, Nat.reduceAdd,
-        Term.abstract.go, Matrix.head_fin_const, Fin.val_eq_zero, List.getElem_cons_zero,
-        Function.FromTypes.uncurry_apply_succ, Function.FromTypes.uncurry, List.map_cons,
-        List.map_nil, Function.updates]
-    | cons v₁ vs =>
-      obtain ⟨α₁, αs, rfl⟩ := List.exists_cons_of_length_eq_add_one len_eq.symm
-      conv =>
-        lhs
-        simp only [List.reduce_cons_cons]
-        rw [Term.abstract.go, Function.OfArity.uncurry, Function.FromTypes.uncurry]
-        simp only [List.length_cons, Fin.coe_ofNat_eq_mod, Nat.zero_mod, List.getElem_cons_zero,
-          Function.FromTypes.uncurry_apply_succ]
-      conv =>
-        rhs
-        simp [List.map_cons, Function.updates]
-      simp_rw [List.length_cons, List.map_cons] at ih
-      exact ih _ tmp₁
-
-end SMT
 
 namespace SMT.Typing
 
@@ -1671,3 +1569,70 @@ theorem denote_update_of_notMem {«Δ» : Context} {t : SMT.Term} {x : SMT.𝒱}
     (h2 := coversFV_update_of_notMem (x := x) (d := d) hx h) hag
 
 end SMT.RenamingContext
+
+namespace B.RenamingContext
+
+/-- FV-restricted type compatibility between a SMT-side context and SMT-side type context,
+indexed by a B-side term's free variables. -/
+abbrev RespectsTypeContextOnFV
+    (Dc : SMT.RenamingContext.Context) (Γ : SMT.TypeContext) (t : B.Term) : Prop :=
+  ∀ ⦃v : SMT.𝒱⦄ ⦃τ : SMTType⦄, v ∈ B.fv t → Γ.lookup v = some τ →
+    ∃ d : SMT.Dom, Dc v = some d ∧ d.2.1 = τ
+
+/-- Transport a full respects on a base type-context across a subset extension,
+restricted to FV of a term whose source-FV is covered by the base context. -/
+theorem RespectsTypeContextOnFV.of_subset_fv_in_base
+    {«Δ» : SMT.RenamingContext.Context} {Λ Λ' : SMT.TypeContext} {t : B.Term}
+    (full : SMT.RenamingContext.RespectsTypeContext «Δ» Λ)
+    (sub : Λ ⊆ Λ')
+    (fv_in : ∀ v ∈ B.fv t, v ∈ Λ) :
+    RespectsTypeContextOnFV «Δ» Λ' t := by
+  intro v σ hv hlk
+  have hv_Λ : v ∈ Λ := fv_in v hv
+  obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_Λ)
+  have hσ'_ext : Λ'.lookup v = some σ' := AList.lookup_of_subset sub hσ'
+  rw [hσ'_ext] at hlk
+  cases hlk
+  exact full hσ'
+
+/-- Restrict FV-respects to a subterm. -/
+theorem RespectsTypeContextOnFV.mono_fv
+    {Dc : SMT.RenamingContext.Context} {Γ : SMT.TypeContext} {t s : B.Term}
+    (resp : RespectsTypeContextOnFV Dc Γ t)
+    (sub_fv : ∀ v ∈ B.fv s, v ∈ B.fv t) :
+    RespectsTypeContextOnFV Dc Γ s := fun _ _ hv hlk => resp (sub_fv _ hv) hlk
+
+/-- Transport FV-respects across a subset extension when FVs of subterm sit in base context. -/
+theorem RespectsTypeContextOnFV.transport_fv
+    {Dc : SMT.RenamingContext.Context} {Γ Γ' : SMT.TypeContext} {t s : B.Term}
+    (resp : RespectsTypeContextOnFV Dc Γ t)
+    (sub_fv : ∀ v ∈ B.fv s, v ∈ B.fv t)
+    (Γ_sub : Γ ⊆ Γ')
+    (fv_in_Γ : ∀ v ∈ B.fv s, v ∈ Γ) :
+    RespectsTypeContextOnFV Dc Γ' s := by
+  intro v σ hv hlk
+  have hv_Γ : v ∈ Γ := fv_in_Γ v hv
+  obtain ⟨σ', hσ'⟩ := Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_Γ)
+  have hσ'_Γ' : Γ'.lookup v = some σ' := AList.lookup_of_subset Γ_sub hσ'
+  rw [hσ'_Γ'] at hlk
+  cases hlk
+  exact resp (sub_fv _ hv) hσ'
+
+/-- Inverse of `foldl_insert_preserves_lookup`: if a key is not in the pairs and the folded
+lookup equals `some v`, then so does the base lookup. -/
+theorem foldl_insert_lookup_outside {Γ : SMT.TypeContext} {k : SMT.𝒱} {v : SMTType}
+    {pairs : List (SMT.𝒱 × SMTType)}
+    (hk : ∀ p ∈ pairs, p.1 ≠ k)
+    (hext : (pairs.foldl (fun Γ (p : SMT.𝒱 × SMTType) => AList.insert p.1 p.2 Γ) Γ).lookup k
+      = some v) :
+    Γ.lookup k = some v := by
+  induction pairs generalizing Γ with
+  | nil => exact hext
+  | cons p ps ih =>
+    simp only [List.foldl_cons] at hext
+    have hk_p : p.1 ≠ k := hk p (List.mem_cons_self ..)
+    have h_ins := ih (fun q hq => hk q (List.mem_cons_of_mem _ hq)) hext
+    rw [AList.lookup_insert_ne hk_p.symm] at h_ins
+    exact h_ins
+
+end B.RenamingContext

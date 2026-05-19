@@ -1,6 +1,7 @@
 import SMT.Reasoning.Defs
 import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
+import SMT.Reasoning.Basic.DenotationTotality
 import SMT.Reasoning.Basic.LoosenAuxExact.FunDefault
 import SMT.Reasoning.Basic.LoosenAuxExact.FunAux
 
@@ -12,8 +13,9 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
   (pα_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
-        ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x)
-          (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
+        ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
+            SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
+          ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
             | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -44,6 +46,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                                                   RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = α' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ ↑(castZF_of_path pα).1) ∧
                                                       ∀ (Y : SMT.Dom.{u}),
@@ -64,8 +67,9 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
   (pβ_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : β →
-        ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x)
-          (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
+        ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
+            SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
+          ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
           ⦃fun x =>
             match x with
             | { env := E, types := Λ' } => ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -96,6 +100,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                                                   RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec)
                                                   (_ :
                                                   ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                                  X!.snd.fst = β' ∧
                                                   Φ.snd.fst = SMTType.bool ∧
                                                     (Φ.fst = zftrue ∧ X.fst.pair X!.fst ∈ ↑(castZF_of_path pβ).1) ∧
                                                       ∀ (Y : SMT.Dom.{u}),
@@ -115,6 +120,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                                                                     X.fst.pair Y.fst ∈ ↑(castZF_of_path pβ).1⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun β)
   («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x)
+  (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x)
   (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true) :
   ⦃fun x =>
     match x with
@@ -142,6 +148,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                                         ∃ (_ : ⟦(Term.var x!).abstract (Function.update «Δ» x! (some X!)) (pf x! X!)⟧ˢ = some X!)
                                           (hφ : RenamingContext.CoversFV (Function.update «Δ» x! (some X!)) x!_spec) (_
                                           : ⟦x!_spec.abstract (Function.update «Δ» x! (some X!)) hφ⟧ˢ = some Φ),
+                                          X!.snd.fst = α'.fun β' ∧
                                           Φ.snd.fst = SMTType.bool ∧
                                             (Φ.fst = zftrue ∧
                                                 X.fst.pair X!.fst ∈ ↑(castZF_of_path (castPath.fun hβ pα pβ)).1) ∧
@@ -206,11 +213,22 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
         subst hv
         erw [Function.update_self]
         rfl
+      have respects_var_a :
+          SMT.RenamingContext.RespectsTypeContextOnFV Δa St₃.types (.var a) := by
+        intro v σ hv hlk
+        rw [SMT.fv, List.mem_singleton] at hv
+        subst hv
+        cases typ_var_a_St₃ with
+        | var _ _ _ h_lookup_a =>
+          rw [hlk] at h_lookup_a
+          cases h_lookup_a
+          refine ⟨⟨α.defaultZFSet, α, SMTType.mem_toZFSet_of_defaultZFSet⟩, ?_, rfl⟩
+          simp [Δa]
       have ih_a :=
         pα_ih_exact
           (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
           (name := s!"{name}_funFun_arg") (x := .var a)
-          typ_var_a_St₃ Δa hcov_var_a pf_var_a
+          typ_var_a_St₃ Δa hcov_var_a respects_var_a pf_var_a
       mspec (Std.Do.Triple.and _
         (funRunVarSpec (p := pα) (name := s!"{name}_funFun_arg") (z := a) (St := St₃))
         ih_a)
@@ -251,11 +269,22 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
             rcases hv with rfl | hv
             · exact Or.inl rfl
             · exact Or.inr (keys₄ (List.mem_of_mem_erase hv))
+          have respects_var_b :
+              SMT.RenamingContext.RespectsTypeContextOnFV Δb St₅.types (.var b) := by
+            intro v σ hv hlk
+            rw [SMT.fv, List.mem_singleton] at hv
+            subst hv
+            cases typ_var_b_St₅ with
+            | var _ _ _ h_lookup_b =>
+              rw [hlk] at h_lookup_b
+              cases h_lookup_b
+              refine ⟨⟨β.defaultZFSet, β, SMTType.mem_toZFSet_of_defaultZFSet⟩, ?_, rfl⟩
+              simp [Δb]
           have ih_b :=
             pβ_ih_exact
               (Λ := St₅.types) (n := St₅.env.freshvarsc) (used := St₅.env.usedVars)
               (name := s!"{name}_funFun_ret") (x := .var b)
-              typ_var_b_St₅ Δb hcov_var_b pf_var_b
+              typ_var_b_St₅ Δb hcov_var_b respects_var_b pf_var_b
           mspec (Std.Do.Triple.and _
             (funRunVarSpec (p := pβ) (name := s!"{name}_funFun_ret") (z := b) (St := St₅))
             ih_b)
@@ -577,7 +606,8 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                   fv_a!_spec fv_b!_spec fv_hdefault
               · intro X denx
                 have hX_ty : X.snd.fst = α.fun β := by
-                  exact denote_type_eq_of_typing (typ_t := typ_x) (hden := denx)
+                  exact SMT.RenamingContext.denote_type_of_typing_fv
+                    (htyp := typ_x) (hden := denx) (hcompat := respects)
                 have hX_mem : X.fst ∈ ⟦α.fun β⟧ᶻ := by
                   erw [← hX_ty]
                   exact X.snd.snd
@@ -1007,6 +1037,8 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                   exact ⟨Dapp, hDapp_ty, hDapp_val, hden_app⟩
                 have default_spec_at :
                     ∀ (Yfun wy0 Dapp : SMT.Dom)
+                      (hYfun_ty : Yfun.snd.fst = α'.fun β')
+                      (hwy0_ty : wy0.snd.fst = α')
                       (hden_app :
                         ⟦((@ˢTerm.var x!) (Term.var a!)).abstract
                             (Function.update (Function.update «Δ» x! (some Yfun)) a! (some wy0))
@@ -1023,13 +1055,18 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                           some Φd ∧
                         Φd.snd.fst = SMTType.bool ∧
                         (Dapp.fst = β'.defaultZFSet → Φd.fst = zftrue) := by
-                  intro Yfun wy0 Dapp hden_app
-                  exact funDefaultSpecAt
+                  intro Yfun wy0 Dapp hYfun_ty hwy0_ty hden_app
+                  refine funDefaultSpecAt
                     («Δ» := Function.update (Function.update «Δ» x! (some Yfun)) a! (some wy0))
                     (St₁ := St₆) (St₂ := St₇)
                     (name := s!"{name}_funFun_default")
                     (t := .app (.var x!) (.var a!)) (spec := hdefault)
-                    keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) hrun_default Dapp hden_app
+                    keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) ?_ hrun_default Dapp hden_app
+                  exact respectsAppVarVar
+                    (hx_ne_a := x!_ne_a!)
+                    (hx_lookup := SMT.Typing.varE typ_var_x!_St₆)
+                    (ha_lookup := SMT.Typing.varE typ_var_a!_St₆')
+                    (hXd_ty := hYfun_ty) (hAd_ty := hwy0_ty)
                 have hex_fun_spec :
                     ∃ Φ : SMT.Dom,
                       ⟦fun_spec.abstract (Function.update «Δ» x! (some X!)) hφX!⟧ˢ = some Φ ∧
@@ -1138,8 +1175,8 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                         den_app_at Y wy0 hY_ty hY_func hwy0_ty
                       exact ⟨Dapp, hDapp_ty, hDapp_val, hden_app⟩)
                     (default_spec_at := by
-                      intro wy0 Dapp hden_app
-                      exact default_spec_at Y wy0 Dapp hden_app)
+                      intro wy0 Dapp hwy0_ty hden_app
+                      exact default_spec_at Y wy0 Dapp hY_ty hwy0_ty hden_app)
                     (hφY := hφY)
                 have hfun_spec_true_implies_cast :
                     ∀ (Y : SMT.Dom), Y.snd.fst = α'.fun β' →
@@ -1191,14 +1228,19 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                     (den_app_at := den_app_at)
                     (default_spec_at := default_spec_at)
                     (default_true_implies_default_at := by
-                      intro Yfun wy0 Dapp hden_app hφd Φd hdenΦd htrueΦd
-                      exact funDefaultTrueImpliesDefaultAt
+                      intro Yfun wy0 Dapp hYfun_ty hwy0_ty hden_app hφd Φd hdenΦd htrueΦd
+                      refine funDefaultTrueImpliesDefaultAt
                         («Δ» := Function.update (Function.update «Δ» x! (some Yfun)) a! (some wy0))
                         (St₁ := St₆) (St₂ := St₇)
                         (name := s!"{name}_funFun_default")
                         (t := .app (.var x!) (.var a!)) (spec := hdefault)
-                        keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) hrun_default
-                        Dapp hden_app hφd hdenΦd htrueΦd)
+                        keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) ?_ hrun_default
+                        Dapp hden_app hφd hdenΦd htrueΦd
+                      exact respectsAppVarVar
+                        (hx_ne_a := x!_ne_a!)
+                        (hx_lookup := SMT.Typing.varE typ_var_x!_St₆)
+                        (ha_lookup := SMT.Typing.varE typ_var_a!_St₆')
+                        (hXd_ty := hYfun_ty) (hAd_ty := hwy0_ty))
                     (hφY := hφY)
                     (hdenΦY := hdenΦY)
                     (htrue := htrueΦY)
@@ -1209,7 +1251,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                   exact (Classical.choose_spec hex_fun_spec).2.1
                 have hΦ_true : Φ.fst = zftrue := by
                   exact (Classical.choose_spec hex_fun_spec).2.2
-                refine ⟨Φ, X!, hden_var_x!, hφX!, hden_fun_spec', hΦ_ty, ?_, ?_⟩
+                refine ⟨Φ, X!, hden_var_x!, hφX!, hden_fun_spec', rfl, hΦ_ty, ?_, ?_⟩
                 · exact ⟨hΦ_true, hcast_mem⟩
                 · intro Y hY_ty hφY
                   refine ⟨hfun_spec_total Y hY_ty hφY, ?_⟩
