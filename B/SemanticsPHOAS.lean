@@ -333,6 +333,14 @@ local notation "⟦" t "⟧ᴮ" => denote t
 
 abbrev Dom := Σ' (x : ZFSet) (τ : BType), x ∈ τ.toZFSet
 
+open Classical in
+noncomputable def TypeContext.abstract (Γ : TypeContext) {«Δ» : B.𝒱 → Option B.Dom} :
+  PHOAS.TypeContext B.Dom := fun ⟨x, τ, h⟩ ↦
+    if h : ∃ k, «Δ» k = .some ⟨x, τ, h⟩ ∧ Γ.lookup k = τ then
+      Γ.lookup <| choose h
+    else .none
+
+
 /-- The intrinsic type of a `Dom` element is its second component. -/
 instance instHasTypeDom : PHOAS.HasType Dom where
   type d := d.2.1

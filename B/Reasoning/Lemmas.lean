@@ -385,9 +385,10 @@ theorem PHOAS.TypeContext.abstract_of_mem
   (h : «Δ» v = some v') (v_mem_Γ : v ∈ Γ) :
     (Γ.abstract («Δ» := «Δ») v') = Γ.lookup v := by
   unfold TypeContext.abstract
-  rw [dite_cond_eq_true (eq_true ⟨v, h, v_mem_Γ⟩)]
-  generalize_proofs hv'
-  obtain ⟨x_def, x_mem_Γ⟩ := choose_spec hv'
+  dsimp
+  rw [dif_pos (by exists v, h; simp only [Option.some.injEq, forall_eq', hΓΔ, h])]
+  generalize_proofs _ hv'
+  obtain ⟨x_def, x_lookup_Γ⟩ := choose_spec hv'
   set x := choose hv'
   rw [Option.ext_iff]
   intro τ
@@ -411,9 +412,7 @@ theorem PHOAS.TypeContext.abstract_of_mem
       rw [←(hΓΔ x ξ).mp hx v' x_def]
     · intro hv'
       injection hv' with hv'
-      obtain ⟨α, hα⟩ := Option.isSome_iff_exists.mp <| AList.lookup_isSome.mpr x_mem_Γ
-      rw [hα, Option.some_inj]
-      rwa [hΓΔ x α |>.mp hα v' x_def] at hv'
+      rwa [x_lookup_Γ, Option.some_inj]
 
 /--
   `«Δ»` is well-typed for `Γ`: every B-variable of `Γ` is assigned the intrinsic
@@ -506,17 +505,21 @@ theorem B.RenWF.updates_ofFn {Γ : B.TypeContext} {«Δ» : B.𝒱 → Option B.
   the same conclusion from an intrinsic-type compatibility hypothesis.
 -/
 theorem PHOAS.TypeContext.abstract_eq_of_coh
-  {𝒱} [DecidableEq 𝒱] {«Δ» : B.𝒱 → Option 𝒱} {Γ : TypeContext} {v : B.𝒱} {v' : 𝒱} {τ : BType}
+  {«Δ» : B.𝒱 → Option Dom} {Γ : TypeContext} {v : B.𝒱} {v' : Dom} {τ : BType}
   (coh : ∀ a b d, «Δ» a = some d → «Δ» b = some d → a ∈ Γ → b ∈ Γ → Γ.lookup a = Γ.lookup b)
-  (h : «Δ» v = some v') (hv : Γ.find? v = some τ) :
+  (h : «Δ» v = some v') (hv : Γ.find? v = some τ) (wf : RenWF Γ «Δ») :
     Γ.abstract («Δ» := «Δ») v' = some τ := by
-  have v_mem : v ∈ Γ := TypeContext.find_in_dom hv
-  unfold TypeContext.abstract
-  rw [dite_cond_eq_true (eq_true ⟨v, h, v_mem⟩)]
-  generalize_proofs hv'
-  obtain ⟨x_def, x_mem⟩ := choose_spec hv'
-  rw [coh _ v v' x_def h x_mem v_mem]
-  exact hv
+  dsimp [TypeContext.abstract]
+  split_ifs with hv'
+  · obtain ⟨x_def, x_mem⟩ := choose_spec hv'
+    set x := choose hv'
+    replace x_mem : x ∈ Γ := by grind only [AList.lookup_eq_none]
+    rw [coh _ v v' x_def h x_mem (TypeContext.find_in_dom hv)]
+    exact hv
+  · push_neg at hv'
+    specialize hv' v h
+    nomatch hv' <| wf v v' h (TypeContext.find_in_dom hv)
+
 
 /-- Equation lemma: `abstract` of a `cprod` is the `cprod` of the abstractions. -/
 theorem B.Term.abstract_cprod {α} (S T : B.Term) («Δ» : B.𝒱 → Option α)
@@ -699,11 +702,16 @@ theorem TypeContext.abstract_updates_eq {Γ : B.TypeContext} {«Δ» : B.𝒱 �
     rw [PHOAS.TypeContext.update_lookup_self_of_agree agree]
     -- LHS: the `dite` condition holds via the bound variable `vs[i]`.
     unfold TypeContext.abstract
-    have hcond : ∃ k, «Δ'» k = some (v i) ∧ k ∈ vs.zipToAList αs ∪ Γ :=
-      ⟨vs[i.1], hΔ'_mem i, AList.mem_union.mpr (Or.inl
-        (AList.mem_zipToAList_of_mem vs_nodup vs_αs_len (List.getElem_mem i.2)))⟩
+    have hcond : ∃ k, «Δ'» k = some (v i) ∧
+        (vs.zipToAList αs ∪ Γ).lookup k = some (v i).2.1 := by
+      refine ⟨vs[i.1], hΔ'_mem i, ?_⟩
+      rw [AList.lookup_union_left
+          (AList.mem_zipToAList_of_mem vs_nodup vs_αs_len (List.getElem_mem i.2)),
+        AList.zipToAList_lookup_getElem vs_nodup vs_αs_len i.2]
+      simpa using (v_typed i).symm
+    dsimp
     rw [dif_pos hcond]
-    obtain ⟨k_def, k_mem⟩ := choose_spec hcond
+    obtain ⟨k_def, k_lookup⟩ := choose_spec hcond
     set k := choose hcond with hk
     by_cases hk_vs : k ∈ vs
     · -- the chosen witness is a bound variable.
@@ -719,35 +727,44 @@ theorem TypeContext.abstract_updates_eq {Γ : B.TypeContext} {«Δ» : B.𝒱 �
       simpa using this
     · -- the chosen witness lives in `Γ`.
       rw [hΔ'_notMem k hk_vs] at k_def
-      have k_Γ : k ∈ Γ :=
-        (AList.mem_union.mp k_mem).resolve_left (fun h => hk_vs (AList.mem_zipToAList h))
-      rw [AList.lookup_union_right (fun h => hk_vs (AList.mem_zipToAList h))]
+      have k_zip : k ∉ vs.zipToAList αs := fun h => hk_vs (AList.mem_zipToAList h)
+      rw [AList.lookup_union_right k_zip] at k_lookup
+      have k_Γ : k ∈ Γ := by grind only [AList.lookup_eq_none]
+      rw [AList.lookup_union_right k_zip]
       rw [wf k (v i) k_def k_Γ]
       simpa using (v_typed i)
   · -- `e ∉ range v`.
     push_neg at he
     rw [PHOAS.TypeContext.update_lookup_not_self he]
     unfold TypeContext.abstract
+    rcases e with ⟨ex, eτ, eh⟩
+    dsimp
     -- the two `dite` conditions are equivalent.
-    have cond_iff : (∃ k, «Δ'» k = some e ∧ k ∈ vs.zipToAList αs ∪ Γ)
-        ↔ (∃ k, «Δ» k = some e ∧ k ∈ Γ) := by
+    have cond_iff : (∃ k, «Δ'» k = some ⟨ex, eτ, eh⟩ ∧
+          (vs.zipToAList αs ∪ Γ).lookup k = some eτ)
+        ↔ (∃ k, «Δ» k = some ⟨ex, eτ, eh⟩ ∧ Γ.lookup k = some eτ) := by
       constructor
-      · rintro ⟨k, k_def, k_mem⟩
+      · rintro ⟨k, k_def, k_lookup⟩
         have hk_vs : k ∉ vs := by
           intro hk
           obtain ⟨j, hjlen, hj⟩ := List.getElem_of_mem hk
           rw [← hj, hΔ'_mem ⟨j, hjlen⟩] at k_def
           exact he ⟨j, hjlen⟩ (Option.some.inj k_def)
-        exact ⟨k, hΔ'_notMem k hk_vs ▸ k_def,
-          (AList.mem_union.mp k_mem).resolve_left (fun h => hk_vs (AList.mem_zipToAList h))⟩
-      · rintro ⟨k, k_def, k_mem⟩
-        have hk_vs : k ∉ vs := fun hk => vs_Γ_disj k hk k_mem
-        exact ⟨k, hΔ'_notMem k hk_vs ▸ k_def, AList.mem_union.mpr (Or.inr k_mem)⟩
-    by_cases hcond : ∃ k, «Δ» k = some e ∧ k ∈ Γ
-    · have hcond' : ∃ k, «Δ'» k = some e ∧ k ∈ vs.zipToAList αs ∪ Γ := cond_iff.mpr hcond
+        have k_zip : k ∉ vs.zipToAList αs := fun h => hk_vs (AList.mem_zipToAList h)
+        refine ⟨k, hΔ'_notMem k hk_vs ▸ k_def, ?_⟩
+        rw [← k_lookup, AList.lookup_union_right k_zip]
+      · rintro ⟨k, k_def, k_lookup⟩
+        have k_Γ : k ∈ Γ := by grind only [AList.lookup_eq_none]
+        have hk_vs : k ∉ vs := fun hk => vs_Γ_disj k hk k_Γ
+        have k_zip : k ∉ vs.zipToAList αs := fun h => hk_vs (AList.mem_zipToAList h)
+        refine ⟨k, hΔ'_notMem k hk_vs ▸ k_def, ?_⟩
+        rw [AList.lookup_union_right k_zip, k_lookup]
+    by_cases hcond : ∃ k, «Δ» k = some ⟨ex, eτ, eh⟩ ∧ Γ.lookup k = some eτ
+    · have hcond' : ∃ k, «Δ'» k = some ⟨ex, eτ, eh⟩ ∧
+          (vs.zipToAList αs ∪ Γ).lookup k = some eτ := cond_iff.mpr hcond
       rw [dif_pos hcond', dif_pos hcond]
-      obtain ⟨k₁_def, k₁_mem⟩ := choose_spec hcond'
-      obtain ⟨k₂_def, k₂_mem⟩ := choose_spec hcond
+      obtain ⟨k₁_def, k₁_lookup⟩ := choose_spec hcond'
+      obtain ⟨k₂_def, k₂_lookup⟩ := choose_spec hcond
       set k₁ := choose hcond' with hk₁
       set k₂ := choose hcond with hk₂
       have hk₁_vs : k₁ ∉ vs := by
@@ -755,10 +772,13 @@ theorem TypeContext.abstract_updates_eq {Γ : B.TypeContext} {«Δ» : B.𝒱 �
         obtain ⟨j, hjlen, hj⟩ := List.getElem_of_mem hk
         rw [← hj, hΔ'_mem ⟨j, hjlen⟩] at k₁_def
         exact he ⟨j, hjlen⟩ (Option.some.inj k₁_def)
-      have k₁_Γ : k₁ ∈ Γ :=
-        (AList.mem_union.mp k₁_mem).resolve_left (fun h => hk₁_vs (AList.mem_zipToAList h))
-      rw [AList.lookup_union_right (fun h => hk₁_vs (AList.mem_zipToAList h))]
-      exact B.coh_of_wf wf k₁ k₂ e (hΔ'_notMem k₁ hk₁_vs ▸ k₁_def) k₂_def k₁_Γ k₂_mem
+      have k₁_zip : k₁ ∉ vs.zipToAList αs := fun h => hk₁_vs (AList.mem_zipToAList h)
+      rw [AList.lookup_union_right k₁_zip] at k₁_lookup
+      have k₁_Γ : k₁ ∈ Γ := by grind only [AList.lookup_eq_none]
+      have k₂_Γ : k₂ ∈ Γ := by grind only [AList.lookup_eq_none]
+      rw [AList.lookup_union_right k₁_zip]
+      exact B.coh_of_wf wf k₁ k₂ ⟨ex, eτ, eh⟩
+        (hΔ'_notMem k₁ hk₁_vs ▸ k₁_def) k₂_def k₁_Γ k₂_Γ
     · rw [dif_neg (fun h => hcond (cond_iff.mp h)), dif_neg hcond]
 
 /-- Generic `List.foldl` ↔ `Fin.foldl` bridge: a left fold over a list equals the
@@ -875,7 +895,7 @@ theorem Typing.of_abstract
       enter [2,1,1]
       apply v'_def
     rw [Option.get_some]
-    exact PHOAS.Typing.var (PHOAS.TypeContext.abstract_eq_of_coh (_root_.B.coh_of_wf wf) v'_def ih)
+    exact PHOAS.Typing.var (PHOAS.TypeContext.abstract_eq_of_coh (_root_.B.coh_of_wf wf) v'_def ih wf)
   | int =>
     unfold Term.abstract
     exact PHOAS.Typing.int
@@ -1347,11 +1367,11 @@ theorem WFTC.of_abstract {«Δ» : 𝒱 → Option B.Dom} {Γ : B.TypeContext} :
   wf := by
     rintro ⟨V, τ, hV⟩ τ' h
     dsimp
-    unfold TypeContext.abstract at h
+    dsimp [TypeContext.abstract] at h
     split_ifs at h with Δ_eq
-    let v' := choose Δ_eq
-    obtain _ := choose_spec Δ_eq
-    admit
+    obtain ⟨eq, mem_Γ⟩ := Classical.choose_spec Δ_eq
+    rw [mem_Γ] at h
+    injections
 
 theorem fv_simplifier_aux_add {x y} : fv (simplifier_aux_add x y) ⊆ fv x ++ fv y := by
   induction x with

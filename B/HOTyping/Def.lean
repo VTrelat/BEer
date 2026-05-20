@@ -79,11 +79,4 @@ theorem TypeContext.update_lookup_iff {𝒱} [DecidableEq 𝒱] {n} {Γ : TypeCo
 
 end PHOAS
 
-open Classical in
-noncomputable def TypeContext.abstract (Γ : TypeContext) {𝒱} [DecidableEq 𝒱] {«Δ» : B.𝒱 → Option 𝒱} :
-  PHOAS.TypeContext 𝒱 := fun x : 𝒱 =>
-    if h : ∃ k, «Δ» k = .some x ∧ k ∈ Γ then
-      Γ.lookup <| choose h
-    else .none
-
 end B
