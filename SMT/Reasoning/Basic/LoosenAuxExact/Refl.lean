@@ -8,7 +8,7 @@ open Std.Do SMT ZFSet Classical
 theorem loosenAux_prf_exact.refl («Δ» : RenamingContext.Context) {α : SMTType}
   (hα : α = SMTType.int ∨ α = SMTType.bool ∨ α = SMTType.unit)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String}
-  {x : Term} (typ_x : Λ ⊢ˢ x : α) (hx : RenamingContext.CoversFV «Δ» x)
+  {x : Term} (typ_x : Λ ⊢ˢ x : α) (hbv_x : ∀ v ∈ bv x, v ∈ used) (hx : RenamingContext.CoversFV «Δ» x)
   (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!),
     (Function.update «Δ» x! (some X!) v).isSome = true)
   (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
@@ -99,6 +99,7 @@ theorem loosenAux_prf_exact.refl («Δ» : RenamingContext.Context) {α : SMTTyp
       · exact Typing.weakening
           (h := TypeContext.entries_subset_insert_of_notMem x!_fresh)
           (typ := typ_x)
+          (hbv := Typing.bv_notMem_insert_of_fresh typ_x (fun h => x!_not_used (hbv_x x! h)))
     · rw [St₂_types_eq]
       apply Typing.var
       exact AList.lookup_insert St₁.types
@@ -109,6 +110,7 @@ theorem loosenAux_prf_exact.refl («Δ» : RenamingContext.Context) {α : SMTTyp
       · exact Typing.weakening
           (h := TypeContext.entries_subset_insert_of_notMem x!_fresh)
           (typ := typ_x)
+          (hbv := Typing.bv_notMem_insert_of_fresh typ_x (fun h => x!_not_used (hbv_x x! h)))
     · rw [fv, fv, List.cons_append, List.nil_append, List.cons_subset, List.mem_union_iff]
       exact ⟨.inr <| List.mem_of_mem_head? rfl, fun _ h ↦ List.mem_union_left h {x!}⟩
     · intro X denx

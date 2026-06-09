@@ -355,7 +355,8 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
     simp only [B.bv] at h
     rw [List.nodup_append] at h
     exact h.2.1
-  mspec D_ih (E := E) (Λ := St₀.types) (α := .set τ) typ_D
+  mspec (Std.Do.Triple.and _ (Std.Do.Triple.and _
+    (D_ih (E := E) (Λ := St₀.types) (α := .set τ) typ_D
       («Δ» := «Δ») Δ_fv_D
       (Δ₀ := Δ₀) Δ₀_ext_D (used := used) Δ₀_none_out (T := 𝒟) (hT := h𝒟)
       den_D vars_used_D (n := St₀.env.freshvarsc)
@@ -363,16 +364,23 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       hD_bv_nodup
       (respects.mono_fv (fun v hv => by rw [B.fv]; exact List.mem_append_left _ hv))
       (fun v hv => fv_in_Λ v (by rw [B.fv]; exact List.mem_append_left _ hv))
-      wf
+      wf)
+    (encodeTerm_bv_used E (t := D) (used := St₀.env.usedVars)
+      (n := St₀.env.freshvarsc) (decl := St₀.env.declarations)))
+    (encodeTerm_bv_notMem_used E (t := D) (used := St₀.env.usedVars)
+      (n := St₀.env.freshvarsc) (decl := St₀.env.declarations)))
   clear D_ih
   rename_i out_D
   obtain ⟨D_enc, τD⟩ := out_D
   mrename_i pre
   mintro ∀St₁
   mpure pre
-  obtain ⟨used_sub_St₁, St₀_sub_St₁, St₁_keys_sub, covers_D, rfl, typ_D_enc,
+  dsimp at pre
+  obtain ⟨⟨⟨used_sub_St₁, St₀_sub_St₁, St₁_keys_sub, covers_D, rfl, typ_D_enc,
     D_preserves_types,
-    Δ_D, Δ_D_covers, Δ_D_extends, Δ_D_src_ext, Δ_D_none, denD', den_D_enc, D_RDom⟩ := pre
+    Δ_D, Δ_D_covers, Δ_D_extends, Δ_D_src_ext, Δ_D_none, denD', den_D_enc, D_RDom⟩,
+    bv_D_enc_used, _⟩,
+    bv_D_enc_notMem_used, _⟩ := pre
   have Δ_D_wt : ∀ v (d : SMT.Dom), Δ_D v = some d →
       ∀ τ_v, St₁.types.lookup v = some τ_v → d.snd.fst = τ_v :=
     SMT.RenamingContext.ExtendsOnSourceFV.wt Δ_D_src_ext typ_D_enc
@@ -578,8 +586,35 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       obtain ⟨St₁_sub_St₂_types, St₂_sub_St₃_types, St₄_sub_St₅_types, St₁_sub_St₅_types⟩ :=
         St_chain_helper vs_nodup zs_nodup St₂_types St₃_types St₅_types
           St₃_sub_St₄_types vs_disj_St₁ zs_not_types
+      have hbv_D_notMem_St₅ : ∀ v ∈ SMT.bv D_enc, v ∉ St₅.types := by
+        intro v hv hmem
+        rw [St₅_types] at hmem
+        have hv_St₄_used : v ∈ St₄.env.usedVars :=
+          St₃_sub_St₄ (St₁_sub_St₃_used (bv_D_enc_used v hv))
+        have hv_not_zs : v ∉ zs := fun hz => zs_not_used v hz hv_St₄_used
+        have hv_St₄ : v ∈ St₄.types := by
+          apply AList.mem_of_mem_foldl_insert' hmem
+          intro hmap
+          rw [List.mem_map] at hmap
+          obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmap
+          exact hv_not_zs (List.of_mem_zip hab).1
+        have hv_St₃_used : v ∈ St₃.env.usedVars := St₁_sub_St₃_used (bv_D_enc_used v hv)
+        have hv_not_St₁ : v ∉ St₁.types := SMT.Typing.bv_notMem_context typ_D_enc v hv
+        have hv_not_St₀_used : v ∉ St₀.env.usedVars := bv_D_enc_notMem_used v hv
+        have hv_not_vs : v ∉ vs := fun hvs => hv_not_St₀_used (St₀_used_eq ▸ vars_used_vs v hvs)
+        have hv_not_P_vars : v ∉ P.vars := fun hpv => hv_not_St₀_used (St₀_used_eq ▸ vars_used_P v hpv)
+        have hv_not_St₃ : v ∉ St₃.types := by
+          rw [St₃_types, St₂_types]
+          intro hmem3
+          apply hv_not_St₁
+          apply AList.mem_of_mem_foldl_insert' hmem3
+          intro hmap
+          rw [List.mem_map] at hmap
+          obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmap
+          exact hv_not_vs (List.of_mem_zip hab).1
+        exact P_preserves_types v hv_St₃_used hv_not_St₃ hv_not_P_vars hv_St₄
       have typ_D_enc_St₅ : St₅.types ⊢ˢ D_enc : τ.toSMTType.fun SMTType.bool :=
-        SMT.Typing.weakening St₁_sub_St₅_types typ_D_enc
+        SMT.Typing.weakening St₁_sub_St₅_types typ_D_enc hbv_D_notMem_St₅
       have St₅_keys_sub : AList.keys St₅.types ⊆ St₅.env.usedVars := by
         rw [St₅_used]
         intro v hv
@@ -599,6 +634,14 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
         · exact List.mem_append_right _ (St₄_keys_sub h_St₄)
       mspec castMembership_spec.{u} (n := St₅.env.freshvarsc) (used := St₅.env.usedVars)
         toPairl_typ typ_D_enc_St₅
+        (by
+          intro v hv
+          rw [bv_toPairl_nil (ts := List.map SMT.Term.var zs)
+            (fun t ht => by simp only [List.mem_map] at ht; obtain ⟨z, _, rfl⟩ := ht; simp [SMT.bv])] at hv
+          exact absurd hv (List.not_mem_nil))
+        (fun v hv => by
+          rw [St₅_used]
+          exact List.mem_append_right _ (St₃_sub_St₄ (St₁_sub_St₃_used (bv_D_enc_used v hv))))
       rename_i out_cm
       obtain ⟨z_mem_D', τ_cm⟩ := out_cm
       mrename_i pre_cm
@@ -943,8 +986,35 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
         obtain ⟨St₁_sub_St₂_types, St₂_sub_St₃_types, St₄_sub_St₅_types, St₁_sub_St₅_types⟩ :=
           St_chain_helper vs_nodup zs_nodup St₂_types St₃_types St₅_types
             St₃_sub_St₄_types vs_disj_St₁ zs_not_types
+        have hbv_D_notMem_St₅ : ∀ v ∈ SMT.bv D_enc, v ∉ St₅.types := by
+          intro v hv hmem
+          rw [St₅_types] at hmem
+          have hv_St₄_used : v ∈ St₄.env.usedVars :=
+            St₃_sub_St₄ (St₁_sub_St₃_used (bv_D_enc_used v hv))
+          have hv_not_zs : v ∉ zs := fun hz => zs_not_used v hz hv_St₄_used
+          have hv_St₄ : v ∈ St₄.types := by
+            apply AList.mem_of_mem_foldl_insert' hmem
+            intro hmap
+            rw [List.mem_map] at hmap
+            obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmap
+            exact hv_not_zs (List.of_mem_zip hab).1
+          have hv_St₃_used : v ∈ St₃.env.usedVars := St₁_sub_St₃_used (bv_D_enc_used v hv)
+          have hv_not_St₁ : v ∉ St₁.types := SMT.Typing.bv_notMem_context typ_D_enc v hv
+          have hv_not_St₀_used : v ∉ St₀.env.usedVars := bv_D_enc_notMem_used v hv
+          have hv_not_vs : v ∉ vs := fun hvs => hv_not_St₀_used (St₀_used_eq ▸ vars_used_vs v hvs)
+          have hv_not_P_vars : v ∉ P.vars := fun hpv => hv_not_St₀_used (St₀_used_eq ▸ vars_used_P v hpv)
+          have hv_not_St₃ : v ∉ St₃.types := by
+            rw [St₃_types, St₂_types]
+            intro hmem3
+            apply hv_not_St₁
+            apply AList.mem_of_mem_foldl_insert' hmem3
+            intro hmap
+            rw [List.mem_map] at hmap
+            obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmap
+            exact hv_not_vs (List.of_mem_zip hab).1
+          exact P_preserves_types v hv_St₃_used hv_not_St₃ hv_not_P_vars hv_St₄
         have typ_D_enc_St₅ : St₅.types ⊢ˢ D_enc : τ.toSMTType.fun SMTType.bool :=
-          SMT.Typing.weakening St₁_sub_St₅_types typ_D_enc
+          SMT.Typing.weakening St₁_sub_St₅_types typ_D_enc hbv_D_notMem_St₅
         have St₅_keys_sub : AList.keys St₅.types ⊆ St₅.env.usedVars := by
           rw [St₅_used]
           intro v hv
@@ -964,6 +1034,14 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
           · exact List.mem_append_right _ (St₄_keys_sub h_St₄)
         mspec castMembership_spec.{u} (n := St₅.env.freshvarsc) (used := St₅.env.usedVars)
           toPairl_typ typ_D_enc_St₅
+          (by
+            intro v hv
+            rw [bv_toPairl_nil (ts := List.map SMT.Term.var zs)
+              (fun t ht => by simp only [List.mem_map] at ht; obtain ⟨z, _, rfl⟩ := ht; simp [SMT.bv])] at hv
+            exact absurd hv (List.not_mem_nil))
+          (fun v hv => by
+            rw [St₅_used]
+            exact List.mem_append_right _ (St₃_sub_St₄ (St₁_sub_St₃_used (bv_D_enc_used v hv))))
         rename_i out_cm
         obtain ⟨z_mem_D', τ_cm⟩ := out_cm
         mrename_i pre_cm
@@ -1496,8 +1574,35 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
     obtain ⟨St₁_sub_St₂_types, St₂_sub_St₃_types, St₄_sub_St₅_types, St₁_sub_St₅_types⟩ :=
       St_chain_helper vs_nodup zs_nodup St₂_types St₃_types St₅_types
         St₃_sub_St₄_types vs_disj_St₁ zs_not_types
+    have hbv_D_notMem_St₅ : ∀ v ∈ SMT.bv D_enc, v ∉ St₅.types := by
+      intro v hv hmem
+      rw [St₅_types] at hmem
+      have hv_St₄_used : v ∈ St₄.env.usedVars :=
+        St₃_sub_St₄ (St₁_sub_St₃_used (bv_D_enc_used v hv))
+      have hv_not_zs : v ∉ zs := fun hz => zs_not_used v hz hv_St₄_used
+      have hv_St₄ : v ∈ St₄.types := by
+        apply AList.mem_of_mem_foldl_insert' hmem
+        intro hmap
+        rw [List.mem_map] at hmap
+        obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmap
+        exact hv_not_zs (List.of_mem_zip hab).1
+      have hv_St₃_used : v ∈ St₃.env.usedVars := St₁_sub_St₃_used (bv_D_enc_used v hv)
+      have hv_not_St₁ : v ∉ St₁.types := SMT.Typing.bv_notMem_context typ_D_enc v hv
+      have hv_not_St₀_used : v ∉ St₀.env.usedVars := bv_D_enc_notMem_used v hv
+      have hv_not_vs : v ∉ vs := fun hvs => hv_not_St₀_used (St₀_used_eq ▸ vars_used_vs v hvs)
+      have hv_not_P_vars : v ∉ P.vars := fun hpv => hv_not_St₀_used (St₀_used_eq ▸ vars_used_P v hpv)
+      have hv_not_St₃ : v ∉ St₃.types := by
+        rw [St₃_types, St₂_types]
+        intro hmem3
+        apply hv_not_St₁
+        apply AList.mem_of_mem_foldl_insert' hmem3
+        intro hmap
+        rw [List.mem_map] at hmap
+        obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmap
+        exact hv_not_vs (List.of_mem_zip hab).1
+      exact P_preserves_types v hv_St₃_used hv_not_St₃ hv_not_P_vars hv_St₄
     have typ_D_enc_St₅ : St₅.types ⊢ˢ D_enc : τ.toSMTType.fun SMTType.bool :=
-      SMT.Typing.weakening St₁_sub_St₅_types typ_D_enc
+      SMT.Typing.weakening St₁_sub_St₅_types typ_D_enc hbv_D_notMem_St₅
     have τs_toProdl_eq : τs.toProdl = τ.toSMTType := by
       rw [τs_eq]
       have h_arith : (τ.toSMTType.fromProdl (vs.length - 1)).length = vs.length - 1 + 1 := by
@@ -1921,8 +2026,35 @@ theorem encodeTerm_spec.all_case.{u} (fv_sub_typings : B.FvSubTypings)
       obtain ⟨St₁_sub_St₂_types, St₂_sub_St₃_types, St₄_sub_St₅_types, St₁_sub_St₅_types⟩ :=
         St_chain_helper vs_nodup zs_nodup St₂_types St₃_types St₅_types
           St₃_sub_St₄_types vs_disj_St₁ zs_not_types
+      have hbv_D_notMem_St₅ : ∀ v ∈ SMT.bv D_enc, v ∉ St₅.types := by
+        intro v hv hmem
+        rw [St₅_types] at hmem
+        have hv_St₄_used : v ∈ St₄.env.usedVars :=
+          St₃_sub_St₄ (St₁_sub_St₃_used (bv_D_enc_used v hv))
+        have hv_not_zs : v ∉ zs := fun hz => zs_not_used v hz hv_St₄_used
+        have hv_St₄ : v ∈ St₄.types := by
+          apply AList.mem_of_mem_foldl_insert' hmem
+          intro hmap
+          rw [List.mem_map] at hmap
+          obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmap
+          exact hv_not_zs (List.of_mem_zip hab).1
+        have hv_St₃_used : v ∈ St₃.env.usedVars := St₁_sub_St₃_used (bv_D_enc_used v hv)
+        have hv_not_St₁ : v ∉ St₁.types := SMT.Typing.bv_notMem_context typ_D_enc v hv
+        have hv_not_St₀_used : v ∉ St₀.env.usedVars := bv_D_enc_notMem_used v hv
+        have hv_not_vs : v ∉ vs := fun hvs => hv_not_St₀_used (St₀_used_eq ▸ vars_used_vs v hvs)
+        have hv_not_P_vars : v ∉ P.vars := fun hpv => hv_not_St₀_used (St₀_used_eq ▸ vars_used_P v hpv)
+        have hv_not_St₃ : v ∉ St₃.types := by
+          rw [St₃_types, St₂_types]
+          intro hmem3
+          apply hv_not_St₁
+          apply AList.mem_of_mem_foldl_insert' hmem3
+          intro hmap
+          rw [List.mem_map] at hmap
+          obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmap
+          exact hv_not_vs (List.of_mem_zip hab).1
+        exact P_preserves_types v hv_St₃_used hv_not_St₃ hv_not_P_vars hv_St₄
       have typ_D_enc_St₅ : St₅.types ⊢ˢ D_enc : τ.toSMTType.fun SMTType.bool :=
-        SMT.Typing.weakening St₁_sub_St₅_types typ_D_enc
+        SMT.Typing.weakening St₁_sub_St₅_types typ_D_enc hbv_D_notMem_St₅
       have τs_toProdl_eq : τs.toProdl = τ.toSMTType := by
         rw [τs_eq]
         have h_arith : (τ.toSMTType.fromProdl (vs.length - 1)).length = vs.length - 1 + 1 := by

@@ -239,17 +239,22 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
     have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
   have hxS_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv S, a ≠ b := by
     have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
-  mspec x_ih (E := E) (Λ := St.types) (α := α) typ_x
-    («Δ» := «Δ») (Δ_fv := fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
-    (Δ₀ := Δ₀) Δ₀_ext_x (used := used) Δ₀_none_out (T := X) (hT := hX)
-    den_x
-    (fun v hv => vars_used v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
-    (fun v hv => Λ_inv v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
-    hx_bv_nodup
-    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
-    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
-    wf
-    (n := St.env.freshvarsc)
+  mspec (Std.Do.Triple.and _ (Std.Do.Triple.and _
+    (x_ih (E := E) (Λ := St.types) (α := α) typ_x
+      («Δ» := «Δ») (Δ_fv := fun v hv ↦ Δ_fv v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
+      (Δ₀ := Δ₀) Δ₀_ext_x (used := used) Δ₀_none_out (T := X) (hT := hX)
+      den_x
+      (fun v hv => vars_used v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
+      (fun v hv => Λ_inv v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
+      hx_bv_nodup
+      (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+      (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
+      wf
+      (n := St.env.freshvarsc))
+    (encodeTerm_bv_used E (t := x) (used := St.env.usedVars)
+      (n := St.env.freshvarsc) (decl := St.env.declarations)))
+    (encodeTerm_bv_notMem_used E (t := x) (used := St.env.usedVars)
+      (n := St.env.freshvarsc) (decl := St.env.declarations)))
   clear x_ih
   rename_i out_x
   obtain ⟨x_enc, α'⟩ := out_x
@@ -257,9 +262,11 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
   mintro ∀St'
   mpure pre
   dsimp at pre
-  obtain ⟨St_used_sub_St', St_eq_St', St'_sub, x_cov_St', rfl, typ_x_enc, x_preserves,
+  obtain ⟨⟨⟨St_used_sub_St', St_eq_St', St'_sub, x_cov_St', rfl, typ_x_enc, x_preserves,
     Δ', Δ'_covers_x, Δ'_extends_Δ₀, Δ'_ext_x, Δ'_none_out,
-    ⟨Xenc, _, hXenc⟩, den_x_enc, ⟨rfl, retract_Xenc⟩, x_ih_total⟩ := pre
+    ⟨Xenc, _, hXenc⟩, den_x_enc, ⟨rfl, retract_Xenc⟩, x_ih_total⟩,
+    bv_x_enc_used, _⟩,
+    bv_x_enc_notMem_used, _⟩ := pre
 
   have Δ'_ext_S : RenamingContext.ExtendsOnSourceFV Δ' «Δ» S := by
     exact RenamingContext.extendsOnSourceFV_of_extends Δ'_extends_Δ₀ Δ₀_ext_S
@@ -332,8 +339,31 @@ theorem encodeTerm_spec.mem_case.{u} (fv_sub_typings : B.FvSubTypings) (x S : B.
   mspec Std.Do.Spec.pure
   -- After dif_pos + dite_true, the pure path yields (S_enc @ x_enc, .bool) with no state change.
   -- Final state is St'', final renaming context is ΔSMT = Δ''.
+  -- Sound `weakening` needs `hbv : ∀ v ∈ bv x_enc, v ∉ St''.types`.
+  -- Discharge (structured below) reduces to a single missing fact:
+  --   `bv_x_enc_used v hv : v ∈ St'.usedVars`     (from the `Triple.and` with `encodeTerm_bv_used`)
+  --   `bv_notMem_context typ_x_enc v hv : v ∉ St'.types`
+  --   `S_preserves v · · ·` needs `v ∉ S.vars = (v ∉ fv S ∧ v ∉ bv S)`:
+  --     - `v ∉ fv S`: `fv S ⊆ St.types ⊆ St'.types`, contradicting `v ∉ St'.types`.
+  --     - `v ∉ bv S`: `bv S ⊆ used`, so this needs `v ∉ used`, i.e. an `encodeTerm`
+  --       BOUND-VARIABLE FRESHNESS lemma `∀ v ∈ bv (encodeTerm t), v ∉ used`.
+  --       `encodeTerm_bv_used` only gives `bv ⊆ usedVars-after`, NOT `∩ used = ∅`.
+  --       This freshness lemma is ABSENT from the codebase (it belongs in the shared
+  --       `EncodeTermBvUsed.lean`); without it this `weakening` cannot be discharged
+  --       soundly. Same blocker affects every `EncodeTermCorrect*` 3-premise-preserves
+  --       case (Bool/Arith/App/Eq/Set/...).
   have typ_x_enc_final : St''.types ⊢ˢ x_enc : α.toSMTType :=
     Typing.weakening St'_eq_St'' typ_x_enc
+      (fun v hv => S_preserves v (bv_x_enc_used v hv)
+        (SMT.Typing.bv_notMem_context typ_x_enc v hv)
+        (B.Term.notMem_vars_iff.mpr
+          ⟨fun hfv => absurd
+              (AList.mem_of_subset St_eq_St' (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hfv)))
+              (SMT.Typing.bv_notMem_context typ_x_enc v hv),
+           fun hbS => absurd (St_used_eq ▸ bv_x_enc_notMem_used v hv)
+              (fun hnu => hnu
+                (vars_used v (B.Term.mem_vars_iff.mpr (Or.inr
+                  (by rw [B.bv]; exact List.mem_append.mpr (Or.inr hbS))))))⟩))
   mpure_intro
   and_intros
   · -- used ⊆ St''.env.usedVars

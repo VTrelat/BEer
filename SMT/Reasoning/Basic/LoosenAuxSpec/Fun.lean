@@ -11,7 +11,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
   {α β α' β' : SMTType} (hβ : β ≠ SMTType.bool) (pα : α ⇝ α') (pβ : β ⇝ β')
   (_pα_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
-      Λ ⊢ˢ x : α →
+      Λ ⊢ˢ x : α → (∀ v ∈ bv x, v ∈ used) →
         ∀ («Δ₀» : RenamingContext.Context) (hx : RenamingContext.CoversFV «Δ₀» x)
           (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x)
           (pf₀ : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ₀» x! (some X!) v).isSome = true),
@@ -59,7 +59,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
                                                               true⌝⦄)
   (_pβ_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
-      Λ ⊢ˢ x : β →
+      Λ ⊢ˢ x : β → (∀ v ∈ bv x, v ∈ used) →
         ∀ («Δ₀» : RenamingContext.Context) (hx : RenamingContext.CoversFV «Δ₀» x)
           (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x)
           (pf₀ : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ₀» x! (some X!) v).isSome = true),
@@ -106,6 +106,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
                                                                     hφY⟧ˢ.isSome =
                                                               true⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun β)
+  (hbv_x : ∀ v ∈ bv x, v ∈ used)
   (hx : RenamingContext.CoversFV «Δ» x)
   (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃fun ⟨E, Λ'⟩ ↦ ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ' ⊆ E.usedVars ∧ E.usedVars = used⌝⦄
@@ -144,7 +145,7 @@ theorem loosenAux_prf_spec.fun («Δ» : RenamingContext.Context)
   mpure pre
   mspec loosenAux_prf_exact
     (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-    (typ_x := typ_x) (𝕔 := castPath.fun hβ pα pβ) («Δ» := «Δ») hx (respects := respects)
+    (typ_x := typ_x) (hbv_x := hbv_x) (𝕔 := castPath.fun hβ pα pβ) («Δ» := «Δ») hx (respects := respects)
   rename_i out
   obtain ⟨x!, x!_spec⟩ := out
   mrename_i pre

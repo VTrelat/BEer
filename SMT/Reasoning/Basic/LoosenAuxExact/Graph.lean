@@ -36,6 +36,8 @@ private theorem graphTypingPack
     {Γ : TypeContext} {x z!_spec : Term} {x! z z! : 𝒱}
     {α β α' β' : SMTType}
     (typ_x : Γ ⊢ˢ x : α.fun β.option)
+    (z_notbv_x : z ∉ bv x)
+    (z!_notbv_x : z! ∉ bv x)
     (typ_x! : Γ ⊢ˢ .var x! : (α'.pair β').fun SMTType.bool)
     (z_not : z ∉ Γ)
     (z!_not : z! ∉ Γ)
@@ -61,9 +63,16 @@ private theorem graphTypingPack
         (AList.insert z (α.pair β) (AList.insert z! (α'.pair β') Γ)).entries := by
     intro v hv
     exact hsub_insz!_insz_insz! (hsub_Γ_insz! hv)
+  have hbv_x_body :
+      ∀ v ∈ bv x, v ∉ (AList.insert z (α.pair β) (AList.insert z! (α'.pair β') Γ)) := by
+    intro v hv
+    rw [AList.mem_insert, AList.mem_insert]
+    push_neg
+    exact ⟨fun h => z_notbv_x (h ▸ hv), fun h => z!_notbv_x (h ▸ hv),
+      SMT.Typing.bv_notMem_context typ_x v hv⟩
   have typ_x_body :
       (AList.insert z (α.pair β) (AList.insert z! (α'.pair β') Γ)) ⊢ˢ x : α.fun β.option := by
-    exact SMT.Typing.weakening (h := hsub_Γ_body) typ_x
+    exact SMT.Typing.weakening (h := hsub_Γ_body) typ_x hbv_x_body
   have typ_var_z_body :
       (AList.insert z (α.pair β) (AList.insert z! (α'.pair β') Γ)) ⊢ˢ .var z : α.pair β := by
     apply SMT.Typing.var
@@ -75,9 +84,16 @@ private theorem graphTypingPack
       (AList.insert_insert_of_ne
         (s := Γ) (a := z) (a' := z!)
         (b := α.pair β) (b' := α'.pair β') z_ne_z!)
+  have hkeys_sub_body :
+      AList.keys (AList.insert z (α.pair β) (AList.insert z! (α'.pair β') Γ)) ⊆
+        AList.keys (AList.insert z! (α'.pair β') (AList.insert z (α.pair β) Γ)) := by
+    intro v hv
+    simp only [← AList.mem_keys, AList.mem_insert] at hv ⊢
+    tauto
   have typ_z!_spec_body :
       (AList.insert z (α.pair β) (AList.insert z! (α'.pair β') Γ)) ⊢ˢ z!_spec : SMTType.bool := by
     exact SMT.Typing.weakening (h := hperm_ctx.subset) typ_z!_spec_ctx
+      (SMT.Typing.bv_notMem_of_subset hkeys_sub_body typ_z!_spec_ctx)
   have typ_fst_body :
       (AList.insert z (α.pair β) (AList.insert z! (α'.pair β') Γ)) ⊢ˢ .fst (.var z) : α := by
     exact SMT.Typing.fst _ _ _ _ typ_var_z_body
@@ -183,7 +199,7 @@ private abbrev GraphPf.{u} («Δ» : RenamingContext.Context.{u}) : Prop :=
 private abbrev GraphOuterIH.{u}
     {τ τ' : SMTType} (p : τ ⇝ τ') : Prop :=
   ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
-    Λ ⊢ˢ x : τ →
+    Λ ⊢ˢ x : τ → (∀ v ∈ bv x, v ∈ used) →
       ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
         SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x →
       ∀ (pf₀ : GraphPf «Δ₀»),
@@ -242,7 +258,7 @@ private abbrev GraphOuterIH.{u}
 private abbrev GraphExactOuterIH.{u}
     {τ τ' : SMTType} (p : τ ⇝ τ') : Prop :=
   ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
-    Λ ⊢ˢ x : τ →
+    Λ ⊢ˢ x : τ → (∀ v ∈ bv x, v ∈ used) →
       ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
         SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x →
       ∀ (pf₀ : GraphPf «Δ₀»),
@@ -368,12 +384,12 @@ private theorem graphWeakenExactIH.{u}
     {τ τ' : SMTType} {p : τ ⇝ τ'}
     (p_ih : GraphExactOuterIH.{u} p) :
     GraphOuterIH.{u} p := by
-  intro Λ n used name x htyp Δ₀ hx hresp pf₀
+  intro Λ n used name x htyp hbv Δ₀ hx hresp pf₀
   mintro pre ∀st
   mpure pre
   mspec (p_ih
     (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-    htyp Δ₀ hx hresp pf₀)
+    htyp hbv Δ₀ hx hresp pf₀)
   rename_i out
   obtain ⟨x!, x!_spec⟩ := out
   mrename_i pre
@@ -2800,10 +2816,11 @@ private theorem graphDenZAt.{u}
       exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
   have ih_pair_z_x₀ := loosenAux_prf_spec.pair
     (Δx₀) (pα := pα) (pβ := pβ) pf_var_z_x₀
-    (fun {Λ} {n} {used} {name} {x} htyp hx' hresp => pα_ih htyp Δx₀ hx' hresp pf_var_z_x₀)
-    (fun {Λ} {n} {used} {name} {x} htyp hx' hresp => pβ_ih htyp Δx₀ hx' hresp pf_var_z_x₀)
+    (fun {Λ} {n} {used} {name} {x} htyp hbv hx' hresp => pα_ih htyp hbv Δx₀ hx' hresp pf_var_z_x₀)
+    (fun {Λ} {n} {used} {name} {x} htyp hbv hx' hresp => pβ_ih htyp hbv Δx₀ hx' hresp pf_var_z_x₀)
     (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀
+    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃
+    (fun v hv => absurd hv (by simp [bv])) hcov_var_z_x₀
     respects_var_z_x₀
   have post_x₀ := ih_pair_z_x₀ St₃ <|
     graphPairVarPre sub St₂_types_eq St₂_used_eq St₃_types_eq St₃_used_eq
@@ -2868,7 +2885,7 @@ private theorem graphDenZExactAt.{u}
     rfl
   have pα_ih_x₀ :
       ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
-        Λ ⊢ˢ x : α →
+        Λ ⊢ˢ x : α → (∀ v ∈ bv x, v ∈ used) →
           ∀ (hx : RenamingContext.CoversFV Δx₀ x)
             (_ : SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ Λ x),
             ⦃fun x =>
@@ -2931,13 +2948,13 @@ private theorem graphDenZExactAt.{u}
                                                                   ΦY.fst = zftrue →
                                                                     X.fst.pair Y.fst ∈
                                                                       (castZF_of_path pα).1⌝⦄ := by
-    intro Λ n used name x htyp hx hresp
+    intro Λ n used name x htyp hbv hx hresp
     exact pα_ih
       (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-      htyp Δx₀ hx hresp pf_var_z_x₀
+      htyp hbv Δx₀ hx hresp pf_var_z_x₀
   have pβ_ih_x₀ :
       ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
-        Λ ⊢ˢ x : β →
+        Λ ⊢ˢ x : β → (∀ v ∈ bv x, v ∈ used) →
           ∀ (hx : RenamingContext.CoversFV Δx₀ x)
             (_ : SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ Λ x),
             ⦃fun x =>
@@ -3000,10 +3017,10 @@ private theorem graphDenZExactAt.{u}
                                                                   ΦY.fst = zftrue →
                                                                     X.fst.pair Y.fst ∈
                                                                       (castZF_of_path pβ).1⌝⦄ := by
-    intro Λ n used name x htyp hx hresp
+    intro Λ n used name x htyp hbv hx hresp
     exact pβ_ih
       (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-      htyp Δx₀ hx hresp pf_var_z_x₀
+      htyp hbv Δx₀ hx hresp pf_var_z_x₀
   have respects_var_z_x₀ :
       SMT.RenamingContext.RespectsTypeContextOnFV Δx₀ St₃.types (.var z) := by
     intro v σ hv hlk
@@ -3017,7 +3034,8 @@ private theorem graphDenZExactAt.{u}
   have exact_var_z_x₀ := loosenAux_prf_exact.pair
     (Δx₀) (pα := pα) (pβ := pβ) pf_var_z_x₀ pα_ih_x₀ pβ_ih_x₀
     (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z_x₀
+    (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃
+    (fun v hv => absurd hv (by simp [bv])) hcov_var_z_x₀
     respects_var_z_x₀
   have post_x₀ := exact_var_z_x₀ St₃ <|
     graphPairVarPre sub St₂_types_eq St₂_used_eq St₃_types_eq St₃_used_eq
@@ -4242,7 +4260,7 @@ set_option maxHeartbeats 400000
 theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α') (pβ : β ⇝ β')
   (pα_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
-      Λ ⊢ˢ x : α →
+      Λ ⊢ˢ x : α → (∀ v ∈ bv x, v ∈ used) →
         ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
           SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
         ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
@@ -4296,7 +4314,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
                                                                     X.fst.pair Y.fst ∈ ↑(castZF_of_path pα).1⌝⦄)
   (pβ_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
-      Λ ⊢ˢ x : β →
+      Λ ⊢ˢ x : β → (∀ v ∈ bv x, v ∈ used) →
         ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
           SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
         ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
@@ -4349,6 +4367,7 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
                                                                   ΦY.fst = zftrue →
                                                                     X.fst.pair Y.fst ∈ ↑(castZF_of_path pβ).1⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun β.option)
+  (hbv_x : ∀ v ∈ bv x, v ∈ used)
   («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x)
   (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x)
   (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true) :
@@ -4452,16 +4471,17 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
           simp [Δz]
       have ih_pair_z := loosenAux_prf_spec.pair
         (Δz) (pα := pα) (pβ := pβ) pf_var_z
-        (fun {Λ} {n} {used} {name} {x} htyp hx hresp =>
+        (fun {Λ} {n} {used} {name} {x} htyp hbv hx hresp =>
           pα_ih_spec
             (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-            htyp Δz hx hresp pf_var_z)
-        (fun {Λ} {n} {used} {name} {x} htyp hx hresp =>
+            htyp hbv Δz hx hresp pf_var_z)
+        (fun {Λ} {n} {used} {name} {x} htyp hbv hx hresp =>
           pβ_ih_spec
             (Λ := Λ) (n := n) (used := used) (name := name) (x := x)
-            htyp Δz hx hresp pf_var_z)
+            htyp hbv Δz hx hresp pf_var_z)
         (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-        (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃ hcov_var_z
+        (name := s!"{name}_funGraph_pair") (x := .var z) typ_var_z_St₃
+        (fun v hv => absurd hv (by simp [bv])) hcov_var_z
         respects_var_z
       mspec (Std.Do.Triple.and _
         (graphRunPairVarSpec (pα := pα) (pβ := pβ) (name := name) (z := z) (St₃ := St₃))
@@ -4492,6 +4512,48 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
         mpure pre
         obtain ⟨hrun, hn₄, St₄_types_eq, z!_fresh, z!_not_used, used_sub₄, keys_sub₄, preserves_z!,
           typ_z!, typ_z!_spec, typ_z!_St₄, typ_z!_spec_St₄, fv_z!_spec, den_z⟩ := pre
+        -- The two `eraseFromContext` calls remove the `∃`/`λ` binders `z`/`z!`
+        -- (in that order, matching the `loosenAux_prf` graph case) from the final
+        -- type context.  Establish the freshness facts needed to transport the
+        -- result clauses across the two erases, then step over each erase.
+        have z!_not_St₂' : z! ∉ St₂.types := by
+          intro hz!
+          apply z!_fresh
+          rw [St₃_types_eq, AList.mem_insert]
+          exact Or.inr hz!
+        have z_ne_z!' : z ≠ z! := by
+          intro hz
+          apply z!_fresh
+          rw [St₃_types_eq, hz, AList.mem_insert]
+          exact Or.inl rfl
+        have x!_in_St₂' : x! ∈ St₂.types := by
+          rw [St₂_types_eq]; exact (AList.mem_insert _).mpr (Or.inl rfl)
+        have St₂_sub_St₃ : St₂.types.entries ⊆ St₃.types.entries := by
+          rw [St₃_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh
+        have x!_in_St₃' : x! ∈ St₃.types :=
+          SMT.TypeContext.mem_of_entries_subset x!_in_St₂' St₂_sub_St₃
+        have z_ne_x!' : z ≠ x! := fun h => z_fresh (h ▸ x!_in_St₂')
+        have z!_ne_x!' : z! ≠ x! := fun h => z!_fresh (h ▸ x!_in_St₃')
+        have z_notIns : z ∉ AList.insert x! ((α'.pair β').fun SMTType.bool) St₁.types := by
+          rw [AList.mem_insert]; push_neg
+          refine ⟨z_ne_x!', ?_⟩
+          intro hz
+          exact z_fresh (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr hz))
+        have z!_notIns : z! ∉ AList.insert x! ((α'.pair β').fun SMTType.bool) St₁.types := by
+          rw [AList.mem_insert]; push_neg
+          refine ⟨z!_ne_x!', ?_⟩
+          intro hz!
+          exact z!_not_St₂' (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr hz!))
+        mspec SMT.eraseFromContext_spec
+        mrename_i preE
+        mintro ∀StE
+        mpure preE
+        obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+        mspec SMT.eraseFromContext_spec
+        mrename_i preE2
+        mintro ∀StE2
+        mpure preE2
+        obtain ⟨StE2_types_eq, StE2_fvc, StE2_used_eq⟩ := preE2
         mspec Std.Do.Spec.pure
         have z!_not_St₂ : z! ∉ St₂.types := by
           intro hz!
@@ -4510,11 +4572,17 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
           intro hxz
           rw [hxz] at hx!_in_St₂
           exact z!_not_St₂ hx!_in_St₂
+        have z_notbv_x : z ∉ bv x := fun h =>
+          z_not_used (St₂_used_eq ▸ List.mem_cons_of_mem x! (hbv_x z h))
+        have z!_notbv_x : z! ∉ bv x := fun h =>
+          z!_not_used (St₃_used_eq ▸ List.mem_cons_of_mem z
+            (St₂_used_eq ▸ List.mem_cons_of_mem x! (hbv_x z! h)))
         have typ_x_St₂ : St₂.types ⊢ˢ x : α.fun β.option := by
           rw [St₂_types_eq]
           exact SMT.Typing.weakening
             (h := SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh)
             typ_x
+            (SMT.Typing.bv_notMem_insert_of_fresh typ_x (fun h => x!_not_used (hbv_x x! h)))
         have typ_var_x!_St₂ :
             St₂.types ⊢ˢ .var x! : ((α'.pair β').fun SMTType.bool) := by
           rw [St₂_types_eq]
@@ -4528,22 +4596,32 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
         have typing_pack := graphTypingPack
           (Γ := St₂.types) (x := x) (x! := x!) (z := z) (z! := z!)
           (α := α) (β := β) (α' := α') (β' := β')
-          typ_x_St₂ typ_var_x!_St₂ z_fresh z!_not_St₂ z_ne_z! typ_z!_spec_ctx
+          typ_x_St₂ z_notbv_x z!_notbv_x typ_var_x!_St₂ z_fresh z!_not_St₂ z_ne_z! typ_z!_spec_ctx
         have typ_x!_spec_base := typing_pack.typ_eq
+        -- The `insert x!` context embeds into `St₄.types`, then into the
+        -- doubly-erased final context (`z`, `z!` are not members of `insert x! St₁`).
+        have hsub_ins_St₄ :
+            (AList.insert x! ((α'.pair β').fun SMTType.bool) St₁.types).entries ⊆ St₄.types.entries := by
+          intro v hv
+          have hv₂ : v ∈ St₂.types.entries := by rw [St₂_types_eq]; exact hv
+          have hv₃ : v ∈ St₃.types.entries := by
+            rw [St₃_types_eq]
+            exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh hv₂
+          exact St₄_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh hv₃)
+        have hsub_ins_erase :
+            (AList.insert x! ((α'.pair β').fun SMTType.bool) St₁.types).entries ⊆
+              ((St₄.types.erase z).erase z!).entries := by
+          apply SMT.TypeContext.entries_subset_erase_of_notMem _ z!_notIns
+          apply SMT.TypeContext.entries_subset_erase_of_notMem _ z_notIns
+          exact hsub_ins_St₄
         mpure_intro
+        rw [StE2_types_eq, StE_types_eq, StE2_fvc, StE_fvc, StE2_used_eq, StE_used_eq]
         and_intros
         · calc
             St₁.env.freshvarsc ≤ St₂.env.freshvarsc := by rw [St₂_fvc]; exact Nat.le_succ _
             _ ≤ St₃.env.freshvarsc := by rw [St₃_fvc]; exact Nat.le_succ _
             _ ≤ St₄.env.freshvarsc := hn₄
-        · intro v hv
-          have hv₂ : v ∈ St₂.types.entries := by
-            rw [St₂_types_eq]
-            exact hv
-          have hv₃ : v ∈ St₃.types.entries := by
-            rw [St₃_types_eq]
-            exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh hv₂
-          exact St₄_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh hv₃)
+        · exact hsub_ins_erase
         · exact x!_fresh
         · exact x!_not_used
         · intro v hv
@@ -4553,9 +4631,12 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
           exact used_sub₄ (by
             rw [St₃_used_eq]
             exact List.mem_cons_of_mem _ hv₂)
-        · exact keys_sub₄
+        · exact fun v hv => keys_sub₄ (SMT.TypeContext.keys_erase_subset
+            (SMT.TypeContext.keys_erase_subset hv))
         · -- preserves_types
           intro v hv hv_not_Λ
+          apply SMT.TypeContext.notMem_erase
+          apply SMT.TypeContext.notMem_erase
           have hv_ne_x : v ≠ x! := fun h => absurd (h ▸ hv) x!_not_used
           have z_not_used_base : z ∉ St₁.env.usedVars := by
             intro hmem; apply z_not_used; rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hmem
@@ -4579,14 +4660,8 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
               .var x! : ((α'.pair β').fun SMTType.bool) := by
             apply SMT.Typing.var
             exact AList.lookup_insert St₁.types
-          apply SMT.Typing.weakening _ typ_x!_base
-          intro v hv
-          have hv₂ : v ∈ St₂.types.entries := by
-            rwa [St₂_types_eq]
-          have hv₃ : v ∈ St₃.types.entries := by
-            rw [St₃_types_eq]
-            exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh hv₂
-          exact St₄_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh hv₃)
+          -- bv (.var x!) = [], so the freshness premise is vacuous.
+          exact SMT.Typing.weakening hsub_ins_erase typ_x!_base (by simp [bv])
         · have typ_x!_spec_base₁ :
             (AList.insert x! ((α'.pair β').fun SMTType.bool) St₁.types) ⊢ˢ
               (Term.var x! =ˢ
@@ -4597,14 +4672,45 @@ theorem loosenAux_prf_exact.graph.{u} {α β α' β' : SMTType} (pα : α ⇝ α
             have h := typ_x!_spec_base
             rw [St₂_types_eq] at h
             exact h
-          apply SMT.Typing.weakening _ typ_x!_spec_base₁
+          refine SMT.Typing.weakening hsub_ins_erase typ_x!_spec_base₁ ?_
+          -- hbv: the spec term `x! =ˢ (λ [z!]. ∃ [z]. …)` binds `z` and `z!` (both
+          -- erased from the final context) together with `bv x` and `bv z!_spec`,
+          -- none of which appear in the doubly-erased context.
+          have bv_z!_spec_notMem : ∀ v ∈ bv z!_spec, v ∉ St₄.types :=
+            SMT.Typing.bv_notMem_context typ_z!_spec_St₄
+          have bv_x_notMem : ∀ v ∈ bv x, v ∉ St₄.types := by
+            intro v hv
+            have hv_used : v ∈ St₁.env.usedVars := hbv_x v hv
+            have hv_notSt₁ : v ∉ St₁.types := SMT.Typing.bv_notMem_context typ_x v hv
+            have hv_ne_x! : v ≠ x! := fun h => x!_not_used (h ▸ hv_used)
+            have hv_ne_z : v ≠ z := fun h =>
+              z_not_used (h ▸ (St₂_used_eq ▸ List.mem_cons_of_mem _ hv_used))
+            have hv_notSt₂ : v ∉ St₂.types := by
+              rw [St₂_types_eq, AList.mem_insert]; push_neg; exact ⟨hv_ne_x!, hv_notSt₁⟩
+            have hv_notSt₃ : v ∉ St₃.types := by
+              rw [St₃_types_eq, AList.mem_insert]; push_neg; exact ⟨hv_ne_z, hv_notSt₂⟩
+            have hv_St₃_used : v ∈ St₃.env.usedVars := by
+              rw [St₃_used_eq]
+              exact List.mem_cons_of_mem _ (by rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv_used)
+            exact preserves_z! v hv_St₃_used hv_notSt₃
           intro v hv
-          have hv₂ : v ∈ St₂.types.entries := by
-            rwa [St₂_types_eq]
-          have hv₃ : v ∈ St₃.types.entries := by
-            rw [St₃_types_eq]
-            exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh hv₂
-          exact St₄_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh hv₃)
+          have hbv_expand : v = z! ∨ v = z ∨ v ∈ bv x ∨ v ∈ bv z!_spec := by
+            simpa only [bv, List.append_assoc, List.nil_append, List.cons_append,
+              List.mem_cons, List.mem_append, List.not_mem_nil, or_false] using hv
+          rcases hbv_expand with rfl | rfl | hvx | hvspec
+          · -- v = z!, erased by the outer erase
+            exact fun h => (AList.mem_erase.mp h).1 rfl
+          · -- v = z, erased by the inner erase
+            apply SMT.TypeContext.notMem_erase
+            exact fun h => (AList.mem_erase.mp h).1 rfl
+          · -- v ∈ bv x: not in St₄.types, hence not in the erased context
+            apply SMT.TypeContext.notMem_erase
+            apply SMT.TypeContext.notMem_erase
+            exact bv_x_notMem v hvx
+          · -- v ∈ bv z!_spec: not in St₄.types, hence not in the erased context
+            apply SMT.TypeContext.notMem_erase
+            apply SMT.TypeContext.notMem_erase
+            exact bv_z!_spec_notMem v hvspec
         · intro v hv
           simp only [fv, List.cons_append, List.nil_append, List.mem_removeAll_iff, List.mem_cons,
             List.mem_append, List.not_mem_nil, or_false] at hv

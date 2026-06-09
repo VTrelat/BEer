@@ -116,8 +116,23 @@ theorem TypeContext.update_concat (Γ : TypeContext) (xs : List 𝒱) (ys : List
     (x : 𝒱) (y : SMTType) (hlen : xs.length = ys.length) :
     Γ.update (xs ++ [x]) (ys ++ [y]) (by simp [hlen]) =
       (Γ.update xs ys hlen).insert x y := by
-  -- TODO: prove via Fin.foldl_succ_last with index casting from (xs ++ [x]).length to xs.length + 1.
-  sorry
+  simp only [TypeContext.update, List.length_append, List.length_cons, List.length_nil,
+    zero_add, Fin.foldl_succ_last, Fin.getElem_fin, Fin.val_cast, Fin.val_last, le_refl,
+    List.getElem_append_right, Nat.sub_self, List.getElem_cons_zero, Fin.val_castSucc, Fin.is_lt,
+    List.getElem_append_left]
+  conv =>
+    enter [1, 3]
+    change ?fold
+  have hfold : ?fold = Γ.update xs ys hlen := by
+    unfold TypeContext.update
+    congr
+    funext Ξ ⟨i, hi⟩
+    rw [List.getElem_append_left (by omega : i < ys.length)]
+    rfl
+  rw [hfold]
+  congr
+  rw [List.getElem_append_right (le_of_eq hlen.symm)]
+  simp only [List.getElem_singleton]
 
 
 section
@@ -288,8 +303,13 @@ theorem existsE   {Γ : TypeContext} {vs : List 𝒱} {τs : List SMTType} {P : 
 
 end RuleInversion
 
+/-- Weakening of the SMT typing judgement. As with the B-level
+`B.Typing.context_weakening'`, the freshness premise `hbv : ∀ v ∈ bv t, v ∉ Δ`
+is **necessary**: a variable of `Δ` clashing with one of `t`'s bound names would
+break the binder disjointness premises (`∀ v ∈ vs, v ∉ Δ`) and the statement is
+false without it. -/
 theorem weakening {Γ Δ : TypeContext} (h : Γ.entries ⊆ Δ.entries) {t : Term} {τ : SMTType}
-  (typ : Γ ⊢ˢ t : τ) : Δ ⊢ˢ t : τ := by
+  (typ : Γ ⊢ˢ t : τ) (hbv : ∀ v ∈ bv t, v ∉ Δ) : Δ ⊢ˢ t : τ := by
   induction typ generalizing Δ with
   | var Γ v τ hv =>
     apply var Δ v τ
@@ -298,82 +318,118 @@ theorem weakening {Γ Δ : TypeContext} (h : Γ.entries ⊆ Δ.entries) {t : Ter
   | int Γ n => exact int Δ n
   | bool Γ b => exact bool Δ b
   | app Γ f x τ σ typ_f typ_x f_ih x_ih =>
+    simp only [bv, List.mem_append] at hbv
     apply app Δ f x τ σ
-    · exact f_ih h
-    · exact x_ih h
+    · exact f_ih h fun v hv => hbv v (Or.inl hv)
+    · exact x_ih h fun v hv => hbv v (Or.inr hv)
   | eq Γ t₁ t₂ τ typ₁ typ₂ ih₁ ih₂ =>
+    simp only [bv, List.mem_append] at hbv
     apply eq Δ t₁ t₂ τ
-    · exact ih₁ h
-    · exact ih₂ h
+    · exact ih₁ h fun v hv => hbv v (Or.inl hv)
+    · exact ih₂ h fun v hv => hbv v (Or.inr hv)
   | and Γ t₁ t₂ typ₁ typ₂ ih₁ ih₂ =>
+    simp only [bv, List.mem_append] at hbv
     apply and Δ t₁ t₂
-    · exact ih₁ h
-    · exact ih₂ h
+    · exact ih₁ h fun v hv => hbv v (Or.inl hv)
+    · exact ih₂ h fun v hv => hbv v (Or.inr hv)
   | or Γ t₁ t₂ typ₁ typ₂ ih₁ ih₂ =>
+    simp only [bv, List.mem_append] at hbv
     apply or Δ t₁ t₂
-    · exact ih₁ h
-    · exact ih₂ h
+    · exact ih₁ h fun v hv => hbv v (Or.inl hv)
+    · exact ih₂ h fun v hv => hbv v (Or.inr hv)
   | not Γ t typ ih =>
+    simp only [bv] at hbv
     apply not Δ t
-    exact ih h
+    exact ih h hbv
   | imp Γ t₁ t₂ typ₁ typ₂ ih₁ ih₂ =>
+    simp only [bv, List.mem_append] at hbv
     apply imp Δ t₁ t₂
-    · exact ih₁ h
-    · exact ih₂ h
+    · exact ih₁ h fun v hv => hbv v (Or.inl hv)
+    · exact ih₂ h fun v hv => hbv v (Or.inr hv)
   | ite Γ c t e τ typ_c typ_t typ_e ih_c ih_t ih_e =>
+    simp only [bv, List.mem_append] at hbv
     apply ite Δ c t e τ
-    · exact ih_c h
-    · exact ih_t h
-    · exact ih_e h
+    · exact ih_c h fun v hv => hbv v (Or.inl (Or.inl hv))
+    · exact ih_t h fun v hv => hbv v (Or.inl (Or.inr hv))
+    · exact ih_e h fun v hv => hbv v (Or.inr hv)
   | some Γ t τ typ ih =>
+    simp only [bv] at hbv
     apply some Δ t τ
-    exact ih h
+    exact ih h hbv
   | none Γ τ => apply none Δ τ
   | the Γ t τ typ ih =>
+    simp only [bv] at hbv
     apply the Δ t τ
-    exact ih h
+    exact ih h hbv
   | pair Γ t₁ τ₁ t₂ τ₂ typ₁ typ₂ ih₁ ih₂ =>
+    simp only [bv, List.mem_append] at hbv
     apply pair Δ t₁ τ₁ t₂ τ₂
-    · exact ih₁ h
-    · exact ih₂ h
+    · exact ih₁ h fun v hv => hbv v (Or.inl hv)
+    · exact ih₂ h fun v hv => hbv v (Or.inr hv)
   | fst Γ t τ σ typ ih =>
+    simp only [bv] at hbv
     apply fst Δ t τ σ
-    exact ih h
+    exact ih h hbv
   | snd Γ t τ σ typ ih =>
+    simp only [bv] at hbv
     apply snd Δ t τ σ
-    exact ih h
+    exact ih h hbv
   | distinct Γ ts τ typ ih =>
     apply distinct Δ ts τ
     intro t ht
-    exact ih t ht h
+    refine ih t ht h fun v hv => hbv v ?_
+    rw [bv]
+    exact List.mem_flatten.mpr ⟨bv t, List.mem_map.mpr ⟨⟨t, ht⟩, List.mem_attach _ _, rfl⟩, hv⟩
   | le Γ t₁ t₂ typ₁ typ₂ ih₁ ih₂ =>
+    simp only [bv, List.mem_append] at hbv
     apply le Δ t₁ t₂
-    · exact ih₁ h
-    · exact ih₂ h
+    · exact ih₁ h fun v hv => hbv v (Or.inl hv)
+    · exact ih₂ h fun v hv => hbv v (Or.inr hv)
   | add Γ t₁ t₂ typ₁ typ₂ ih₁ ih₂ =>
+    simp only [bv, List.mem_append] at hbv
     apply add Δ t₁ t₂
-    · exact ih₁ h
-    · exact ih₂ h
+    · exact ih₁ h fun v hv => hbv v (Or.inl hv)
+    · exact ih₂ h fun v hv => hbv v (Or.inr hv)
   | sub Γ t₁ t₂ typ₁ typ₂ ih₁ ih₂ =>
+    simp only [bv, List.mem_append] at hbv
     apply sub Δ t₁ t₂
-    · exact ih₁ h
-    · exact ih₂ h
+    · exact ih₁ h fun v hv => hbv v (Or.inl hv)
+    · exact ih₂ h fun v hv => hbv v (Or.inr hv)
   | mul Γ t₁ t₂ typ₁ typ₂ ih₁ ih₂ =>
+    simp only [bv, List.mem_append] at hbv
     apply mul Δ t₁ t₂
-    · exact ih₁ h
-    · exact ih₂ h
+    · exact ih₁ h fun v hv => hbv v (Or.inl hv)
+    · exact ih₂ h fun v hv => hbv v (Or.inr hv)
   | lambda Γ vs τs t γ vs_Γ vs_fresh len_pos len_eq ih₁ ih₂ =>
-    apply lambda Δ vs τs t γ _ vs_fresh len_pos len_eq
+    apply lambda Δ vs τs t γ
+      (fun v hvs => hbv v (by simp only [bv, List.mem_append]; exact Or.inl hvs))
+      vs_fresh len_pos len_eq
     apply ih₂ (TypeContext.update_mono Γ Δ len_eq h)
-    admit
-  | «forall» Γ vs τs P typ vs_fresh len_pos len_eq h₁ h₂ =>
-    apply «forall» Δ vs τs P _ vs_fresh len_pos len_eq
-    apply h₂ (TypeContext.update_mono Γ Δ len_eq h)
-    admit
-  | «exists» Γ vs τs P typ vs_fresh len_pos len_eq h₁ h₂ =>
-    apply «exists» Δ vs τs P _ vs_fresh len_pos len_eq
-    apply h₂ (TypeContext.update_mono Γ Δ len_eq h)
-    admit
+    intro v hv hmem
+    rw [TypeContext.mem_update_iff (hlen := len_eq)] at hmem
+    rcases hmem with hvs | hvΔ
+    · exact vs_fresh v hvs hv
+    · exact hbv v (by simp only [bv, List.mem_append]; exact Or.inr hv) hvΔ
+  | «forall» Γ vs τs P vs_Γ vs_fresh len_pos len_eq typ_P ih =>
+    apply «forall» Δ vs τs P
+      (fun v hvs => hbv v (by simp only [bv, List.mem_append]; exact Or.inl hvs))
+      vs_fresh len_pos len_eq
+    apply ih (TypeContext.update_mono Γ Δ len_eq h)
+    intro v hv hmem
+    rw [TypeContext.mem_update_iff (hlen := len_eq)] at hmem
+    rcases hmem with hvs | hvΔ
+    · exact vs_fresh v hvs hv
+    · exact hbv v (by simp only [bv, List.mem_append]; exact Or.inr hv) hvΔ
+  | «exists» Γ vs τs P vs_Γ vs_fresh len_pos len_eq typ_P ih =>
+    apply «exists» Δ vs τs P
+      (fun v hvs => hbv v (by simp only [bv, List.mem_append]; exact Or.inl hvs))
+      vs_fresh len_pos len_eq
+    apply ih (TypeContext.update_mono Γ Δ len_eq h)
+    intro v hv hmem
+    rw [TypeContext.mem_update_iff (hlen := len_eq)] at hmem
+    rcases hmem with hvs | hvΔ
+    · exact vs_fresh v hvs hv
+    · exact hbv v (by simp only [bv, List.mem_append]; exact Or.inr hv) hvΔ
 
 theorem bv_disjoint {Γ : TypeContext} {t : Term} {τ : SMTType} (h : Γ ⊢ˢ t : τ) : (bv t).Disjoint Γ.keys := by
   induction h with

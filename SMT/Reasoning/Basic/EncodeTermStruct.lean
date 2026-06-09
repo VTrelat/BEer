@@ -24,6 +24,36 @@ so `Δ₀` padded over `Γ'` covers it.
 open Std.Do B SMT ZFSet
 set_option mvcgen.warning false
 
+namespace SMT.TypeContext
+
+/-- Erasing any key keeps a non-member a non-member: if `v ∉ Γ` then `v ∉ Γ.erase z`. -/
+theorem notMem_erase {Γ : SMT.TypeContext} {v z : SMT.𝒱}
+    (h : v ∉ Γ) : v ∉ Γ.erase z := fun hin => h (AList.mem_erase.mp hin).2
+
+/-- Erasing a key only shrinks the key set: `(Γ.erase z).keys ⊆ Γ.keys`. -/
+theorem keys_erase_subset {Γ : SMT.TypeContext} {z : SMT.𝒱} :
+    (Γ.erase z).keys ⊆ Γ.keys := by
+  rw [AList.keys_erase]; exact List.erase_subset
+
+/-- If `Γ.entries ⊆ Δ.entries` and the erased key `z` is not in `Γ`, then
+`Γ.entries ⊆ (Δ.erase z).entries`: erasing `z` cannot drop any entry of `Γ`
+because no entry of `Γ` has key `z`. -/
+theorem entries_subset_erase_of_notMem {Γ Γ₂ : SMT.TypeContext} {z : SMT.𝒱}
+    (h : Γ.entries ⊆ Γ₂.entries) (hz : z ∉ Γ) : Γ.entries ⊆ (Γ₂.erase z).entries := by
+  intro e he
+  apply List.mem_kerase_of_ne_key _ (h he)
+  intro hcontra
+  exact hz (AList.mem_keys.mpr (hcontra ▸ (List.mem_map.mpr ⟨e, he, rfl⟩)))
+
+/-- Key membership transports along an `entries ⊆ entries` inclusion. -/
+theorem mem_of_entries_subset {a : SMT.𝒱} {Γ Γ' : SMT.TypeContext}
+    (ha : a ∈ Γ) (hsub : Γ.entries ⊆ Γ'.entries) : a ∈ Γ' := by
+  have ha' := AList.mem_keys.mpr ha
+  obtain ⟨τ, hτ⟩ := List.mem_keys.mp ha'
+  exact AList.mem_keys.mp (List.mem_keys.mpr ⟨τ, hsub hτ⟩)
+
+end SMT.TypeContext
+
 /-- Any computation `m` followed by an unconditional `throw` satisfies every
 `mayThrow` postcondition: the overall computation always throws, and `mayThrow`
 imposes no obligation on thrown outcomes. Used to discharge the (statically
@@ -294,13 +324,21 @@ theorem defaultSpecM_state
     mintro ∀St₃
     mpure pre
     obtain ⟨body_le, body_Λ_sub, body_used_sub, body_keys_sub, body_preserves, body_fv_sub⟩ := pre
+    rename_i z _
+    have z_fresh' : z ∉ St.types := z_fresh
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE
+    mintro ∀StE
+    mpure preE
+    obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
     mspec Std.Do.Spec.pure
     mpure_intro
-    rename_i z _
-    refine ⟨?_, ?_, ?_, body_keys_sub, ?_, ?_⟩
+    rw [StE_types_eq, StE_fvc, StE_used_eq]
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
     · have h : St.env.freshvarsc ≤ St₂.env.freshvarsc := by omega
       exact le_trans h body_le
-    · have hz : St₂.types ⊆ St₃.types := body_Λ_sub
+    · apply SMT.TypeContext.entries_subset_erase_of_notMem _ z_fresh'
+      have hz : St₂.types ⊆ St₃.types := body_Λ_sub
       rw [St₂_types_eq] at hz
       exact AList.subset_trans
         (SMT.TypeContext.entries_subset_insert_of_notMem z_fresh) hz
@@ -308,7 +346,9 @@ theorem defaultSpecM_state
       apply body_used_sub
       rw [St₂_used_eq]
       exact List.mem_cons_of_mem _ hv
+    · exact fun v hv => body_keys_sub (SMT.TypeContext.keys_erase_subset hv)
     · intro v hv hΛ
+      apply SMT.TypeContext.notMem_erase
       have hv_St₂ : v ∈ St₂.env.usedVars := by
         rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv
       have hv_ne_z : v ≠ z := fun h => z_not_used (h ▸ hv)
@@ -390,15 +430,43 @@ theorem loosenAux_prf_state_pair
   mpure pre
   obtain ⟨snd!_le, snd!_Λ_sub, snd!_fresh, snd!_not_used, snd!_used_sub,
     snd!_keys_sub, snd!_preserves, snd!_fv_sub⟩ := pre
-  mspec Std.Do.Spec.pure
-  mpure_intro
   rename_i x! fst_out snd_out
   obtain ⟨fst!, fst!_spec⟩ := fst_out
   obtain ⟨snd!, snd!_spec⟩ := snd_out
+  -- freshness facts about the erased binders `fst!`, `snd!`
+  have x!_in_St₂ : x! ∈ St₂.types := by rw [St₂_types_eq]; exact (AList.mem_insert _).mpr (Or.inl rfl)
+  have St₂_sub_St₃ : St₂.types ⊆ St₃.types :=
+    AList.subset_trans (SMT.TypeContext.entries_subset_insert_of_notMem fst!_fresh) fst!_Λ_sub
+  have x!_in_St₃ : x! ∈ St₃.types := SMT.TypeContext.mem_of_entries_subset x!_in_St₂ St₂_sub_St₃
+  have fst!_ne_x! : fst! ≠ x! := fun h => fst!_fresh (h ▸ x!_in_St₂)
+  have fst!_notSt : fst! ∉ St.types := fun h => fst!_fresh (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr h))
+  have snd!_ne_x! : snd! ≠ x! := fun h => snd!_fresh (h ▸ x!_in_St₃)
+  have snd!_notSt : snd! ∉ St.types := fun h =>
+    snd!_fresh (SMT.TypeContext.mem_of_entries_subset
+      (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr h) : snd! ∈ St₂.types) St₂_sub_St₃)
+  have fst!_notIns : fst! ∉ AList.insert x! (α'.pair β') St.types := by
+    rw [AList.mem_insert]; push_neg; exact ⟨fst!_ne_x!, fst!_notSt⟩
+  have snd!_notIns : snd! ∉ AList.insert x! (α'.pair β') St.types := by
+    rw [AList.mem_insert]; push_neg; exact ⟨snd!_ne_x!, snd!_notSt⟩
+  mspec SMT.eraseFromContext_spec
+  mrename_i preE
+  mintro ∀StE
+  mpure preE
+  obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+  mspec SMT.eraseFromContext_spec
+  mrename_i preE2
+  mintro ∀StE2
+  mpure preE2
+  obtain ⟨StE2_types_eq, StE2_fvc, StE2_used_eq⟩ := preE2
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  rw [StE2_types_eq, StE_types_eq, StE2_fvc, StE_fvc, StE2_used_eq, StE_used_eq]
   and_intros
   · have h₁ : St.env.freshvarsc ≤ St₂.env.freshvarsc := by omega
     exact le_trans h₁ (le_trans fst!_le snd!_le)
-  · have hf : St₂.types ⊆ AList.insert fst! α' St₂.types :=
+  · apply SMT.TypeContext.entries_subset_erase_of_notMem _ snd!_notIns
+    apply SMT.TypeContext.entries_subset_erase_of_notMem _ fst!_notIns
+    have hf : St₂.types ⊆ AList.insert fst! α' St₂.types :=
       SMT.TypeContext.entries_subset_insert_of_notMem fst!_fresh
     have hs : St₃.types ⊆ AList.insert snd! β' St₃.types :=
       SMT.TypeContext.entries_subset_insert_of_notMem snd!_fresh
@@ -414,8 +482,11 @@ theorem loosenAux_prf_state_pair
     apply fst!_used_sub
     rw [St₂_used_eq]
     exact List.mem_cons_of_mem _ hv
-  · exact snd!_keys_sub
+  · exact fun v hv => snd!_keys_sub (SMT.TypeContext.keys_erase_subset
+      (SMT.TypeContext.keys_erase_subset hv))
   · intro v hv hv_not_St
+    apply SMT.TypeContext.notMem_erase
+    apply SMT.TypeContext.notMem_erase
     have hv_St₂ : v ∈ St₂.env.usedVars := by
       rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv
     have hv_St₃ : v ∈ St₃.env.usedVars := fst!_used_sub hv_St₂
@@ -522,15 +593,43 @@ theorem loosenAux_prf_state
     mpure pre
     obtain ⟨z!_le, z!_Λ_sub, z!_fresh, z!_not_used, z!_used_sub,
       z!_keys_sub, z!_preserves, z!_fv_sub⟩ := pre
-    mspec Std.Do.Spec.pure
-    mpure_intro
     rename_i x! z out
     obtain ⟨z!, z!_spec⟩ := out
+    -- freshness facts about the erased binders `z`, `z!`
+    have St₂_sub_St₃ : St₂.types ⊆ St₃.types := by
+      rw [St₃_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh
+    have x!_in_St₂ : x! ∈ St₂.types := by rw [St₂_types_eq]; exact (AList.mem_insert _).mpr (Or.inl rfl)
+    have x!_in_St₃ : x! ∈ St₃.types := SMT.TypeContext.mem_of_entries_subset x!_in_St₂ St₂_sub_St₃
+    have z_ne_x! : z ≠ x! := fun h => z_fresh (h ▸ x!_in_St₂)
+    have z_notSt : z ∉ St.types := fun h =>
+      z_fresh (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr h))
+    have z!_ne_x! : z! ≠ x! := fun h => z!_fresh (h ▸ x!_in_St₃)
+    have z!_notSt : z! ∉ St.types := fun h =>
+      z!_fresh (SMT.TypeContext.mem_of_entries_subset
+        (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr h) : z! ∈ St₂.types) St₂_sub_St₃)
+    have z_notIns : z ∉ AList.insert x! ((α'.pair β').fun SMTType.bool) St.types := by
+      rw [AList.mem_insert]; push_neg; exact ⟨z_ne_x!, z_notSt⟩
+    have z!_notIns : z! ∉ AList.insert x! ((α'.pair β').fun SMTType.bool) St.types := by
+      rw [AList.mem_insert]; push_neg; exact ⟨z!_ne_x!, z!_notSt⟩
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE
+    mintro ∀StE
+    mpure preE
+    obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE2
+    mintro ∀StE2
+    mpure preE2
+    obtain ⟨StE2_types_eq, StE2_fvc, StE2_used_eq⟩ := preE2
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [StE2_types_eq, StE_types_eq, StE2_fvc, StE_fvc, StE2_used_eq, StE_used_eq]
     and_intros
     · have h : St.env.freshvarsc ≤ St₃.env.freshvarsc := by omega
       exact le_trans h z!_le
-    · have h₁ : St₂.types ⊆ St₃.types := by
-        rw [St₃_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh
+    · apply SMT.TypeContext.entries_subset_erase_of_notMem _ z!_notIns
+      apply SMT.TypeContext.entries_subset_erase_of_notMem _ z_notIns
+      have h₁ : St₂.types ⊆ St₃.types := St₂_sub_St₃
       have h₂ : St₃.types ⊆ AList.insert z! (α'.pair β') St₃.types :=
         SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh
       rw [St₂_types_eq] at h₁
@@ -541,8 +640,11 @@ theorem loosenAux_prf_state
       apply z!_used_sub
       rw [St₃_used_eq, St₂_used_eq]
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hv)
-    · exact z!_keys_sub
+    · exact fun v hv => z!_keys_sub (SMT.TypeContext.keys_erase_subset
+        (SMT.TypeContext.keys_erase_subset hv))
     · intro v hv hv_not_St
+      apply SMT.TypeContext.notMem_erase
+      apply SMT.TypeContext.notMem_erase
       have hv_St₃ : v ∈ St₃.env.usedVars := by
         rw [St₃_used_eq, St₂_used_eq]
         exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hv)
@@ -593,15 +695,43 @@ theorem loosenAux_prf_state
     mpure pre
     obtain ⟨z!_le, z!_Λ_sub, z!_fresh, z!_not_used, z!_used_sub,
       z!_keys_sub, z!_preserves, z!_fv_sub⟩ := pre
-    mspec Std.Do.Spec.pure
-    mpure_intro
     rename_i x! z out
     obtain ⟨z!, z!_spec⟩ := out
+    -- freshness facts about the erased binders `z`, `z!`
+    have St₂_sub_St₃ : St₂.types ⊆ St₃.types := by
+      rw [St₃_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh
+    have x!_in_St₂ : x! ∈ St₂.types := by rw [St₂_types_eq]; exact (AList.mem_insert _).mpr (Or.inl rfl)
+    have x!_in_St₃ : x! ∈ St₃.types := SMT.TypeContext.mem_of_entries_subset x!_in_St₂ St₂_sub_St₃
+    have z_ne_x! : z ≠ x! := fun h => z_fresh (h ▸ x!_in_St₂)
+    have z_notSt : z ∉ St.types := fun h =>
+      z_fresh (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr h))
+    have z!_ne_x! : z! ≠ x! := fun h => z!_fresh (h ▸ x!_in_St₃)
+    have z!_notSt : z! ∉ St.types := fun h =>
+      z!_fresh (SMT.TypeContext.mem_of_entries_subset
+        (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr h) : z! ∈ St₂.types) St₂_sub_St₃)
+    have z_notIns : z ∉ AList.insert x! (α'.fun SMTType.bool) St.types := by
+      rw [AList.mem_insert]; push_neg; exact ⟨z_ne_x!, z_notSt⟩
+    have z!_notIns : z! ∉ AList.insert x! (α'.fun SMTType.bool) St.types := by
+      rw [AList.mem_insert]; push_neg; exact ⟨z!_ne_x!, z!_notSt⟩
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE
+    mintro ∀StE
+    mpure preE
+    obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE2
+    mintro ∀StE2
+    mpure preE2
+    obtain ⟨StE2_types_eq, StE2_fvc, StE2_used_eq⟩ := preE2
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [StE2_types_eq, StE_types_eq, StE2_fvc, StE_fvc, StE2_used_eq, StE_used_eq]
     and_intros
     · have : St.env.freshvarsc ≤ St₃.env.freshvarsc := by omega
       exact le_trans this z!_le
-    · have h₁ : St₂.types ⊆ St₃.types := by
-        rw [St₃_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh
+    · apply SMT.TypeContext.entries_subset_erase_of_notMem _ z!_notIns
+      apply SMT.TypeContext.entries_subset_erase_of_notMem _ z_notIns
+      have h₁ : St₂.types ⊆ St₃.types := St₂_sub_St₃
       have h₂ : St₃.types ⊆ AList.insert z! α' St₃.types :=
         SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh
       rw [St₂_types_eq] at h₁
@@ -612,8 +742,11 @@ theorem loosenAux_prf_state
       apply z!_used_sub
       rw [St₃_used_eq, St₂_used_eq]
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hv)
-    · exact z!_keys_sub
+    · exact fun v hv => z!_keys_sub (SMT.TypeContext.keys_erase_subset
+        (SMT.TypeContext.keys_erase_subset hv))
     · intro v hv hv_not_St
+      apply SMT.TypeContext.notMem_erase
+      apply SMT.TypeContext.notMem_erase
       have hv_St₃ : v ∈ St₃.env.usedVars := by
         rw [St₃_used_eq, St₂_used_eq]
         exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hv)
@@ -682,23 +815,84 @@ theorem loosenAux_prf_state
     mintro ∀St₇
     mpure pre
     obtain ⟨hd_le, hd_Λ_sub, hd_used_sub, hd_keys_sub, hd_preserves, hd_fv_sub⟩ := pre
-    mspec Std.Do.Spec.pure
-    mpure_intro
     rename_i x! a a_out b b_out _hdefault
     obtain ⟨a!, a!_spec⟩ := a_out
     obtain ⟨b!, b!_spec⟩ := b_out
+    -- the subset chain `St.types ⊆ ... ⊆ St₆.types`, reused below
+    have h23 : St₂.types ⊆ St₃.types := by
+      rw [St₃_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem a_fresh
+    have h34 : St₃.types ⊆ St₄.types :=
+      AList.subset_trans (SMT.TypeContext.entries_subset_insert_of_notMem a!_fresh) a!_Λ_sub
+    have h45 : St₄.types ⊆ St₅.types := by
+      rw [St₅_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem b_fresh
+    have h56 : St₅.types ⊆ St₆.types :=
+      AList.subset_trans (SMT.TypeContext.entries_subset_insert_of_notMem b!_fresh) b!_Λ_sub
+    have x!_in_St₂ : x! ∈ St₂.types := by rw [St₂_types_eq]; exact (AList.mem_insert _).mpr (Or.inl rfl)
+    have St_sub_St₂ : St.types ⊆ St₂.types := by
+      rw [St₂_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh
+    have x!_in_St₃ : x! ∈ St₃.types := SMT.TypeContext.mem_of_entries_subset x!_in_St₂ h23
+    have x!_in_St₄ : x! ∈ St₄.types := SMT.TypeContext.mem_of_entries_subset x!_in_St₃ h34
+    have x!_in_St₅ : x! ∈ St₅.types := SMT.TypeContext.mem_of_entries_subset x!_in_St₄ h45
+    -- freshness facts about the four erased binders `a`, `a!`, `b`, `b!`
+    have a_ne_x! : a ≠ x! := fun h => a_fresh (h ▸ x!_in_St₂)
+    have a_notSt : a ∉ St.types := fun h =>
+      a_fresh (SMT.TypeContext.mem_of_entries_subset h St_sub_St₂)
+    have a!_ne_x! : a! ≠ x! := fun h => a!_fresh (h ▸ x!_in_St₃)
+    have a!_notSt : a! ∉ St.types := fun h =>
+      a!_fresh (SMT.TypeContext.mem_of_entries_subset
+        (SMT.TypeContext.mem_of_entries_subset h St_sub_St₂) h23)
+    have b_ne_x! : b ≠ x! := fun h => b_fresh (h ▸ x!_in_St₄)
+    have b_notSt : b ∉ St.types := fun h =>
+      b_fresh (SMT.TypeContext.mem_of_entries_subset
+        (SMT.TypeContext.mem_of_entries_subset
+          (SMT.TypeContext.mem_of_entries_subset h St_sub_St₂) h23) h34)
+    have b!_ne_x! : b! ≠ x! := fun h => b!_fresh (h ▸ x!_in_St₅)
+    have b!_notSt : b! ∉ St.types := fun h =>
+      b!_fresh (SMT.TypeContext.mem_of_entries_subset
+        (SMT.TypeContext.mem_of_entries_subset
+          (SMT.TypeContext.mem_of_entries_subset
+            (SMT.TypeContext.mem_of_entries_subset h St_sub_St₂) h23) h34) h45)
+    have a_notIns : a ∉ AList.insert x! (α'.fun β') St.types := by
+      rw [AList.mem_insert]; push_neg; exact ⟨a_ne_x!, a_notSt⟩
+    have a!_notIns : a! ∉ AList.insert x! (α'.fun β') St.types := by
+      rw [AList.mem_insert]; push_neg; exact ⟨a!_ne_x!, a!_notSt⟩
+    have b_notIns : b ∉ AList.insert x! (α'.fun β') St.types := by
+      rw [AList.mem_insert]; push_neg; exact ⟨b_ne_x!, b_notSt⟩
+    have b!_notIns : b! ∉ AList.insert x! (α'.fun β') St.types := by
+      rw [AList.mem_insert]; push_neg; exact ⟨b!_ne_x!, b!_notSt⟩
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE
+    mintro ∀StE
+    mpure preE
+    obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE2
+    mintro ∀StE2
+    mpure preE2
+    obtain ⟨StE2_types_eq, StE2_fvc, StE2_used_eq⟩ := preE2
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE3
+    mintro ∀StE3
+    mpure preE3
+    obtain ⟨StE3_types_eq, StE3_fvc, StE3_used_eq⟩ := preE3
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE4
+    mintro ∀StE4
+    mpure preE4
+    obtain ⟨StE4_types_eq, StE4_fvc, StE4_used_eq⟩ := preE4
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [StE4_types_eq, StE3_types_eq, StE2_types_eq, StE_types_eq,
+      StE4_fvc, StE3_fvc, StE2_fvc, StE_fvc,
+      StE4_used_eq, StE3_used_eq, StE2_used_eq, StE_used_eq]
     and_intros
     · have h : St.env.freshvarsc ≤ St₃.env.freshvarsc := by omega
       exact le_trans h (le_trans a!_le (le_trans (by omega : St₄.env.freshvarsc ≤
         St₅.env.freshvarsc) (le_trans b!_le hd_le)))
-    · have h23 : St₂.types ⊆ St₃.types := by
-        rw [St₃_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem a_fresh
-      have h34 : St₃.types ⊆ St₄.types :=
-        AList.subset_trans (SMT.TypeContext.entries_subset_insert_of_notMem a!_fresh) a!_Λ_sub
-      have h45 : St₄.types ⊆ St₅.types := by
-        rw [St₅_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem b_fresh
-      have h56 : St₅.types ⊆ St₆.types :=
-        AList.subset_trans (SMT.TypeContext.entries_subset_insert_of_notMem b!_fresh) b!_Λ_sub
+    · apply SMT.TypeContext.entries_subset_erase_of_notMem _ b!_notIns
+      apply SMT.TypeContext.entries_subset_erase_of_notMem _ b_notIns
+      apply SMT.TypeContext.entries_subset_erase_of_notMem _ a!_notIns
+      apply SMT.TypeContext.entries_subset_erase_of_notMem _ a_notIns
       have h₃ : AList.insert x! (α'.fun β') St.types ⊆ St₇.types := by
         rw [← St₂_types_eq]
         exact AList.subset_trans h23 (AList.subset_trans h34 (AList.subset_trans h45
@@ -716,8 +910,14 @@ theorem loosenAux_prf_state
       apply List.mem_cons_of_mem
       rw [St₂_used_eq]
       exact List.mem_cons_of_mem _ hv
-    · exact hd_keys_sub
+    · exact fun v hv => hd_keys_sub (SMT.TypeContext.keys_erase_subset
+        (SMT.TypeContext.keys_erase_subset (SMT.TypeContext.keys_erase_subset
+          (SMT.TypeContext.keys_erase_subset hv))))
     · intro v hv hv_not_St
+      apply SMT.TypeContext.notMem_erase
+      apply SMT.TypeContext.notMem_erase
+      apply SMT.TypeContext.notMem_erase
+      apply SMT.TypeContext.notMem_erase
       have hv_St₂ : v ∈ St₂.env.usedVars := by
         rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv
       have hv_St₃ : v ∈ St₃.env.usedVars := by
@@ -832,14 +1032,28 @@ theorem loosenAux_prf_state
       mpure pre
       obtain ⟨w!_le, w!_Λ_sub, w!_fresh, w!_not_used, w!_used_sub,
         w!_keys_sub, w!_preserves, w!_fv_sub⟩ := pre
-      mspec Std.Do.Spec.pure
-      mpure_intro
       rename_i out
       obtain ⟨w!, w!_spec⟩ := out
+      -- freshness facts about the erased binder `w!`
+      have x!_in_St₂ : x! ∈ St₂.types := by rw [St₂_types_eq]; exact (AList.mem_insert _).mpr (Or.inl rfl)
+      have w!_ne_x! : w! ≠ x! := fun h => w!_fresh (h ▸ x!_in_St₂)
+      have w!_notSt : w! ∉ St.types := fun h =>
+        w!_fresh (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr h))
+      have w!_notIns : w! ∉ AList.insert x! α'.option St.types := by
+        rw [AList.mem_insert]; push_neg; exact ⟨w!_ne_x!, w!_notSt⟩
+      mspec SMT.eraseFromContext_spec
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      rw [StE_types_eq, StE_fvc, StE_used_eq]
       and_intros
       · have h : St.env.freshvarsc ≤ St₂.env.freshvarsc := by omega
         exact le_trans h w!_le
-      · have h₂ : St₂.types ⊆ AList.insert w! α' St₂.types :=
+      · apply SMT.TypeContext.entries_subset_erase_of_notMem _ w!_notIns
+        have h₂ : St₂.types ⊆ AList.insert w! α' St₂.types :=
           SMT.TypeContext.entries_subset_insert_of_notMem w!_fresh
         have h₃ : AList.insert x! α'.option St.types ⊆ St₃.types := by
           rw [← St₂_types_eq]; exact AList.subset_trans h₂ w!_Λ_sub
@@ -850,8 +1064,9 @@ theorem loosenAux_prf_state
         apply w!_used_sub
         rw [St₂_used_eq]
         exact List.mem_cons_of_mem _ hv
-      · exact w!_keys_sub
+      · exact fun v hv => w!_keys_sub (SMT.TypeContext.keys_erase_subset hv)
       · intro v hv hv_not_St
+        apply SMT.TypeContext.notMem_erase
         have hv_St₂ : v ∈ St₂.env.usedVars := by
           rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv
         have hv_ne_x! : v ≠ x! := fun h => x!_not_used (h ▸ hv)
@@ -880,14 +1095,28 @@ theorem loosenAux_prf_state
       mpure pre
       obtain ⟨w!_le, w!_Λ_sub, w!_fresh, w!_not_used, w!_used_sub,
         w!_keys_sub, w!_preserves, w!_fv_sub⟩ := pre
-      mspec Std.Do.Spec.pure
-      mpure_intro
       rename_i out
       obtain ⟨w!, w!_spec⟩ := out
+      -- freshness facts about the erased binder `w!`
+      have x!_in_St₂ : x! ∈ St₂.types := by rw [St₂_types_eq]; exact (AList.mem_insert _).mpr (Or.inl rfl)
+      have w!_ne_x! : w! ≠ x! := fun h => w!_fresh (h ▸ x!_in_St₂)
+      have w!_notSt : w! ∉ St.types := fun h =>
+        w!_fresh (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr h))
+      have w!_notIns : w! ∉ AList.insert x! α'.option St.types := by
+        rw [AList.mem_insert]; push_neg; exact ⟨w!_ne_x!, w!_notSt⟩
+      mspec SMT.eraseFromContext_spec
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      rw [StE_types_eq, StE_fvc, StE_used_eq]
       and_intros
       · have h : St.env.freshvarsc ≤ St₂.env.freshvarsc := by omega
         exact le_trans h w!_le
-      · have h₂ : St₂.types ⊆ AList.insert w! α' St₂.types :=
+      · apply SMT.TypeContext.entries_subset_erase_of_notMem _ w!_notIns
+        have h₂ : St₂.types ⊆ AList.insert w! α' St₂.types :=
           SMT.TypeContext.entries_subset_insert_of_notMem w!_fresh
         have h₃ : AList.insert x! α'.option St.types ⊆ St₃.types := by
           rw [← St₂_types_eq]; exact AList.subset_trans h₂ w!_Λ_sub
@@ -898,8 +1127,9 @@ theorem loosenAux_prf_state
         apply w!_used_sub
         rw [St₂_used_eq]
         exact List.mem_cons_of_mem _ hv
-      · exact w!_keys_sub
+      · exact fun v hv => w!_keys_sub (SMT.TypeContext.keys_erase_subset hv)
       · intro v hv hv_not_St
+        apply SMT.TypeContext.notMem_erase
         have hv_St₂ : v ∈ St₂.env.usedVars := by
           rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv
         have hv_ne_x! : v ≠ x! := fun h => x!_not_used (h ▸ hv)
@@ -5645,22 +5875,76 @@ theorem encodeTerm_combined
               mpure pre
               obtain ⟨⟨St₃_types_eq, b_fresh, St₃_fvc_eq, St₃_used_eq, b_not_used⟩,
                 St₃_decl⟩ := pre
+              mspec (Std.Do.Triple.and (SMT.eraseFromContext p)
+                (SMT.eraseFromContext_spec (v := p) (Γ := St₃.types)
+                  (n := St₃.env.freshvarsc) (used := St₃.env.usedVars))
+                (SMT.eraseFromContext_decls (v := p) (decl := St₃.env.declarations)))
+              mrename_i preEp
+              mintro ∀StEp
+              mpure preEp
+              obtain ⟨⟨StEp_types_eq, StEp_fvc, StEp_used_eq⟩, StEp_decl⟩ := preEp
+              mspec (Std.Do.Triple.and (SMT.eraseFromContext a)
+                (SMT.eraseFromContext_spec (v := a) (Γ := StEp.types)
+                  (n := StEp.env.freshvarsc) (used := StEp.env.usedVars))
+                (SMT.eraseFromContext_decls (v := a) (decl := StEp.env.declarations)))
+              mrename_i preEa
+              mintro ∀StEa
+              mpure preEa
+              obtain ⟨⟨StEa_types_eq, StEa_fvc, StEa_used_eq⟩, StEa_decl⟩ := preEa
+              mspec (Std.Do.Triple.and (SMT.eraseFromContext b)
+                (SMT.eraseFromContext_spec (v := b) (Γ := StEa.types)
+                  (n := StEa.env.freshvarsc) (used := StEa.env.usedVars))
+                (SMT.eraseFromContext_decls (v := b) (decl := StEa.env.declarations)))
+              mrename_i preEb
+              mintro ∀StEb
+              mpure preEb
+              obtain ⟨⟨StEb_types_eq, StEb_fvc, StEb_used_eq⟩, StEb_decl⟩ := preEb
+              have hσ_sub_ctx : σ.types ⊆ ctx := AList.subset_trans A_Λ_sub C_Λ_sub
+              have p_notσ : p ∉ σ.types := fun h => p_fresh (AList.mem_of_subset hσ_sub_ctx h)
+              have a_notσ : a ∉ σ.types := fun h =>
+                a_fresh ((AList.mem_insert _).mpr (Or.inr (AList.mem_of_subset hσ_sub_ctx h)))
+              have b_notσ : b ∉ σ.types := fun h =>
+                b_fresh ((AList.mem_insert _).mpr (Or.inr
+                  ((AList.mem_insert _).mpr (Or.inr (AList.mem_of_subset hσ_sub_ctx h)))))
+              have hv_ne : ∀ {v : SMT.𝒱}, v ≠ p → v ≠ a → v ≠ b → v ∈ ctx →
+                  v ∈ AList.keys StEb.types := by
+                intro v hvp hva hvb hvctx
+                rw [← AList.mem_keys, StEb_types_eq]
+                refine AList.mem_erase.mpr ⟨hvb, ?_⟩
+                rw [StEa_types_eq]
+                refine AList.mem_erase.mpr ⟨hva, ?_⟩
+                rw [StEp_types_eq]
+                refine AList.mem_erase.mpr ⟨hvp, ?_⟩
+                rw [St₃_types_eq]
+                exact (AList.mem_insert _).mpr (Or.inr ((AList.mem_insert _).mpr
+                  (Or.inr ((AList.mem_insert _).mpr (Or.inr hvctx)))))
               mspec Std.Do.Spec.pure
               mpure_intro
               refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, ΔA ++ ΔC, ?_, ?_, ?_⟩
               · intro v hv
-                rw [St₃_used_eq, St₂_used_eq, St₁_used_eq]
+                rw [StEb_used_eq, StEa_used_eq, StEp_used_eq,
+                  St₃_used_eq, St₂_used_eq, St₁_used_eq]
                 exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
                   (List.mem_cons_of_mem _ (C_used_sub (A_used_sub hv))))
+              · rw [StEb_types_eq, StEa_types_eq, StEp_types_eq]
+                have base : σ.types ⊆ St₃.types := by
+                  rw [St₃_types_eq]
+                  exact AList.subset_trans (AList.subset_trans A_Λ_sub C_Λ_sub)
+                    (AList.subset_trans (SMT.TypeContext.entries_subset_insert_of_notMem p_fresh)
+                      (AList.subset_trans
+                        (SMT.TypeContext.entries_subset_insert_of_notMem a_fresh)
+                        (SMT.TypeContext.entries_subset_insert_of_notMem b_fresh)))
+                exact SMT.TypeContext.entries_subset_erase_of_notMem
+                  (SMT.TypeContext.entries_subset_erase_of_notMem
+                    (SMT.TypeContext.entries_subset_erase_of_notMem base p_notσ) a_notσ) b_notσ
               · intro v hv
-                rw [St₃_types_eq]
-                apply SMT.TypeContext.entries_subset_insert_of_notMem b_fresh
-                apply SMT.TypeContext.entries_subset_insert_of_notMem a_fresh
-                apply SMT.TypeContext.entries_subset_insert_of_notMem p_fresh
-                exact AList.subset_trans A_Λ_sub C_Λ_sub hv
-              · intro v hv
-                rw [St₃_used_eq, St₂_used_eq, St₁_used_eq]
-                have hv' : v ∈ St₃.types := AList.mem_keys.mpr hv
+                rw [StEb_used_eq, StEa_used_eq, StEp_used_eq,
+                  St₃_used_eq, St₂_used_eq, St₁_used_eq]
+                have hv0 : v ∈ AList.keys St₃.types :=
+                  SMT.TypeContext.keys_erase_subset (StEp_types_eq ▸
+                    SMT.TypeContext.keys_erase_subset (StEa_types_eq ▸
+                      SMT.TypeContext.keys_erase_subset (StEb_types_eq ▸ hv)))
+                have hv' : v ∈ St₃.types := AList.mem_keys.mpr hv0
                 rw [St₃_types_eq] at hv'
                 iterate 3 rw [AList.mem_insert] at hv'
                 rcases hv' with rfl | rfl | rfl | hv'
@@ -5671,7 +5955,8 @@ theorem encodeTerm_combined
                     (List.mem_cons_of_mem _ (C_keys_sub (AList.mem_keys.mp hv'))))
               · intro v hv
                 rw [B.fv, List.mem_append] at hv
-                rw [St₃_used_eq, St₂_used_eq, St₁_used_eq]
+                rw [StEb_used_eq, StEa_used_eq, StEp_used_eq,
+                  St₃_used_eq, St₂_used_eq, St₁_used_eq]
                 rcases hv with hv | hv
                 · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
                     (List.mem_cons_of_mem _ (C_used_sub (A_cov v hv))))
@@ -5681,20 +5966,17 @@ theorem encodeTerm_combined
                 simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append,
                   List.mem_cons, List.not_mem_nil, or_false] at hv
                 obtain ⟨⟨hv1, hv_ne_ab⟩, hv_ne_p⟩ := hv
+                have hv_ne_a : v ≠ a := fun h => hv_ne_ab (Or.inl h)
+                have hv_ne_b : v ≠ b := fun h => hv_ne_ab (Or.inr h)
                 rcases hv1 with (hvA | hva) | (hvC | hvb) | (hvp | hva | hvb)
                 · rcases List.mem_union_iff.mp (A_fv_sub hvA) with hk | hbv
-                  · refine List.mem_union_iff.mpr (.inl ?_)
-                    rw [← AList.mem_keys, St₃_types_eq, AList.mem_insert,
-                      AList.mem_insert, AList.mem_insert]
-                    exact Or.inr (Or.inr (Or.inr (AList.mem_of_subset C_Λ_sub
-                      (AList.mem_keys.mp hk))))
+                  · exact List.mem_union_iff.mpr (.inl (hv_ne hv_ne_p hv_ne_a hv_ne_b
+                      (AList.mem_of_subset C_Λ_sub (AList.mem_keys.mp hk))))
                   · exact List.mem_union_iff.mpr (.inr (hvars_A_sub hbv))
                 · exact absurd (Or.inl hva) hv_ne_ab
                 · rcases List.mem_union_iff.mp (C_fv_sub hvC) with hk | hbv
-                  · refine List.mem_union_iff.mpr (.inl ?_)
-                    rw [← AList.mem_keys, St₃_types_eq, AList.mem_insert,
-                      AList.mem_insert, AList.mem_insert]
-                    exact Or.inr (Or.inr (Or.inr (AList.mem_keys.mp hk)))
+                  · exact List.mem_union_iff.mpr (.inl (hv_ne hv_ne_p hv_ne_a hv_ne_b
+                      (AList.mem_keys.mp hk)))
                   · exact List.mem_union_iff.mpr (.inr (hvars_C_sub hbv))
                 · exact absurd (Or.inr hvb) hv_ne_ab
                 · exact absurd hvp hv_ne_p
@@ -5705,6 +5987,12 @@ theorem encodeTerm_combined
                 have hvC : v ∉ B.Term.vars C := fun h => hvars (hvars_C_sub h)
                 have hv_not_ctx : v ∉ ctx :=
                   C_preserves v (A_used_sub hv) (A_preserves v hv hΛ hvA) hvC
+                rw [StEb_types_eq]
+                apply SMT.TypeContext.notMem_erase
+                rw [StEa_types_eq]
+                apply SMT.TypeContext.notMem_erase
+                rw [StEp_types_eq]
+                apply SMT.TypeContext.notMem_erase
                 rw [St₃_types_eq]
                 intro hv_in
                 iterate 3 rw [AList.mem_insert] at hv_in
@@ -5718,7 +6006,8 @@ theorem encodeTerm_combined
                     exact List.mem_cons_of_mem _ (C_used_sub (A_used_sub hv)))
                 · exact p_not_used (C_used_sub (A_used_sub hv))
                 · exact hv_not_ctx hv_in
-              · rw [St₃_decl, St₂_decl, St₁_decl, C_decl_eq, List.append_assoc]
+              · rw [StEb_decl, StEa_decl, StEp_decl,
+                  St₃_decl, St₂_decl, St₁_decl, C_decl_eq, List.append_assoc]
               · intro b hb
                 rw [specBodies_append, List.mem_append] at hb
                 rcases hb with hb | hb
@@ -6101,20 +6390,36 @@ theorem encodeTerm_combined
         mintro ∀St₁
         mpure pre
         obtain ⟨⟨St₁_types_eq, x_fresh, St₁_fvc, St₁_used_eq, x_not_used⟩, St₁_decl⟩ := pre
+        mspec (Std.Do.Triple.and (SMT.eraseFromContext x)
+          (SMT.eraseFromContext_spec (v := x) (Γ := St₁.types) (n := St₁.env.freshvarsc)
+            (used := St₁.env.usedVars))
+          (SMT.eraseFromContext_decls (v := x) (decl := St₁.env.declarations)))
+        mrename_i preE
+        mintro ∀StE
+        mpure preE
+        obtain ⟨⟨StE_types_eq, StE_fvc, StE_used_eq⟩, StE_decl⟩ := preE
+        have x_notσ : x ∉ σ.types := fun h =>
+          x_fresh (AList.mem_of_subset (AList.subset_trans A_Λ_sub C_Λ_sub) h)
         mspec Std.Do.Spec.pure
         mpure_intro
         refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, ΔA ++ ΔC, ?_, ?_, ?_⟩
         · intro v hv
-          rw [St₁_used_eq]
+          rw [StE_used_eq, St₁_used_eq]
           exact List.mem_cons_of_mem _ (C_used_sub (A_used_sub hv))
-        · rw [St₁_types_eq]
+        · rw [StE_types_eq]
+          apply SMT.TypeContext.entries_subset_erase_of_notMem _ x_notσ
+          rw [St₁_types_eq]
           exact AList.subset_trans (AList.subset_trans A_Λ_sub C_Λ_sub)
             (SMT.TypeContext.entries_subset_insert_of_notMem x_fresh)
-        · rw [St₁_types_eq, St₁_used_eq]
-          exact keys_insert_subset_cons C_keys_sub
+        · rw [StE_used_eq, St₁_used_eq]
+          intro v hv
+          rw [StE_types_eq] at hv
+          have hv' : v ∈ AList.keys St₁.types := SMT.TypeContext.keys_erase_subset hv
+          rw [St₁_types_eq] at hv'
+          exact keys_insert_subset_cons C_keys_sub hv'
         · intro v hv
           rw [B.fv, List.mem_append] at hv
-          rw [St₁_used_eq]
+          rw [StE_used_eq, St₁_used_eq]
           rcases hv with hv | hv
           · exact List.mem_cons_of_mem _ (C_used_sub (A_cov v hv))
           · exact List.mem_cons_of_mem _ (C_cov v hv)
@@ -6122,27 +6427,30 @@ theorem encodeTerm_combined
           simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
             List.not_mem_nil, or_false] at hv
           obtain ⟨hv_body, hv_ne_x⟩ := hv
-          rw [St₁_types_eq]
+          rw [StE_types_eq, St₁_types_eq]
           rcases hv_body with (hvA | hvx) | (hvC | hvx)
           · rcases List.mem_union_iff.mp (A_fv_sub hvA) with hk | hb
-            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_insert _ |>.mpr
-                (Or.inr (AList.mem_of_subset C_Λ_sub (AList.mem_keys.mp hk))))))
+            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_erase.mpr
+                ⟨hv_ne_x, AList.mem_insert _ |>.mpr
+                  (Or.inr (AList.mem_of_subset C_Λ_sub (AList.mem_keys.mp hk)))⟩)))
             · exact List.mem_union_iff.mpr (.inr (hvars_A_sub hb))
           · exact absurd hvx hv_ne_x
           · rcases List.mem_union_iff.mp (C_fv_sub hvC) with hk | hb
-            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_insert _ |>.mpr
-                (Or.inr (AList.mem_keys.mp hk)))))
+            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_erase.mpr
+                ⟨hv_ne_x, AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mp hk))⟩)))
             · exact List.mem_union_iff.mpr (.inr (hvars_C_sub hb))
           · exact absurd hvx hv_ne_x
         · intro v hv hΛ hvars
           have hv_not_σC := hpres v hv hΛ hvars
+          rw [StE_types_eq]
+          apply SMT.TypeContext.notMem_erase
           rw [St₁_types_eq]
           intro hv_in
           rw [AList.mem_insert] at hv_in
           rcases hv_in with rfl | hv_in
           · exact x_not_used (C_used_sub (A_used_sub hv))
           · exact hv_not_σC hv_in
-        · rw [St₁_decl, C_decl_eq, List.append_assoc]
+        · rw [StE_decl, St₁_decl, C_decl_eq, List.append_assoc]
         · intro b hb
           rw [specBodies_append, List.mem_append] at hb
           rcases hb with hb | hb
@@ -6421,20 +6729,36 @@ theorem encodeTerm_combined
         mintro ∀St₁
         mpure pre
         obtain ⟨⟨St₁_types_eq, x_fresh, St₁_fvc, St₁_used_eq, x_not_used⟩, St₁_decl⟩ := pre
+        mspec (Std.Do.Triple.and (SMT.eraseFromContext x)
+          (SMT.eraseFromContext_spec (v := x) (Γ := St₁.types) (n := St₁.env.freshvarsc)
+            (used := St₁.env.usedVars))
+          (SMT.eraseFromContext_decls (v := x) (decl := St₁.env.declarations)))
+        mrename_i preE
+        mintro ∀StE
+        mpure preE
+        obtain ⟨⟨StE_types_eq, StE_fvc, StE_used_eq⟩, StE_decl⟩ := preE
+        have x_notσ : x ∉ σ.types := fun h =>
+          x_fresh (AList.mem_of_subset (AList.subset_trans A_Λ_sub C_Λ_sub) h)
         mspec Std.Do.Spec.pure
         mpure_intro
         refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, ΔA ++ ΔC, ?_, ?_, ?_⟩
         · intro v hv
-          rw [St₁_used_eq]
+          rw [StE_used_eq, St₁_used_eq]
           exact List.mem_cons_of_mem _ (C_used_sub (A_used_sub hv))
-        · rw [St₁_types_eq]
+        · rw [StE_types_eq]
+          apply SMT.TypeContext.entries_subset_erase_of_notMem _ x_notσ
+          rw [St₁_types_eq]
           exact AList.subset_trans (AList.subset_trans A_Λ_sub C_Λ_sub)
             (SMT.TypeContext.entries_subset_insert_of_notMem x_fresh)
-        · rw [St₁_types_eq, St₁_used_eq]
-          exact keys_insert_subset_cons C_keys_sub
+        · rw [StE_used_eq, St₁_used_eq]
+          intro v hv
+          rw [StE_types_eq] at hv
+          have hv' : v ∈ AList.keys St₁.types := SMT.TypeContext.keys_erase_subset hv
+          rw [St₁_types_eq] at hv'
+          exact keys_insert_subset_cons C_keys_sub hv'
         · intro v hv
           rw [B.fv, List.mem_append] at hv
-          rw [St₁_used_eq]
+          rw [StE_used_eq, St₁_used_eq]
           rcases hv with hv | hv
           · exact List.mem_cons_of_mem _ (C_used_sub (A_cov v hv))
           · exact List.mem_cons_of_mem _ (C_cov v hv)
@@ -6442,27 +6766,30 @@ theorem encodeTerm_combined
           simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
             List.not_mem_nil, or_false] at hv
           obtain ⟨hv_body, hv_ne_x⟩ := hv
-          rw [St₁_types_eq]
+          rw [StE_types_eq, St₁_types_eq]
           rcases hv_body with (hvA | hvx) | (hvC | hvx)
           · rcases List.mem_union_iff.mp (A_fv_sub hvA) with hk | hb
-            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_insert _ |>.mpr
-                (Or.inr (AList.mem_of_subset C_Λ_sub (AList.mem_keys.mp hk))))))
+            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_erase.mpr
+                ⟨hv_ne_x, AList.mem_insert _ |>.mpr
+                  (Or.inr (AList.mem_of_subset C_Λ_sub (AList.mem_keys.mp hk)))⟩)))
             · exact List.mem_union_iff.mpr (.inr (hvars_A_sub hb))
           · exact absurd hvx hv_ne_x
           · rcases List.mem_union_iff.mp (C_fv_sub hvC) with hk | hb
-            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_insert _ |>.mpr
-                (Or.inr (AList.mem_keys.mp hk)))))
+            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_erase.mpr
+                ⟨hv_ne_x, AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mp hk))⟩)))
             · exact List.mem_union_iff.mpr (.inr (hvars_C_sub hb))
           · exact absurd hvx hv_ne_x
         · intro v hv hΛ hvars
           have hv_not_σC := hpres v hv hΛ hvars
+          rw [StE_types_eq]
+          apply SMT.TypeContext.notMem_erase
           rw [St₁_types_eq]
           intro hv_in
           rw [AList.mem_insert] at hv_in
           rcases hv_in with rfl | hv_in
           · exact x_not_used (C_used_sub (A_used_sub hv))
           · exact hv_not_σC hv_in
-        · rw [St₁_decl, C_decl_eq, List.append_assoc]
+        · rw [StE_decl, St₁_decl, C_decl_eq, List.append_assoc]
         · intro b hb
           rw [specBodies_append, List.mem_append] at hb
           rcases hb with hb | hb
@@ -6770,24 +7097,98 @@ theorem encodeTerm_combined
                 mpure pre
                 obtain ⟨⟨St₄_types_eq, y'_fresh, St₄_fvc_eq, St₄_used_eq, y'_not_used⟩,
                   St₄_decl⟩ := pre
+                mspec (Std.Do.Triple.and (SMT.eraseFromContext R)
+                  (SMT.eraseFromContext_spec (v := R) (Γ := St₄.types)
+                    (n := St₄.env.freshvarsc) (used := St₄.env.usedVars))
+                  (SMT.eraseFromContext_decls (v := R) (decl := St₄.env.declarations)))
+                mrename_i preER
+                mintro ∀StER
+                mpure preER
+                obtain ⟨⟨StER_types_eq, StER_fvc, StER_used_eq⟩, StER_decl⟩ := preER
+                mspec (Std.Do.Triple.and (SMT.eraseFromContext x)
+                  (SMT.eraseFromContext_spec (v := x) (Γ := StER.types)
+                    (n := StER.env.freshvarsc) (used := StER.env.usedVars))
+                  (SMT.eraseFromContext_decls (v := x) (decl := StER.env.declarations)))
+                mrename_i preEx
+                mintro ∀StEx
+                mpure preEx
+                obtain ⟨⟨StEx_types_eq, StEx_fvc, StEx_used_eq⟩, StEx_decl⟩ := preEx
+                mspec (Std.Do.Triple.and (SMT.eraseFromContext y)
+                  (SMT.eraseFromContext_spec (v := y) (Γ := StEx.types)
+                    (n := StEx.env.freshvarsc) (used := StEx.env.usedVars))
+                  (SMT.eraseFromContext_decls (v := y) (decl := StEx.env.declarations)))
+                mrename_i preEy
+                mintro ∀StEy
+                mpure preEy
+                obtain ⟨⟨StEy_types_eq, StEy_fvc, StEy_used_eq⟩, StEy_decl⟩ := preEy
+                mspec (Std.Do.Triple.and (SMT.eraseFromContext y')
+                  (SMT.eraseFromContext_spec (v := y') (Γ := StEy.types)
+                    (n := StEy.env.freshvarsc) (used := StEy.env.usedVars))
+                  (SMT.eraseFromContext_decls (v := y') (decl := StEy.env.declarations)))
+                mrename_i preEy'
+                mintro ∀StEy'
+                mpure preEy'
+                obtain ⟨⟨StEy'_types_eq, StEy'_fvc, StEy'_used_eq⟩, StEy'_decl⟩ := preEy'
+                have hσ_sub_ctx : σ.types ⊆ ctx := AList.subset_trans A_Λ_sub C_Λ_sub
+                have R_notσ : R ∉ σ.types := fun h => R_fresh (AList.mem_of_subset hσ_sub_ctx h)
+                have x_notσ : x ∉ σ.types := fun h =>
+                  x_fresh ((AList.mem_insert _).mpr (Or.inr (AList.mem_of_subset hσ_sub_ctx h)))
+                have y_notσ : y ∉ σ.types := fun h =>
+                  y_fresh ((AList.mem_insert _).mpr (Or.inr
+                    ((AList.mem_insert _).mpr (Or.inr (AList.mem_of_subset hσ_sub_ctx h)))))
+                have y'_notσ : y' ∉ σ.types := fun h =>
+                  y'_fresh ((AList.mem_insert _).mpr (Or.inr
+                    ((AList.mem_insert _).mpr (Or.inr
+                      ((AList.mem_insert _).mpr (Or.inr (AList.mem_of_subset hσ_sub_ctx h)))))))
+                have hv_ne : ∀ {v : SMT.𝒱}, v ≠ R → v ≠ x → v ≠ y → v ≠ y' → v ∈ ctx →
+                    v ∈ AList.keys StEy'.types := by
+                  intro v hvR hvx hvy hvy' hvctx
+                  rw [← AList.mem_keys, StEy'_types_eq]
+                  refine AList.mem_erase.mpr ⟨hvy', ?_⟩
+                  rw [StEy_types_eq]
+                  refine AList.mem_erase.mpr ⟨hvy, ?_⟩
+                  rw [StEx_types_eq]
+                  refine AList.mem_erase.mpr ⟨hvx, ?_⟩
+                  rw [StER_types_eq]
+                  refine AList.mem_erase.mpr ⟨hvR, ?_⟩
+                  rw [St₄_types_eq]
+                  exact (AList.mem_insert _).mpr (Or.inr ((AList.mem_insert _).mpr
+                    (Or.inr ((AList.mem_insert _).mpr (Or.inr ((AList.mem_insert _).mpr
+                      (Or.inr hvctx)))))))
                 mspec Std.Do.Spec.pure
                 mpure_intro
                 refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, ΔA ++ ΔC, ?_, ?_, ?_⟩
                 · intro v hv
-                  rw [St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
+                  rw [StEy'_used_eq, StEy_used_eq, StEx_used_eq, StER_used_eq,
+                    St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
                   exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
                     (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
                       (C_used_sub (A_used_sub hv)))))
+                · rw [StEy'_types_eq, StEy_types_eq, StEx_types_eq, StER_types_eq]
+                  have base : σ.types ⊆ St₄.types := by
+                    rw [St₄_types_eq]
+                    exact AList.subset_trans (AList.subset_trans A_Λ_sub C_Λ_sub)
+                      (AList.subset_trans
+                        (SMT.TypeContext.entries_subset_insert_of_notMem R_fresh)
+                        (AList.subset_trans
+                          (SMT.TypeContext.entries_subset_insert_of_notMem x_fresh)
+                          (AList.subset_trans
+                            (SMT.TypeContext.entries_subset_insert_of_notMem y_fresh)
+                            (SMT.TypeContext.entries_subset_insert_of_notMem y'_fresh))))
+                  exact SMT.TypeContext.entries_subset_erase_of_notMem
+                    (SMT.TypeContext.entries_subset_erase_of_notMem
+                      (SMT.TypeContext.entries_subset_erase_of_notMem
+                        (SMT.TypeContext.entries_subset_erase_of_notMem base R_notσ)
+                          x_notσ) y_notσ) y'_notσ
                 · intro v hv
-                  rw [St₄_types_eq]
-                  apply SMT.TypeContext.entries_subset_insert_of_notMem y'_fresh
-                  apply SMT.TypeContext.entries_subset_insert_of_notMem y_fresh
-                  apply SMT.TypeContext.entries_subset_insert_of_notMem x_fresh
-                  apply SMT.TypeContext.entries_subset_insert_of_notMem R_fresh
-                  exact AList.subset_trans A_Λ_sub C_Λ_sub hv
-                · intro v hv
-                  rw [St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
-                  have hv' : v ∈ St₄.types := AList.mem_keys.mpr hv
+                  rw [StEy'_used_eq, StEy_used_eq, StEx_used_eq, StER_used_eq,
+                    St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
+                  have hv0 : v ∈ AList.keys St₄.types :=
+                    SMT.TypeContext.keys_erase_subset (StER_types_eq ▸
+                      SMT.TypeContext.keys_erase_subset (StEx_types_eq ▸
+                        SMT.TypeContext.keys_erase_subset (StEy_types_eq ▸
+                          SMT.TypeContext.keys_erase_subset (StEy'_types_eq ▸ hv))))
+                  have hv' : v ∈ St₄.types := AList.mem_keys.mpr hv0
                   rw [St₄_types_eq] at hv'
                   iterate 4 rw [AList.mem_insert] at hv'
                   rcases hv' with rfl | rfl | rfl | rfl | hv'
@@ -6801,7 +7202,8 @@ theorem encodeTerm_combined
                         (C_keys_sub (AList.mem_keys.mp hv')))))
                 · intro v hv
                   rw [B.fv, List.mem_append] at hv
-                  rw [St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
+                  rw [StEy'_used_eq, StEy_used_eq, StEx_used_eq, StER_used_eq,
+                    St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
                   rcases hv with hv | hv
                   · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
                       (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
@@ -6812,11 +7214,19 @@ theorem encodeTerm_combined
                   simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append,
                     List.mem_cons, List.not_mem_nil, or_false] at hv
                   obtain ⟨hv_body, hv_ne_R⟩ := hv
-                  have hv_ctx : v ∈ ctx → v ∈ AList.keys St₄.types ∪ B.Term.vars (A ⇸ᴮ C) :=
-                    fun hvc => List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (by
-                      rw [St₄_types_eq, AList.mem_insert, AList.mem_insert,
-                        AList.mem_insert, AList.mem_insert]
-                      exact Or.inr (Or.inr (Or.inr (Or.inr hvc))))))
+                  -- Any key of `ctx` differs from the fresh binders `x`, `y`, `y'`.
+                  have ctx_ne_x : ∀ {w}, w ∈ ctx → w ≠ x := fun hw h =>
+                    x_fresh (h ▸ (AList.mem_insert _).mpr (Or.inr hw))
+                  have ctx_ne_y : ∀ {w}, w ∈ ctx → w ≠ y := fun hw h =>
+                    y_fresh (h ▸ (AList.mem_insert _).mpr (Or.inr
+                      ((AList.mem_insert _).mpr (Or.inr hw))))
+                  have ctx_ne_y' : ∀ {w}, w ∈ ctx → w ≠ y' := fun hw h =>
+                    y'_fresh (h ▸ (AList.mem_insert _).mpr (Or.inr
+                      ((AList.mem_insert _).mpr (Or.inr
+                        ((AList.mem_insert _).mpr (Or.inr hw))))))
+                  have hv_ctx : v ∈ ctx → v ∈ AList.keys StEy'.types ∪ B.Term.vars (A ⇸ᴮ C) :=
+                    fun hvc => List.mem_union_iff.mpr (Or.inl
+                      (hv_ne hv_ne_R (ctx_ne_x hvc) (ctx_ne_y hvc) (ctx_ne_y' hvc) hvc))
                   rcases hv_body with ⟨hv1, hv_ne_xy⟩ | ⟨hv2, hv_ne_xyy'⟩
                   · rcases hv1 with (hR | hx | hy) | (hvA | hx) | hvC | hy
                     · exact absurd hR hv_ne_R
@@ -6824,13 +7234,11 @@ theorem encodeTerm_combined
                     · exact absurd (Or.inr hy) hv_ne_xy
                     · rcases List.mem_union_iff.mp (A_fv_sub hvA) with hk | hbv
                       · exact hv_ctx (AList.mem_of_subset C_Λ_sub (AList.mem_keys.mp hk))
-                      · refine List.mem_union_iff.mpr (Or.inr ?_)
-                        exact hvars_A_sub hbv
+                      · exact List.mem_union_iff.mpr (Or.inr (hvars_A_sub hbv))
                     · exact absurd (Or.inl hx) hv_ne_xy
                     · rcases List.mem_union_iff.mp (C_fv_sub hvC) with hk | hbv
                       · exact hv_ctx (AList.mem_keys.mp hk)
-                      · refine List.mem_union_iff.mpr (Or.inr ?_)
-                        exact hvars_C_sub hbv
+                      · exact List.mem_union_iff.mpr (Or.inr (hvars_C_sub hbv))
                     · exact absurd (Or.inr hy) hv_ne_xy
                   · rcases hv2 with ((hR | hx | hy) | hR | hx | hy') | hy | hy'
                     · exact absurd hR hv_ne_R
@@ -6846,6 +7254,14 @@ theorem encodeTerm_combined
                   have hvC : v ∉ B.Term.vars C := fun h => hvars (hvars_C_sub h)
                   have hv_not_ctx : v ∉ ctx :=
                     C_preserves v (A_used_sub hv) (A_preserves v hv hΛ hvA) hvC
+                  rw [StEy'_types_eq]
+                  apply SMT.TypeContext.notMem_erase
+                  rw [StEy_types_eq]
+                  apply SMT.TypeContext.notMem_erase
+                  rw [StEx_types_eq]
+                  apply SMT.TypeContext.notMem_erase
+                  rw [StER_types_eq]
+                  apply SMT.TypeContext.notMem_erase
                   rw [St₄_types_eq]
                   intro hv_in
                   iterate 4 rw [AList.mem_insert] at hv_in
@@ -6863,7 +7279,8 @@ theorem encodeTerm_combined
                       exact List.mem_cons_of_mem _ (C_used_sub (A_used_sub hv)))
                   · exact R_not_used (C_used_sub (A_used_sub hv))
                   · exact hv_not_ctx hv_in
-                · rw [St₄_decl, St₃_decl, St₂_decl, St₁_decl, C_decl_eq, List.append_assoc]
+                · rw [StEy'_decl, StEy_decl, StEx_decl, StER_decl,
+                    St₄_decl, St₃_decl, St₂_decl, St₁_decl, C_decl_eq, List.append_assoc]
                 · intro b hb
                   rw [specBodies_append, List.mem_append] at hb
                   rcases hb with hb | hb

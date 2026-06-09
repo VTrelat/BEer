@@ -20,6 +20,9 @@ def defaultSpecM (name : String) : SMTType → Term → Encoder Term
   | .fun α β, t => do
       let x ← SMT.freshVar α s!"{name}_arg"
       let body ← defaultSpecM s!"{name}_body" β (.app t (.var x))
+      -- `x` is used only as the `∀`-binder below; erase it from the global type
+      -- context so the result stays typeable there (it is re-introduced by the binder).
+      SMT.eraseFromContext x
       pure (.forall [x] [α] body)
 
 def loosenAux_prf (name : String) {α β : SMTType} (c : α ~> β) (x : Term) : Encoder (𝒱 × Term) := do
@@ -28,6 +31,10 @@ def loosenAux_prf (name : String) {α β : SMTType} (c : α ~> β) (x : Term) : 
   | @castPath.graph α β α' β' c_α c_β =>
     let z ← SMT.freshVar (.pair α β) s!"{x!}_funGraph"
     let ⟨z!, z!_spec⟩ ← loosenAux_prf s!"{name}_funGraph_pair" (c_α.pair c_β) (.var z)
+    -- `z`/`z!` are only the `∃`/`λ` binders below; erase them from the global
+    -- type context so the result spec stays typeable there.
+    SMT.eraseFromContext z
+    SMT.eraseFromContext z!
     return ⟨x!,
       .var x! =ˢ
         (.lambda [z!] [α'.pair β']
@@ -37,17 +44,21 @@ def loosenAux_prf (name : String) {α β : SMTType} (c : α ~> β) (x : Term) : 
   | @castPath.chpred α α' c_α =>
     let z ← SMT.freshVar α s!"{x!}_charPred"
     let ⟨z!, z!_spec⟩ ← loosenAux_prf s!"{name}_char_pred" c_α (.var z)
+    SMT.eraseFromContext z
+    SMT.eraseFromContext z!
     return ⟨x!, .var x! =ˢ (.lambda [z!] [α'] (.exists [z] [α] ((.app x (.var z)) ∧ˢ z!_spec)))⟩
   | @castPath.opt α α' c_α =>
     match _hx : x with
     | .none   => return ⟨x!, .var x! =ˢ none$α'⟩
     | .some x =>
       let ⟨the_x!, the_x!_spec⟩ ← loosenAux_prf s!"{name}_opt_opt" c_α x
+      SMT.eraseFromContext the_x!
       return ⟨x!,
         .exists [the_x!] [α'] ((.var x! =ˢ .some (.var the_x!)) ∧ˢ the_x!_spec)
       ⟩
     | x       =>
       let ⟨the_x!, the_x!_spec⟩ ← loosenAux_prf s!"{name}_opt_opt" c_α (.the x)
+      SMT.eraseFromContext the_x!
       return ⟨x!,
         .ite (x =ˢ none$α) (.var x! =ˢ none$α')
           (.exists [the_x!] [α'] ((.var x! =ˢ .some (.var the_x!)) ∧ˢ the_x!_spec))
@@ -55,6 +66,8 @@ def loosenAux_prf (name : String) {α β : SMTType} (c : α ~> β) (x : Term) : 
   | @castPath.pair α β α' β' c_α c_β =>
     let ⟨fst!, fst!_spec⟩ ← loosenAux_prf s!"{name}_pair_fst" c_α (.fst x)
     let ⟨snd!, snd!_spec⟩ ← loosenAux_prf s!"{name}_pair_snd" c_β (.snd x)
+    SMT.eraseFromContext fst!
+    SMT.eraseFromContext snd!
     return ⟨x!,
       .exists [fst!, snd!] [α', β'] ((.var x! =ˢ .pair (.var fst!) (.var snd!)) ∧ˢ (fst!_spec ∧ˢ snd!_spec))
     ⟩
@@ -65,6 +78,10 @@ def loosenAux_prf (name : String) {α β : SMTType} (c : α ~> β) (x : Term) : 
     let b ← SMT.freshVar β s!"{x!}_funFun_src_ret"
     let ⟨b!, b!_spec⟩ ← loosenAux_prf s!"{name}_funFun_ret" c_β (.var b)
     let hdefault ← defaultSpecM s!"{name}_funFun_default" β' (.app (.var x!) (.var a!))
+    SMT.eraseFromContext a
+    SMT.eraseFromContext a!
+    SMT.eraseFromContext b
+    SMT.eraseFromContext b!
     return ⟨x!,
       .forall [a!] [α'] (
         .ite (.exists [a] [α] a!_spec)

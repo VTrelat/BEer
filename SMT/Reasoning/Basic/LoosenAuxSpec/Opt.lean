@@ -5,13 +5,37 @@ import SMT.Reasoning.Basic.DenotationTotality
 
 open Std.Do SMT ZFSet Classical
 
-set_option maxHeartbeats 1000000
+set_option maxHeartbeats 1600000
+
+namespace SMT.TypeContext
+
+/-- Erasing any key keeps a non-member a non-member: if `v ∉ Γ` then `v ∉ Γ.erase z`. -/
+private theorem notMem_erase {Γ : SMT.TypeContext} {v z : SMT.𝒱}
+    (h : v ∉ Γ) : v ∉ Γ.erase z := fun hin => h (AList.mem_erase.mp hin).2
+
+/-- Erasing a key only shrinks the key set: `(Γ.erase z).keys ⊆ Γ.keys`. -/
+private theorem keys_erase_subset {Γ : SMT.TypeContext} {z : SMT.𝒱} :
+    (Γ.erase z).keys ⊆ Γ.keys := by
+  rw [AList.keys_erase]; exact List.erase_subset
+
+/-- If `Γ.entries ⊆ Δ.entries` and the erased key `z` is not in `Γ`, then
+`Γ.entries ⊆ (Δ.erase z).entries`. -/
+private theorem entries_subset_erase_of_notMem {Γ Γ₂ : SMT.TypeContext} {z : SMT.𝒱}
+    (h : Γ.entries ⊆ Γ₂.entries) (hz : z ∉ Γ) : Γ.entries ⊆ (Γ₂.erase z).entries := by
+  intro e he
+  apply List.mem_kerase_of_ne_key _ (h he)
+  intro hcontra
+  exact hz (AList.mem_keys.mpr (hcontra ▸ (List.mem_map.mpr ⟨e, he, rfl⟩)))
+
+end SMT.TypeContext
+
 theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
   (pf : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true)
   {α α' : SMTType} (hα : α ⇝ α')
   (ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
+        (∀ v ∈ bv x, v ∈ used) →
         ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x)
           (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x)
           (pf₀ : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ₀» x! (some X!) v).isSome = true),
@@ -58,6 +82,7 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
                                                                     hφY⟧ˢ.isSome =
                                                               true⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.option)
+  (hbv_x : ∀ v ∈ bv x, v ∈ used)
   (hx : RenamingContext.CoversFV «Δ» x)
   (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃fun x =>
@@ -103,6 +128,7 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
   have ih_on_Δ :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
+        (∀ v ∈ bv x, v ∈ used) →
         ∀ (hx : RenamingContext.CoversFV «Δ» x)
           (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x),
           ⦃fun x =>
@@ -146,7 +172,7 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
                                                               x!_spec),
                                                             ⟦x!_spec.abstract (Function.update «Δ» x! (some Y))
                                                                     hφY⟧ˢ.isSome =
-                                                              true⌝⦄ := fun htyp hx hresp => ih htyp «Δ» hx hresp pf
+                                                              true⌝⦄ := fun htyp hbv hx hresp => ih htyp hbv «Δ» hx hresp pf
   unfold loosenAux_prf
   mspec SMT.freshVar_spec (Γ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
   next x! =>
@@ -158,6 +184,7 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
       exact SMT.Typing.weakening
         (h := SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh)
         typ_x
+        (hbv := SMT.Typing.bv_notMem_insert_of_fresh typ_x (fun h => x!_not_used (hbv_x x! h)))
     by_cases hnone : x = .none
     · subst hnone
       exact (SMT.Typing.noneE typ_x_St₂).elim
@@ -180,8 +207,12 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
           have hv_ne : v ≠ x! := fun h => x!_fresh (h ▸ hv_Λ)
           rw [St₂_types_eq, AList.lookup_insert_ne hv_ne] at hlk
           exact respects hv_x hlk
+        have hbv_t : ∀ v ∈ bv t, v ∈ St₂.env.usedVars := by
+          intro v hv
+          rw [St₂_used_eq]
+          exact List.mem_cons_of_mem _ (hbv_x v (by simpa [bv] using hv))
         mspec ih_on_Δ (x := t) (Λ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-          typ_t_St₂ hx_t respects_t
+          typ_t_St₂ hbv_t hx_t respects_t
         · mpure_intro
           and_intros
           · trivial
@@ -201,6 +232,12 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
           obtain ⟨hn₃, St₃_types_eq, the_x!_fresh, the_x!_not_used, used_sub₃, keys_sub₃, preserves₃,
             typ_the_x!, typ_the_x!_spec, typ_the_x!_St₃, typ_the_x!_spec_St₃, fv_the_x!_spec,
             den_the⟩ := pre
+          -- `the_x!` is erased from the global context before returning the spec.
+          mspec SMT.eraseFromContext_spec
+          mrename_i preE
+          mintro ∀StE
+          mpure preE
+          obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
           mspec Std.Do.Spec.pure
           have typ_x!_spec_base :
               (AList.insert x! α'.option St₁.types) ⊢ˢ
@@ -267,14 +304,27 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
                   List.getElem_cons_zero, Fin.last_zero, Fin.isValue, Fin.foldl_zero]
               rwa [hupdate]
           mpure_intro
+          rw [StE_types_eq, StE_fvc, StE_used_eq]
+          -- `the_x!` is not in `St₃` (it was freshly created beyond `St₂`).
+          have the_x!_notSt₃ : the_x! ∉ AList.erase the_x! St₃.types := by
+            intro h; exact (AList.mem_erase.mp h).1 rfl
+          -- bound vars of `the_x!_spec` are not in `St₃` (the recursive spec typed it there).
+          have bv_spec_notSt₃ : ∀ v ∈ bv the_x!_spec, v ∉ St₃.types :=
+            SMT.Typing.bv_notMem_context typ_the_x!_spec_St₃
+          -- `the_x!` is fresh from the base context `insert x! α'.option St₁.types`.
+          have the_x!_notbase : the_x! ∉ AList.insert x! α'.option St₁.types :=
+            St₂_types_eq ▸ the_x!_fresh
+          -- the base context's entries are included in `St₃` (before erasing `the_x!`).
+          have base_sub_St₃ :
+              (AList.insert x! α'.option St₁.types).entries ⊆ St₃.types.entries := by
+            intro v hv
+            have hv₂ : v ∈ St₂.types.entries := by simpa [St₂_types_eq] using hv
+            exact St₃_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem the_x!_fresh hv₂)
           and_intros
           · calc
               St₁.env.freshvarsc ≤ St₂.env.freshvarsc := by rw [St₂_fvc]; exact Nat.le_succ _
               _ ≤ St₃.env.freshvarsc := hn₃
-          · intro v hv
-            have hv₂ : v ∈ St₂.types.entries := by
-              simpa [St₂_types_eq] using hv
-            exact St₃_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem the_x!_fresh hv₂)
+          · exact SMT.TypeContext.entries_subset_erase_of_notMem base_sub_St₃ the_x!_notbase
           · exact x!_fresh
           · exact x!_not_used
           · intro v hv
@@ -282,9 +332,10 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
               rw [St₂_used_eq]
               exact List.mem_cons_of_mem _ hv
             exact used_sub₃ hv₂
-          · exact keys_sub₃
+          · exact fun v hv => keys_sub₃ (SMT.TypeContext.keys_erase_subset hv)
           · -- preserves_types: v ∈ used, v ∉ Λ → v ∉ Γ'
             intro v hv hv_not_Λ
+            apply SMT.TypeContext.notMem_erase
             have hv_not_St₂ : v ∉ St₂.types := by
               rw [St₂_types_eq, AList.mem_insert]
               push_neg
@@ -299,14 +350,23 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
           · have typ_x!_base : (AList.insert x! α'.option St₁.types) ⊢ˢ .var x! : α'.option := by
               apply SMT.Typing.var
               exact AList.lookup_insert St₁.types
-            apply SMT.Typing.weakening _ typ_x!_base
-            intro v hv
-            have hv₂ : v ∈ St₂.types.entries := by rwa [St₂_types_eq]
-            exact St₃_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem the_x!_fresh hv₂)
-          · apply SMT.Typing.weakening _ typ_x!_spec_base
-            intro v hv
-            have hv₂ : v ∈ St₂.types.entries := by rwa [St₂_types_eq]
-            exact St₃_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem the_x!_fresh hv₂)
+            apply SMT.Typing.weakening (typ := typ_x!_base)
+              (hbv := by simp [SMT.bv])
+            exact SMT.TypeContext.entries_subset_erase_of_notMem base_sub_St₃ the_x!_notbase
+          · -- `the_x!` is now erased from the final context, so weakening the
+            -- `exists [the_x!] …` spec there is sound: every bound name avoids the
+            -- erased context (`the_x!` by `mem_erase`, the rest by the recursive
+            -- spec's typing in `St₃`).
+            apply SMT.Typing.weakening (typ := typ_x!_spec_base)
+              (hbv := by
+                intro v hv
+                -- `bv (exists [the_x!] body) = the_x! :: bv the_x!_spec`
+                simp only [SMT.bv, List.singleton_append, List.mem_cons,
+                  List.append_nil, List.nil_append, List.mem_append] at hv
+                rcases hv with rfl | hv
+                · exact the_x!_notSt₃
+                · exact SMT.TypeContext.notMem_erase (bv_spec_notSt₃ v hv))
+            exact SMT.TypeContext.entries_subset_erase_of_notMem base_sub_St₃ the_x!_notbase
           · intro v hv
             rw [SMT.fv.eq_def] at hv
             rcases List.mem_removeAll_iff.mp hv with ⟨hv_body, hv_not_bound⟩
@@ -1005,8 +1065,12 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
           have hv_ne : v ≠ x! := fun h => x!_fresh (h ▸ hv_Λ)
           rw [St₂_types_eq, AList.lookup_insert_ne hv_ne] at hlk
           exact respects hv_x hlk
+        have hbv_the : ∀ v ∈ bv (.the x), v ∈ St₂.env.usedVars := by
+          intro v hv
+          rw [St₂_used_eq]
+          exact List.mem_cons_of_mem _ (hbv_x v (by simpa [bv] using hv))
         mspec ih_on_Δ (x := .the x) (Λ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-          typ_the_x_St₂ hx_the respects_the
+          typ_the_x_St₂ hbv_the hx_the respects_the
         · mpure_intro
           and_intros
           · trivial
@@ -1129,15 +1193,36 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
               rcases hv' with hvt | hvthe'
               · exact Or.inl (by simpa [fv] using hvt)
               · exact (hv_ne_the (List.mem_singleton.mp hvthe')).elim
+          -- `the_x!` is erased from the global context before returning the spec.
+          rw [map_eq_pure_bind]
+          mspec SMT.eraseFromContext_spec
+          mrename_i preE
+          mintro ∀StE
+          mpure preE
+          obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+          mspec Std.Do.Spec.pure
           mpure_intro
+          rw [StE_types_eq, StE_fvc, StE_used_eq]
+          -- `the_x!` is not in `St₃` (it was freshly created beyond `St₂`).
+          have the_x!_notSt₃ : the_x! ∉ AList.erase the_x! St₃.types := by
+            intro h; exact (AList.mem_erase.mp h).1 rfl
+          -- bound vars of `the_x!_spec` are not in `St₃` (the recursive spec typed it there).
+          have bv_spec_notSt₃ : ∀ v ∈ bv the_x!_spec, v ∉ St₃.types :=
+            SMT.Typing.bv_notMem_context typ_the_x!_spec_St₃
+          -- `the_x!` is fresh from the base context `insert x! α'.option St₁.types`.
+          have the_x!_notbase : the_x! ∉ AList.insert x! α'.option St₁.types :=
+            St₂_types_eq ▸ the_x!_fresh
+          -- the base context's entries are included in `St₃` (before erasing `the_x!`).
+          have base_sub_St₃ :
+              (AList.insert x! α'.option St₁.types).entries ⊆ St₃.types.entries := by
+            intro v hv
+            have hv₂ : v ∈ St₂.types.entries := by simpa [St₂_types_eq] using hv
+            exact St₃_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem the_x!_fresh hv₂)
           and_intros
           · calc
               St₁.env.freshvarsc ≤ St₂.env.freshvarsc := by rw [St₂_fvc]; exact Nat.le_succ _
               _ ≤ St₃.env.freshvarsc := hn₃
-          · intro v hv
-            have hv₂ : v ∈ St₂.types.entries := by
-              simpa [St₂_types_eq] using hv
-            exact St₃_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem the_x!_fresh hv₂)
+          · exact SMT.TypeContext.entries_subset_erase_of_notMem base_sub_St₃ the_x!_notbase
           · exact x!_fresh
           · exact x!_not_used
           · intro v hv
@@ -1145,9 +1230,10 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
               rw [St₂_used_eq]
               exact List.mem_cons_of_mem _ hv
             exact used_sub₃ hv₂
-          · exact keys_sub₃
+          · exact fun v hv => keys_sub₃ (SMT.TypeContext.keys_erase_subset hv)
           · -- preserves_types: v ∈ used, v ∉ Λ → v ∉ Γ'
             intro v hv hv_not_Λ
+            apply SMT.TypeContext.notMem_erase
             have hv_not_St₂ : v ∉ St₂.types := by
               rw [St₂_types_eq, AList.mem_insert]
               push_neg
@@ -1162,15 +1248,31 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
           · have typ_x!_base : (AList.insert x! α'.option St₁.types) ⊢ˢ .var x! : α'.option := by
               apply SMT.Typing.var
               exact AList.lookup_insert St₁.types
-            apply SMT.Typing.weakening _ typ_x!_base
-            intro v hv
-            have hv₂ : v ∈ St₂.types.entries := by
-              simpa only [St₂_types_eq, AList.entries_insert, List.mem_cons] using hv
-            exact St₃_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem the_x!_fresh hv₂)
-          · apply SMT.Typing.weakening _ typ_x!_spec_base
-            intro v hv
-            have hv₂ : v ∈ St₂.types.entries := by rwa [St₂_types_eq]
-            exact St₃_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem the_x!_fresh hv₂)
+            apply SMT.Typing.weakening (typ := typ_x!_base)
+              (hbv := by simp [SMT.bv])
+            exact SMT.TypeContext.entries_subset_erase_of_notMem base_sub_St₃ the_x!_notbase
+          · -- `the_x!` is now erased from the final context, so weakening the
+            -- `ite … (exists [the_x!] …)` spec there is sound. The bound names are
+            -- `bv x` (avoid `St₃` via `bv_x_notSt₃`), `the_x!` (erased), and
+            -- `bv the_x!_spec` (avoid `St₃` via the recursive spec), all `∉ St₃.erase`.
+            -- bound vars of `x` avoid `St₃`: they are used (via `hbv_the`) but not in
+            -- `St₂.types` (via the typing of `x`), so `preserves₃` keeps them out.
+            have bv_x_notSt₃ : ∀ v ∈ bv x, v ∉ St₃.types := by
+              intro v hv
+              have hv_used : v ∈ St₂.env.usedVars := hbv_the v (by simpa [bv] using hv)
+              have hv_notSt₂ : v ∉ St₂.types :=
+                SMT.Typing.bv_notMem_context typ_the_x_St₂ v (by simpa [bv] using hv)
+              exact preserves₃ v hv_used hv_notSt₂
+            apply SMT.Typing.weakening (typ := typ_x!_spec_base)
+              (hbv := by
+                intro v hv
+                simp only [SMT.bv, noneCast, List.append_nil, List.nil_append,
+                  List.singleton_append, List.mem_append, List.mem_cons] at hv
+                rcases hv with hvx | rfl | hv
+                · exact SMT.TypeContext.notMem_erase (bv_x_notSt₃ v hvx)
+                · exact the_x!_notSt₃
+                · exact SMT.TypeContext.notMem_erase (bv_spec_notSt₃ v hv))
+            exact SMT.TypeContext.entries_subset_erase_of_notMem base_sub_St₃ the_x!_notbase
           · intro u hu
             have hu' :
                 u ∈ SMT.fv (x =ˢ none$α) ∨
@@ -1192,7 +1294,8 @@ theorem loosenAux_prf_spec.opt.{u} («Δ» : RenamingContext.Context.{u})
               · exfalso
                 simp only [noneCast, fv, List.not_mem_nil] at hunone
             · simpa only [List.mem_union_iff] using hfv_exists_sub hlelse
-          · intro X denx
+          · clear the_x!_notSt₃ bv_spec_notSt₃ the_x!_notbase base_sub_St₃
+            intro X denx
             have hX_ty : X.snd.fst = α.option :=
               SMT.RenamingContext.denote_type_of_typing_fv typ_x_St₂
                 (by

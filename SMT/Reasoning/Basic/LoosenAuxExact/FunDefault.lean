@@ -255,10 +255,109 @@ private theorem sInterSepEqZftrueImpliesForallEqZftrue
   · exact False.elim (hnot_false hFx_false)
   · exact hFx_true
 
+/-- Erasing a freshly-inserted key restores the original context. -/
+private theorem erase_insert_self_aux {a : SMT.𝒱} {τ : SMTType}
+    {s : SMT.TypeContext} (ha : a ∉ s) : (s.insert a τ).erase a = s := by
+  apply AList.ext
+  show List.kerase a (AList.insert a τ s).entries = s.entries
+  rw [AList.entries_insert_of_notMem ha]
+  exact List.kerase_cons_eq rfl
+
+/-- Erasing any key keeps a non-member a non-member. -/
+private theorem notMem_erase_aux {Γ : SMT.TypeContext} {v z : SMT.𝒱}
+    (h : v ∉ Γ) : v ∉ Γ.erase z := fun hin => h (AList.mem_erase.mp hin).2
+
+/-- Erasing a key only shrinks the key set. -/
+private theorem keys_erase_subset_aux {Γ : SMT.TypeContext} {z : SMT.𝒱} :
+    (Γ.erase z).keys ⊆ Γ.keys := by
+  rw [AList.keys_erase]; exact List.erase_subset
+
+/-- If `Γ.entries ⊆ Δ.entries` and the erased key `z` is not in `Γ`, then
+`Γ.entries ⊆ (Δ.erase z).entries`. -/
+private theorem entries_subset_erase_of_notMem_aux {Γ Γ₂ : SMT.TypeContext} {z : SMT.𝒱}
+    (h : Γ.entries ⊆ Γ₂.entries) (hz : z ∉ Γ) : Γ.entries ⊆ (Γ₂.erase z).entries := by
+  intro e he
+  apply List.mem_kerase_of_ne_key _ (h he)
+  intro hcontra
+  exact hz (AList.mem_keys.mpr (hcontra ▸ (List.mem_map.mpr ⟨e, he, rfl⟩)))
+
+/-- Key membership transports along an `entries ⊆ entries` inclusion. -/
+private theorem mem_of_entries_subset_aux {a : SMT.𝒱} {Γ Γ' : SMT.TypeContext}
+    (ha : a ∈ Γ) (hsub : Γ.entries ⊆ Γ'.entries) : a ∈ Γ' := by
+  have ha' := AList.mem_keys.mpr ha
+  obtain ⟨τ, hτ⟩ := List.mem_keys.mp ha'
+  exact AList.mem_keys.mp (List.mem_keys.mpr ⟨τ, hsub hτ⟩)
+
+/-- The entries of `insert a v (erase a s)` are contained in the entries of `s`,
+provided `s.lookup a = some v`. -/
+private theorem insert_erase_entries_subset_aux {s : SMT.TypeContext} {a : SMT.𝒱} {v : SMTType}
+    (h : s.lookup a = some v) :
+    (AList.insert a v (s.erase a)).entries ⊆ s.entries := by
+  have ha_notMem : a ∉ s.erase a := by
+    intro hin; exact (AList.mem_erase.mp hin).1 rfl
+  rw [AList.entries_insert_of_notMem ha_notMem]
+  intro e he
+  rcases List.mem_cons.mp he with rfl | he
+  · exact AList.mem_lookup_iff.mp h
+  · exact (List.kerase_sublist a s.entries).subset he
+
+/-- `defaultSpecM` leaves the type context unchanged: every binder it introduces
+(only in the `.fun` case) is erased before returning. This is the structural
+fact that makes the binder/typing obligations of `defaultSpecMSpec` /
+`defaultSpecMTrueImpliesDefault` provable, since the running context coincides
+with the input context. -/
+private theorem defaultSpecM_types_unchanged (τ : SMTType) {Λ : SMT.TypeContext}
+    {name : String} {t : SMT.Term} :
+    ⦃ fun (⟨_, Λ'⟩ : EncoderState) ↦ ⌜Λ' = Λ⌝ ⦄
+    defaultSpecM name τ t
+    ⦃ ⇓? (_ : SMT.Term) (⟨_, Γ'⟩ : EncoderState) => ⌜Γ' = Λ⌝⦄ := by
+  induction τ generalizing Λ name t with
+  | int | bool | unit | option σ _ih =>
+    mintro pre ∀St
+    mpure pre
+    subst pre
+    unfold defaultSpecM
+    mspec Std.Do.Spec.pure
+  | pair σ ρ σ_ih ρ_ih =>
+    mintro pre ∀St
+    mpure pre
+    subst pre
+    unfold defaultSpecM
+    mspec σ_ih
+    mrename_i pre
+    mintro ∀St₂
+    mpure pre
+    mspec ρ_ih
+  | «fun» σ ρ _σ_ih ρ_ih =>
+    mintro pre ∀St
+    mpure pre
+    subst pre
+    unfold defaultSpecM
+    mspec SMT.freshVar_spec
+    mrename_i pre
+    mintro ∀St₂
+    mpure pre
+    obtain ⟨St₂_types_eq, x_fresh, _, _, _⟩ := pre
+    mspec (ρ_ih (Λ := St₂.types))
+    mrename_i pre3
+    mintro ∀St₃
+    mpure pre3
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE
+    mintro ∀StE
+    mpure preE
+    obtain ⟨StE_types_eq, _, _⟩ := preE
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    rw [StE_types_eq, pre3, St₂_types_eq]
+    rename_i x _
+    exact erase_insert_self_aux x_fresh
+
 theorem defaultSpecMSpec.{u} :
     ∀ («Δ» : RenamingContext.Context.{u})
       {τ : SMTType} {Γ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {t : Term}
       (typ_t : Γ ⊢ˢ t : τ)
+      (hbv_t : ∀ v ∈ bv t, v ∈ used)
       (ht : RenamingContext.CoversFV «Δ» t),
       ⦃fun st =>
         match st with
@@ -283,8 +382,8 @@ theorem defaultSpecMSpec.{u} :
                       ⟦spec.abstract «Δ₀» hφ⟧ˢ = some Φ ∧
                         Φ.snd.fst = SMTType.bool ∧
                         (Y.fst = τ.defaultZFSet → Φ.fst = zftrue)⌝⦄ := by
-  intro «Δ» τ Γ n used name t typ_t ht
-  induction τ generalizing «Δ» Γ n used name t with
+  intro «Δ» τ Γ n used name t typ_t hbv_t ht
+  induction τ generalizing «Δ» Γ n used name t hbv_t with
   | int =>
       mintro pre ∀St₁
       mpure pre
@@ -469,13 +568,15 @@ theorem defaultSpecMSpec.{u} :
       · exact ihα
           «Δ»
           (Γ := Γ) (n := n) (used := used)
-          (name := s!"{name}_fst") (t := .fst t) typ_fst ht_fst
+          (name := s!"{name}_fst") (t := .fst t) typ_fst
+          (fun v hv => hbv_t v (by simpa [SMT.bv] using hv)) ht_fst
       · intro hfst
         mintro pre ∀St₂
         mpure pre
         obtain ⟨hn₂, sub₂, used₂, keys₂, preserves₂, typ_hfst, fv_hfst, den_hfst⟩ := pre
         have typ_t_St₂ : St₂.types ⊢ˢ t : α.pair β := by
           exact SMT.Typing.weakening (h := sub₂) typ_t
+            (fun v hv => preserves₂ v (hbv_t v hv) (SMT.Typing.bv_notMem_context typ_t v hv))
         have typ_snd : St₂.types ⊢ˢ .snd t : β := by
           exact SMT.Typing.snd _ _ _ _ typ_t_St₂
         have ht_snd : RenamingContext.CoversFV «Δ» (.snd t) := by
@@ -484,14 +585,16 @@ theorem defaultSpecMSpec.{u} :
         have ihβ_snd := ihβ
           «Δ»
           (Γ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-          (name := s!"{name}_snd") (t := .snd t) typ_snd ht_snd
+          (name := s!"{name}_snd") (t := .snd t) typ_snd
+          (fun v hv => used₂ (hbv_t v (by simpa [SMT.bv] using hv))) ht_snd
         let Qraw : Std.Do.PostCond Term
             (Std.Do.PostShape.arg EncoderState (Std.Do.PostShape.except String Std.Do.PostShape.pure)) :=
           Std.Do.PostCond.mayThrow fun hsnd st =>
             match st with
             | { env := E', types := Γ'' } =>
               Std.Do.SPred.pure
-                (St₂.env.freshvarsc ≤ E'.freshvarsc ∧
+                (Γ'' = St₂.types ∧
+                  St₂.env.freshvarsc ≤ E'.freshvarsc ∧
                   St₂.types ⊆ Γ'' ∧
                   St₂.env.usedVars ⊆ E'.usedVars ∧
                   AList.keys Γ'' ⊆ E'.usedVars ∧
@@ -532,14 +635,23 @@ theorem defaultSpecMSpec.{u} :
         rw [Std.Do.WP.bind]
         simp only [Std.Do.WP.pure]
         have hraw_at :
-            (wp⟦defaultSpecM s!"{name}_snd" β (.snd t)⟧ Qraw St₂).down :=
-          ihβ_snd St₂ (by refine ⟨rfl, rfl, keys₂, rfl⟩)
+            (wp⟦defaultSpecM s!"{name}_snd" β (.snd t)⟧ Qraw St₂).down := by
+          refine ((Std.Do.WP.wp (defaultSpecM s!"{name}_snd" β (.snd t))).mono _ Qraw ?_)
+            St₂ ((Std.Do.Triple.and (defaultSpecM s!"{name}_snd" β (.snd t))
+              (defaultSpecM_types_unchanged β (Λ := St₂.types)
+                (name := s!"{name}_snd") (t := .snd t))
+              ihβ_snd) St₂ ⟨rfl, ⟨rfl, rfl, keys₂, rfl⟩⟩)
+          refine ⟨?_, Std.Do.ExceptConds.entails_true⟩
+          intro hsnd st h
+          obtain ⟨htypes', hbase'⟩ := h
+          obtain ⟨hn, hsub, hused, hkeys, hpres, htyp, hfv, hden⟩ := hbase'
+          exact ⟨htypes', hn, hsub, hused, hkeys, hpres, htyp, hfv, hden⟩
         have hpost : Qraw ⊢ₚ Qneed := by
           rw [Std.Do.PostCond.entails_mayThrow]
           intro hsnd
           mintro pre ∀St₃
           mpure pre
-          obtain ⟨hn₃, sub₃, used₃, keys₃, preserves₃, typ_hsnd, fv_hsnd, den_hsnd⟩ := pre
+          obtain ⟨St₃_eq, hn₃, sub₃, used₃, keys₃, preserves₃, typ_hsnd, fv_hsnd, den_hsnd⟩ := pre
           mpure_intro
           and_intros
           · exact hn₂.trans hn₃
@@ -550,8 +662,7 @@ theorem defaultSpecMSpec.{u} :
           · exact keys₃
           · intro v hv hv_not
             exact preserves₃ v (used₂ hv) (preserves₂ v hv hv_not)
-          · have typ_hfst_St₃ : St₃.types ⊢ˢ hfst : SMTType.bool := by
-              exact SMT.Typing.weakening (h := sub₃) typ_hfst
+          · have typ_hfst_St₃ : St₃.types ⊢ˢ hfst : SMTType.bool := St₃_eq ▸ typ_hfst
             exact SMT.Typing.and _ _ _ typ_hfst_St₃ typ_hsnd
           · intro v hv
             rcases (by simpa [SMT.fv, List.mem_append] using hv) with hv | hv
@@ -661,6 +772,7 @@ theorem defaultSpecMSpec.{u} :
           exact SMT.Typing.weakening
             (h := SMT.TypeContext.entries_subset_insert_of_notMem x_fresh)
             typ_t
+            (SMT.Typing.bv_notMem_insert_of_fresh typ_t (fun h => x_not_used (hbv_t x h)))
         have typ_var_x_St₂ : St₂.types ⊢ˢ .var x : α := by
           apply SMT.Typing.var
           rw [St₂_types_eq]
@@ -691,294 +803,287 @@ theorem defaultSpecMSpec.{u} :
         have ihβ_body := ihβ
           Δd
           (Γ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-          (name := s!"{name}_body") (t := .app t (.var x)) typ_app_St₂ ht_app_d
-        let Qraw : Std.Do.PostCond Term
-            (Std.Do.PostShape.arg EncoderState (Std.Do.PostShape.except String Std.Do.PostShape.pure)) :=
-          Std.Do.PostCond.mayThrow fun a st =>
-            match st with
-            | { env := E', types := Γ'' } =>
-              Std.Do.SPred.pure
-                (St₂.env.freshvarsc ≤ E'.freshvarsc ∧
-                  St₂.types ⊆ Γ'' ∧
-                  St₂.env.usedVars ⊆ E'.usedVars ∧
-                  AList.keys Γ'' ⊆ E'.usedVars ∧
-                  (∀ v ∈ St₂.env.usedVars, v ∉ St₂.types → v ∉ Γ'') ∧
-                  Γ'' ⊢ˢ a : SMTType.bool ∧
-                  fv a ⊆ fv (Term.app t (.var x)) ∧
-                  ∀ (Δ₀ : RenamingContext.Context)
-                    (ht₀ : RenamingContext.CoversFV Δ₀ (Term.app t (.var x)))
-                    (Y : SMT.Dom),
-                    RenamingContext.RespectsTypeContextOnFV Δ₀ St₂.types (Term.app t (.var x)) →
-                    ⟦(Term.app t (.var x)).abstract Δ₀ ht₀⟧ˢ = some Y →
-                      ∃ (hφ : RenamingContext.CoversFV Δ₀ a) (Φ : SMT.Dom),
-                        ⟦a.abstract Δ₀ hφ⟧ˢ = some Φ ∧
-                          Φ.snd.fst = SMTType.bool ∧
-                          (Y.fst = β.defaultZFSet → Φ.fst = zftrue))
-        let Qneed : Std.Do.PostCond Term
-            (Std.Do.PostShape.arg EncoderState (Std.Do.PostShape.except String Std.Do.PostShape.pure)) :=
-          Std.Do.PostCond.mayThrow fun a st =>
-            match st with
-            | { env := E', types := Γ'' } =>
-              Std.Do.SPred.pure
-                (St₁.env.freshvarsc ≤ E'.freshvarsc ∧
-                  St₁.types ⊆ Γ'' ∧
-                  St₁.env.usedVars ⊆ E'.usedVars ∧
-                  AList.keys Γ'' ⊆ E'.usedVars ∧
-                  (∀ v ∈ St₁.env.usedVars, v ∉ St₁.types → v ∉ Γ'') ∧
-                  Γ'' ⊢ˢ Term.forall [x] [α] a : .bool ∧
-                  fv (Term.forall [x] [α] a) ⊆ fv t ∧
-                  ∀ (Δ₀ : RenamingContext.Context)
-                    (ht₀ : RenamingContext.CoversFV Δ₀ t)
-                    (Y : SMT.Dom),
-                    RenamingContext.RespectsTypeContextOnFV Δ₀ St₁.types t →
-                    ⟦t.abstract Δ₀ ht₀⟧ˢ = some Y →
-                      ∃ (hφ : RenamingContext.CoversFV Δ₀ (Term.forall [x] [α] a)) (Φ : SMT.Dom),
-                        ⟦(Term.forall [x] [α] a).abstract Δ₀ hφ⟧ˢ = some Φ ∧
-                          Φ.snd.fst = SMTType.bool ∧
-                          (Y.fst = (α.fun β).defaultZFSet → Φ.fst = zftrue))
-        rw [Std.Do.WP.bind]
-        simp only [Std.Do.WP.pure]
-        have hraw_at := ihβ_body St₂ (by
-          refine ⟨rfl, rfl, keys₂, rfl⟩)
-        have hpost : Qraw ⊢ₚ Qneed := by
-          rw [Std.Do.PostCond.entails_mayThrow]
-          intro a
-          mintro pre ∀St₃
-          mpure pre
-          obtain ⟨hn₃, sub₃, used₃, keys₃, preserves₃, typ_a, fv_a, den_a⟩ := pre
-          have typ_a_St₂ : St₂.types ⊢ˢ a : SMTType.bool := by
-            apply SMT.Typing.strengthening_of_fv_subset sub₃ typ_a
+          (name := s!"{name}_body") (t := .app t (.var x)) typ_app_St₂
+          (fun v hv => by
+            rw [St₂_used_eq]
+            exact List.mem_cons_of_mem _ (hbv_t v (by simpa [SMT.bv] using hv))) ht_app_d
+        mspec ihβ_body
+        mrename_i pre
+        mintro ∀St₃
+        mpure pre
+        rename_i a
+        obtain ⟨hn₃, sub₃, used₃, keys₃, preserves₃, typ_a, fv_a, den_a⟩ := pre
+        have typ_a_St₂ : St₂.types ⊢ˢ a : SMTType.bool := by
+          apply SMT.Typing.strengthening_of_fv_subset sub₃ typ_a
+          intro v hv
+          have hv' := fv_a hv
+          simp only [fv, List.mem_append, List.mem_singleton] at hv'
+          rcases hv' with hv_t | hv_x
+          · exact SMT.Typing.mem_context_of_mem_fv typ_t_St₂ hv_t
+          · subst hv_x
+            rw [St₂_types_eq, AList.mem_insert]
+            exact Or.inl rfl
+        -- erase the forall binder `x` from the running context, then return the `forall`.
+        mspec SMT.eraseFromContext_spec
+        mrename_i preE
+        mintro ∀StE
+        mpure preE
+        obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+        mspec Std.Do.Spec.pure
+        mpure_intro
+        rw [StE_types_eq, StE_fvc, StE_used_eq]
+        and_intros
+        · calc
+            St₁.env.freshvarsc ≤ St₂.env.freshvarsc := by
+              rw [St₂_fvc]
+              exact Nat.le_succ _
+            _ ≤ St₃.env.freshvarsc := hn₃
+        · apply entries_subset_erase_of_notMem_aux _ x_fresh
+          intro v hv
+          exact sub₃ (by rw [St₂_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem x_fresh hv)
+        · intro v hv
+          exact used₃ (by rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv)
+        · exact fun v hv => keys₃ (keys_erase_subset_aux hv)
+        · intro v hv hv_not
+          apply notMem_erase_aux
+          have hv_ne_x : v ≠ x := fun h => absurd hv (h ▸ x_not_used)
+          have hv_not_St₂ : v ∉ St₂.types := by
+            rw [St₂_types_eq, AList.mem_insert]; push_neg; exact ⟨hv_ne_x, hv_not⟩
+          exact preserves₃ v (by rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv) hv_not_St₂
+        · -- `x` has been erased from `St₃.types`; the `∀`-binder re-introduces it, so the
+          -- typing of `Term.forall [x] [α] a` over `St₃.types.erase x` holds (no circularity).
+          have hlk : St₃.types.lookup x = some α :=
+            AList.lookup_of_subset sub₃ (St₂_types_eq ▸ AList.lookup_insert St₁.types)
+          have hx_notMem : x ∉ St₃.types.erase x := fun hin => (AList.mem_erase.mp hin).1 rfl
+          -- the binder body `a` typed in `St₃.types.erase x` re-extended with `x : α`,
+          -- which has the same lookups as `St₃.types`.
+          have typ_a_ext : SMT.TypeContext.update (St₃.types.erase x) [x] [α] rfl ⊢ˢ a : SMTType.bool := by
+            have hupd : SMT.TypeContext.update (St₃.types.erase x) [x] [α] rfl
+                = AList.insert x α (St₃.types.erase x) := by
+              simp only [SMT.TypeContext.update, List.length_cons, List.length_nil, zero_add,
+                Fin.foldl_succ, Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin,
+                Fin.val_eq_zero, List.getElem_cons_zero, Fin.isValue, Fin.foldl_zero]
+            rw [hupd]
+            refine SMT.Typing.strengthening_of_fv_subset
+              (insert_erase_entries_subset_aux hlk) typ_a ?_
             intro v hv
             have hv' := fv_a hv
             simp only [fv, List.mem_append, List.mem_singleton] at hv'
             rcases hv' with hv_t | hv_x
-            · exact SMT.Typing.mem_context_of_mem_fv typ_t_St₂ hv_t
+            · rw [AList.mem_insert]
+              right
+              rw [AList.mem_erase]
+              have hv_St₃ : v ∈ St₃.types :=
+                mem_of_entries_subset_aux
+                  (SMT.Typing.mem_context_of_mem_fv typ_t_St₂ hv_t) sub₃
+              have hv_ne_x : v ≠ x := by
+                intro hvx; subst hvx
+                exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hv_t)
+              exact ⟨hv_ne_x, hv_St₃⟩
             · subst hv_x
-              rw [St₂_types_eq, AList.mem_insert]
-              exact Or.inl rfl
-          mpure_intro
-          and_intros
-          · calc
-              St₁.env.freshvarsc ≤ St₂.env.freshvarsc := by
-                rw [St₂_fvc]
-                exact Nat.le_succ _
-              _ ≤ St₃.env.freshvarsc := hn₃
-          · intro v hv
-            exact sub₃ (by rw [St₂_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem x_fresh hv)
-          · intro v hv
-            exact used₃ (by rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv)
-          · exact keys₃
-          · intro v hv hv_not
-            have hv_ne_x : v ≠ x := fun h => absurd hv (h ▸ x_not_used)
-            have hv_not_St₂ : v ∉ St₂.types := by
-              rw [St₂_types_eq, AList.mem_insert]; push_neg; exact ⟨hv_ne_x, hv_not⟩
-            exact preserves₃ v (by rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv) hv_not_St₂
-          · have typ_forall_base :
-                St₁.types ⊢ˢ Term.forall [x] [α] a : SMTType.bool := by
-              refine SMT.Typing.forall St₁.types [x] [α] a ?_ ?_ ?_ ?_ ?_
-              · intro v hvv hvΓ
-                rw [List.mem_singleton] at hvv
-                subst hvv
-                exact x_fresh hvΓ
-              · intro v hvv hvb
-                have hxv : v = x := by
-                  simpa [List.mem_singleton] using hvv
-                have hv_mem_St₂ : v ∈ St₂.types := by
-                  rw [hxv, St₂_types_eq, AList.mem_insert]
-                  exact Or.inl rfl
-                exact SMT.Typing.bv_notMem_context typ_a_St₂ _ hvb hv_mem_St₂
-              · simp
-              · simp
-              · have hupd : St₁.types.update [x] [α] rfl = AList.insert x α St₁.types := by
-                  simp only [SMT.TypeContext.update, List.length_cons, List.length_nil, zero_add,
-                    Fin.foldl_succ, Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin,
-                    Fin.val_eq_zero, List.getElem_cons_zero, Fin.isValue, Fin.foldl_zero]
-                rw [hupd]
-                simpa [St₂_types_eq] using typ_a_St₂
-            exact SMT.Typing.weakening
-              (h := by
-                intro v hv
-                exact sub₃ (by
-                  rw [St₂_types_eq]
-                  exact SMT.TypeContext.entries_subset_insert_of_notMem x_fresh hv))
-              typ_forall_base
-          · intro v hv
+              rw [AList.mem_insert]; exact Or.inl rfl
+          refine SMT.Typing.forall (St₃.types.erase x) [x] [α] a ?_ ?_ ?_ ?_ typ_a_ext
+          · intro v hvv hvΓ
+            rw [List.mem_singleton] at hvv
+            subst hvv
+            exact (AList.mem_erase.mp hvΓ).1 rfl
+          · intro v hvv hvb
+            have hxv : v = x := by simpa [List.mem_singleton] using hvv
+            exact SMT.Typing.bv_notMem_context typ_a _ hvb
+              (hxv ▸ AList.lookup_isSome.mp (by rw [hlk]; rfl))
+          · simp
+          · simp
+        · intro v hv
+          simp only [fv, List.mem_removeAll_iff, List.mem_cons, List.not_mem_nil, or_false] at hv
+          obtain ⟨hv_a, hxv⟩ := hv
+          have hv' := fv_a hv_a
+          simp only [fv, List.mem_append, List.mem_singleton] at hv'
+          rcases hv' with hv_t | hv_x
+          · exact hv_t
+          · exact (hxv hv_x).elim
+        · intro Δ₀ ht₀ Y respects den_t
+          have x_not_mem_fv_t : x ∉ fv t := by
+            intro hx_mem
+            exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hx_mem)
+          have hY_ty : Y.snd.fst = α.fun β :=
+            RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)
+          have respects_app :
+              ∀ (Xarg : SMT.Dom), Xarg.snd.fst = α →
+                RenamingContext.RespectsTypeContextOnFV
+                  (Function.update Δ₀ x (some Xarg)) St₂.types (Term.app t (.var x)) := by
+            intro Xarg hXarg_ty
+            rw [St₂_types_eq]
+            exact respectsTypeContextOnFV_app_var
+              (respects := respects) (typ_t := typ_t) (x_fresh := x_fresh)
+              (hXarg_ty := hXarg_ty)
+          have hY_func : ZFSet.IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ Y.fst := by
+            rw [←ZFSet.mem_funs]
+            simpa [hY_ty] using Y.snd.snd
+          have hcov_t_upd (Xarg : SMT.Dom) :
+              RenamingContext.CoversFV (Function.update Δ₀ x (some Xarg)) t :=
+            SMT.RenamingContext.coversFV_update_of_notMem
+              (x := x) (d := Xarg) x_not_mem_fv_t ht₀
+          have den_t_upd (Xarg : SMT.Dom) :
+              ⟦t.abstract (Function.update Δ₀ x (some Xarg)) (hcov_t_upd Xarg)⟧ˢ = some Y := by
+            calc
+              ⟦t.abstract (Function.update Δ₀ x (some Xarg)) (hcov_t_upd Xarg)⟧ˢ =
+                  SMT.RenamingContext.denote (Function.update Δ₀ x (some Xarg)) t
+                    (hcov_t_upd Xarg) := by
+                    rfl
+              _ = SMT.RenamingContext.denote Δ₀ t ht₀ := by
+                    simpa [SMT.RenamingContext.denote] using
+                      (SMT.RenamingContext.denote_update_of_notMem
+                        («Δ» := Δ₀) (t := t) (x := x) (d := Xarg)
+                        (h := ht₀) x_not_mem_fv_t).symm
+              _ = some Y := den_t
+          have hcov_a_upd (Xarg : SMT.Dom) :
+              RenamingContext.CoversFV (Function.update Δ₀ x (some Xarg)) a := by
+            intro v hv
+            have hv' := fv_a hv
+            simp only [fv, List.mem_append, List.mem_singleton] at hv'
+            rcases hv' with hv_t | hv_x
+            · by_cases hvx : v = x
+              · subst hvx
+                simp
+              · rw [Function.update_of_ne hvx]
+                exact ht₀ v hv_t
+            · subst hv_x
+              simp
+          have hgo_cov :
+              ∀ v ∈ fv a, v ∉ [x] → (Δ₀ v).isSome = true := by
+            intro v hv hv_not_x
+            have hv' := fv_a hv
+            simp only [fv, List.mem_append, List.mem_singleton] at hv'
+            rcases hv' with hv_t | hv_x
+            · exact ht₀ v hv_t
+            · have hv_mem_x : v ∈ [x] := by
+                simpa [List.mem_singleton] using hv_x
+              exact (hv_not_x hv_mem_x).elim
+          have hφ : RenamingContext.CoversFV Δ₀ (Term.forall [x] [α] a) := by
+            intro v hv
             simp only [fv, List.mem_removeAll_iff, List.mem_cons, List.not_mem_nil, or_false] at hv
             obtain ⟨hv_a, hxv⟩ := hv
             have hv' := fv_a hv_a
             simp only [fv, List.mem_append, List.mem_singleton] at hv'
             rcases hv' with hv_t | hv_x
-            · exact hv_t
+            · exact ht₀ v hv_t
             · exact (hxv hv_x).elim
-          · intro Δ₀ ht₀ Y respects den_t
-            have x_not_mem_fv_t : x ∉ fv t := by
-              intro hx_mem
-              exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hx_mem)
-            have hY_ty : Y.snd.fst = α.fun β :=
-              RenamingContext.denote_type_of_typing_fv (htyp := typ_t) (hden := den_t) (hcompat := respects)
-            have respects_app :
-                ∀ (Xarg : SMT.Dom), Xarg.snd.fst = α →
-                  RenamingContext.RespectsTypeContextOnFV
-                    (Function.update Δ₀ x (some Xarg)) St₂.types (Term.app t (.var x)) := by
-              intro Xarg hXarg_ty
-              rw [St₂_types_eq]
-              exact respectsTypeContextOnFV_app_var
-                (respects := respects) (typ_t := typ_t) (x_fresh := x_fresh)
-                (hXarg_ty := hXarg_ty)
-            have hY_func : ZFSet.IsFunc ⟦α⟧ᶻ ⟦β⟧ᶻ Y.fst := by
-              rw [←ZFSet.mem_funs]
-              simpa [hY_ty] using Y.snd.snd
-            have hcov_t_upd (Xarg : SMT.Dom) :
-                RenamingContext.CoversFV (Function.update Δ₀ x (some Xarg)) t :=
-              SMT.RenamingContext.coversFV_update_of_notMem
-                (x := x) (d := Xarg) x_not_mem_fv_t ht₀
-            have den_t_upd (Xarg : SMT.Dom) :
-                ⟦t.abstract (Function.update Δ₀ x (some Xarg)) (hcov_t_upd Xarg)⟧ˢ = some Y := by
-              calc
-                ⟦t.abstract (Function.update Δ₀ x (some Xarg)) (hcov_t_upd Xarg)⟧ˢ =
-                    SMT.RenamingContext.denote (Function.update Δ₀ x (some Xarg)) t
-                      (hcov_t_upd Xarg) := by
-                      rfl
-                _ = SMT.RenamingContext.denote Δ₀ t ht₀ := by
-                      simpa [SMT.RenamingContext.denote] using
-                        (SMT.RenamingContext.denote_update_of_notMem
-                          («Δ» := Δ₀) (t := t) (x := x) (d := Xarg)
-                          (h := ht₀) x_not_mem_fv_t).symm
-                _ = some Y := den_t
-            have hcov_a_upd (Xarg : SMT.Dom) :
-                RenamingContext.CoversFV (Function.update Δ₀ x (some Xarg)) a := by
-              intro v hv
-              have hv' := fv_a hv
-              simp only [fv, List.mem_append, List.mem_singleton] at hv'
-              rcases hv' with hv_t | hv_x
-              · by_cases hvx : v = x
-                · subst hvx
-                  simp
-                · rw [Function.update_of_ne hvx]
-                  exact ht₀ v hv_t
-              · subst hv_x
+          have hgo_forall
+              (w : Fin [x].length → SMT.Dom)
+              (hw : ∀ i, (w i).snd.fst = [α][i] ∧ (w i).fst ∈ ⟦[α][i]⟧ᶻ) :
+              (Term.abstract.go a [x] Δ₀ hgo_cov).uncurry w =
+                a.abstract (Function.update Δ₀ x (some (w ⟨0, by simp⟩)))
+                  (hcov_a_upd (w ⟨0, by simp⟩)) := by
+            have hgo := SMT.Term.abstract.go.alt_def₂
+              (vs := [x]) (P := a) (Δctx := Δ₀)
+              (αs := List.ofFn w) (vs_αs_len := by simp)
+              (Δ_isSome := hgo_cov)
+              (tmp₁ := by
+                intro v hv
+                by_cases hvx : v ∈ [x]
+                · exact Function.updates_isSome_of_mem_map_some Δ₀ [x] (List.ofFn w) v hvx (by simp)
+                · rw [Function.updates_of_not_mem
+                    (f := Δ₀)
+                    (xs := [x]) (ys := (List.ofFn w).map Option.some) (k := v) hvx]
+                  exact hgo_cov v hv (by simpa using hvx))
+            have h_ofFn_list : List.ofFn w = [w ⟨0, by simp⟩] := by
+              simpa using (List.ofFn_succ' (n := 0) w)
+            have h_ofFn :
+                (fun i =>
+                  match i with
+                  | ⟨j, _⟩ => (List.ofFn w)[j]) = w := by
+              funext i
+              cases i with
+              | mk j hj =>
+                  simp at hj
+                  have hj0 : j = 0 := hj
+                  subst hj0
+                  simp [h_ofFn_list]
+            simpa [h_ofFn, Function.updates] using hgo
+          have hbody_total :
+              ∀ {x_1 : Fin [x].length → SMT.Dom},
+                (∀ i, (x_1 i).snd.fst = [α][i] ∧ (x_1 i).fst ∈ ⟦[α][i]⟧ᶻ) →
+                  ⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry x_1⟧ˢ.isSome = true := by
+            intro x_1 hx_1
+            let Xarg : SMT.Dom := x_1 ⟨0, by simp⟩
+            have hXarg_ty : Xarg.snd.fst = α := by
+              simpa [Xarg] using (hx_1 ⟨0, by simp⟩).1
+            have hXarg_mem : Xarg.fst ∈ ⟦α⟧ᶻ := by
+              simpa [Xarg] using (hx_1 ⟨0, by simp⟩).2
+            obtain ⟨hcov_app, Dapp, hDapp_ty, hDapp_val, hden_app⟩ :=
+              defaultSpecMFunDenoteAppAt
+                (hcov_t_upd := hcov_t_upd) (den_t_upd := den_t_upd)
+                (hY_ty := hY_ty) (hY_func := hY_func)
+                Xarg hXarg_ty hXarg_mem
+            obtain ⟨hφa, Dspec, hden_spec, hDspec_ty, hDspec_def⟩ :=
+              den_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
+                (respects_app Xarg hXarg_ty) hden_app
+            rw [hgo_forall x_1 hx_1]
+            exact Option.isSome_of_eq_some hden_spec
+          have hbody_total' :
+              ∀ {x_1 : Fin [x].length → SMT.Dom},
+                (∀ i,
+                  ((x_1 i).snd.fst =
+                      match i with
+                      | ⟨i, hi⟩ => [α][i]) ∧
+                    (x_1 i).fst ∈
+                      ⟦match i with
+                        | ⟨i, hi⟩ => [α][i]⟧ᶻ) →
+                  ⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry x_1⟧ˢ.isSome = true := by
+            intro x_1 hx_1
+            exact hbody_total (by
+              intro i
+              have hi0 : i = ⟨0, by simp⟩ := by
+                apply Fin.ext
                 simp
-            have hgo_cov :
-                ∀ v ∈ fv a, v ∉ [x] → (Δ₀ v).isSome = true := by
-              intro v hv hv_not_x
-              have hv' := fv_a hv
-              simp only [fv, List.mem_append, List.mem_singleton] at hv'
-              rcases hv' with hv_t | hv_x
-              · exact ht₀ v hv_t
-              · have hv_mem_x : v ∈ [x] := by
-                  simpa [List.mem_singleton] using hv_x
-                exact (hv_not_x hv_mem_x).elim
-            have hφ : RenamingContext.CoversFV Δ₀ (Term.forall [x] [α] a) := by
-              intro v hv
-              simp only [fv, List.mem_removeAll_iff, List.mem_cons, List.not_mem_nil, or_false] at hv
-              obtain ⟨hv_a, hxv⟩ := hv
-              have hv' := fv_a hv_a
-              simp only [fv, List.mem_append, List.mem_singleton] at hv'
-              rcases hv' with hv_t | hv_x
-              · exact ht₀ v hv_t
-              · exact (hxv hv_x).elim
-            have hgo_forall
-                (w : Fin [x].length → SMT.Dom)
-                (hw : ∀ i, (w i).snd.fst = [α][i] ∧ (w i).fst ∈ ⟦[α][i]⟧ᶻ) :
-                (Term.abstract.go a [x] Δ₀ hgo_cov).uncurry w =
-                  a.abstract (Function.update Δ₀ x (some (w ⟨0, by simp⟩)))
-                    (hcov_a_upd (w ⟨0, by simp⟩)) := by
-              have hgo := SMT.Term.abstract.go.alt_def₂
-                (vs := [x]) (P := a) (Δctx := Δ₀)
-                (αs := List.ofFn w) (vs_αs_len := by simp)
-                (Δ_isSome := hgo_cov)
-                (tmp₁ := by
-                  intro v hv
-                  by_cases hvx : v ∈ [x]
-                  · exact Function.updates_isSome_of_mem_map_some Δ₀ [x] (List.ofFn w) v hvx (by simp)
-                  · rw [Function.updates_of_not_mem
-                      (f := Δ₀)
-                      (xs := [x]) (ys := (List.ofFn w).map Option.some) (k := v) hvx]
-                    exact hgo_cov v hv (by simpa using hvx))
-              have h_ofFn_list : List.ofFn w = [w ⟨0, by simp⟩] := by
-                simpa using (List.ofFn_succ' (n := 0) w)
-              have h_ofFn :
-                  (fun i =>
-                    match i with
-                    | ⟨j, _⟩ => (List.ofFn w)[j]) = w := by
-                funext i
-                cases i with
-                | mk j hj =>
-                    simp at hj
-                    have hj0 : j = 0 := hj
-                    subst hj0
-                    simp [h_ofFn_list]
-              simpa [h_ofFn, Function.updates] using hgo
-            have hbody_total :
-                ∀ {x_1 : Fin [x].length → SMT.Dom},
-                  (∀ i, (x_1 i).snd.fst = [α][i] ∧ (x_1 i).fst ∈ ⟦[α][i]⟧ᶻ) →
-                    ⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry x_1⟧ˢ.isSome = true := by
-              intro x_1 hx_1
-              let Xarg : SMT.Dom := x_1 ⟨0, by simp⟩
-              have hXarg_ty : Xarg.snd.fst = α := by
-                simpa [Xarg] using (hx_1 ⟨0, by simp⟩).1
-              have hXarg_mem : Xarg.fst ∈ ⟦α⟧ᶻ := by
-                simpa [Xarg] using (hx_1 ⟨0, by simp⟩).2
-              obtain ⟨hcov_app, Dapp, hDapp_ty, hDapp_val, hden_app⟩ :=
-                defaultSpecMFunDenoteAppAt
-                  (hcov_t_upd := hcov_t_upd) (den_t_upd := den_t_upd)
-                  (hY_ty := hY_ty) (hY_func := hY_func)
-                  Xarg hXarg_ty hXarg_mem
-              obtain ⟨hφa, Dspec, hden_spec, hDspec_ty, hDspec_def⟩ :=
-                den_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
-                  (respects_app Xarg hXarg_ty) hden_app
-              rw [hgo_forall x_1 hx_1]
-              exact Option.isSome_of_eq_some hden_spec
-            have hbody_total' :
-                ∀ {x_1 : Fin [x].length → SMT.Dom},
-                  (∀ i,
-                    ((x_1 i).snd.fst =
-                        match i with
-                        | ⟨i, hi⟩ => [α][i]) ∧
-                      (x_1 i).fst ∈
-                        ⟦match i with
-                          | ⟨i, hi⟩ => [α][i]⟧ᶻ) →
-                    ⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry x_1⟧ˢ.isSome = true := by
-              intro x_1 hx_1
-              exact hbody_total (by
-                intro i
-                have hi0 : i = ⟨0, by simp⟩ := by
-                  apply Fin.ext
-                  simp
-                cases hi0
-                simpa using hx_1 ⟨0, by simp⟩)
-            have hlen_forall : [x].length > 0 := by
-              simp
-            let Φ : SMT.Dom :=
-              ⟨⋂₀
-                (ZFSet.sep
-                  (fun y =>
-                    ∃ x_1 ∈ ⟦α⟧ᶻ,
-                      y =
-                        if h : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ then
-                          (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
-                              (fun _ => ⟨x_1, α, h.2⟩)⟧ˢ.get
-                            (hbody_total (by
-                              intro i
-                              have hi0 : i = ⟨0, by simp⟩ := by
-                                apply Fin.ext
-                                simp
-                              cases hi0
-                              exact ⟨rfl, h.2⟩))).fst
-                        else zffalse)
-                  𝔹 : ZFSet),
-                SMTType.bool,
-                ZFSet.sInter_sep_subset_of_𝔹_mem_𝔹 (fun _ => id)⟩
-            refine ⟨hφ, Φ, ?_, rfl, ?_⟩
-            · rw [SMT.Term.abstract, dif_pos (by rfl), SMT.denote]
-              rw [dif_pos hlen_forall]
-              split_ifs with hsome
-              · simp only [List.length_cons, List.length_nil, Nat.reduceAdd, Nat.add_one_sub_one,
-                  List.getElem_cons_succ, Fin.zero_eta, Fin.isValue, Fin.coe_ofNat_eq_mod,
-                  Nat.zero_mod, List.getElem_cons_zero, Fin.val_eq_zero, get.eq_1, forall_const,
-                  Option.pure_def, Option.failure_eq_none, Option.bind_some, Fin.foldl_zero, Φ]
-                let sInterGoal : ZFSet :=
-                  ⋂₀
+              cases hi0
+              simpa using hx_1 ⟨0, by simp⟩)
+          have hlen_forall : [x].length > 0 := by
+            simp
+          let Φ : SMT.Dom :=
+            ⟨⋂₀
+              (ZFSet.sep
+                (fun y =>
+                  ∃ x_1 ∈ ⟦α⟧ᶻ,
+                    y =
+                      if h : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ then
+                        (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
+                            (fun _ => ⟨x_1, α, h.2⟩)⟧ˢ.get
+                          (hbody_total (by
+                            intro i
+                            have hi0 : i = ⟨0, by simp⟩ := by
+                              apply Fin.ext
+                              simp
+                            cases hi0
+                            exact ⟨rfl, h.2⟩))).fst
+                      else zffalse)
+                𝔹 : ZFSet),
+              SMTType.bool,
+              ZFSet.sInter_sep_subset_of_𝔹_mem_𝔹 (fun _ => id)⟩
+          refine ⟨hφ, Φ, ?_, rfl, ?_⟩
+          · rw [SMT.Term.abstract, dif_pos (by rfl), SMT.denote]
+            rw [dif_pos hlen_forall]
+            split_ifs with hsome
+            · simp only [List.length_cons, List.length_nil, Nat.reduceAdd, Nat.add_one_sub_one,
+                List.getElem_cons_succ, Fin.zero_eta, Fin.isValue, Fin.coe_ofNat_eq_mod,
+                Nat.zero_mod, List.getElem_cons_zero, Fin.val_eq_zero, get.eq_1, forall_const,
+                Option.pure_def, Option.failure_eq_none, Option.bind_some, Fin.foldl_zero, Φ]
+              let sInterGoal : ZFSet :=
+                ⋂₀
+                  ZFSet.sep
+                    (fun y =>
+                      ∃ x_1 ∈ ⟦α⟧ᶻ,
+                        y =
+                          if hx : x_1.hasArity 1 ∧ ∀ i : Fin 1, x_1 ∈ ⟦[α][↑i]⟧ᶻ then
+                            (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
+                                (fun i => ⟨x_1, [α][↑i], hx.2 i⟩)⟧ˢ.get
+                              (hsome (by
+                                intro i
+                                exact ⟨rfl, hx.2 i⟩))).fst
+                          else zffalse)
+                    𝔹
+              have hsInter_eq :
+                  (⋂₀
                     ZFSet.sep
                       (fun y =>
                         ∃ x_1 ∈ ⟦α⟧ᶻ,
@@ -990,94 +1095,7 @@ theorem defaultSpecMSpec.{u} :
                                   intro i
                                   exact ⟨rfl, hx.2 i⟩))).fst
                             else zffalse)
-                      𝔹
-                have hsInter_eq :
-                    (⋂₀
-                      ZFSet.sep
-                        (fun y =>
-                          ∃ x_1 ∈ ⟦α⟧ᶻ,
-                            y =
-                              if hx : x_1.hasArity 1 ∧ ∀ i : Fin 1, x_1 ∈ ⟦[α][↑i]⟧ᶻ then
-                                (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
-                                    (fun i => ⟨x_1, [α][↑i], hx.2 i⟩)⟧ˢ.get
-                                  (hsome (by
-                                    intro i
-                                    exact ⟨rfl, hx.2 i⟩))).fst
-                              else zffalse)
-                        𝔹 : ZFSet) =
-                    (⋂₀
-                      ZFSet.sep
-                        (fun y =>
-                          ∃ x_1 ∈ ⟦α⟧ᶻ,
-                            y =
-                              if h : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ then
-                                (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
-                                    (fun _ => ⟨x_1, α, h.2⟩)⟧ˢ.get
-                                  (hbody_total (by
-                                    intro i
-                                    have hi0 : i = ⟨0, by simp⟩ := by
-                                      apply Fin.ext
-                                      simp
-                                    cases hi0
-                                    exact ⟨rfl, h.2⟩))).fst
-                              else zffalse)
-                        𝔹 : ZFSet) := by
-                  congr
-                  ext y
-                  have hbody_eq {x_1 : ZFSet} (hx_1 : x_1 ∈ ⟦α⟧ᶻ) :
-                      (if hx : x_1.hasArity 1 ∧ ∀ i : Fin 1, x_1 ∈ ⟦[α][↑i]⟧ᶻ then
-                        (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
-                            (fun i => ⟨x_1, [α][↑i], hx.2 i⟩)⟧ˢ.get
-                          (hsome (by
-                            intro i
-                            exact ⟨rfl, hx.2 i⟩))).fst
-                      else zffalse) =
-                      (if h : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ then
-                        (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
-                            (fun _ => ⟨x_1, α, h.2⟩)⟧ˢ.get
-                          (hbody_total (by
-                            intro i
-                            have hi0 : i = ⟨0, by simp⟩ := by
-                              apply Fin.ext
-                              simp
-                            cases hi0
-                            exact ⟨rfl, h.2⟩))).fst
-                      else zffalse) := by
-                    by_cases h : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ
-                    · have hx : x_1.hasArity 1 ∧ ∀ i : Fin 1, x_1 ∈ ⟦[α][↑i]⟧ᶻ := by
-                        constructor
-                        · exact h.1
-                        · intro i
-                          have hi0 : i = ⟨0, by simp⟩ := by
-                            apply Fin.ext
-                            simp
-                          cases hi0
-                          simpa using h.2
-                      simpa [hx, h]
-                    · have hx : ¬ (x_1.hasArity 1 ∧ ∀ i : Fin 1, x_1 ∈ ⟦[α][↑i]⟧ᶻ) := by
-                        intro hx
-                        apply h
-                        constructor
-                        · exact hx.1
-                        · simpa using hx.2 ⟨0, by simp⟩
-                      simpa [hx, h]
-                  constructor
-                  · rintro ⟨x_1, hx_1, hy⟩
-                    refine ⟨x_1, ?_, hy.trans (hbody_eq (by simpa [Fin.foldl_zero] using hx_1))⟩
-                    simpa [Fin.foldl_zero] using hx_1
-                  · rintro ⟨x_1, hx_1, hy⟩
-                    refine ⟨x_1, ?_, hy.trans (hbody_eq hx_1).symm⟩
-                    simpa [Fin.foldl_zero] using hx_1
-                congr
-                · conv_lhs =>
-                    simp [sInterGoal, Fin.foldl_zero]
-                · funext τ
-                  conv_lhs =>
-                    simp [sInterGoal, Fin.foldl_zero]
-                · apply proof_irrel_heq
-              · exact (hsome hbody_total').elim
-            · intro hdef
-              have hsInter_true :
+                      𝔹 : ZFSet) =
                   (⋂₀
                     ZFSet.sep
                       (fun y =>
@@ -1094,92 +1112,142 @@ theorem defaultSpecMSpec.{u} :
                                   cases hi0
                                   exact ⟨rfl, h.2⟩))).fst
                             else zffalse)
-                      𝔹 : ZFSet) = zftrue := by
-                apply sInter_sep_eq_zftrue_of_forall_eq_zftrue
-                · exact ⟨α.defaultZFSet, SMTType.mem_toZFSet_of_defaultZFSet⟩
-                · intro x_1 hx_1
-                  have hx1 := funUnaryTarget (α := α) hx_1
-                  have hx_cast : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ := by
-                    constructor
-                    · exact hx1.1
-                    · exact hx_1
-                  rw [dif_pos hx_cast]
-                  let Xarg : SMT.Dom := ⟨x_1, α, hx_1⟩
-                  obtain ⟨hcov_app, Dapp, hDapp_ty, hDapp_val, hden_app⟩ :=
-                    defaultSpecMFunDenoteAppAt
-                      (hcov_t_upd := hcov_t_upd) (den_t_upd := den_t_upd)
-                      (hY_ty := hY_ty) (hY_func := hY_func)
-                      Xarg rfl hx_1
-                  obtain ⟨hφa, Dspec, hden_spec, hDspec_ty, hDspec_def⟩ :=
-                    den_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
-                      (respects_app Xarg rfl) hden_app
-                  have hDapp_def : Dapp.fst = β.defaultZFSet := by
-                    have hYeq_default :
-                        Y = ⟨(α.fun β).defaultZFSet, α.fun β,
-                          SMTType.mem_toZFSet_of_defaultZFSet⟩ := by
-                      cases Y with
-                      | mk y hy =>
-                      cases hy with
-                      | mk τ hy =>
-                          cases hY_ty
-                          subst hdef
-                          congr
-                    cases hYeq_default
-                    rw [hDapp_val]
-                    simpa [Xarg] using defaultZFSetFunApp (α := α) (β := β) hx_1
-                  have hDspec_true : Dspec.fst = zftrue := hDspec_def hDapp_def
-                  have hgo_Xarg := hgo_forall (fun _ => Xarg) (by
-                    intro i
-                    have hi0 : i = ⟨0, by simp⟩ := by
-                      apply Fin.ext
-                      simp
-                    cases hi0
-                    exact ⟨rfl, hx_1⟩)
-                  have hbody_eq :
-                      ⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry (fun _ => Xarg)⟧ˢ =
-                        some Dspec := by
-                    rw [hgo_Xarg]
-                    simpa [Xarg] using hden_spec
-                  generalize_proofs hbody_some
-                  have hbody_get :
-                      (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry (fun _ => Xarg)⟧ˢ.get
-                        hbody_some) = Dspec := by
-                    rw [Option.get_of_eq_some hbody_some hbody_eq]
-                  have hbody_fst :
-                      (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry (fun _ => Xarg)⟧ˢ.get
-                        hbody_some).fst = Dspec.fst := by
-                    exact congrArg (fun d : SMT.Dom => d.fst) hbody_get
-                  rw [hbody_fst, hDspec_true]
-              simpa [Φ] using hsInter_true
-        simpa [Std.Do.PostCond.mayThrow] using
-          (((Std.Do.wp (defaultSpecM s!"{name}_body" β (.app t (.var x)))).mono
-            Qraw
-            (Std.Do.PostCond.mayThrow fun a st =>
-              match st with
-              | { env := E', types := Γ'' } =>
-                Std.Do.SPred.pure
-                  (St₁.env.freshvarsc ≤ E'.freshvarsc ∧
-                    St₁.types ⊆ Γ'' ∧
-                    St₁.env.usedVars ⊆ E'.usedVars ∧
-                    AList.keys Γ'' ⊆ E'.usedVars ∧
-                    (∀ v ∈ St₁.env.usedVars, v ∉ St₁.types → v ∉ Γ'') ∧
-                    Γ'' ⊢ˢ Term.forall [x] [α] a : SMTType.bool ∧
-                    fv (Term.forall [x] [α] a) ⊆ fv t ∧
-                    ∀ (Δ₀ : RenamingContext.Context)
-                      (ht₀ : RenamingContext.CoversFV Δ₀ t)
-                      (Y : SMT.Dom),
-                      RenamingContext.RespectsTypeContextOnFV Δ₀ St₁.types t →
-                      ⟦t.abstract Δ₀ ht₀⟧ˢ = some Y →
-                        ∃ (hφ : RenamingContext.CoversFV Δ₀ (Term.forall [x] [α] a)) (Φ : SMT.Dom),
-                          ⟦(Term.forall [x] [α] a).abstract Δ₀ hφ⟧ˢ = some Φ ∧
-                            Φ.snd.fst = SMTType.bool ∧
-                            (Y.fst = (α.fun β).defaultZFSet → Φ.fst = zftrue)))
-            (by simpa [Qneed] using hpost)) St₂ hraw_at)
+                      𝔹 : ZFSet) := by
+                congr
+                ext y
+                have hbody_eq {x_1 : ZFSet} (hx_1 : x_1 ∈ ⟦α⟧ᶻ) :
+                    (if hx : x_1.hasArity 1 ∧ ∀ i : Fin 1, x_1 ∈ ⟦[α][↑i]⟧ᶻ then
+                      (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
+                          (fun i => ⟨x_1, [α][↑i], hx.2 i⟩)⟧ˢ.get
+                        (hsome (by
+                          intro i
+                          exact ⟨rfl, hx.2 i⟩))).fst
+                    else zffalse) =
+                    (if h : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ then
+                      (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
+                          (fun _ => ⟨x_1, α, h.2⟩)⟧ˢ.get
+                        (hbody_total (by
+                          intro i
+                          have hi0 : i = ⟨0, by simp⟩ := by
+                            apply Fin.ext
+                            simp
+                          cases hi0
+                          exact ⟨rfl, h.2⟩))).fst
+                    else zffalse) := by
+                  by_cases h : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ
+                  · have hx : x_1.hasArity 1 ∧ ∀ i : Fin 1, x_1 ∈ ⟦[α][↑i]⟧ᶻ := by
+                      constructor
+                      · exact h.1
+                      · intro i
+                        have hi0 : i = ⟨0, by simp⟩ := by
+                          apply Fin.ext
+                          simp
+                        cases hi0
+                        simpa using h.2
+                    simpa [hx, h]
+                  · have hx : ¬ (x_1.hasArity 1 ∧ ∀ i : Fin 1, x_1 ∈ ⟦[α][↑i]⟧ᶻ) := by
+                      intro hx
+                      apply h
+                      constructor
+                      · exact hx.1
+                      · simpa using hx.2 ⟨0, by simp⟩
+                    simpa [hx, h]
+                constructor
+                · rintro ⟨x_1, hx_1, hy⟩
+                  refine ⟨x_1, ?_, hy.trans (hbody_eq (by simpa [Fin.foldl_zero] using hx_1))⟩
+                  simpa [Fin.foldl_zero] using hx_1
+                · rintro ⟨x_1, hx_1, hy⟩
+                  refine ⟨x_1, ?_, hy.trans (hbody_eq hx_1).symm⟩
+                  simpa [Fin.foldl_zero] using hx_1
+              congr
+              · conv_lhs =>
+                  simp [sInterGoal, Fin.foldl_zero]
+              · funext τ
+                conv_lhs =>
+                  simp [sInterGoal, Fin.foldl_zero]
+              · apply proof_irrel_heq
+            · exact (hsome hbody_total').elim
+          · intro hdef
+            have hsInter_true :
+                (⋂₀
+                  ZFSet.sep
+                    (fun y =>
+                      ∃ x_1 ∈ ⟦α⟧ᶻ,
+                        y =
+                          if h : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ then
+                            (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry
+                                (fun _ => ⟨x_1, α, h.2⟩)⟧ˢ.get
+                              (hbody_total (by
+                                intro i
+                                have hi0 : i = ⟨0, by simp⟩ := by
+                                  apply Fin.ext
+                                  simp
+                                cases hi0
+                                exact ⟨rfl, h.2⟩))).fst
+                          else zffalse)
+                    𝔹 : ZFSet) = zftrue := by
+              apply sInter_sep_eq_zftrue_of_forall_eq_zftrue
+              · exact ⟨α.defaultZFSet, SMTType.mem_toZFSet_of_defaultZFSet⟩
+              · intro x_1 hx_1
+                have hx1 := funUnaryTarget (α := α) hx_1
+                have hx_cast : x_1.hasArity 1 ∧ x_1 ∈ ⟦α⟧ᶻ := by
+                  constructor
+                  · exact hx1.1
+                  · exact hx_1
+                rw [dif_pos hx_cast]
+                let Xarg : SMT.Dom := ⟨x_1, α, hx_1⟩
+                obtain ⟨hcov_app, Dapp, hDapp_ty, hDapp_val, hden_app⟩ :=
+                  defaultSpecMFunDenoteAppAt
+                    (hcov_t_upd := hcov_t_upd) (den_t_upd := den_t_upd)
+                    (hY_ty := hY_ty) (hY_func := hY_func)
+                    Xarg rfl hx_1
+                obtain ⟨hφa, Dspec, hden_spec, hDspec_ty, hDspec_def⟩ :=
+                  den_a (Function.update Δ₀ x (some Xarg)) hcov_app Dapp
+                    (respects_app Xarg rfl) hden_app
+                have hDapp_def : Dapp.fst = β.defaultZFSet := by
+                  have hYeq_default :
+                      Y = ⟨(α.fun β).defaultZFSet, α.fun β,
+                        SMTType.mem_toZFSet_of_defaultZFSet⟩ := by
+                    cases Y with
+                    | mk y hy =>
+                    cases hy with
+                    | mk τ hy =>
+                        cases hY_ty
+                        subst hdef
+                        congr
+                  cases hYeq_default
+                  rw [hDapp_val]
+                  simpa [Xarg] using defaultZFSetFunApp (α := α) (β := β) hx_1
+                have hDspec_true : Dspec.fst = zftrue := hDspec_def hDapp_def
+                have hgo_Xarg := hgo_forall (fun _ => Xarg) (by
+                  intro i
+                  have hi0 : i = ⟨0, by simp⟩ := by
+                    apply Fin.ext
+                    simp
+                  cases hi0
+                  exact ⟨rfl, hx_1⟩)
+                have hbody_eq :
+                    ⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry (fun _ => Xarg)⟧ˢ =
+                      some Dspec := by
+                  rw [hgo_Xarg]
+                  simpa [Xarg] using hden_spec
+                generalize_proofs hbody_some
+                have hbody_get :
+                    (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry (fun _ => Xarg)⟧ˢ.get
+                      hbody_some) = Dspec := by
+                  rw [Option.get_of_eq_some hbody_some hbody_eq]
+                have hbody_fst :
+                    (⟦(Term.abstract.go a [x] Δ₀ hgo_cov).uncurry (fun _ => Xarg)⟧ˢ.get
+                      hbody_some).fst = Dspec.fst := by
+                  exact congrArg (fun d : SMT.Dom => d.fst) hbody_get
+                rw [hbody_fst, hDspec_true]
+            simpa [Φ] using hsInter_true
 
 theorem defaultSpecMTrueImpliesDefault.{u} :
     ∀ («Δ» : RenamingContext.Context.{u})
       {τ : SMTType} {Γ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {t : Term}
       (typ_t : Γ ⊢ˢ t : τ)
+      (hbv_t : ∀ v ∈ bv t, v ∈ used)
       (ht : RenamingContext.CoversFV «Δ» t),
       ⦃fun st =>
         match st with
@@ -1204,8 +1272,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                       ⟦spec.abstract «Δ₀» hφ⟧ˢ = some Φ →
                         Φ.fst = zftrue →
                           Y.fst = τ.defaultZFSet⌝⦄ := by
-  intro «Δ» τ Γ n used name t typ_t ht
-  induction τ generalizing «Δ» Γ n used name t with
+  intro «Δ» τ Γ n used name t typ_t hbv_t ht
+  induction τ generalizing «Δ» Γ n used name t hbv_t with
   | int =>
       mintro pre ∀St₁
       mpure pre
@@ -1359,7 +1427,8 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
             match st with
             | { env := E', types := Γ'' } =>
               Std.Do.SPred.pure
-                (St₁.env.freshvarsc ≤ E'.freshvarsc ∧
+                (Γ'' = St₁.types ∧
+                  St₁.env.freshvarsc ≤ E'.freshvarsc ∧
                   St₁.types ⊆ Γ'' ∧
                   St₁.env.usedVars ⊆ E'.usedVars ∧
                   AList.keys Γ'' ⊆ E'.usedVars ∧
@@ -1382,16 +1451,27 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
             let hsnd ← defaultSpecM s!"{name}_snd" β (.snd t)
             pure (hfst ∧ˢ hsnd))
           ?_ ?_
-        · exact ihα
-            «Δ»
-            (Γ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
-            (name := s!"{name}_fst") (t := .fst t) typ_fst ht_fst
+        · mintro pre
+          mspec (Std.Do.Triple.and (defaultSpecM s!"{name}_fst" α (.fst t))
+            (defaultSpecM_types_unchanged α (Λ := St₁.types)
+              (name := s!"{name}_fst") (t := .fst t))
+            (ihα
+              «Δ»
+              (Γ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
+              (name := s!"{name}_fst") (t := .fst t) typ_fst
+              (fun v hv => hbv_t v (by simpa [SMT.bv] using hv)) ht_fst))
+          · intro st h
+            exact ⟨h.1, h⟩
+          · intro st h
+            obtain ⟨htypes', hbase'⟩ := h
+            obtain ⟨hn, hsub, hused, hkeys, htyp, hfv, hden⟩ := hbase'
+            exact ⟨htypes', hn, hsub, hused, hkeys, htyp, hfv, hden⟩
         · intro hfst
           mintro pre ∀St₂
           mpure pre
-          obtain ⟨hn₂, sub₂, used₂, keys₂, typ_hfst, fv_hfst, den_hfst⟩ := pre
+          obtain ⟨St₂_eq, hn₂, sub₂, used₂, keys₂, typ_hfst, fv_hfst, den_hfst⟩ := pre
           have typ_t_St₂ : St₂.types ⊢ˢ t : α.pair β := by
-            exact SMT.Typing.weakening (h := sub₂) typ_t
+            rw [St₂_eq]; exact typ_t
           have typ_snd : St₂.types ⊢ˢ .snd t : β := by
             exact SMT.Typing.snd _ _ _ _ typ_t_St₂
           have ht_snd : RenamingContext.CoversFV «Δ» (.snd t) := by
@@ -1400,14 +1480,16 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
           have ihβ_snd := ihβ
             «Δ»
             (Γ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-            (name := s!"{name}_snd") (t := .snd t) typ_snd ht_snd
+            (name := s!"{name}_snd") (t := .snd t) typ_snd
+            (fun v hv => used₂ (hbv_t v (by simpa [SMT.bv] using hv))) ht_snd
           let Qraw : Std.Do.PostCond Term
               (Std.Do.PostShape.arg EncoderState (Std.Do.PostShape.except String Std.Do.PostShape.pure)) :=
             Std.Do.PostCond.mayThrow fun hsnd st =>
               match st with
               | { env := E', types := Γ'' } =>
                 Std.Do.SPred.pure
-                  (St₂.env.freshvarsc ≤ E'.freshvarsc ∧
+                  (Γ'' = St₂.types ∧
+                    St₂.env.freshvarsc ≤ E'.freshvarsc ∧
                     St₂.types ⊆ Γ'' ∧
                     St₂.env.usedVars ⊆ E'.usedVars ∧
                     AList.keys Γ'' ⊆ E'.usedVars ∧
@@ -1449,37 +1531,22 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
           simp only [Std.Do.WP.pure]
           have hraw_at :
               (wp⟦defaultSpecM s!"{name}_snd" β (.snd t)⟧ Qraw St₂).down := by
-            change
-              (wp⟦defaultSpecM s!"{name}_snd" β (.snd t)⟧
-                (Std.Do.PostCond.mayThrow fun hsnd st =>
-                  match st with
-                  | { env := E', types := Γ'' } =>
-                    Std.Do.SPred.pure
-                      (St₂.env.freshvarsc ≤ E'.freshvarsc ∧
-                        St₂.types ⊆ Γ'' ∧
-                        St₂.env.usedVars ⊆ E'.usedVars ∧
-                        AList.keys Γ'' ⊆ E'.usedVars ∧
-                        Γ'' ⊢ˢ hsnd : SMTType.bool ∧
-                        fv hsnd ⊆ fv (Term.snd t) ∧
-                        ∀ («Δ₀» : RenamingContext.Context)
-                          (ht₀ : RenamingContext.CoversFV «Δ₀» (Term.snd t))
-                          (Y : SMT.Dom),
-                          RenamingContext.RespectsTypeContextOnFV «Δ₀» St₂.types (Term.snd t) →
-                          ⟦(Term.snd t).abstract «Δ₀» ht₀⟧ˢ = some Y →
-                            ∀ (hφ : RenamingContext.CoversFV «Δ₀» hsnd)
-                              {Φ : SMT.Dom},
-                              ⟦hsnd.abstract «Δ₀» hφ⟧ˢ = some Φ →
-                                Φ.fst = zftrue →
-                                  Y.fst = β.defaultZFSet))
-                St₂).down
-            exact ihβ_snd St₂ (by
-              refine ⟨rfl, rfl, keys₂, rfl⟩)
+            refine ((Std.Do.WP.wp (defaultSpecM s!"{name}_snd" β (.snd t))).mono _ Qraw ?_)
+              St₂ ((Std.Do.Triple.and (defaultSpecM s!"{name}_snd" β (.snd t))
+                (defaultSpecM_types_unchanged β (Λ := St₂.types)
+                  (name := s!"{name}_snd") (t := .snd t))
+                ihβ_snd) St₂ ⟨rfl, ⟨rfl, rfl, keys₂, rfl⟩⟩)
+            refine ⟨?_, Std.Do.ExceptConds.entails_true⟩
+            intro hsnd st h
+            obtain ⟨htypes', hbase'⟩ := h
+            obtain ⟨hn, hsub, hused, hkeys, htyp, hfv, hden⟩ := hbase'
+            exact ⟨htypes', hn, hsub, hused, hkeys, htyp, hfv, hden⟩
           have hpost : Qraw ⊢ₚ Qneed := by
             rw [Std.Do.PostCond.entails_mayThrow]
             intro hsnd
             mintro pre ∀St₃
             mpure pre
-            obtain ⟨hn₃, sub₃, used₃, keys₃, typ_hsnd, fv_hsnd, den_hsnd⟩ := pre
+            obtain ⟨St₃_eq, hn₃, sub₃, used₃, keys₃, typ_hsnd, fv_hsnd, den_hsnd⟩ := pre
             mpure_intro
             and_intros
             · exact hn₂.trans hn₃
@@ -1488,8 +1555,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
             · intro v hv
               exact used₃ (used₂ hv)
             · exact keys₃
-            · have typ_hfst_St₃ : St₃.types ⊢ˢ hfst : SMTType.bool := by
-                exact SMT.Typing.weakening (h := sub₃) typ_hfst
+            · have typ_hfst_St₃ : St₃.types ⊢ˢ hfst : SMTType.bool := St₃_eq ▸ typ_hfst
               exact SMT.Typing.and _ _ _ typ_hfst_St₃ typ_hsnd
             · intro v hv
               rcases (by simpa [SMT.fv, List.mem_append] using hv) with hv | hv
@@ -1554,7 +1620,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
                 denoteAndTrueComponents
                   (fun hdenDfst =>
                     RenamingContext.denote_type_of_typing_fv
-                      (htyp := SMT.Typing.weakening (h := sub₃) typ_hfst)
+                      (htyp := St₃_eq ▸ typ_hfst)
                       (hden := hdenDfst) (hcompat := respects_hfst))
                   (fun hdenDsnd =>
                     RenamingContext.denote_type_of_typing_fv (htyp := typ_hsnd) (hden := hdenDsnd)
@@ -1611,6 +1677,7 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
           exact SMT.Typing.weakening
             (h := SMT.TypeContext.entries_subset_insert_of_notMem x_fresh)
             typ_t
+            (SMT.Typing.bv_notMem_insert_of_fresh typ_t (fun h => x_not_used (hbv_t x h)))
         have typ_var_x_St₂ : St₂.types ⊢ˢ .var x : α := by
           apply SMT.Typing.var
           rw [St₂_types_eq]
@@ -1638,14 +1705,18 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
             · simpa [Δd, Function.update, hvx] using ht v hv
           · subst hv
             simp [Δd]
+        have hbv_app_body : ∀ v ∈ bv (.app t (.var x)), v ∈ St₂.env.usedVars := by
+          intro v hv
+          rw [St₂_used_eq]
+          exact List.mem_cons_of_mem _ (hbv_t v (by simpa [SMT.bv] using hv))
         have hspecβ_body := defaultSpecMSpec
           Δd
           (Γ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-          (name := s!"{name}_body") (t := .app t (.var x)) typ_app_St₂ ht_app_d
+          (name := s!"{name}_body") (t := .app t (.var x)) typ_app_St₂ hbv_app_body ht_app_d
         have ihβ_body := ihβ
           Δd
           (Γ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
-          (name := s!"{name}_body") (t := .app t (.var x)) typ_app_St₂ ht_app_d
+          (name := s!"{name}_body") (t := .app t (.var x)) typ_app_St₂ hbv_app_body ht_app_d
         mspec (Std.Do.Triple.and _ hspecβ_body ihβ_body)
         · rename_i a
           mrename_i pre
@@ -1664,15 +1735,23 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
             · subst hv_x
               rw [St₂_types_eq, AList.mem_insert]
               exact Or.inl rfl
+          -- erase the forall binder `x` from the running context, then return the `forall`.
+          mspec SMT.eraseFromContext_spec
+          mrename_i preE
+          mintro ∀StE
+          mpure preE
+          obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
           mspec Std.Do.Spec.pure
           mpure_intro
+          rw [StE_types_eq, StE_fvc, StE_used_eq]
           and_intros
           · calc
               St₁.env.freshvarsc ≤ St₂.env.freshvarsc := by
                 rw [St₂_fvc]
                 exact Nat.le_succ _
               _ ≤ St₃.env.freshvarsc := hn₃
-          · intro v hv
+          · apply entries_subset_erase_of_notMem_aux _ x_fresh
+            intro v hv
             exact sub₃ (by
               rw [St₂_types_eq]
               exact SMT.TypeContext.entries_subset_insert_of_notMem x_fresh hv)
@@ -1680,36 +1759,46 @@ theorem defaultSpecMTrueImpliesDefault.{u} :
             exact used₃ (by
               rw [St₂_used_eq]
               exact List.mem_cons_of_mem _ hv)
-          · exact keys₃
-          · have typ_forall_base :
-                St₁.types ⊢ˢ Term.forall [x] [α] a : SMTType.bool := by
-              refine SMT.Typing.forall St₁.types [x] [α] a ?_ ?_ ?_ ?_ ?_
-              · intro v hvv hvΓ
-                rw [List.mem_singleton] at hvv
-                subst hvv
-                exact x_fresh hvΓ
-              · intro v hvv hvb
-                have hxv : v = x := by
-                  simpa [List.mem_singleton] using hvv
-                have hv_mem_St₂ : v ∈ St₂.types := by
-                  rw [hxv, St₂_types_eq, AList.mem_insert]
-                  exact Or.inl rfl
-                exact SMT.Typing.bv_notMem_context typ_a_St₂ _ hvb hv_mem_St₂
-              · simp
-              · simp
-              · have hupd : St₁.types.update [x] [α] rfl = AList.insert x α St₁.types := by
-                  simp only [SMT.TypeContext.update, List.length_cons, List.length_nil, zero_add,
-                    Fin.foldl_succ, Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin,
-                    Fin.val_eq_zero, List.getElem_cons_zero, Fin.isValue, Fin.foldl_zero]
-                rw [hupd]
-                simpa [St₂_types_eq] using typ_a_St₂
-            exact SMT.Typing.weakening
-              (h := by
-                intro v hv
-                exact sub₃ (by
-                  rw [St₂_types_eq]
-                  exact SMT.TypeContext.entries_subset_insert_of_notMem x_fresh hv))
-              typ_forall_base
+          · exact fun v hv => keys₃ (keys_erase_subset_aux hv)
+          · -- `x` has been erased from `St₃.types`; the `∀`-binder re-introduces it.
+            have hlk : St₃.types.lookup x = some α :=
+              AList.lookup_of_subset sub₃ (St₂_types_eq ▸ AList.lookup_insert St₁.types)
+            have typ_a_ext : SMT.TypeContext.update (St₃.types.erase x) [x] [α] rfl ⊢ˢ a : SMTType.bool := by
+              have hupd : SMT.TypeContext.update (St₃.types.erase x) [x] [α] rfl
+                  = AList.insert x α (St₃.types.erase x) := by
+                simp only [SMT.TypeContext.update, List.length_cons, List.length_nil, zero_add,
+                  Fin.foldl_succ, Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin,
+                  Fin.val_eq_zero, List.getElem_cons_zero, Fin.isValue, Fin.foldl_zero]
+              rw [hupd]
+              refine SMT.Typing.strengthening_of_fv_subset
+                (insert_erase_entries_subset_aux hlk) typ_a ?_
+              intro v hv
+              have hv' := fv_a hv
+              simp only [fv, List.mem_append, List.mem_singleton] at hv'
+              rcases hv' with hv_t | hv_x
+              · rw [AList.mem_insert]
+                right
+                rw [AList.mem_erase]
+                have hv_St₃ : v ∈ St₃.types :=
+                  mem_of_entries_subset_aux
+                    (SMT.Typing.mem_context_of_mem_fv typ_t_St₂ hv_t) sub₃
+                have hv_ne_x : v ≠ x := by
+                  intro hvx; subst hvx
+                  exact x_fresh (SMT.Typing.mem_context_of_mem_fv typ_t hv_t)
+                exact ⟨hv_ne_x, hv_St₃⟩
+              · subst hv_x
+                rw [AList.mem_insert]; exact Or.inl rfl
+            refine SMT.Typing.forall (St₃.types.erase x) [x] [α] a ?_ ?_ ?_ ?_ typ_a_ext
+            · intro v hvv hvΓ
+              rw [List.mem_singleton] at hvv
+              subst hvv
+              exact (AList.mem_erase.mp hvΓ).1 rfl
+            · intro v hvv hvb
+              have hxv : v = x := by simpa [List.mem_singleton] using hvv
+              exact SMT.Typing.bv_notMem_context typ_a _ hvb
+                (hxv ▸ AList.lookup_isSome.mp (by rw [hlk]; rfl))
+            · simp
+            · simp
           · intro v hv
             simp only [fv, List.mem_removeAll_iff, List.mem_cons, List.not_mem_nil, or_false] at hv
             obtain ⟨hv_a, hxv⟩ := hv

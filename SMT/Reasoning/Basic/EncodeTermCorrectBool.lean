@@ -1,6 +1,7 @@
 import SMT.Reasoning.Defs
 import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
+import SMT.Reasoning.Basic.EncodeTermBvUsed
 import SMT.Reasoning.Axioms
 
 open Std.Do B SMT ZFSet
@@ -230,17 +231,23 @@ theorem encodeTerm_spec.and_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
     have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.1
   have hxy_bv_disj : ∀ a ∈ B.bv x, ∀ b ∈ B.bv y, a ≠ b := by
     have := bv_nodup; simp only [B.bv, List.nodup_append] at this; exact this.2.2
-  mspec x_ih (E := E) (Λ := σ.types) (α := .bool) typ_x
-    («Δ» := «Δ»)
-    Δ_fv_x
-    (Δ₀ := Δ₀) Δ₀_ext_x (used := used) Δ₀_none_out (T := X) (hT := hX)
-    den_x (fun v hv => vars_used v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
-    (fun v hv => Λ_inv v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
-    hx_bv_nodup
-    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
-    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
-    wf
-    (n := σ.env.freshvarsc)
+  mspec (Std.Do.Triple.and _
+    (Std.Do.Triple.and _
+      (x_ih (E := E) (Λ := σ.types) (α := .bool) typ_x
+        («Δ» := «Δ»)
+        Δ_fv_x
+        (Δ₀ := Δ₀) Δ₀_ext_x (used := used) Δ₀_none_out (T := X) (hT := hX)
+        den_x (fun v hv => vars_used v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
+        (fun v hv => Λ_inv v (by simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hv ⊢; rcases hv with h | h <;> [left; right] <;> exact .inl h))
+        hx_bv_nodup
+        (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+        (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
+        wf
+        (n := σ.env.freshvarsc))
+      (encodeTerm_bv_used E (t := x) (used := σ.env.usedVars)
+        (n := σ.env.freshvarsc) (decl := σ.env.declarations)))
+    (encodeTerm_bv_notMem_used E (t := x) (used := σ.env.usedVars)
+      (n := σ.env.freshvarsc) (decl := σ.env.declarations)))
   clear x_ih
   rename_i out_x
   obtain ⟨x_enc, σx⟩ := out_x
@@ -248,9 +255,11 @@ theorem encodeTerm_spec.and_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
   mintro ∀σ_x
   mpure pre
   dsimp at pre
-  obtain ⟨St_used_sub_St', St_eq_St', St'_sub, x_cov_St', rfl, typ_x_enc, x_preserves,
+  obtain ⟨⟨⟨St_used_sub_St', St_eq_St', St'_sub, x_cov_St', rfl, typ_x_enc, x_preserves,
     Δ', Δ'_covers_x, Δ'_extends_Δ₀, Δ'_ext_x, Δ'_none_out,
-    ⟨Xenc, _, hXenc⟩, den_x_enc, ⟨rfl, retract_α_Xenc_eq_X⟩, x_ih_total⟩ := pre
+    ⟨Xenc, _, hXenc⟩, den_x_enc, ⟨rfl, retract_α_Xenc_eq_X⟩, x_ih_total⟩,
+    bv_x_enc_used, _⟩,
+    bv_x_enc_notMem_used, _⟩ := pre
 
   have Δ'_ext_y : RenamingContext.ExtendsOnSourceFV Δ' «Δ» y := by
     exact RenamingContext.extendsOnSourceFV_of_extends Δ'_extends_Δ₀ Δ₀_ext_y
@@ -295,6 +304,10 @@ theorem encodeTerm_spec.and_case.{u} (fv_sub_typings : B.FvSubTypings) (x y : B.
 
   have typ_x_in_final : σ_y.types ⊢ˢ x_enc : .bool :=
     Typing.weakening St'_eq_St'' typ_x_enc
+      (fun v hv => y_preserves v (bv_x_enc_used v hv)
+        (SMT.Typing.bv_notMem_context typ_x_enc v hv)
+        (fun hyv => bv_x_enc_notMem_used v hv (St_used_eq ▸ vars_used v (by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv, List.mem_append] at hyv ⊢; tauto))))
 
   have hΔ_x_final : RenamingContext.CoversFV Δ'' x_enc := by
     exact RenamingContext.coversFV_of_extends_of_coversFV Δ''_extends_Δ' Δ'_covers_x

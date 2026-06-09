@@ -4,15 +4,17 @@ import SMT.Reasoning.Basic.StateSpecs
 import SMT.Reasoning.Basic.DenotationTotality
 import SMT.Reasoning.Basic.LoosenAuxExact.FunDefault
 import SMT.Reasoning.Basic.LoosenAuxExact.FunAux
+import SMT.Reasoning.Basic.EncodeTermBvUsed
 
 open Std.Do SMT ZFSet Classical
 
-set_option maxHeartbeats 2000000 in
+set_option maxHeartbeats 4000000 in
 theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTType.bool) (pα : α ⇝ α')
   (pβ : β ⇝ β')
   (pα_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
+        (∀ v ∈ bv x, v ∈ used) →
         ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
             SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
           ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
@@ -67,6 +69,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
   (pβ_ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : β →
+        (∀ v ∈ bv x, v ∈ used) →
         ∀ («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x),
             SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x →
           ∀ (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true),
@@ -119,6 +122,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                                                                   ΦY.fst = zftrue →
                                                                     X.fst.pair Y.fst ∈ ↑(castZF_of_path pβ).1⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun β)
+  (hbv_x : ∀ v ∈ bv x, v ∈ used)
   («Δ» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ» x)
   (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x)
   (pf : ∀ (x! : 𝒱) (X! : SMT.Dom.{u}), ∀ v ∈ fv (Term.var x!), (Function.update «Δ» x! (some X!) v).isSome = true) :
@@ -228,7 +232,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
         pα_ih_exact
           (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
           (name := s!"{name}_funFun_arg") (x := .var a)
-          typ_var_a_St₃ Δa hcov_var_a respects_var_a pf_var_a
+          typ_var_a_St₃ (by simp [SMT.bv]) Δa hcov_var_a respects_var_a pf_var_a
       mspec (Std.Do.Triple.and _
         (funRunVarSpec (p := pα) (name := s!"{name}_funFun_arg") (z := a) (St := St₃))
         ih_a)
@@ -284,7 +288,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
             pβ_ih_exact
               (Λ := St₅.types) (n := St₅.env.freshvarsc) (used := St₅.env.usedVars)
               (name := s!"{name}_funFun_ret") (x := .var b)
-              typ_var_b_St₅ Δb hcov_var_b respects_var_b pf_var_b
+              typ_var_b_St₅ (by simp [SMT.bv]) Δb hcov_var_b respects_var_b pf_var_b
           mspec (Std.Do.Triple.and _
             (funRunVarSpec (p := pβ) (name := s!"{name}_funFun_ret") (z := b) (St := St₅))
             ih_b)
@@ -341,13 +345,13 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                 apply SMT.Typing.var
                 erw [St₂_types_eq]
                 exact AList.lookup_insert St₁.types
-              apply SMT.Typing.weakening
+              exact SMT.Typing.weakening
                 (h := hsub_St₂_St₆)
-                typ_var_x!_St₂
+                typ_var_x!_St₂ (by simp [SMT.bv])
             have typ_var_a!_St₆' : St₆.types ⊢ˢ .var a! : α' := by
-              apply SMT.Typing.weakening
+              exact SMT.Typing.weakening
                 (h := hsub_St₄_St₆)
-                typ_var_a!_St₄
+                typ_var_a!_St₄ (by simp [SMT.bv])
             have typ_app_default_St₆ : St₆.types ⊢ˢ .app (.var x!) (.var a!) : β' := by
               exact SMT.Typing.app
                 (Γ := St₆.types) (f := .var x!) (x := .var a!) (τ := α') (σ := β')
@@ -377,7 +381,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                 (Γ := St₆.types) (n := St₆.env.freshvarsc) (used := St₆.env.usedVars)
                 (name := s!"{name}_funFun_default")
                 (t := .app (.var x!) (.var a!))
-                typ_app_default_St₆ hcov_default
+                typ_app_default_St₆ (by simp [SMT.bv]) hcov_default
             mspec (Std.Do.Triple.and _
               (funRunDefaultSpec
                 (τ := β')
@@ -403,6 +407,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                 exact SMT.Typing.weakening
                   (h := SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh)
                   typ_x
+                  (SMT.Typing.bv_notMem_insert_of_fresh typ_x (fun h => x!_not_used (hbv_x x! h)))
               have a_not_base :
                   a ∉ AList.insert x! (α'.fun β') St₁.types := by
                 erw [← St₂_types_eq]
@@ -493,8 +498,8 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                   St₇.types ⊢ˢ .var a! : α' := by
                 have typ_var_a!_St₆ :
                     St₆.types ⊢ˢ .var a! : α' := by
-                  exact SMT.Typing.weakening (h := hsub_St₄_St₆) typ_var_a!_St₄
-                exact SMT.Typing.weakening (h := sub₇) typ_var_a!_St₆
+                  exact SMT.Typing.weakening (h := hsub_St₄_St₆) typ_var_a!_St₄ (by simp [SMT.bv])
+                exact SMT.Typing.weakening (h := sub₇) typ_var_a!_St₆ (by simp [SMT.bv])
               have hlookup_a!_St₇ :
                   St₇.types.lookup a! = some α' := SMT.Typing.varE typ_var_a!_St₇
               have hsub_hdefault_ctx :
@@ -528,15 +533,107 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
               have typ_fun_spec_base :
                   AList.insert x! (α'.fun β') St₁.types ⊢ˢ
                     funSpecTerm x x! a a! b b! α β α' β' a!_spec b!_spec hdefault : SMTType.bool := by
+                -- `funSpecTermTyping` weakens the loosen input `x` and the `.var a` spec
+                -- `a!_spec` into a context extended by the fresh binders `a, b, a!, b!`; the
+                -- sound `weakening` it uses needs `bv x`/`bv a!_spec` disjoint from those
+                -- binders. Establish that disjointness from the `bv … ⊆ usedVars` invariant
+                -- (`loosenAux_prf_bv` / monotone `usedVars`) and the binders' freshness.
+                have bvx_St₂ : ∀ v ∈ bv x, v ∈ St₂.env.usedVars := fun v hv => by
+                  rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbv_x v hv)
+                have bvx_St₃ : ∀ v ∈ bv x, v ∈ St₃.env.usedVars := fun v hv => by
+                  rw [St₃_used_eq]; exact List.mem_cons_of_mem _ (bvx_St₂ v hv)
+                have bvx_St₄ : ∀ v ∈ bv x, v ∈ St₄.env.usedVars := fun v hv =>
+                  used_sub₄ (bvx_St₃ v hv)
+                have bvx_St₅ : ∀ v ∈ bv x, v ∈ St₅.env.usedVars := fun v hv => by
+                  rw [St₅_used_eq]; exact List.mem_cons_of_mem _ (bvx_St₄ v hv)
+                have a_notbv_x : a ∉ bv x := fun h => a_not_used (bvx_St₂ a h)
+                have a!_notbv_x : a! ∉ bv x := fun h => a!_not_used (bvx_St₃ a! h)
+                have b_notbv_x : b ∉ bv x := fun h => b_not_used (bvx_St₄ b h)
+                have b!_notbv_x : b! ∉ bv x := fun h => b!_not_used (bvx_St₅ b! h)
+                -- `bv a!_spec ⊆ St₄.usedVars`, from the recorded `a!` recursive run.
+                have bva!_St₄ : ∀ v ∈ bv a!_spec, v ∈ St₄.env.usedVars := by
+                  have hbv := loosenAux_prf_bv pα
+                    (used := St₃.env.usedVars) (n := St₃.env.freshvarsc)
+                    (name := s!"{name}_funFun_arg") (x := .var a)
+                    (by intro w hw; simp only [SMT.bv, List.not_mem_nil] at hw)
+                  have post := hbv St₃ (by exact ⟨rfl, rfl⟩)
+                  simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply,
+                    PredTrans.pure_apply] at post
+                  have hrun_a' :
+                      Id.run (loosenAux_prf (s!"{name}_funFun_arg") pα (Term.var a) St₃) =
+                        Except.ok ((a!, a!_spec), St₄) := hrun_a
+                  rw [hrun_a'] at post
+                  exact post.2.1
+                have b_notbv_a!_spec : b ∉ bv a!_spec := fun h => b_not_used (bva!_St₄ b h)
+                have b!_notbv_a!_spec : b! ∉ bv a!_spec := fun h =>
+                  b!_not_used (by rw [St₅_used_eq]; exact List.mem_cons_of_mem _ (bva!_St₄ b! h))
                 exact funSpecTermTyping
                   (Γ := AList.insert x! (α'.fun β') St₁.types)
                   (x := x) (x! := x!) (a := a) (a! := a!) (b := b) (b! := b!)
                   (α := α) (β := β) (α' := α') (β' := β')
                   typ_x_base typ_var_x!_base
                   a_not_base a!_not_base b_not_base b!_not_base a_ne_a!
+                  a_notbv_x b_notbv_x a!_notbv_x b!_notbv_x
+                  b_notbv_a!_spec b!_notbv_a!_spec
                   typ_a!_spec_ctx_base typ_b!_spec_ctx_base typ_hdefault_base
+              -- The four `eraseFromContext` calls remove the binders `a`/`a!`/`b`/`b!`
+              -- from the final type context.  Establish freshness facts to transport
+              -- the result clauses across the four erases.
+              have b_not_base_ctx : b ∉ AList.insert x! (α'.fun β') St₁.types := by
+                intro hb
+                exact b_not_base (by
+                  erw [AList.mem_insert]
+                  exact Or.inr (by
+                    erw [AList.mem_insert]
+                    exact Or.inr hb))
+              have b!_not_base_ctx : b! ∉ AList.insert x! (α'.fun β') St₁.types := by
+                intro hb!
+                exact b!_not_base (by
+                  erw [AList.mem_insert]
+                  exact Or.inr (by
+                    erw [AList.mem_insert]
+                    exact Or.inr (by
+                      erw [AList.mem_insert]
+                      exact Or.inr hb!)))
+              mspec SMT.eraseFromContext_spec
+              mrename_i preEa
+              mintro ∀StEa
+              mpure preEa
+              obtain ⟨StEa_types_eq, StEa_fvc, StEa_used_eq⟩ := preEa
+              mspec SMT.eraseFromContext_spec
+              mrename_i preEa!
+              mintro ∀StEa!
+              mpure preEa!
+              obtain ⟨StEa!_types_eq, StEa!_fvc, StEa!_used_eq⟩ := preEa!
+              mspec SMT.eraseFromContext_spec
+              mrename_i preEb
+              mintro ∀StEb
+              mpure preEb
+              obtain ⟨StEb_types_eq, StEb_fvc, StEb_used_eq⟩ := preEb
+              mspec SMT.eraseFromContext_spec
+              mrename_i preEb!
+              mintro ∀StEb!
+              mpure preEb!
+              obtain ⟨StEb!_types_eq, StEb!_fvc, StEb!_used_eq⟩ := preEb!
+              -- The `insert x!` context embeds into the quadruply-erased final context.
+              have hsub_base_St₇_erase :
+                  (AList.insert x! (α'.fun β') St₁.types).entries ⊆
+                    ((((St₇.types.erase a).erase a!).erase b).erase b!).entries := by
+                apply SMT.TypeContext.entries_subset_erase_of_notMem _ b!_not_base_ctx
+                apply SMT.TypeContext.entries_subset_erase_of_notMem _ b_not_base_ctx
+                apply SMT.TypeContext.entries_subset_erase_of_notMem _ a!_not_base_ctx
+                apply SMT.TypeContext.entries_subset_erase_of_notMem _ a_not_base
+                exact hsub_base_St₇
+              have StEb!_types_eq' :
+                  StEb!.types = (((St₇.types.erase a).erase a!).erase b).erase b! := by
+                rw [StEb!_types_eq, StEb_types_eq, StEa!_types_eq, StEa_types_eq]
+              have StEb!_fvc' : StEb!.env.freshvarsc = St₇.env.freshvarsc := by
+                rw [StEb!_fvc, StEb_fvc, StEa!_fvc, StEa_fvc]
+              have StEb!_used_eq' : StEb!.env.usedVars = St₇.env.usedVars := by
+                rw [StEb!_used_eq, StEb_used_eq, StEa!_used_eq, StEa_used_eq]
               mspec Std.Do.Spec.pure
               mpure_intro
+              rw [StEb!_types_eq', StEb!_fvc', StEb!_used_eq']
               and_intros
               · calc
                   St₁.env.freshvarsc ≤ St₂.env.freshvarsc := by
@@ -551,7 +648,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                     exact Nat.le_succ _
                   _ ≤ St₆.env.freshvarsc := hn₆
                   _ ≤ St₇.env.freshvarsc := hn₇
-              · exact hsub_base_St₇
+              · exact hsub_base_St₇_erase
               · exact x!_fresh
               · exact x!_not_used
               · intro v hv
@@ -562,9 +659,16 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                     exact List.mem_cons_of_mem _ (by
                       erw [St₂_used_eq]
                       exact List.mem_cons_of_mem _ hv)))))
-              · exact keys₇
+              · exact fun v hv => keys₇ (SMT.TypeContext.keys_erase_subset
+                  (SMT.TypeContext.keys_erase_subset
+                    (SMT.TypeContext.keys_erase_subset
+                      (SMT.TypeContext.keys_erase_subset hv))))
               · -- preserves_types
                 intro v hv hv_not_Λ
+                apply SMT.TypeContext.notMem_erase
+                apply SMT.TypeContext.notMem_erase
+                apply SMT.TypeContext.notMem_erase
+                apply SMT.TypeContext.notMem_erase
                 have hv_ne_x : v ≠ x! := fun h => absurd (h ▸ hv) x!_not_used
                 have a_not_used_base : a ∉ St₁.env.usedVars := by
                   intro hmem; apply a_not_used; rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hmem
@@ -593,13 +697,140 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                     funSpecTerm x x! a a! b b! α β α' β' a!_spec b!_spec hdefault :
                       SMTType.bool
                 exact typ_fun_spec_base
-              · change St₇.types ⊢ˢ Term.var x! : α'.fun β'
-                exact SMT.Typing.weakening (h := hsub_base_St₇) typ_var_x!_base
-              · change
-                  St₇.types ⊢ˢ
-                    funSpecTerm x x! a a! b b! α β α' β' a!_spec b!_spec hdefault :
-                      SMTType.bool
-                exact SMT.Typing.weakening (h := hsub_base_St₇) typ_fun_spec_base
+              · exact SMT.Typing.weakening (h := hsub_base_St₇_erase) typ_var_x!_base (by simp [SMT.bv])
+              · -- running-context typing of the spec term, now in the quadruply-erased context.
+                -- The binders `a, a!, b, b!` of `funSpecTerm` are removed by the four erases;
+                -- the remaining bound variables (those of `x`, `a!_spec`, `b!_spec`, `hdefault`)
+                -- are shown not to appear in `St₇.types`, hence not in the erased context.
+                refine SMT.Typing.weakening (h := hsub_base_St₇_erase) typ_fun_spec_base (fun v hv => ?_)
+                -- `bv hdefault` is excluded directly from `St₇.types`.
+                have bv_hdefault_notMem : ∀ w ∈ bv hdefault, w ∉ St₇.types :=
+                  SMT.Typing.bv_notMem_context typ_hdefault_St₇
+                -- `bv x` threaded out of `St₇.types` via `hbv_x` and the `preserves` chain.
+                have bv_x_notMem : ∀ w ∈ bv x, w ∉ St₇.types := by
+                  intro w hw
+                  have hw_used : w ∈ St₁.env.usedVars := hbv_x w hw
+                  have hw_notSt₁ : w ∉ St₁.types := SMT.Typing.bv_notMem_context typ_x w hw
+                  have hw_ne_x! : w ≠ x! := fun h => x!_not_used (h ▸ hw_used)
+                  have hw_ne_a : w ≠ a := fun h => a_not_used (h ▸ (St₂_used_eq ▸ List.mem_cons_of_mem _ hw_used))
+                  have hw_notSt₂ : w ∉ St₂.types := by
+                    rw [St₂_types_eq, AList.mem_insert]; push_neg; exact ⟨hw_ne_x!, hw_notSt₁⟩
+                  have hw_notSt₃ : w ∉ St₃.types := by
+                    rw [St₃_types_eq, AList.mem_insert]; push_neg; exact ⟨hw_ne_a, hw_notSt₂⟩
+                  have hw_St₃_used : w ∈ St₃.env.usedVars := by
+                    rw [St₃_used_eq]
+                    exact List.mem_cons_of_mem _ (by rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hw_used)
+                  have hw_notSt₄ : w ∉ St₄.types := preserves_a! w hw_St₃_used hw_notSt₃
+                  have hw_ne_b : w ≠ b := fun h =>
+                    b_not_used (h ▸ (used_sub₄ hw_St₃_used))
+                  have hw_notSt₅ : w ∉ St₅.types := by
+                    rw [St₅_types_eq, AList.mem_insert]; push_neg; exact ⟨hw_ne_b, hw_notSt₄⟩
+                  have hw_St₅_used : w ∈ St₅.env.usedVars := by
+                    rw [St₅_used_eq]; exact List.mem_cons_of_mem _ (used_sub₄ hw_St₃_used)
+                  have hw_notSt₆ : w ∉ St₆.types := preserves_b! w hw_St₅_used hw_notSt₅
+                  have hw_St₆_used : w ∈ St₆.env.usedVars := used_sub₆ hw_St₅_used
+                  exact preserves_default₇ w hw_St₆_used hw_notSt₆
+                -- `bv a!_spec ⊆ St₄.usedVars`, obtained from the recursive `loosenAux_prf` run.
+                have bv_a!_spec_used : ∀ w ∈ bv a!_spec, w ∈ St₄.env.usedVars := by
+                  have hbv := loosenAux_prf_bv pα
+                    (used := St₃.env.usedVars) (n := St₃.env.freshvarsc)
+                    (name := s!"{name}_funFun_arg") (x := .var a)
+                    (by intro w hw; simp only [SMT.bv, List.not_mem_nil] at hw)
+                  have post := hbv St₃ (by exact ⟨rfl, rfl⟩)
+                  simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply,
+                    PredTrans.pure_apply] at post
+                  have hrun_a' :
+                      Id.run (loosenAux_prf (s!"{name}_funFun_arg") pα (Term.var a) St₃) =
+                        Except.ok ((a!, a!_spec), St₄) := hrun_a
+                  rw [hrun_a'] at post
+                  exact post.2.1
+                -- `bv b!_spec ⊆ St₆.usedVars`, obtained the same way.
+                have bv_b!_spec_used : ∀ w ∈ bv b!_spec, w ∈ St₆.env.usedVars := by
+                  have hbv := loosenAux_prf_bv pβ
+                    (used := St₅.env.usedVars) (n := St₅.env.freshvarsc)
+                    (name := s!"{name}_funFun_ret") (x := .var b)
+                    (by intro w hw; simp only [SMT.bv, List.not_mem_nil] at hw)
+                  have post := hbv St₅ (by exact ⟨rfl, rfl⟩)
+                  simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply,
+                    PredTrans.pure_apply] at post
+                  have hrun_b' :
+                      Id.run (loosenAux_prf (s!"{name}_funFun_ret") pβ (Term.var b) St₅) =
+                        Except.ok ((b!, b!_spec), St₆) := hrun_b
+                  rw [hrun_b'] at post
+                  exact post.2.1
+                -- Thread `bv a!_spec` out of `St₇.types`.
+                have bv_a!_spec_notMem : ∀ w ∈ bv a!_spec, w ∉ St₇.types := by
+                  intro w hw
+                  have hw_used₄ : w ∈ St₄.env.usedVars := bv_a!_spec_used w hw
+                  have hw_notSt₄ : w ∉ St₄.types := SMT.Typing.bv_notMem_context typ_a!_spec_St₄ w hw
+                  have hw_ne_b : w ≠ b := fun h => b_not_used (h ▸ hw_used₄)
+                  have hw_notSt₅ : w ∉ St₅.types := by
+                    rw [St₅_types_eq, AList.mem_insert]; push_neg; exact ⟨hw_ne_b, hw_notSt₄⟩
+                  have hw_St₅_used : w ∈ St₅.env.usedVars := by
+                    rw [St₅_used_eq]; exact List.mem_cons_of_mem _ hw_used₄
+                  have hw_notSt₆ : w ∉ St₆.types := preserves_b! w hw_St₅_used hw_notSt₅
+                  have hw_St₆_used : w ∈ St₆.env.usedVars := used_sub₆ hw_St₅_used
+                  exact preserves_default₇ w hw_St₆_used hw_notSt₆
+                -- Thread `bv b!_spec` out of `St₇.types`.
+                have bv_b!_spec_notMem : ∀ w ∈ bv b!_spec, w ∉ St₇.types := by
+                  intro w hw
+                  have hw_used₆ : w ∈ St₆.env.usedVars := bv_b!_spec_used w hw
+                  have hw_notSt₆ : w ∉ St₆.types := SMT.Typing.bv_notMem_context typ_b!_spec_St₆ w hw
+                  exact preserves_default₇ w hw_used₆ hw_notSt₆
+                -- Case split on `bv (funSpecTerm …)`.
+                have hv_exp :
+                    v = a! ∨ v = a ∨ v ∈ bv a!_spec ∨ v = b! ∨ v = a ∨ v = b ∨
+                      v ∈ bv x ∨ v ∈ bv a!_spec ∨ v ∈ bv b!_spec ∨ v ∈ bv hdefault := by
+                  simpa only [SMT.bv, funBBodyTerm, funExistsABTerm, List.append_assoc,
+                    List.nil_append, List.cons_append, List.singleton_append, List.mem_cons,
+                    List.mem_append, List.not_mem_nil, or_false] using hv
+                -- The four binders are removed by the corresponding erases; the remaining
+                -- bound variables are not in `St₇.types`, hence not in the erased context.
+                rcases hv_exp with rfl | rfl | hva | rfl | rfl | rfl | hvx | hva | hvb | hvd
+                · -- v = a!
+                  apply SMT.TypeContext.notMem_erase
+                  apply SMT.TypeContext.notMem_erase
+                  exact fun h => (AList.mem_erase.mp h).1 rfl
+                · -- v = a
+                  apply SMT.TypeContext.notMem_erase
+                  apply SMT.TypeContext.notMem_erase
+                  apply SMT.TypeContext.notMem_erase
+                  exact fun h => (AList.mem_erase.mp h).1 rfl
+                · -- v ∈ bv a!_spec
+                  exact SMT.TypeContext.notMem_erase
+                    (SMT.TypeContext.notMem_erase
+                      (SMT.TypeContext.notMem_erase
+                        (SMT.TypeContext.notMem_erase (bv_a!_spec_notMem v hva))))
+                · -- v = b!
+                  exact fun h => (AList.mem_erase.mp h).1 rfl
+                · -- v = a (second occurrence)
+                  apply SMT.TypeContext.notMem_erase
+                  apply SMT.TypeContext.notMem_erase
+                  apply SMT.TypeContext.notMem_erase
+                  exact fun h => (AList.mem_erase.mp h).1 rfl
+                · -- v = b
+                  apply SMT.TypeContext.notMem_erase
+                  exact fun h => (AList.mem_erase.mp h).1 rfl
+                · -- v ∈ bv x
+                  exact SMT.TypeContext.notMem_erase
+                    (SMT.TypeContext.notMem_erase
+                      (SMT.TypeContext.notMem_erase
+                        (SMT.TypeContext.notMem_erase (bv_x_notMem v hvx))))
+                · -- v ∈ bv a!_spec (second occurrence)
+                  exact SMT.TypeContext.notMem_erase
+                    (SMT.TypeContext.notMem_erase
+                      (SMT.TypeContext.notMem_erase
+                        (SMT.TypeContext.notMem_erase (bv_a!_spec_notMem v hva))))
+                · -- v ∈ bv b!_spec
+                  exact SMT.TypeContext.notMem_erase
+                    (SMT.TypeContext.notMem_erase
+                      (SMT.TypeContext.notMem_erase
+                        (SMT.TypeContext.notMem_erase (bv_b!_spec_notMem v hvb))))
+                · -- v ∈ bv hdefault
+                  exact SMT.TypeContext.notMem_erase
+                    (SMT.TypeContext.notMem_erase
+                      (SMT.TypeContext.notMem_erase
+                        (SMT.TypeContext.notMem_erase (bv_hdefault_notMem v hvd))))
               · exact funSpecTermFvSubset
                   (x := x) (x! := x!) (a := a) (a! := a!) (b := b) (b! := b!)
                   (α := α) (β := β) (α' := α') (β' := β')
@@ -1061,7 +1292,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                     (St₁ := St₆) (St₂ := St₇)
                     (name := s!"{name}_funFun_default")
                     (t := .app (.var x!) (.var a!)) (spec := hdefault)
-                    keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) ?_ hrun_default Dapp hden_app
+                    keys₆ typ_app_default_St₆ (by simp [SMT.bv]) (hcov_app_at Yfun wy0) ?_ hrun_default Dapp hden_app
                   exact respectsAppVarVar
                     (hx_ne_a := x!_ne_a!)
                     (hx_lookup := SMT.Typing.varE typ_var_x!_St₆)
@@ -1234,7 +1465,7 @@ theorem loosenAux_prf_exact.fun.{u} {α β α' β' : SMTType} (hβ : β ≠ SMTT
                         (St₁ := St₆) (St₂ := St₇)
                         (name := s!"{name}_funFun_default")
                         (t := .app (.var x!) (.var a!)) (spec := hdefault)
-                        keys₆ typ_app_default_St₆ (hcov_app_at Yfun wy0) ?_ hrun_default
+                        keys₆ typ_app_default_St₆ (by simp [SMT.bv]) (hcov_app_at Yfun wy0) ?_ hrun_default
                         Dapp hden_app hφd hdenΦd htrueΦd
                       exact respectsAppVarVar
                         (hx_ne_a := x!_ne_a!)

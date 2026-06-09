@@ -540,7 +540,8 @@ where
             (fun v hv hbv => hfresh v hv (SMT_bv_subst_subset hbv_e v hbv))
             hlen_pos hlen_eq
             (ih (by rw [SMT.TypeContext.lookup_update Γ' x vs' τs' hlen_eq hxvs]; exact α_def)
-                (SMT.Typing.weakening (entries_subset_update_of_fresh hvs hlen_eq) h_e_typed))
+                (SMT.Typing.weakening (entries_subset_update_of_fresh hvs hlen_eq) h_e_typed
+                  (by simp [hbv_e])))
     | «forall» Γ' vs' τs' body hvs hfresh hlen_pos hlen_eq _ ih =>
       unfold SMT.subst
       split_ifs with hxvs
@@ -549,7 +550,8 @@ where
             (fun v hv hbv => hfresh v hv (SMT_bv_subst_subset hbv_e v hbv))
             hlen_pos hlen_eq
             (ih (by rw [SMT.TypeContext.lookup_update Γ' x vs' τs' hlen_eq hxvs]; exact α_def)
-                (SMT.Typing.weakening (entries_subset_update_of_fresh hvs hlen_eq) h_e_typed))
+                (SMT.Typing.weakening (entries_subset_update_of_fresh hvs hlen_eq) h_e_typed
+                  (by simp [hbv_e])))
     | «exists» Γ' vs' τs' body hvs hfresh hlen_pos hlen_eq _ ih =>
       unfold SMT.subst
       split_ifs with hxvs
@@ -558,7 +560,8 @@ where
             (fun v hv hbv => hfresh v hv (SMT_bv_subst_subset hbv_e v hbv))
             hlen_pos hlen_eq
             (ih (by rw [SMT.TypeContext.lookup_update Γ' x vs' τs' hlen_eq hxvs]; exact α_def)
-                (SMT.Typing.weakening (entries_subset_update_of_fresh hvs hlen_eq) h_e_typed))
+                (SMT.Typing.weakening (entries_subset_update_of_fresh hvs hlen_eq) h_e_typed
+                  (by simp [hbv_e])))
     | eq Γ' t₁ t₂ τ' _ _ ih₁ ih₂ =>
       unfold SMT.subst; exact .eq Γ' _ _ τ' (ih₁ α_def h_e_typed) (ih₂ α_def h_e_typed)
     | and Γ' t₁ t₂ _ _ ih₁ ih₂ =>

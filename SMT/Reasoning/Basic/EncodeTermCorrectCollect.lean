@@ -1,4 +1,5 @@
 import SMT.Reasoning.Basic.CollectCaseHelpers
+import SMT.Reasoning.Basic.EncodeTermBvUsed
 import SMT.Reasoning.Axioms
 
 open Std.Do B SMT ZFSet
@@ -272,24 +273,33 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
     simp only [B.bv] at h
     rw [List.nodup_append] at h
     exact h.2.1
-  mspec D_ih (E := E) (Λ := St₀.types) (α := .set τ) typ_D
-      («Δ» := «Δ») Δ_fv_D
-      (Δ₀ := Δ₀) Δ₀_ext_D (used := used) Δ₀_none_out (T := 𝒟) (hT := h𝒟)
-      den_D vars_used_D (n := St₀.env.freshvarsc)
-      St₀_types_sub_E_ctx_on_D_vars
-      hD_bv_nodup
-      (respects.mono_fv (fun v hv => by rw [B.fv]; exact List.mem_append_left _ hv))
-      (fun v hv => fv_in_Λ v (by rw [B.fv]; exact List.mem_append_left _ hv))
-      wf
+  mspec (Std.Do.Triple.and _
+    (Std.Do.Triple.and _
+      (D_ih (E := E) (Λ := St₀.types) (α := .set τ) typ_D
+        («Δ» := «Δ») Δ_fv_D
+        (Δ₀ := Δ₀) Δ₀_ext_D (used := used) Δ₀_none_out (T := 𝒟) (hT := h𝒟)
+        den_D vars_used_D (n := St₀.env.freshvarsc)
+        St₀_types_sub_E_ctx_on_D_vars
+        hD_bv_nodup
+        (respects.mono_fv (fun v hv => by rw [B.fv]; exact List.mem_append_left _ hv))
+        (fun v hv => fv_in_Λ v (by rw [B.fv]; exact List.mem_append_left _ hv))
+        wf)
+      (encodeTerm_bv_used E (t := D) (used := St₀.env.usedVars)
+        (n := St₀.env.freshvarsc) (decl := St₀.env.declarations)))
+    (encodeTerm_bv_notMem_used E (t := D) (used := St₀.env.usedVars)
+      (n := St₀.env.freshvarsc) (decl := St₀.env.declarations)))
   clear D_ih
   rename_i out_D
   obtain ⟨D_enc, τD⟩ := out_D
   mrename_i pre
   mintro ∀St₁
   mpure pre
-  obtain ⟨used_sub_St₁, St₀_sub_St₁, St₁_keys_sub, covers_D, rfl, typ_D_enc,
+  dsimp at pre
+  obtain ⟨⟨⟨used_sub_St₁, St₀_sub_St₁, St₁_keys_sub, covers_D, rfl, typ_D_enc,
     D_preserves_types,
-    Δ_D, Δ_D_covers, Δ_D_extends, Δ_D_src_ext, Δ_D_none, denD', den_D_enc, D_RDom⟩ := pre
+    Δ_D, Δ_D_covers, Δ_D_extends, Δ_D_src_ext, Δ_D_none, denD', den_D_enc, D_RDom⟩,
+    bv_D_enc_used, _⟩,
+    bv_D_enc_notMem_used, _⟩ := pre
   -- Derive Δ_D_wt and Δ_D_dom via axioms (they were previously obtained from the postcondition).
   have Δ_D_wt : ∀ v (d : SMT.Dom), Δ_D v = some d →
       ∀ τ_v, St₁.types.lookup v = some τ_v → d.snd.fst = τ_v :=
@@ -483,7 +493,8 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
         · apply foldl_insert_mem
           exact (AList.mem_insert _).mpr (Or.inl rfl)
         · exact ih τs'' _ v (Nat.le_of_succ_le_succ hlen) hv'
-  mspec P_ih (E := E') (Λ := St₂.types) (α := .bool) typP
+  mspec (Std.Do.Triple.and _
+   (P_ih (E := E') (Λ := St₂.types) (α := .bool) typP
     («Δ» := Δ_ext) Δ_fv_P
     (Δ₀ := Δ_D_ext) Δ₀_ext_P (used := St₂.env.usedVars) Δ_D_ext_none_St₂
     (T := TP) (hT := hTP) den_P vars_used_P_St₂ (n := St₂.env.freshvarsc)
@@ -554,16 +565,20 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
         have hv_St₁ : v ∈ St₁.types := AList.mem_of_subset St₀_sub_St₁ hv_Λ
         rw [St₂_types]
         exact foldl_insert_mem _ St₁.types v hv_St₁)
-    wf_P
+    wf_P)
+   (encodeTerm_bv_used E' (t := P) (used := St₂.env.usedVars)
+     (n := St₂.env.freshvarsc) (decl := St₂.env.declarations)))
   rename_i out_P
   obtain ⟨P_enc, σP⟩ := out_P
   mrename_i pre
   mintro ∀St₃
   mpure pre
-  obtain ⟨St₂_sub_St₃, St₂_sub_St₃_types, St₃_keys_sub, covers_P, rfl, typ_P_enc,
+  dsimp at pre
+  obtain ⟨⟨St₂_sub_St₃, St₂_sub_St₃_types, St₃_keys_sub, covers_P, rfl, typ_P_enc,
     P_preserves_types,
     Δ_P, Δ_P_covers, Δ_P_extends, Δ_P_src_ext, Δ_P_none, denP', den_P_enc, P_RDom,
-    P_enc_total⟩ := pre
+    P_enc_total⟩,
+    bv_P_enc_used, _⟩ := pre
   -- Derive Δ_P_wt and Δ_P_dom via axioms (they were previously obtained from the postcondition).
   have Δ_P_wt : ∀ v (d : SMT.Dom), Δ_P v = some d →
       ∀ τ_v, St₃.types.lookup v = some τ_v → d.snd.fst = τ_v :=
@@ -625,6 +640,37 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
     · intro ⟨v, ξ⟩ hv
       exact vs_disj_St₁ v (List.mem_fst_of_mem_zip hv)
     · exact List.nodup_map_fst_of_nodup_zip vs_nodup
+  -- bv D_enc avoids St₃.types.  Each bound variable `v` of `D_enc` lives in `St₁.usedVars`
+  -- (`bv_D_enc_used`) and is absent from its own typing context `St₁.types`
+  -- (`bv_notMem_context`).  The extra keys `St₃` carries over `St₁` are the binders `vs`
+  -- and the variables introduced while encoding `P`.  A bound variable of `D_enc` is a name
+  -- generated *fresh* during the encoding of `D` — before `vs` were added to the context — so
+  -- it is neither one of the `vs` nor any source variable of `P`.  The `addToContext` for `vs`
+  -- together with the `P_preserves_types` invariant then keep it out of `St₃.types`.
+  -- The freshness of an encoded subterm's bound variables w.r.t. source-level variable names is
+  -- the (still missing) structural `encodeTerm` invariant shared with the `app` frontier case
+  -- (cf. `EncodeTermCorrectApp.lean`); it is the single remaining gap in this case.
+  have hbv_D_notMem_St₃ : ∀ v ∈ SMT.bv D_enc, v ∉ St₃.types := by
+    intro v hv
+    have hv_St₁_used : v ∈ St₁.env.usedVars := bv_D_enc_used v hv
+    have hv_not_St₁ : v ∉ St₁.types := SMT.Typing.bv_notMem_context typ_D_enc v hv
+    -- `v` is a *bound* name of `D_enc`, hence fresh w.r.t. the input `usedVars` of the
+    -- `D`-encoding (`bv_D_enc_notMem_used`), i.e. `v ∉ used`.  Consequently `v` is neither
+    -- one of the binders `vs` nor any source variable of `P` (both live in `used`), and the
+    -- `addToContext` for `vs` only adds the `vs` keys to `St₁.types`, so `v ∉ St₂.types`.
+    -- `P_preserves_types` then keeps such a used-but-non-source, non-context name out of `St₃`.
+    have hv_not_used : v ∉ used := by
+      rw [← St₀_used_eq]; exact bv_D_enc_notMem_used v hv
+    have hv_not_vs : v ∉ vs := fun hvs => hv_not_used (vars_used_vs v hvs)
+    have hv_not_P_vars : v ∉ P.vars := fun hpv => hv_not_used (vars_used_P v hpv)
+    have hv_not_St₂ : v ∉ St₂.types := by
+      rw [St₂_types]; intro hmem
+      exact hv_not_St₁ (AList.mem_of_mem_foldl_insert' hmem (by
+        intro h
+        rw [List.mem_map] at h
+        obtain ⟨⟨a, b⟩, hab, rfl⟩ := h
+        exact hv_not_vs (List.of_mem_zip hab).1))
+    exact P_preserves_types v (St₁_sub_St₂_used hv_St₁_used) hv_not_St₂ hv_not_P_vars
   -- St₆.types ⊆ St₃.types because erasure only removes entries
   have St₆_sub_St₃ : St₆.types ⊆ St₃.types := by
     rw [St₆_types, St₄_types]
@@ -750,32 +796,33 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
       intro v hv; simp only [List.mem_singleton] at hv; subst hv
       simp only [SMT.bv, List.append_nil, List.mem_append, not_or]
       constructor
-      · -- z ∉ bv D_enc
+      · -- z ∉ bv D_enc: bv D_enc ⊆ St₁.usedVars ⊆ St₃.usedVars, but z ∉ St₃.usedVars
         intro hbv
-        have typ_D_enc_St₃ := SMT.Typing.weakening
-          (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh)
-          (SMT.Typing.weakening h_St₁_sub_St₃ typ_D_enc)
-        exact SMT.Typing.bv_notMem_context typ_D_enc_St₃ _ hbv
-          ((AList.mem_insert _).mpr (Or.inl rfl))
-      · -- z ∉ bv (substList ...)
+        exact z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used (bv_D_enc_used v hbv)))
+      · -- z ∉ bv (substList ...): bv P_enc ⊆ St₃.usedVars, but z ∉ St₃.usedVars
         intro hbv
         have hbv_P := SMT_bv_substList_subset (fun t ht => toDestPair_bv_nil t ht) _ hbv
-        have typ_P_enc_ins := SMT.Typing.weakening
-          (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh) typ_P_enc
-        exact SMT.Typing.bv_notMem_context typ_P_enc_ins _ hbv_P
-          ((AList.mem_insert _).mpr (Or.inl rfl))
+        exact z_not_used (bv_P_enc_used v hbv_P)
     · exact Nat.zero_lt_succ 0
     · rfl
     · rw [hupdate]
       have h_ins := SMT.TypeContext.entries_subset_insert_of_notMem (v := z) (τ := τ.toSMTType) z_fresh
+      -- z is fresh: z ∉ St₃.usedVars, while bv D_enc ⊆ St₃.usedVars and bv P_enc ⊆ St₃.usedVars
+      have hz_D : z ∉ SMT.bv D_enc := fun hbv =>
+        z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used (bv_D_enc_used z hbv)))
+      have hz_P : z ∉ SMT.bv P_enc := fun hbv => z_not_used (bv_P_enc_used z hbv)
       apply SMT.Typing.ite
       · -- D_enc typing: weaken from St₁ to St₃.insert z
         exact SMT.Typing.app _ _ _ _ _
-          (SMT.Typing.weakening h_ins (SMT.Typing.weakening h_St₁_sub_St₃ typ_D_enc))
+          (SMT.Typing.weakening h_ins
+            (SMT.Typing.weakening h_St₁_sub_St₃ typ_D_enc hbv_D_notMem_St₃)
+            (SMT.Typing.bv_notMem_insert_of_fresh
+              (SMT.Typing.weakening h_St₁_sub_St₃ typ_D_enc hbv_D_notMem_St₃) hz_D))
           (SMT.Typing.var _ z τ.toSMTType (AList.lookup_insert St₃.types))
       · -- substList typing: directly in St₃.types.insert z (no strengthening needed)
         apply SMT_Typing_substList
         · exact SMT.Typing.weakening h_ins typ_P_enc
+            (SMT.Typing.bv_notMem_insert_of_fresh typ_P_enc hz_P)
         · exact toDestPair_bv_nil
         · -- toDestPair pairs typing
           set Γ_z := St₃.types.insert z τ.toSMTType with Γ_z_def
@@ -977,8 +1024,9 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
         -- rest2 gives T = 𝒟.sep ℙ and hT types
         -- Now show the SMT lambda denotes and satisfies RDom
         -- z ∉ fv(D_enc) and z ∉ fv(P_enc) since z ∉ St₃.types
+        have z_not_St₁ : z ∉ St₁.types := fun hz => z_fresh (AList.mem_of_subset St₁_sub_St₃_types hz)
         have z_not_fv_D : z ∉ SMT.fv D_enc :=
-          funNotMemFvOfNotMemContext (SMT.Typing.weakening St₁_sub_St₃_types typ_D_enc) z_fresh
+          funNotMemFvOfNotMemContext typ_D_enc z_not_St₁
         have z_not_fv_P : z ∉ SMT.fv P_enc :=
           funNotMemFvOfNotMemContext typ_P_enc z_fresh
         -- Δ' agrees with Δ_D on fv(D_enc): for v ∈ fv(D_enc), v ∉ vs (since D_enc
@@ -1556,13 +1604,9 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                   have h_St₃_lookup := AList.mem_lookup_iff.mpr h_St₃_entry
                   exact AList.lookup_isSome.mp (Option.isSome_of_eq_some h_St₃_lookup)
                 exact SMT.Typing.bv_notMem_context typ_P_enc v hbv hv_St₃
-              -- z ∉ bv P_enc
-              have z_not_bv_P : z ∉ SMT.bv P_enc := by
-                intro hbv
-                have typ_P_enc_ins := SMT.Typing.weakening
-                  (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh) typ_P_enc
-                exact SMT.Typing.bv_notMem_context typ_P_enc_ins _ hbv
-                  ((AList.mem_insert _).mpr (Or.inl rfl))
+              -- z ∉ bv P_enc: bv P_enc ⊆ St₃.usedVars but z ∉ St₃.usedVars
+              have z_not_bv_P : z ∉ SMT.bv P_enc := fun hbv =>
+                z_not_used (bv_P_enc_used z hbv)
               -- z ∉ vs (z is fresh, vs[i] ∈ usedVars)
               have z_not_vs : z ∉ vs := by
                 intro hz; exact z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used
@@ -1770,18 +1814,24 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
             ⟦ite_body.abstract (Function.update Δ' z (some W)) (hcov_ite_upd W)⟧ˢ = some Db →
             Db.snd.fst = .bool := by
           intro W hW_ty Db hDb
+          have hz_D : z ∉ SMT.bv D_enc := fun hbv =>
+            z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used (bv_D_enc_used z hbv)))
+          have hz_P : z ∉ SMT.bv P_enc := fun hbv => z_not_used (bv_P_enc_used z hbv)
           have typ_ite_body : St₃.types.insert z τ.toSMTType ⊢ˢ ite_body : .bool := by
             rw [ite_body_def]
             exact SMT.Typing.ite _ _ _ _ _
               (SMT.Typing.app _ _ _ _ _
                 (SMT.Typing.weakening
                   (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh)
-                  (SMT.Typing.weakening St₁_sub_St₃_types typ_D_enc))
+                  (SMT.Typing.weakening St₁_sub_St₃_types typ_D_enc hbv_D_notMem_St₃)
+                  (SMT.Typing.bv_notMem_insert_of_fresh
+                    (SMT.Typing.weakening St₁_sub_St₃_types typ_D_enc hbv_D_notMem_St₃) hz_D))
                 (SMT.Typing.var _ z τ.toSMTType (AList.lookup_insert St₃.types)))
               (SMT_Typing_substList vs (toDestPair vs (.var z)) P_enc
                 (SMT.Typing.weakening
                   (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh)
-                  typ_P_enc)
+                  typ_P_enc
+                  (SMT.Typing.bv_notMem_insert_of_fresh typ_P_enc hz_P))
                 toDestPair_bv_nil
                 (by
                   set Γ_z := St₃.types.insert z τ.toSMTType
@@ -2502,12 +2552,8 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                         have h_St₃_lookup := AList.mem_lookup_iff.mpr h_St₃_entry
                         exact AList.lookup_isSome.mp (Option.isSome_of_eq_some h_St₃_lookup)
                       exact SMT.Typing.bv_notMem_context typ_P_enc v hbv hv_St₃
-                    have z_not_bv_P' : z ∉ SMT.bv P_enc := by
-                      intro hbv
-                      have typ_P_enc_ins := SMT.Typing.weakening
-                        (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh) typ_P_enc
-                      exact SMT.Typing.bv_notMem_context typ_P_enc_ins _ hbv
-                        ((AList.mem_insert _).mpr (Or.inl rfl))
+                    have z_not_bv_P' : z ∉ SMT.bv P_enc := fun hbv =>
+                      z_not_used (bv_P_enc_used z hbv)
                     have z_not_vs' : z ∉ vs := by
                       intro hz; exact z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used
                         (used_sub_St₁ (vars_used_vs z hz))))
@@ -3073,12 +3119,8 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                       have h_St₃_lookup := AList.mem_lookup_iff.mpr h_St₃_entry
                       exact AList.lookup_isSome.mp (Option.isSome_of_eq_some h_St₃_lookup)
                     exact SMT.Typing.bv_notMem_context typ_P_enc v hbv hv_St₃
-                  have z_not_bv_P' : z ∉ SMT.bv P_enc := by
-                    intro hbv
-                    have typ_P_enc_ins := SMT.Typing.weakening
-                      (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh) typ_P_enc
-                    exact SMT.Typing.bv_notMem_context typ_P_enc_ins _ hbv
-                      ((AList.mem_insert _).mpr (Or.inl rfl))
+                  have z_not_bv_P' : z ∉ SMT.bv P_enc := fun hbv =>
+                    z_not_used (bv_P_enc_used z hbv)
                   have z_not_vs' : z ∉ vs := by
                     intro hz; exact z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used
                       (used_sub_St₁ (vars_used_vs z hz))))
@@ -3490,18 +3532,24 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                   simp only [SMT.fv, List.mem_removeAll_iff]
                   exact ⟨ite_body_def ▸ hv, List.mem_singleton.not.mpr hvz⟩)
             -- Build body typing: St₃.types.insert z τ.toSMTType ⊢ˢ ite_body : .bool
+            have hz_D : z ∉ SMT.bv D_enc := fun hbv =>
+              z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used (bv_D_enc_used z hbv)))
+            have hz_P : z ∉ SMT.bv P_enc := fun hbv => z_not_used (bv_P_enc_used z hbv)
             have typ_ite_body_alt : St₃.types.insert z τ.toSMTType ⊢ˢ ite_body : .bool := by
               rw [ite_body_def]
               exact SMT.Typing.ite _ _ _ _ _
                 (SMT.Typing.app _ _ _ _ _
                   (SMT.Typing.weakening
                     (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh)
-                    (SMT.Typing.weakening St₁_sub_St₃_types typ_D_enc))
+                    (SMT.Typing.weakening St₁_sub_St₃_types typ_D_enc hbv_D_notMem_St₃)
+                    (SMT.Typing.bv_notMem_insert_of_fresh
+                      (SMT.Typing.weakening St₁_sub_St₃_types typ_D_enc hbv_D_notMem_St₃) hz_D))
                   (SMT.Typing.var _ z τ.toSMTType (AList.lookup_insert St₃.types)))
                 (SMT_Typing_substList vs (toDestPair vs (.var z)) P_enc
                   (SMT.Typing.weakening
                     (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh)
-                    typ_P_enc)
+                    typ_P_enc
+                    (SMT.Typing.bv_notMem_insert_of_fresh typ_P_enc hz_P))
                   toDestPair_bv_nil
                   (by
                     set Γ_z := St₃.types.insert z τ.toSMTType
@@ -3950,12 +3998,8 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
                 have h_St₃_entry := St₂_sub_St₃_types h_entry
                 exact AList.lookup_isSome.mp (Option.isSome_of_eq_some (AList.mem_lookup_iff.mpr h_St₃_entry))
               exact SMT.Typing.bv_notMem_context typ_P_enc v hbv hv_St₃
-            have z_not_bv_P_enc : z ∉ SMT.bv P_enc := by
-              intro hbv
-              have typ_P_enc_ins := SMT.Typing.weakening
-                (SMT.TypeContext.entries_subset_insert_of_notMem (τ := τ.toSMTType) z_fresh) typ_P_enc
-              exact SMT.Typing.bv_notMem_context typ_P_enc_ins _ hbv
-                ((AList.mem_insert _).mpr (Or.inl rfl))
+            have z_not_bv_P_enc : z ∉ SMT.bv P_enc := fun hbv =>
+              z_not_used (bv_P_enc_used z hbv)
             have z_not_vs_proof : z ∉ vs := by
               intro hz; exact z_not_used (St₂_sub_St₃ (St₁_sub_St₂_used
                 (used_sub_St₁ (vars_used_vs z hz))))

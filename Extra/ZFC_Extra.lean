@@ -144,16 +144,14 @@ theorem sep_mono {s t : ZFSet} {P} (h : s ⊆ t) : s.sep P ⊆ t := by
   exact h hx.1
 
 theorem union_mono {x y z : ZFSet} :  x ⊆ z → y ⊆ z → x ∪ y ⊆ z := by
-  intro hx hy
-  intro a ha
+  intro hx hy a ha
   rw [ZFSet.mem_union] at ha
   rcases ha with _ | _
   · exact hx ‹_›
   · exact hy ‹_›
 
 theorem inter_mono {x y z : ZFSet} :  x ⊆ z → y ⊆ z → x ∩ y ⊆ z := by
-  intro hx hy
-  intro a ha
+  intro hx hy a ha
   rw [ZFSet.mem_inter] at ha
   exact hx ha.1
 
@@ -253,26 +251,27 @@ instance : ZFNat ≃ ℕ where
 --     dsimp
 --     exact mono' x y |>.mpr h
 
-instance instPreorderSubtypeMemInt : Preorder {x // x ∈ Int} where
-  le x y := ZFInt.instPartialOrder.le x y
-  le_refl x := ZFInt.instLinearOrder.le_refl x
-  le_trans x y z := ZFInt.instLinearOrder.le_trans x y z
-  lt_iff_le_not_ge x y := by
-    symm
-    trans
-    · exact ZFInt.instLinearOrder.lt_iff_le_not_ge x y |>.symm
-    · exact ZFSet.instEquivZFIntInt.mono_iff x y
+-- instance instPreorderSubtypeMemInt : Preorder {x // x ∈ Int} where
+--   le x y := ZFInt.instPartialOrder.le x y
+--   le_refl x := ZFInt.instLinearOrder.le_refl x
+--   le_trans x y z := ZFInt.instLinearOrder.le_trans x y z
+--   lt_iff_le_not_ge x y := by
+--     symm
+--     trans
+--     · exact ZFInt.instLinearOrder.lt_iff_le_not_ge x y |>.symm
+--     · exact ZFSet.instEquivZFIntInt.mono_iff x y
 
-instance instLinearOrderSubtypeMemInt : LinearOrder {x // x ∈ Int} where
-  le := (ZFInt.instLinearOrder.le · ·)
-  le_refl := (ZFInt.instLinearOrder.le_refl ·)
-  le_trans := (ZFInt.instLinearOrder.le_trans · · ·)
-  le_antisymm x y h h' := by
-    have := ZFInt.instLinearOrder.le_antisymm x y h h'
-    rwa [Equiv.invFun_as_coe, EmbeddingLike.apply_eq_iff_eq] at this
-  le_total := (ZFInt.instLinearOrder.le_total · ·)
-  toDecidableLE := (ZFInt.instLinearOrder.toDecidableLE · ·)
-  lt_iff_le_not_ge _ _ := _root_.lt_iff_le_not_ge
+
+-- instance instLinearOrderSubtypeMemInt : LinearOrder {x // x ∈ Int} where
+--   le := (ZFInt.instLinearOrder.le · ·)
+--   le_refl := (ZFInt.instLinearOrder.le_refl ·)
+--   le_trans := (ZFInt.instLinearOrder.le_trans · · ·)
+--   le_antisymm x y h h' := by
+--     have := ZFInt.instLinearOrder.le_antisymm x y h h'
+--     rwa [Equiv.invFun_as_coe, EmbeddingLike.apply_eq_iff_eq] at this
+--   le_total := (ZFInt.instLinearOrder.le_total · ·)
+--   toDecidableLE := (ZFInt.instLinearOrder.toDecidableLE · ·)
+--   lt_iff_le_not_ge _ _ := _root_.lt_iff_le_not_ge
 
 end ZFSet.ZFInt
 

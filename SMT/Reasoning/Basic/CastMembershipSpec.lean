@@ -3,6 +3,7 @@ import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
 import SMT.Reasoning.Basic.LoosenAuxSpec
 import SMT.Reasoning.Basic.DenotationTotality
+import SMT.Reasoning.Basic.EncodeTermBvUsed
 
 set_option mvcgen.warning false
 
@@ -11,7 +12,8 @@ open Std.Do
 set_option maxHeartbeats 3000000 in
 @[spec]
 theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT.TypeContext} {n : ℕ}
-  (typ_x : Λ ⊢ˢ x : α) (typ_S : Λ ⊢ˢ S : β) {used : List SMT.𝒱} :
+  (typ_x : Λ ⊢ˢ x : α) (typ_S : Λ ⊢ˢ S : β) {used : List SMT.𝒱}
+  (hbv_x : ∀ v ∈ SMT.bv x, v ∈ used) (hbv_S : ∀ v ∈ SMT.bv S, v ∈ used) :
   ⦃ λ ⟨E, Λ'⟩ ↦ ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used⌝ ⦄
     castMembership ⟨x, α⟩ ⟨S, β⟩
   ⦃ ⇓? ⟨t, τ⟩ ⟨E', Λ'⟩ =>
@@ -94,7 +96,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             (SMT.Typing.app _ _ _ _ _ typ_S_bool typ_x) hcompat hcov_t
       · -- Branch 2: α ⊑ τ. Encoder does loosenAux on x then declareConst x! τ.
         mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-          typ_x τ_le_α.toCastPath (Δresp St.types) (hcov_resp _ x) (hresp_fv _ x)
+          typ_x (fun v hv => St_used_eq ▸ hbv_x v hv) τ_le_α.toCastPath (Δresp St.types) (hcov_resp _ x) (hresp_fv _ x)
         next out =>
         obtain ⟨x!, x!_spec⟩ := out
         mrename_i pre
@@ -116,6 +118,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             · exact SMT.Typing.weakening
                 (h := fun v hv => St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh hv))
                 typ_S_bool
+                (fun v hv => preserves1 v (St_used_eq ▸ hbv_S v hv) (SMT.Typing.bv_notMem_context typ_S_bool v hv))
             · exact typ_x!_St1
         mpure_intro
         and_intros
@@ -157,7 +160,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
       · -- Branch 3: τ ⊑ α. Encoder does loosenAux on S with chpred then declareConst S! (α.fun .bool).
         rename_i h
         mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-          typ_S_bool (castPath.chpred h.toCastPath) (Δresp St.types) (hcov_resp _ S) (hresp_fv _ S)
+          typ_S_bool (fun v hv => St_used_eq ▸ hbv_S v hv) (castPath.chpred h.toCastPath) (Δresp St.types) (hcov_resp _ S) (hresp_fv _ S)
         next out =>
         obtain ⟨S!, S!_spec⟩ := out
         mrename_i pre
@@ -180,6 +183,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             · exact SMT.Typing.weakening
                 (h := fun v hv => St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
                 typ_x
+                (fun v hv => preserves1 v (St_used_eq ▸ hbv_x v hv) (SMT.Typing.bv_notMem_context typ_x v hv))
         mpure_intro
         and_intros
         · rw [St2_fvc_eq]
@@ -231,7 +235,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
           simp [hσ, hα]
         split_ifs with hαL hβL hβR hαR hβL2 hβR2
         · mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-            typ_x_pair (.pair hαL.toCastPath hβL.toCastPath) (Δresp St.types) (hcov_resp _ x) (hresp_fv _ x)
+            typ_x_pair (fun v hv => St_used_eq ▸ hbv_x v hv) (.pair hαL.toCastPath hβL.toCastPath) (Δresp St.types) (hcov_resp _ x) (hresp_fv _ x)
           next out =>
           obtain ⟨x!, x!_spec⟩ := out
           mrename_i pre
@@ -256,6 +260,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
                 · exact SMT.Typing.weakening
                     (h := fun v hv => St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh hv))
                     typ_S_opt
+                    (fun v hv => preserves1 v (St_used_eq ▸ hbv_S v hv) (SMT.Typing.bv_notMem_context typ_S_opt v hv))
                 · apply SMT.Typing.fst
                   exact typ_x!_St1
               · apply SMT.Typing.some
@@ -299,14 +304,19 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
         · have typ_fst_x : St.types ⊢ˢ .fst x : α0 := by
             apply SMT.Typing.fst
             exact typ_x_pair
-          mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-            typ_fst_x hαL.toCastPath (Δresp St.types) (hcov_resp _ (.fst x)) (hresp_fv _ (.fst x))
+          mspec (Std.Do.Triple.and _
+            (SMT.loosenAux_prf_bv hαL.toCastPath (used := St.env.usedVars) (n := St.env.freshvarsc)
+              (name := "mem!") (x := .fst x)
+              (fun v hv => St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv)))
+            (loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
+              typ_fst_x (fun v hv => St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv)) hαL.toCastPath
+              (Δresp St.types) (hcov_resp _ (.fst x)) (hresp_fv _ (.fst x))))
           next out =>
           obtain ⟨x!, x!_spec⟩ := out
           mrename_i pre
           mintro ∀St1
           mpure pre
-          obtain ⟨hn1, St1_types_eq, x!_fresh, x!_not_used, used_sub1, keys_sub1, preserves1, typ_x!, typ_x!_spec, typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, _⟩ := pre
+          obtain ⟨⟨_x!_used, bv_x!_spec_used, _⟩, hn1, St1_types_eq, x!_fresh, x!_not_used, used_sub1, keys_sub1, preserves1, typ_x!, typ_x!_spec, typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, _⟩ := pre
           mspec SMT.declareConst_spec (v := x!) (τ := τ) (decl := St1.env.declarations)
             (as := St1.env.asserts) (n := St1.env.freshvarsc) (Γ := St1.types) (used := St1.env.usedVars)
           mrename_i pre
@@ -318,8 +328,11 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             exact SMT.Typing.weakening
               (h := fun v hv => St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh hv))
               typ_S_opt
+              (fun v hv => preserves1 v (St_used_eq ▸ hbv_S v hv) (SMT.Typing.bv_notMem_context typ_S_opt v hv))
+          have hbv_S_St2 : ∀ v ∈ SMT.bv S, v ∈ St2.env.usedVars := fun v hv =>
+            St2_used_eq ▸ used_sub1 (St_used_eq ▸ hbv_S v hv)
           mspec loosenAux_prf_spec (Λ := St2.types) (n := St2.env.freshvarsc) (used := St2.env.usedVars)
-            typ_S_opt_St2
+            typ_S_opt_St2 hbv_S_St2
             (.fun (not_eq_of_beq_eq_false rfl) (castPath.reflexive τ) (.opt hβR.toCastPath))
             (Δresp St2.types) (hcov_resp _ S) (hresp_fv _ S)
           · mpure_intro
@@ -358,25 +371,33 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
                 exact SMT.Typing.weakening
                   (h := fun v hv => St3_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
                   typ_x!_spec_St2
+                  (fun v hv => preserves2 v (St2_used_eq ▸ bv_x!_spec_used v hv)
+                    (SMT.Typing.bv_notMem_context typ_x!_spec_St2 v hv))
               have typ_x!_St2 : St2.types ⊢ˢ .var x! : τ := by
                 rw [St2_types_eq]
                 exact typ_x!_St1
               have typ_x!_St3 : St3.types ⊢ˢ .var x! : τ := by
                 exact SMT.Typing.weakening
                   (h := fun v hv => St3_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
-                  typ_x!_St2
+                  typ_x!_St2 (by simp [SMT.bv])
               have typ_snd_x : St.types ⊢ˢ .snd x : β0 := by
                 apply SMT.Typing.snd
                 exact typ_x_pair
+              have hbv_snd_x_St2 : ∀ v ∈ SMT.bv (SMT.Term.snd x), v ∈ St2.env.usedVars := fun v hv =>
+                St2_used_eq ▸ used_sub1 (St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv))
               have typ_snd_x_St2 : St2.types ⊢ˢ .snd x : β0 := by
                 rw [St2_types_eq]
                 exact SMT.Typing.weakening
                   (h := fun v hv => St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh hv))
                   typ_snd_x
+                  (fun v hv => preserves1 v (St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv))
+                    (SMT.Typing.bv_notMem_context typ_snd_x v hv))
               have typ_snd_x_St3 : St3.types ⊢ˢ .snd x : β0 := by
                 exact SMT.Typing.weakening
                   (h := fun v hv => St3_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
                   typ_snd_x_St2
+                  (fun v hv => preserves2 v (hbv_snd_x_St2 v hv)
+                    (SMT.Typing.bv_notMem_context typ_snd_x_St2 v hv))
               apply SMT.Typing.and
               · apply SMT.Typing.and
                 · exact typ_x!_spec_St3
@@ -469,14 +490,19 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
         · have typ_snd_x : St.types ⊢ˢ .snd x : β0 := by
             apply SMT.Typing.snd
             exact typ_x_pair
-          mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-            typ_snd_x hβL2.toCastPath (Δresp St.types) (hcov_resp _ (.snd x)) (hresp_fv _ (.snd x))
+          mspec (Std.Do.Triple.and _
+            (SMT.loosenAux_prf_bv hβL2.toCastPath (used := St.env.usedVars) (n := St.env.freshvarsc)
+              (name := "mem!") (x := .snd x)
+              (fun v hv => St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv)))
+            (loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
+              typ_snd_x (fun v hv => St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv)) hβL2.toCastPath
+              (Δresp St.types) (hcov_resp _ (.snd x)) (hresp_fv _ (.snd x))))
           next out =>
           obtain ⟨y!, y!_spec⟩ := out
           mrename_i pre
           mintro ∀St1
           mpure pre
-          obtain ⟨hn1, St1_types_eq, y!_fresh, y!_not_used, used_sub1, keys_sub1, preserves1, typ_y!, typ_y!_spec, typ_y!_St1, typ_y!_spec_St1, fv_y!_spec, _⟩ := pre
+          obtain ⟨⟨_y!_used, bv_y!_spec_used, _⟩, hn1, St1_types_eq, y!_fresh, y!_not_used, used_sub1, keys_sub1, preserves1, typ_y!, typ_y!_spec, typ_y!_St1, typ_y!_spec_St1, fv_y!_spec, _⟩ := pre
           mspec SMT.declareConst_spec (v := y!) (τ := β') (decl := St1.env.declarations)
             (as := St1.env.asserts) (n := St1.env.freshvarsc) (Γ := St1.types) (used := St1.env.usedVars)
           mrename_i pre
@@ -488,8 +514,11 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             exact SMT.Typing.weakening
               (h := fun v hv => St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem y!_fresh hv))
               typ_S_opt
+              (fun v hv => preserves1 v (St_used_eq ▸ hbv_S v hv) (SMT.Typing.bv_notMem_context typ_S_opt v hv))
+          have hbv_S_St2 : ∀ v ∈ SMT.bv S, v ∈ St2.env.usedVars := fun v hv =>
+            St2_used_eq ▸ used_sub1 (St_used_eq ▸ hbv_S v hv)
           mspec loosenAux_prf_spec (Λ := St2.types) (n := St2.env.freshvarsc) (used := St2.env.usedVars)
-            typ_S_opt_St2
+            typ_S_opt_St2 hbv_S_St2
             (.fun (not_eq_of_beq_eq_false rfl) hαR.toCastPath (castPath.reflexive (.option β')))
             (Δresp St2.types) (hcov_resp _ S) (hresp_fv _ S)
           · mpure_intro
@@ -528,25 +557,33 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
                 exact SMT.Typing.weakening
                   (h := fun v hv => St3_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
                   typ_y!_spec_St2
+                  (fun v hv => preserves2 v (St2_used_eq ▸ bv_y!_spec_used v hv)
+                    (SMT.Typing.bv_notMem_context typ_y!_spec_St2 v hv))
               have typ_y!_St2 : St2.types ⊢ˢ .var y! : β' := by
                 rw [St2_types_eq]
                 exact typ_y!_St1
               have typ_y!_St3 : St3.types ⊢ˢ .var y! : β' := by
                 exact SMT.Typing.weakening
                   (h := fun v hv => St3_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
-                  typ_y!_St2
+                  typ_y!_St2 (by simp [SMT.bv])
               have typ_fst_x : St.types ⊢ˢ .fst x : α0 := by
                 apply SMT.Typing.fst
                 exact typ_x_pair
+              have hbv_fst_x_St2 : ∀ v ∈ SMT.bv (SMT.Term.fst x), v ∈ St2.env.usedVars := fun v hv =>
+                St2_used_eq ▸ used_sub1 (St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv))
               have typ_fst_x_St2 : St2.types ⊢ˢ .fst x : α0 := by
                 rw [St2_types_eq]
                 exact SMT.Typing.weakening
                   (h := fun v hv => St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem y!_fresh hv))
                   typ_fst_x
+                  (fun v hv => preserves1 v (St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv))
+                    (SMT.Typing.bv_notMem_context typ_fst_x v hv))
               have typ_fst_x_St3 : St3.types ⊢ˢ .fst x : α0 := by
                 exact SMT.Typing.weakening
                   (h := fun v hv => St3_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
                   typ_fst_x_St2
+                  (fun v hv => preserves2 v (hbv_fst_x_St2 v hv)
+                    (SMT.Typing.bv_notMem_context typ_fst_x_St2 v hv))
               apply SMT.Typing.and
               · apply SMT.Typing.and
                 · exact typ_y!_spec_St3
@@ -636,7 +673,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
               intro Δctx hcov_t hcompat
               exact SMT.RenamingContext.denote_exists_of_typing typ_full hcompat hcov_t
         · mspec loosenAux_prf_spec (Λ := St.types) (n := St.env.freshvarsc) (used := St.env.usedVars)
-            typ_S_opt
+            typ_S_opt (fun v hv => St_used_eq ▸ hbv_S v hv)
             (.fun (not_eq_of_beq_eq_false rfl) hαR.toCastPath (.opt hβR2.toCastPath))
             (Δresp St.types) (hcov_resp _ S) (hresp_fv _ S)
           rename_i out
@@ -668,6 +705,8 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
               exact SMT.Typing.weakening
                 (h := fun v hv => St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
                 typ_fst_x
+                (fun v hv => preserves1 v (St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv))
+                  (SMT.Typing.bv_notMem_context typ_fst_x v hv))
             have typ_snd_x : St.types ⊢ˢ .snd x : β0 := by
               apply SMT.Typing.snd
               exact typ_x_pair
@@ -675,6 +714,8 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
               exact SMT.Typing.weakening
                 (h := fun v hv => St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
                 typ_snd_x
+                (fun v hv => preserves1 v (St_used_eq ▸ hbv_x v (by simpa only [SMT.bv] using hv))
+                  (SMT.Typing.bv_notMem_context typ_snd_x v hv))
             apply SMT.Typing.and
             · exact typ_S!_spec_St1
             · refine SMT.Typing.eq
@@ -756,7 +797,8 @@ theorem castMembership_branch2_spec.{u}
   {α τ : SMT.SMTType} {x S : SMT.Term} {Λ : SMT.TypeContext} {n : ℕ}
   (typ_x : Λ ⊢ˢ x : α) (typ_S : Λ ⊢ˢ S : .fun τ .bool)
   (α_ne_τ : α ≠ τ) (α_le_τ : α ⊑ τ)
-  {used : List SMT.𝒱} :
+  {used : List SMT.𝒱}
+  (hbv_x : ∀ v ∈ SMT.bv x, v ∈ used) (hbv_S : ∀ v ∈ SMT.bv S, v ∈ used) :
   ⦃ λ ⟨E, Λ'⟩ ↦ ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧ E.usedVars = used⌝ ⦄
     castMembership ⟨x, α⟩ ⟨S, .fun τ .bool⟩
   ⦃ ⇓? ⟨t, σ⟩ ⟨E', Λ'⟩ =>
@@ -805,7 +847,7 @@ theorem castMembership_branch2_spec.{u}
   rw [dif_neg α_ne_τ, dif_pos α_le_τ]
   -- Use loosenAux_prf_spec_univ to get the Δ-universal adequacy.
   mspec loosenAux_prf_spec_univ (Λ := St.types) (n := St.env.freshvarsc)
-    (used := St.env.usedVars) typ_x α_le_τ.toCastPath
+    (used := St.env.usedVars) typ_x (fun v hv => St_used_eq ▸ hbv_x v hv) α_le_τ.toCastPath
   next out =>
   obtain ⟨x!, x!_spec⟩ := out
   mrename_i pre
@@ -830,6 +872,7 @@ theorem castMembership_branch2_spec.{u}
           (h := fun v hv => St1_types_eq
             (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh hv))
           typ_S
+          (fun v hv => preserves1 v (St_used_eq ▸ hbv_S v hv) (SMT.Typing.bv_notMem_context typ_S v hv))
       · exact typ_x!_St1
   mpure_intro
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩

@@ -59,7 +59,7 @@ theorem Triple_forall_post_encoder.{u₁} {α : Type} {ι : Sort u₁} (x : Enco
 theorem loosenAux_prf_spec
   {Λ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱} {name : String}
   {x : SMT.Term} {α β : SMTType}
-  (typ_x : Λ ⊢ˢ x : α) (𝕔 : α ~> β)
+  (typ_x : Λ ⊢ˢ x : α) (hbv_x : ∀ v ∈ bv x, v ∈ used) (𝕔 : α ~> β)
   («Δ» : RenamingContext.Context)
   (hx  : RenamingContext.CoversFV «Δ» x)
   (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
@@ -97,30 +97,30 @@ theorem loosenAux_prf_spec
   induction 𝕔 generalizing x Λ n used name with
     | @refl α hα =>
       intro «Δ» hx respects pf
-      exact loosenAux_prf_spec.refl «Δ» hα typ_x hx pf respects
+      exact loosenAux_prf_spec.refl «Δ» hα typ_x hbv_x hx pf respects
     | @pair α β α' β' pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
-      refine loosenAux_prf_spec.pair «Δ» pα pβ pf ?_ ?_ typ_x hx respects
-      · exact fun a hx hresp => pα_ih a «Δ» hx hresp pf
-      · exact fun a hx hresp => pβ_ih a «Δ» hx hresp pf
+      refine loosenAux_prf_spec.pair «Δ» pα pβ pf ?_ ?_ typ_x hbv_x hx respects
+      · exact fun a hbv hx hresp => pα_ih a hbv «Δ» hx hresp pf
+      · exact fun a hbv hx hresp => pβ_ih a hbv «Δ» hx hresp pf
     | @opt α α' hα ih =>
       intro «Δ» hx respects pf
       exact loosenAux_prf_spec.opt «Δ» pf hα
-        (fun typ Δ' hx' hresp' pf' => ih typ Δ' hx' hresp' pf') typ_x hx respects
+        (fun typ hbv' Δ' hx' hresp' pf' => ih typ hbv' Δ' hx' hresp' pf') typ_x hbv_x hx respects
     | @graph α β α' β' pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
       exact loosenAux_prf_spec.graph «Δ» pf pα pβ
-        (fun typ Δ' hx' respects' pf' => pα_ih typ Δ' hx' respects' pf')
-        (fun typ Δ' hx' respects' pf' => pβ_ih typ Δ' hx' respects' pf') typ_x hx respects
+        (fun typ hbv' Δ' hx' respects' pf' => pα_ih typ hbv' Δ' hx' respects' pf')
+        (fun typ hbv' Δ' hx' respects' pf' => pβ_ih typ hbv' Δ' hx' respects' pf') typ_x hbv_x hx respects
     | @chpred α α' p ih =>
       intro «Δ» hx respects pf
       exact loosenAux_prf_spec.chpred «Δ» pf p
-        (fun typ Δ' hx' hresp' pf' => ih typ Δ' hx' hresp' pf') typ_x hx respects
+        (fun typ hbv' Δ' hx' hresp' pf' => ih typ hbv' Δ' hx' hresp' pf') typ_x hbv_x hx respects
     | @«fun» α β α' β' hβ pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
       exact loosenAux_prf_spec.fun «Δ» pf hβ pα pβ
-        (fun typ Δ' hx' hresp' pf' => pα_ih typ Δ' hx' hresp' pf')
-        (fun typ Δ' hx' hresp' pf' => pβ_ih typ Δ' hx' hresp' pf') typ_x hx respects
+        (fun typ hbv' Δ' hx' hresp' pf' => pα_ih typ hbv' Δ' hx' hresp' pf')
+        (fun typ hbv' Δ' hx' hresp' pf' => pβ_ih typ hbv' Δ' hx' hresp' pf') typ_x hbv_x hx respects
 
 /--
 Δ-universal version of `loosenAux_prf_spec`: the adequacy clause is universally
@@ -135,7 +135,7 @@ WP unfolding for the encoder monad.
 theorem loosenAux_prf_spec_univ
   {Λ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱} {name : String}
   {x : SMT.Term} {α β : SMTType}
-  (typ_x : Λ ⊢ˢ x : α) (𝕔 : α ~> β) :
+  (typ_x : Λ ⊢ˢ x : α) (hbv_x : ∀ v ∈ bv x, v ∈ used) (𝕔 : α ~> β) :
   ⦃ fun ⟨E, Λ'⟩ => ⌜ Λ' = Λ ∧ E.freshvarsc = n ∧ Λ'.keys ⊆ E.usedVars ∧ E.usedVars = used⌝ ⦄
     loosenAux_prf name 𝕔 x
   ⦃ ⇓? ⟨x!, x!_spec⟩ ⟨E', Γ'⟩ =>
@@ -216,7 +216,7 @@ theorem loosenAux_prf_spec_univ
                          (⟦x_!_spec.abstract (Function.update «Δ» x_! (some Y)) hφY⟧ˢ).isSome = true)⌝)
                 st).down :=
     fun «Δ» hx hresp => loosenAux_prf_spec (Λ := Λ) (n := n) (used := used) (name := name)
-      typ_x 𝕔 «Δ» hx hresp st pst
+      typ_x hbv_x 𝕔 «Δ» hx hresp st pst
   -- Reduce hi via key.
   conv at hi => intro «Δ» hx hresp; rw [key]
   -- Reduce the Goal via key.

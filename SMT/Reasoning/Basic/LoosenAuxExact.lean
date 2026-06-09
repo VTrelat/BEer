@@ -15,7 +15,7 @@ open Std.Do SMT ZFSet Classical
 theorem loosenAux_prf_exact
   {Λ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱} {name : String}
   {x : SMT.Term} {α β : SMTType}
-  (typ_x : Λ ⊢ˢ x : α) (𝕔 : α ~> β)
+  (typ_x : Λ ⊢ˢ x : α) (hbv_x : ∀ v ∈ bv x, v ∈ used) (𝕔 : α ~> β)
   («Δ» : RenamingContext.Context)
   (hx : RenamingContext.CoversFV «Δ» x)
   (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
@@ -55,21 +55,21 @@ theorem loosenAux_prf_exact
   induction 𝕔 generalizing x Λ n used name with
   | @refl α hα =>
       intro «Δ» hx respects pf
-      exact loosenAux_prf_exact.refl «Δ» hα typ_x hx pf respects
+      exact loosenAux_prf_exact.refl «Δ» hα typ_x hbv_x hx pf respects
   | @pair α β α' β' pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
       exact loosenAux_prf_exact.pair «Δ» pα pβ pf
-        (fun ht hx' hresp => pα_ih ht «Δ» hx' hresp pf)
-        (fun ht hx' hresp => pβ_ih ht «Δ» hx' hresp pf) typ_x hx respects
+        (fun ht hbv' hx' hresp => pα_ih ht hbv' «Δ» hx' hresp pf)
+        (fun ht hbv' hx' hresp => pβ_ih ht hbv' «Δ» hx' hresp pf) typ_x hbv_x hx respects
   | @opt α α' hα ih =>
       intro «Δ» hx respects pf
-      exact loosenAux_prf_exact.opt «Δ» pf hα ih typ_x hx respects
+      exact loosenAux_prf_exact.opt «Δ» pf hα ih typ_x hbv_x hx respects
   | @chpred α α' p ih =>
       intro «Δ» hx respects pf
-      exact loosenAux_prf_exact.chpred «Δ» pf p ih typ_x hx respects
+      exact loosenAux_prf_exact.chpred «Δ» pf p ih typ_x hbv_x hx respects
   | @graph α β α' β' pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
-      apply loosenAux_prf_exact.graph pα pβ pα_ih pβ_ih typ_x «Δ» hx respects pf
+      apply loosenAux_prf_exact.graph pα pβ pα_ih pβ_ih typ_x hbv_x «Δ» hx respects pf
   | @«fun» α β α' β' hβ pα pβ pα_ih pβ_ih =>
       intro «Δ» hx respects pf
-      exact loosenAux_prf_exact.fun hβ pα pβ pα_ih pβ_ih typ_x «Δ» hx respects pf
+      exact loosenAux_prf_exact.fun hβ pα pβ pα_ih pβ_ih typ_x hbv_x «Δ» hx respects pf

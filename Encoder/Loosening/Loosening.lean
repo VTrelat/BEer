@@ -233,6 +233,7 @@ def castUnion : Term × SMTType → Term × SMTType → Encoder (Term × SMTType
         S ∪ T    ↪    λ x : γ. S(x) ∨ T(x)
       -/
       let x ← freshVar γ "union!"
+      SMT.eraseFromContext x
       return (.lambda [x] [γ] (.or (.app S (.var x)) (.app T (.var x))), .fun γ .bool)
     | _, _, rfl => throw s!"castUnion: direct path requires function-to-bool type, got {α}"
   else if h : α ⊑ β then castUnionAux S T h.toCastPath
@@ -278,6 +279,7 @@ def castInter : Term × SMTType → Term × SMTType → Encoder (Term × SMTType
         S ∩ T    ↪    λ x : γ. S(x) ∧ T(x)
       -/
       let x ← freshVar γ "inter!"
+      SMT.eraseFromContext x
       return (.lambda [x] [γ] (.and (.app S (.var x)) (.app T (.var x))), .fun γ .bool)
     | _, _, rfl => throw s!"castInter: direct path requires function-to-bool type, got {α}"
   else if h : α ⊑ β then castInterAux S T h.toCastPath

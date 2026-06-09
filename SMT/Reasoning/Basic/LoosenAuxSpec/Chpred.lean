@@ -27,6 +27,8 @@ private structure ChpredTypingPack
 private theorem chpredTypingPack
     {Γ : TypeContext} {x z!_spec : Term} {x! z z! : 𝒱} {α α' : SMTType}
     (typ_x : Γ ⊢ˢ x : α.fun SMTType.bool)
+    (z_not_bv_x : z ∉ bv x)
+    (z!_not_bv_x : z! ∉ bv x)
     (typ_x! : Γ ⊢ˢ .var x! : α'.fun SMTType.bool)
     (z_not : z ∉ Γ)
     (z!_not : z! ∉ Γ)
@@ -52,9 +54,16 @@ private theorem chpredTypingPack
         (AList.insert z α (AList.insert z! α' Γ)).entries := by
     intro v hv
     exact hsub_insz!_insz_insz! (hsub_Γ_insz! hv)
+  have hbv_x_body : ∀ v ∈ bv x, v ∉ (AList.insert z α (AList.insert z! α' Γ)) := by
+    intro v hv hvmem
+    rcases (AList.mem_insert (s := AList.insert z! α' Γ)).1 hvmem with rfl | hv'
+    · exact z_not_bv_x hv
+    · rcases (AList.mem_insert (s := Γ)).1 hv' with rfl | hv''
+      · exact z!_not_bv_x hv
+      · exact (SMT.Typing.bv_notMem_context typ_x v hv) hv''
   have typ_x_body :
       (AList.insert z α (AList.insert z! α' Γ)) ⊢ˢ x : α.fun SMTType.bool := by
-    exact SMT.Typing.weakening (h := hsub_Γ_body) typ_x
+    exact SMT.Typing.weakening (h := hsub_Γ_body) typ_x hbv_x_body
   have typ_var_z_body :
       (AList.insert z α (AList.insert z! α' Γ)) ⊢ˢ .var z : α := by
     apply SMT.Typing.var
@@ -64,9 +73,18 @@ private theorem chpredTypingPack
         ((AList.insert z α (AList.insert z! α' Γ)).entries) := by
     simpa using
       (AList.insert_insert_of_ne (s := Γ) (a := z) (a' := z!) (b := α) (b' := α') z_ne_z!)
+  have hkeys_sub :
+      (AList.insert z α (AList.insert z! α' Γ)).keys ⊆
+        (AList.insert z! α' (AList.insert z α Γ)).keys := by
+    have hperm_keys :
+        (AList.insert z! α' (AList.insert z α Γ)).keys.Perm
+          ((AList.insert z α (AList.insert z! α' Γ)).keys) :=
+      hperm_ctx.map Sigma.fst
+    exact fun v hv => (hperm_keys.mem_iff).2 hv
   have typ_z!_spec_body :
       (AList.insert z α (AList.insert z! α' Γ)) ⊢ˢ z!_spec : SMTType.bool := by
     exact SMT.Typing.weakening (h := hperm_ctx.subset) typ_z!_spec_ctx
+      (hbv := SMT.Typing.bv_notMem_of_subset hkeys_sub typ_z!_spec_ctx)
   have typ_app_body :
       (AList.insert z α (AList.insert z! α' Γ)) ⊢ˢ (@ˢx) (.var z) : SMTType.bool := by
     exact SMT.Typing.app _ _ _ _ _ typ_x_body typ_var_z_body
@@ -2167,6 +2185,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
   (ih :
     ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
       Λ ⊢ˢ x : α →
+        (∀ v ∈ bv x, v ∈ used) →
         ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x)
           (_ : SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x)
           (pf₀ : ∀ (x! : 𝒱) (X! : SMT.Dom), ∀ v ∈ fv (Term.var x!), (Function.update «Δ₀» x! (some X!) v).isSome = true),
@@ -2213,6 +2232,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                                                                     hφY⟧ˢ.isSome =
                                                               true⌝⦄)
   {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term} (typ_x : Λ ⊢ˢ x : α.fun SMTType.bool)
+  (hbv_x : ∀ v ∈ bv x, v ∈ used)
   (hx : RenamingContext.CoversFV «Δ» x)
   (respects : SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ x) :
   ⦃fun x =>
@@ -2296,7 +2316,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
           refine ⟨⟨α.defaultZFSet, α, SMTType.mem_toZFSet_of_defaultZFSet⟩, ?_, rfl⟩
           simp [Δz]
       have ih_var_z := ih (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-        (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δz hcov_var_z respects_var_z pf_var_z
+        (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ (by simp [SMT.bv]) Δz hcov_var_z respects_var_z pf_var_z
       have run_var_z_spec :
           ⦃fun st => ⌜st = St₃⌝⦄
             loosenAux_prf s!"{name}_char_pred" p (.var z)
@@ -2338,6 +2358,20 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
         mpure pre
         obtain ⟨hrun, hn₄, St₄_types_eq, z!_fresh, z!_not_used, used_sub₄, keys_sub₄, preserves₄,
           typ_z!, typ_z!_spec, typ_z!_St₄, typ_z!_spec_St₄, fv_z!_spec, den_z⟩ := pre
+        -- The two `eraseFromContext` calls remove the freshly-declared `∃`/`λ`
+        -- binders `z`/`z!` from the final type context before the spec term is
+        -- returned.  `mspec` through both erases, then the post-`pure` clauses are
+        -- stated over the doubly-erased context `(St₄.types.erase z).erase z!`.
+        mspec SMT.eraseFromContext_spec
+        mrename_i preEz
+        mintro ∀StEz
+        mpure preEz
+        obtain ⟨StEz_types_eq, StEz_fvc, StEz_used_eq⟩ := preEz
+        mspec SMT.eraseFromContext_spec
+        mrename_i preEz!
+        mintro ∀StEz!
+        mpure preEz!
+        obtain ⟨StEz!_types_eq, StEz!_fvc, StEz!_used_eq⟩ := preEz!
         mspec Std.Do.Spec.pure
         have z!_not_St₂ : z! ∉ St₂.types := by
           intro hz!
@@ -2361,6 +2395,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
           exact SMT.Typing.weakening
             (h := SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh)
             typ_x
+            (hbv := SMT.Typing.bv_notMem_insert_of_fresh typ_x (fun h => x!_not_used (hbv_x x! h)))
         have typ_var_x!_St₂ : St₂.types ⊢ˢ .var x! : α'.fun SMTType.bool := by
           rw [St₂_types_eq]
           apply SMT.Typing.var
@@ -2368,29 +2403,64 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
         have typ_z!_spec_ctx :
             (AList.insert z! α' (AList.insert z α St₂.types)) ⊢ˢ z!_spec : SMTType.bool := by
           simpa [St₃_types_eq] using typ_z!_spec
+        have z_not_bv_x : z ∉ bv x := by
+          intro hzbv
+          exact z_not_used (St₂_used_eq ▸ List.mem_cons_of_mem _ (hbv_x z hzbv))
+        have z!_not_bv_x : z! ∉ bv x := by
+          intro hz!bv
+          have hz!_in : z! ∈ St₃.env.usedVars := by
+            rw [St₃_used_eq, St₂_used_eq]
+            exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (hbv_x z! hz!bv))
+          exact z!_not_used hz!_in
         have typing_pack := chpredTypingPack
           (Γ := St₂.types) (x := x) (x! := x!) (z := z) (z! := z!)
           (α := α) (α' := α')
-          typ_x_St₂ typ_var_x!_St₂ z_fresh z!_not_St₂ z_ne_z! typ_z!_spec_ctx
+          typ_x_St₂ z_not_bv_x z!_not_bv_x typ_var_x!_St₂ z_fresh z!_not_St₂ z_ne_z! typ_z!_spec_ctx
         have typ_z!_spec_body := typing_pack.typ_z!_spec_body
         have typ_app_body := typing_pack.typ_app_body
         have typ_exists' := typing_pack.typ_exists
         have typ_lambda := typing_pack.typ_lambda
         have typ_x!_spec_base := typing_pack.typ_eq
+        -- Freshness facts for transporting result clauses across the two erases.
+        have St₂_sub_St₃ : St₂.types.entries ⊆ St₃.types.entries := by
+          rw [St₃_types_eq]; exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh
+        have x!_in_St₃ : x! ∈ St₃.types :=
+          SMT.TypeContext.mem_of_entries_subset hx!_in_St₂ St₂_sub_St₃
+        have z_ne_x! : z ≠ x! := fun h => z_fresh (h ▸ hx!_in_St₂)
+        have z!_ne_x! : z! ≠ x! := fun h => z!_fresh (h ▸ x!_in_St₃)
+        have z_notIns : z ∉ AList.insert x! (α'.fun SMTType.bool) St₁.types := by
+          rw [AList.mem_insert]; push_neg
+          refine ⟨z_ne_x!, ?_⟩
+          intro hz
+          exact z_fresh (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr hz))
+        have z!_notIns : z! ∉ AList.insert x! (α'.fun SMTType.bool) St₁.types := by
+          rw [AList.mem_insert]; push_neg
+          refine ⟨z!_ne_x!, ?_⟩
+          intro hz!
+          exact z!_not_St₂ (St₂_types_eq ▸ (AList.mem_insert _).mpr (Or.inr hz!))
+        -- The `insert x!` context embeds into the (doubly-erased) final context.
+        have hsub_ins_St₄ :
+            (AList.insert x! (α'.fun SMTType.bool) St₁.types).entries ⊆ St₄.types.entries := by
+          intro v hv
+          have hv₂ : v ∈ St₂.types.entries := by rw [St₂_types_eq]; exact hv
+          have hv₃ : v ∈ St₃.types.entries := by
+            rw [St₃_types_eq]
+            exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh hv₂
+          exact St₄_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh hv₃)
+        have hsub_ins_erase :
+            (AList.insert x! (α'.fun SMTType.bool) St₁.types).entries ⊆
+              ((St₄.types.erase z).erase z!).entries := by
+          apply SMT.TypeContext.entries_subset_erase_of_notMem _ z!_notIns
+          apply SMT.TypeContext.entries_subset_erase_of_notMem _ z_notIns
+          exact hsub_ins_St₄
         mpure_intro
+        rw [StEz!_types_eq, StEz_types_eq, StEz!_fvc, StEz_fvc, StEz!_used_eq, StEz_used_eq]
         and_intros
         · calc
             St₁.env.freshvarsc ≤ St₂.env.freshvarsc := by rw [St₂_fvc]; exact Nat.le_succ _
             _ ≤ St₃.env.freshvarsc := by rw [St₃_fvc]; exact Nat.le_succ _
             _ ≤ St₄.env.freshvarsc := hn₄
-        · intro v hv
-          have hv₂ : v ∈ St₂.types.entries := by
-            rw [St₂_types_eq]
-            exact hv
-          have hv₃ : v ∈ St₃.types.entries := by
-            rw [St₃_types_eq]
-            exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh hv₂
-          exact St₄_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh hv₃)
+        · exact hsub_ins_erase
         · exact x!_fresh
         · exact x!_not_used
         · intro v hv
@@ -2400,9 +2470,12 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
           exact used_sub₄ (by
             rw [St₃_used_eq]
             exact List.mem_cons_of_mem _ hv₂)
-        · exact keys_sub₄
+        · exact fun v hv => keys_sub₄ (SMT.TypeContext.keys_erase_subset
+            (SMT.TypeContext.keys_erase_subset hv))
         · -- preserves_types: v ∈ used, v ∉ Λ → v ∉ Γ'
           intro v hv hv_not_Λ
+          apply SMT.TypeContext.notMem_erase
+          apply SMT.TypeContext.notMem_erase
           have hv_in_St₂_used : v ∈ St₂.env.usedVars := by
             rw [St₂_used_eq]
             exact List.mem_cons_of_mem _ hv
@@ -2424,27 +2497,51 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
         · have typ_x!_base : (AList.insert x! (α'.fun SMTType.bool) St₁.types) ⊢ˢ .var x! : α'.fun SMTType.bool := by
             apply SMT.Typing.var
             exact AList.lookup_insert St₁.types
-          apply SMT.Typing.weakening _ typ_x!_base
-          intro v hv
-          have hv₂ : v ∈ St₂.types.entries := by
-            rwa [St₂_types_eq]
-          have hv₃ : v ∈ St₃.types.entries := by
-            rw [St₃_types_eq]
-            exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh hv₂
-          exact St₄_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh hv₃)
+          exact SMT.Typing.weakening hsub_ins_erase typ_x!_base (by simp [SMT.bv])
         · have typ_x!_spec_base₁ :
             (AList.insert x! (α'.fun SMTType.bool) St₁.types) ⊢ˢ
               (Term.var x! =ˢ (λˢ [z!]) [α'] (.exists [z] [α] (((@ˢx) (.var z)) ∧ˢ z!_spec))) :
                 SMTType.bool := by
             simpa [St₂_types_eq] using typ_x!_spec_base
-          apply SMT.Typing.weakening _ typ_x!_spec_base₁
+          -- The spec term `x! =ˢ (λ [z!]. ∃ [z]. …)` binds `z` and `z!` (both erased
+          -- from the final context) together with `bv x` and `bv z!_spec`, none of
+          -- which appear in the doubly-erased context.
+          refine SMT.Typing.weakening hsub_ins_erase typ_x!_spec_base₁ ?_
+          have bv_z!_spec_notMem : ∀ v ∈ bv z!_spec, v ∉ St₄.types :=
+            SMT.Typing.bv_notMem_context typ_z!_spec_St₄
+          have bv_x_notMem : ∀ v ∈ bv x, v ∉ St₄.types := by
+            intro v hv
+            have hv_used : v ∈ St₁.env.usedVars := hbv_x v hv
+            have hv_notSt₁ : v ∉ St₁.types := SMT.Typing.bv_notMem_context typ_x v hv
+            have hv_ne_x! : v ≠ x! := fun h => x!_not_used (h ▸ hv_used)
+            have hv_ne_z : v ≠ z := fun h =>
+              z_not_used (h ▸ (St₂_used_eq ▸ List.mem_cons_of_mem _ hv_used))
+            have hv_notSt₂ : v ∉ St₂.types := by
+              rw [St₂_types_eq, AList.mem_insert]; push_neg; exact ⟨hv_ne_x!, hv_notSt₁⟩
+            have hv_notSt₃ : v ∉ St₃.types := by
+              rw [St₃_types_eq, AList.mem_insert]; push_neg; exact ⟨hv_ne_z, hv_notSt₂⟩
+            have hv_St₃_used : v ∈ St₃.env.usedVars := by
+              rw [St₃_used_eq]
+              exact List.mem_cons_of_mem _ (by rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv_used)
+            exact preserves₄ v hv_St₃_used hv_notSt₃
           intro v hv
-          have hv₂ : v ∈ St₂.types.entries := by
-            rwa [St₂_types_eq]
-          have hv₃ : v ∈ St₃.types.entries := by
-            rw [St₃_types_eq]
-            exact SMT.TypeContext.entries_subset_insert_of_notMem z_fresh hv₂
-          exact St₄_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem z!_fresh hv₃)
+          have hbv_expand : v = z! ∨ v = z ∨ v ∈ bv x ∨ v ∈ bv z!_spec := by
+            simpa only [SMT.bv, List.append_assoc, List.nil_append, List.cons_append,
+              List.mem_cons, List.mem_append, List.not_mem_nil, or_false] using hv
+          rcases hbv_expand with rfl | rfl | hvx | hvspec
+          · -- v = z!, erased by the outer erase
+            exact fun h => (AList.mem_erase.mp h).1 rfl
+          · -- v = z, erased by the inner erase
+            apply SMT.TypeContext.notMem_erase
+            exact fun h => (AList.mem_erase.mp h).1 rfl
+          · -- v ∈ bv x: not in St₄.types, hence not in the erased context
+            apply SMT.TypeContext.notMem_erase
+            apply SMT.TypeContext.notMem_erase
+            exact bv_x_notMem v hvx
+          · -- v ∈ bv z!_spec: not in St₄.types, hence not in the erased context
+            apply SMT.TypeContext.notMem_erase
+            apply SMT.TypeContext.notMem_erase
+            exact bv_z!_spec_notMem v hvspec
         · intro v hv
           simp only [fv, List.cons_append, List.nil_append, List.mem_removeAll_iff, List.mem_cons,
             List.mem_append, List.not_mem_nil, or_false] at hv
@@ -2542,7 +2639,7 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                 cases h_lookup_z
                 exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
             have ih_var_z_x₀ := ih (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ Δx₀ hcov_var_z_x₀ respects_var_z_x₀ pf_var_z_x₀
+              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ (by simp [SMT.bv]) Δx₀ hcov_var_z_x₀ respects_var_z_x₀ pf_var_z_x₀
             have post_x₀ := ih_var_z_x₀ St₃ (by
               dsimp
               refine ⟨rfl, rfl, ?_, rfl⟩
@@ -2611,8 +2708,8 @@ theorem loosenAux_prf_spec.chpred («Δ» : RenamingContext.Context.{u})
                 exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
             have exact_var_z_x₀ := loosenAux_prf_exact
               (Λ := St₃.types) (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
-              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ p Δx₀ hcov_var_z_x₀
-              respects_var_z_x₀
+              (name := s!"{name}_char_pred") (x := .var z) typ_var_z_St₃ (by simp [bv]) p Δx₀
+              hcov_var_z_x₀ respects_var_z_x₀
             have post_x₀ := exact_var_z_x₀ St₃ (by
               dsimp
               refine ⟨rfl, rfl, ?_, rfl⟩

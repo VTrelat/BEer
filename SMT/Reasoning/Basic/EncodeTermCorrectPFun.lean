@@ -3,6 +3,7 @@ import SMT.Reasoning.LooseningDefs
 import SMT.Reasoning.Basic.StateSpecs
 import SMT.Reasoning.Basic.LoosenAuxExact.FunAux
 import SMT.Reasoning.Basic.DenotationTotality
+import SMT.Reasoning.Basic.EncodeTermBvUsed
 import SMT.Reasoning.Axioms
 
 open Std.Do B SMT ZFSet
@@ -759,6 +760,11 @@ private theorem pfun_lambda_denotation.{u}
     (x_not_fv_A : x ∉ SMT.fv A_enc) (x_not_fv_B : x ∉ SMT.fv B_enc)
     (y_not_fv_A : y ∉ SMT.fv A_enc) (y_not_fv_B : y ∉ SMT.fv B_enc)
     (y'_not_fv_A : y' ∉ SMT.fv A_enc) (y'_not_fv_B : y' ∉ SMT.fv B_enc)
+    -- Bound-variable freshness of the freshly-declared binders w.r.t. A_enc/B_enc.
+    -- Needed to discharge the sound `weakening`'s `hbv` obligations.
+    (R_not_bv_A : R ∉ SMT.bv A_enc) (R_not_bv_B : R ∉ SMT.bv B_enc)
+    (x_not_bv_A : x ∉ SMT.bv A_enc) (x_not_bv_B : x ∉ SMT.bv B_enc)
+    (y_not_bv_A : y ∉ SMT.bv A_enc) (y_not_bv_B : y ∉ SMT.bv B_enc)
     (hR_ne_x : R ≠ x) (hR_ne_y : R ≠ y) (hR_ne_y' : R ≠ y')
     (hx_ne_y : x ≠ y) (hx_ne_y' : x ≠ y') (hy_ne_y' : y ≠ y')
     -- Typing parameters for denote_exists_of_typing_fv
@@ -1066,8 +1072,10 @@ private theorem pfun_lambda_denotation.{u}
     -- Prove body existence via denote_exists_of_typing_fv on pfun_body
     set Γ_R := Γ.insert R τR
     have hΓ_sub : Γ.entries ⊆ Γ_R.entries := TypeContext.entries_subset_insert_of_notMem R_not_in_Γ
-    have typ_A_R : Γ_R ⊢ˢ A_enc : .fun αx.toSMTType .bool := Typing.weakening hΓ_sub htyp_A
-    have typ_B_R : Γ_R ⊢ˢ B_enc : .fun βx.toSMTType .bool := Typing.weakening hΓ_sub htyp_B
+    have typ_A_R : Γ_R ⊢ˢ A_enc : .fun αx.toSMTType .bool :=
+      Typing.weakening hΓ_sub htyp_A (Typing.bv_notMem_insert_of_fresh htyp_A R_not_bv_A)
+    have typ_B_R : Γ_R ⊢ˢ B_enc : .fun βx.toSMTType .bool :=
+      Typing.weakening hΓ_sub htyp_B (Typing.bv_notMem_insert_of_fresh htyp_B R_not_bv_B)
     have x_not_in_ΓR : x ∉ Γ_R := by
       intro h; rw [AList.mem_insert] at h
       rcases h with rfl | h; exact hR_ne_x.symm rfl; exact x_not_in_Γ h
@@ -1108,17 +1116,9 @@ private theorem pfun_lambda_denotation.{u}
         · intro v hv hbv
           simp only [List.mem_cons, List.mem_nil_iff, or_false] at hv
           simp only [SMT.bv, List.mem_append, List.mem_nil_iff, false_or, or_false] at hbv
-          have hv_not_in_ΓR : v ∉ Γ_R := by
-            rcases hv with rfl | rfl; exact x_not_in_ΓR; exact y_not_in_ΓR
-          have hv_typ_A : (Γ_R.insert v αx.toSMTType) ⊢ˢ A_enc : .fun αx.toSMTType .bool :=
-            Typing.weakening (TypeContext.entries_subset_insert_of_notMem hv_not_in_ΓR) typ_A_R
-          have hv_typ_B : (Γ_R.insert v αx.toSMTType) ⊢ˢ B_enc : .fun βx.toSMTType .bool :=
-            Typing.weakening (TypeContext.entries_subset_insert_of_notMem hv_not_in_ΓR) typ_B_R
-          have hv_in : v ∈ (Γ_R.insert v αx.toSMTType) := by
-            rw [AList.mem_insert]; exact Or.inl rfl
-          rcases hbv with hb | hb
-          · exact Typing.bv_notMem_context hv_typ_A v hb hv_in
-          · exact Typing.bv_notMem_context hv_typ_B v hb hv_in
+          rcases hv with rfl | rfl
+          · exact hbv.elim x_not_bv_A x_not_bv_B
+          · exact hbv.elim y_not_bv_A y_not_bv_B
         · have hupdate_xy : TypeContext.update Γ_R [x, y] [αx.toSMTType, βx.toSMTType] rfl =
               ((Γ_R.insert x αx.toSMTType).insert y βx.toSMTType) := by
             simp only [TypeContext.update, List.length_cons, List.length_nil, zero_add,
@@ -1138,13 +1138,40 @@ private theorem pfun_lambda_denotation.{u}
             · apply SMT.Typing.pair
               · apply SMT.Typing.var; rw [AList.lookup_insert_ne hx_ne_y, AList.lookup_insert]
               · apply SMT.Typing.var; rw [AList.lookup_insert]
-          · apply SMT.Typing.and
+          · -- hbv discharge: bv A_enc / bv B_enc avoid Γ and the binders R, x, y.
+            have hbv_A : ∀ v ∈ SMT.bv A_enc,
+                v ∉ ((Γ_R.insert x αx.toSMTType).insert y βx.toSMTType) := by
+              intro v hv hmem
+              rw [AList.mem_insert] at hmem
+              rcases hmem with rfl | hmem
+              · exact y_not_bv_A hv
+              rw [AList.mem_insert] at hmem
+              rcases hmem with rfl | hmem
+              · exact x_not_bv_A hv
+              rw [AList.mem_insert] at hmem
+              rcases hmem with rfl | hmem
+              · exact R_not_bv_A hv
+              · exact Typing.bv_notMem_context htyp_A v hv hmem
+            have hbv_B : ∀ v ∈ SMT.bv B_enc,
+                v ∉ ((Γ_R.insert x αx.toSMTType).insert y βx.toSMTType) := by
+              intro v hv hmem
+              rw [AList.mem_insert] at hmem
+              rcases hmem with rfl | hmem
+              · exact y_not_bv_B hv
+              rw [AList.mem_insert] at hmem
+              rcases hmem with rfl | hmem
+              · exact x_not_bv_B hv
+              rw [AList.mem_insert] at hmem
+              rcases hmem with rfl | hmem
+              · exact R_not_bv_B hv
+              · exact Typing.bv_notMem_context htyp_B v hv hmem
+            apply SMT.Typing.and
             · apply SMT.Typing.app
-              · exact Typing.weakening hΓRxy_sub typ_A_R
+              · exact Typing.weakening hΓRxy_sub typ_A_R hbv_A
               · apply SMT.Typing.var
                 rw [AList.lookup_insert_ne hx_ne_y, AList.lookup_insert]
             · apply SMT.Typing.app
-              · exact Typing.weakening hΓRxy_sub typ_B_R
+              · exact Typing.weakening hΓRxy_sub typ_B_R hbv_B
               · apply SMT.Typing.var; rw [AList.lookup_insert]
       · -- P2 typing
         rw [hP2_def]
@@ -2766,20 +2793,25 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
     have := bv_nodup; simp only [_root_.B.bv, List.nodup_append] at this; exact this.2.1
   have hAB_bv_disj : ∀ a ∈ _root_.B.bv A, ∀ b ∈ _root_.B.bv B, a ≠ b := by
     have := bv_nodup; simp only [_root_.B.bv, List.nodup_append] at this; exact this.2.2
-  mspec A_ih (E := E) (Λ := St.types) (α := .set αx) typ_A
-    («Δ» := «Δ») Δ_fv_A
-    (Δ₀ := Δ₀) Δ₀_ext_A (used := used) Δ₀_none_out (T := X) (hT := hX)
-    den_A (fun v hv => vars_used v (by
-      simp only [_root_.B.Term.vars, List.mem_union_iff, _root_.B.fv, _root_.B.bv, List.mem_append] at hv ⊢
-      rcases hv with h | h <;> [left; right] <;> exact .inl h))
-    (fun v hv => Λ_inv v (by
-      simp only [_root_.B.Term.vars, List.mem_union_iff, _root_.B.fv, _root_.B.bv, List.mem_append] at hv ⊢
-      rcases hv with h | h <;> [left; right] <;> exact .inl h))
-    hA_bv_nodup
-    (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
-    (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
-    wf
-    (n := St.env.freshvarsc)
+  mspec (Std.Do.Triple.and _ (Std.Do.Triple.and _
+    (A_ih (E := E) (Λ := St.types) (α := .set αx) typ_A
+      («Δ» := «Δ») Δ_fv_A
+      (Δ₀ := Δ₀) Δ₀_ext_A (used := used) Δ₀_none_out (T := X) (hT := hX)
+      den_A (fun v hv => vars_used v (by
+        simp only [_root_.B.Term.vars, List.mem_union_iff, _root_.B.fv, _root_.B.bv, List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact .inl h))
+      (fun v hv => Λ_inv v (by
+        simp only [_root_.B.Term.vars, List.mem_union_iff, _root_.B.fv, _root_.B.bv, List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact .inl h))
+      hA_bv_nodup
+      (respects.mono_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inl hv))
+      (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inl hv))
+      wf
+      (n := St.env.freshvarsc))
+    (encodeTerm_bv_used E (t := A) (used := St.env.usedVars)
+      (n := St.env.freshvarsc) (decl := St.env.declarations)))
+    (encodeTerm_bv_notMem_used E (t := A) (used := St.env.usedVars)
+      (n := St.env.freshvarsc) (decl := St.env.declarations)))
   clear A_ih
   rename_i out_A
   obtain ⟨A_enc, StA⟩ := out_A
@@ -2787,40 +2819,45 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
   mintro ∀StA
   mpure pre
   dsimp at pre
-  obtain ⟨St_used_sub_StA, St_eq_StA, StA_sub, A_cov_StA, rfl, typ_A_enc, A_preserves,
+  obtain ⟨⟨⟨St_used_sub_StA, St_eq_StA, StA_sub, A_cov_StA, rfl, typ_A_enc, A_preserves,
     Δ', Δ'_covers_A, Δ'_extends_Δ₀, Δ'_ext_A, Δ'_none_out,
-    ⟨Aenc, _, hAenc⟩, den_A_enc, ⟨rfl, retract_Aenc_eq_X⟩, A_ih_total⟩ := pre
+    ⟨Aenc, _, hAenc⟩, den_A_enc, ⟨rfl, retract_Aenc_eq_X⟩, A_ih_total⟩,
+    bvA_used, _⟩,
+    bvA_notMem_used, _⟩ := pre
 
   have Δ'_ext_B : RenamingContext.ExtendsOnSourceFV Δ' «Δ» B := by
     exact RenamingContext.extendsOnSourceFV_of_extends Δ'_extends_Δ₀ Δ₀_ext_B
 
   rw [BType.toSMTType]
-  mspec B_ih (E := E) (Λ := StA.types) (α := .set βx) typ_B
-    («Δ» := «Δ») Δ_fv_B
-    (Δ₀ := Δ') Δ'_ext_B (used := StA.env.usedVars) Δ'_none_out (T := Y) (hT := hY)
-    den_B (fun v hv => St_used_sub_StA (vars_used v (by
-      simp only [_root_.B.Term.vars, List.mem_union_iff, _root_.B.fv, _root_.B.bv, List.mem_append] at hv ⊢
-      rcases hv with h | h <;> [left; right] <;> exact .inr h)))
-    (fun v hv hΛ => by
-      have hv_pfun : v ∈ (A ⇸ᴮ B).vars := by
+  mspec (Std.Do.Triple.and _
+    (B_ih (E := E) (Λ := StA.types) (α := .set βx) typ_B
+      («Δ» := «Δ») Δ_fv_B
+      (Δ₀ := Δ') Δ'_ext_B (used := StA.env.usedVars) Δ'_none_out (T := Y) (hT := hY)
+      den_B (fun v hv => St_used_sub_StA (vars_used v (by
         simp only [_root_.B.Term.vars, List.mem_union_iff, _root_.B.fv, _root_.B.bv, List.mem_append] at hv ⊢
-        rcases hv with h | h <;> [left; right] <;> exact .inr h
-      by_cases hv_St : v ∈ St.types
-      · exact Λ_inv v hv_pfun hv_St
-      · have hv_vars_A : v ∈ _root_.B.Term.vars A := by
-          by_contra h_neg
-          exact absurd hΛ (A_preserves v (vars_used v hv_pfun) hv_St h_neg)
-        rcases _root_.B.Term.mem_vars_iff.mp hv_vars_A with h | h
-        · exact _root_.B.Typing.typed_by_fv typ_A h
-        · rcases _root_.B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
-          · exact absurd (_root_.B.Typing.typed_by_fv typ_B hy_fv)
-              (_root_.B.Typing.bv_notMem_context typ_A v h)
-          · exact absurd rfl (hAB_bv_disj v h v hy_bv))
-    hB_bv_nodup
-    (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_StA (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
-    (fun v hv => AList.mem_of_subset St_eq_StA (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
-    wf
-    (n := StA.env.freshvarsc)
+        rcases hv with h | h <;> [left; right] <;> exact .inr h)))
+      (fun v hv hΛ => by
+        have hv_pfun : v ∈ (A ⇸ᴮ B).vars := by
+          simp only [_root_.B.Term.vars, List.mem_union_iff, _root_.B.fv, _root_.B.bv, List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact .inr h
+        by_cases hv_St : v ∈ St.types
+        · exact Λ_inv v hv_pfun hv_St
+        · have hv_vars_A : v ∈ _root_.B.Term.vars A := by
+            by_contra h_neg
+            exact absurd hΛ (A_preserves v (vars_used v hv_pfun) hv_St h_neg)
+          rcases _root_.B.Term.mem_vars_iff.mp hv_vars_A with h | h
+          · exact _root_.B.Typing.typed_by_fv typ_A h
+          · rcases _root_.B.Term.mem_vars_iff.mp hv with hy_fv | hy_bv
+            · exact absurd (_root_.B.Typing.typed_by_fv typ_B hy_fv)
+                (_root_.B.Typing.bv_notMem_context typ_A v h)
+            · exact absurd rfl (hAB_bv_disj v h v hy_bv))
+      hB_bv_nodup
+      (respects.transport_fv (fun v hv => by rw [B.fv, List.mem_append]; exact Or.inr hv) St_eq_StA (fun v hv => fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+      (fun v hv => AList.mem_of_subset St_eq_StA (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hv)))
+      wf
+      (n := StA.env.freshvarsc))
+    (encodeTerm_bv_used E (t := B) (used := StA.env.usedVars)
+      (n := StA.env.freshvarsc) (decl := StA.env.declarations)))
   clear B_ih
   rename_i out_B
   obtain ⟨B_enc, StB⟩ := out_B
@@ -2828,12 +2865,39 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
   mintro ∀StB
   mpure pre
   dsimp at pre
-  obtain ⟨StA_used_sub_StB, StA_eq_StB, StB_sub, B_cov_StB, rfl, typ_B_enc, B_preserves,
+  obtain ⟨⟨StA_used_sub_StB, StA_eq_StB, StB_sub, B_cov_StB, rfl, typ_B_enc, B_preserves,
     Δ'', Δ''_covers_B, Δ''_extends_Δ', Δ''_ext_B, Δ''_none_out,
-    ⟨Benc, _, hBenc⟩, den_B_enc, ⟨rfl, retract_Benc_eq_Y⟩, B_ih_total⟩ := pre
+    ⟨Benc, _, hBenc⟩, den_B_enc, ⟨rfl, retract_Benc_eq_Y⟩, B_ih_total⟩,
+    bvB_used, _⟩ := pre
 
+  -- `bv A_enc`'s vars avoid `StB.types`: each lies in `StA.env.usedVars`
+  -- (by `bvA_used`), is not in `StA.types` (its own typing context), and is
+  -- not a free/bound variable of the later-encoded `B`, so `B_preserves`
+  -- keeps it out of `StB.types`.
+  have hbv_A_enc_notMem_StB : ∀ v ∈ SMT.bv A_enc, v ∉ StB.types := fun v hv =>
+    B_preserves v (bvA_used v hv) (SMT.Typing.bv_notMem_context typ_A_enc v hv)
+      (by
+        rw [_root_.B.Term.notMem_vars_iff]
+        refine ⟨?_, ?_⟩
+        · -- v ∉ fv B : otherwise v ∈ St.types ⊆ StA.types, contradicting bv A_enc ∩ StA.types = ∅
+          intro hfB
+          exact SMT.Typing.bv_notMem_context typ_A_enc v hv
+            (AList.mem_of_subset St_eq_StA
+              (fv_in_Λ v (by rw [B.fv, List.mem_append]; exact Or.inr hfB)))
+        · -- v ∉ bv B : a bound var of A_enc lies past `used` (it is fresh w.r.t. the
+          -- input `usedVars` of A's encoding, by `bvA_notMem_used`), while the source
+          -- bound vars of `B` lie in the initial `used` (by `vars_used`).  This is the
+          -- encoder bound-variable freshness invariant supplied by
+          -- `encodeTerm_bv_notMem_used`.
+          intro hbB
+          refine bvA_notMem_used v hv ?_
+          rw [St_used_eq]
+          exact vars_used v (by
+            simp only [_root_.B.Term.vars, List.mem_union_iff, _root_.B.fv, _root_.B.bv,
+              List.mem_append]
+            right; right; exact hbB))
   have typ_A_enc_B : StB.types ⊢ˢ A_enc : (BType.set αx).toSMTType :=
-    Typing.weakening StA_eq_StB typ_A_enc
+    Typing.weakening StA_eq_StB typ_A_enc hbv_A_enc_notMem_StB
   have hΔ_A_final : RenamingContext.CoversFV Δ'' A_enc := by
     exact RenamingContext.coversFV_of_extends_of_coversFV Δ''_extends_Δ' Δ'_covers_A
   have den_A_enc_final : ⟦A_enc.abstract Δ'' hΔ_A_final⟧ˢ = some ⟨Aenc, ⟨(BType.set αx).toSMTType, hAenc⟩⟩ := by
@@ -2893,6 +2957,118 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
           mpure pre
           obtain ⟨St₄_types_eq, y'_fresh, St₄_fvc_eq, St₄_used_eq, y'_not_used⟩ := pre
 
+          -- The encoder now erases the leaked λ/∀ binders `R`, `x`, `y`, `y'` from the
+          -- global type context before returning, so the result stays typeable there
+          -- (the binders re-introduce them locally).
+          mspec SMT.eraseFromContext_spec
+            (v := R) (Γ := St₄.types)
+            (n := St₄.env.freshvarsc) (used := St₄.env.usedVars)
+          mrename_i preER
+          mintro ∀StER
+          mpure preER
+          obtain ⟨StER_types_eq, StER_fvc, StER_used_eq⟩ := preER
+          mspec SMT.eraseFromContext_spec
+            (v := x) (Γ := StER.types)
+            (n := StER.env.freshvarsc) (used := StER.env.usedVars)
+          mrename_i preEx
+          mintro ∀StEx
+          mpure preEx
+          obtain ⟨StEx_types_eq, StEx_fvc, StEx_used_eq⟩ := preEx
+          mspec SMT.eraseFromContext_spec
+            (v := y) (Γ := StEx.types)
+            (n := StEx.env.freshvarsc) (used := StEx.env.usedVars)
+          mrename_i preEy
+          mintro ∀StEy
+          mpure preEy
+          obtain ⟨StEy_types_eq, StEy_fvc, StEy_used_eq⟩ := preEy
+          mspec SMT.eraseFromContext_spec
+            (v := y') (Γ := StEy.types)
+            (n := StEy.env.freshvarsc) (used := StEy.env.usedVars)
+          mrename_i preEy'
+          mintro ∀StEy'
+          mpure preEy'
+          obtain ⟨StEy'_types_eq, StEy'_fvc, StEy'_used_eq⟩ := preEy'
+
+          -- The final type context `StEy'.types` is `ctx` with the (fresh) λ/∀ binders
+          -- `R`, `x`, `y`, `y'` erased. Hoist the bookkeeping facts that relate it to `ctx`.
+          have R_notctx : R ∉ ctx := R_fresh
+          have x_notctx : x ∉ ctx := fun h =>
+            x_fresh ((AList.mem_insert _).mpr (Or.inr h))
+          have y_notctx : y ∉ ctx := fun h =>
+            y_fresh ((AList.mem_insert _).mpr (Or.inr ((AList.mem_insert _).mpr (Or.inr h))))
+          have y'_notctx : y' ∉ ctx := fun h =>
+            y'_fresh ((AList.mem_insert _).mpr (Or.inr ((AList.mem_insert _).mpr (Or.inr
+              ((AList.mem_insert _).mpr (Or.inr h))))))
+          have StEy'_types_eq' :
+              StEy'.types =
+                AList.erase y' (AList.erase y (AList.erase x (AList.erase R St₄.types))) := by
+            rw [StEy'_types_eq, StEy_types_eq, StEx_types_eq, StER_types_eq]
+          -- `ctx ⊆ StEy'.types` (entries) — needed to lift typings/lookups into the result.
+          have ctx_sub_StEy' : ctx.entries ⊆ StEy'.types.entries := by
+            have base : ctx.entries ⊆ St₄.types.entries := by
+              rw [St₄_types_eq]
+              exact AList.subset_trans
+                (SMT.TypeContext.entries_subset_insert_of_notMem R_fresh)
+                (AList.subset_trans
+                  (SMT.TypeContext.entries_subset_insert_of_notMem x_fresh)
+                  (AList.subset_trans
+                    (SMT.TypeContext.entries_subset_insert_of_notMem y_fresh)
+                    (SMT.TypeContext.entries_subset_insert_of_notMem y'_fresh)))
+            rw [StEy'_types_eq']
+            exact SMT.TypeContext.entries_subset_erase_of_notMem
+              (SMT.TypeContext.entries_subset_erase_of_notMem
+                (SMT.TypeContext.entries_subset_erase_of_notMem
+                  (SMT.TypeContext.entries_subset_erase_of_notMem base R_notctx)
+                    x_notctx) y_notctx) y'_notctx
+          -- Any key of `StEy'.types` lies in `ctx` (the only extra keys R/x/y/y'
+          -- have been erased), and there its lookup agrees with `ctx`.
+          have StEy'_mem_ctx : ∀ {v : SMT.𝒱}, v ∈ StEy'.types → v ∈ ctx := by
+            intro v hvErase
+            have hv_ne_y' : v ≠ y' := (AList.mem_erase.mp (StEy'_types_eq' ▸ hvErase)).1
+            have hv_ne_y : v ≠ y :=
+              (AList.mem_erase.mp (AList.mem_erase.mp (StEy'_types_eq' ▸ hvErase)).2).1
+            have hv_ne_x : v ≠ x :=
+              (AList.mem_erase.mp
+                (AList.mem_erase.mp (AList.mem_erase.mp (StEy'_types_eq' ▸ hvErase)).2).2).1
+            have hv_ne_R : v ≠ R :=
+              (AList.mem_erase.mp
+                (AList.mem_erase.mp
+                  (AList.mem_erase.mp (AList.mem_erase.mp (StEy'_types_eq' ▸ hvErase)).2).2).2).1
+            have hv_St₄ : v ∈ St₄.types :=
+              AList.mem_keys.mpr (SMT.TypeContext.keys_erase_subset
+                (SMT.TypeContext.keys_erase_subset
+                  (SMT.TypeContext.keys_erase_subset
+                    (SMT.TypeContext.keys_erase_subset
+                      (AList.mem_keys.mp (StEy'_types_eq' ▸ hvErase))))))
+            rw [St₄_types_eq] at hv_St₄
+            iterate 4 rw [AList.mem_insert] at hv_St₄
+            rcases hv_St₄ with rfl | rfl | rfl | rfl | hv_St₄
+            · exact absurd rfl hv_ne_y'
+            · exact absurd rfl hv_ne_y
+            · exact absurd rfl hv_ne_x
+            · exact absurd rfl hv_ne_R
+            · exact hv_St₄
+          -- Lookup in `StEy'.types` of a non-binder key reduces to lookup in `ctx`.
+          have StEy'_lookup_ctx : ∀ {v : SMT.𝒱} {τ : SMTType},
+              AList.lookup v StEy'.types = some τ → AList.lookup v ctx = some τ := by
+            intro v τ hτ
+            have hv_mem : v ∈ StEy'.types := AList.lookup_isSome.mp (by rw [hτ]; rfl)
+            have hv_ne_y' : v ≠ y' := (AList.mem_erase.mp (StEy'_types_eq' ▸ hv_mem)).1
+            have hv_ne_y : v ≠ y :=
+              (AList.mem_erase.mp (AList.mem_erase.mp (StEy'_types_eq' ▸ hv_mem)).2).1
+            have hv_ne_x : v ≠ x :=
+              (AList.mem_erase.mp
+                (AList.mem_erase.mp (AList.mem_erase.mp (StEy'_types_eq' ▸ hv_mem)).2).2).1
+            have hv_ne_R : v ≠ R :=
+              (AList.mem_erase.mp
+                (AList.mem_erase.mp
+                  (AList.mem_erase.mp (AList.mem_erase.mp (StEy'_types_eq' ▸ hv_mem)).2).2).2).1
+            rw [StEy'_types_eq', AList.lookup_erase_ne hv_ne_y', AList.lookup_erase_ne hv_ne_y,
+              AList.lookup_erase_ne hv_ne_x, AList.lookup_erase_ne hv_ne_R, St₄_types_eq,
+              AList.lookup_insert_ne hv_ne_y', AList.lookup_insert_ne hv_ne_y,
+              AList.lookup_insert_ne hv_ne_x, AList.lookup_insert_ne hv_ne_R] at hτ
+            exact hτ
+
           mspec Std.Do.Spec.pure
           mpure_intro
           -- Distinctness facts (needed for typing AND denotation blocks)
@@ -2914,23 +3090,21 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
           and_intros
           · -- used ⊆ E'.usedVars
             intro v hv
-            rw [St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
+            rw [StEy'_used_eq, StEy_used_eq, StEx_used_eq, StER_used_eq,
+              St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
             exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (StA_used_sub_StB (St_used_sub_StA hv)))))
           · -- Λ ⊆ Γ'
             intro v hv
-            have hctx_sub_R :
-                ctx ⊆ ctx.insert R (SMTType.fun (SMTType.pair αx.toSMTType βx.toSMTType) .bool) :=
-              SMT.TypeContext.entries_subset_insert_of_notMem R_fresh
-            rw [St₄_types_eq]
-            apply SMT.TypeContext.entries_subset_insert_of_notMem y'_fresh
-            apply SMT.TypeContext.entries_subset_insert_of_notMem y_fresh
-            apply SMT.TypeContext.entries_subset_insert_of_notMem x_fresh
-            apply SMT.TypeContext.entries_subset_insert_of_notMem R_fresh
-            exact StA_eq_StB (St_eq_StA hv)
+            exact ctx_sub_StEy' (StA_eq_StB (St_eq_StA hv))
           · -- AList.keys Γ' ⊆ E'.usedVars
             intro v hv
-            rw [St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
-            have hv' : v ∈ St₄.types := (AList.mem_keys).mpr hv
+            rw [StEy'_used_eq, StEy_used_eq, StEx_used_eq, StER_used_eq,
+              St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
+            have hv' : v ∈ St₄.types :=
+              AList.mem_keys.mpr (SMT.TypeContext.keys_erase_subset (StER_types_eq ▸
+                SMT.TypeContext.keys_erase_subset (StEx_types_eq ▸
+                  SMT.TypeContext.keys_erase_subset (StEy_types_eq ▸
+                    SMT.TypeContext.keys_erase_subset (StEy'_types_eq ▸ hv)))))
             rw [St₄_types_eq] at hv'
             iterate 4 rw [AList.mem_insert] at hv'
             rcases hv' with rfl | rfl | rfl | rfl | hv'
@@ -2942,7 +3116,8 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
           · -- CoversUsedVars
             intro v hv
             rw [_root_.B.fv, List.mem_append] at hv
-            rw [St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
+            rw [StEy'_used_eq, StEy_used_eq, StEx_used_eq, StER_used_eq,
+              St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
             rcases hv with hv | hv
             · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (StA_used_sub_StB (A_cov_StA v hv)))))
             · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (B_cov_StB v hv))))
@@ -2963,41 +3138,33 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
             have hctxRxyy'_sub : (((ctx.insert R τR).insert x αx.toSMTType).insert y βx.toSMTType).entries ⊆
                 ((((ctx.insert R τR).insert x αx.toSMTType).insert y βx.toSMTType).insert y' βx.toSMTType).entries :=
               TypeContext.entries_subset_insert_of_notMem y'_fresh
-            -- bv freshness helpers: A_enc and B_enc have no bound vars from R/x/y/y'
-            have R_not_bv_A : R ∉ SMT.bv A_enc := by
-              have htyp : (ctx.insert R τR) ⊢ˢ A_enc : .fun αx.toSMTType .bool :=
-                Typing.weakening hctxR_sub typ_A_enc_B
-              exact fun h => (Typing.bv_notMem_context htyp R h)
-                (by rw [AList.mem_insert]; exact Or.inl rfl)
-            have R_not_bv_B : R ∉ SMT.bv B_enc := by
-              have htyp : (ctx.insert R τR) ⊢ˢ B_enc : .fun βx.toSMTType .bool :=
-                Typing.weakening hctxR_sub typ_B_enc
-              exact fun h => (Typing.bv_notMem_context htyp R h)
-                (by rw [AList.mem_insert]; exact Or.inl rfl)
-            have x_not_bv_A : x ∉ SMT.bv A_enc := by
-              have htyp : ((ctx.insert R τR).insert x αx.toSMTType) ⊢ˢ A_enc : .fun αx.toSMTType .bool :=
-                Typing.weakening (hctxR_sub.trans hctxRx_sub) typ_A_enc_B
-              exact fun h => (Typing.bv_notMem_context htyp x h)
-                (by rw [AList.mem_insert]; exact Or.inl rfl)
-            have x_not_bv_B : x ∉ SMT.bv B_enc := by
-              have htyp : ((ctx.insert R τR).insert x αx.toSMTType) ⊢ˢ B_enc : .fun βx.toSMTType .bool :=
-                Typing.weakening (hctxR_sub.trans hctxRx_sub) typ_B_enc
-              exact fun h => (Typing.bv_notMem_context htyp x h)
-                (by rw [AList.mem_insert]; exact Or.inl rfl)
-            have y_not_bv_A : y ∉ SMT.bv A_enc := by
-              have htyp : (((ctx.insert R τR).insert x αx.toSMTType).insert y βx.toSMTType) ⊢ˢ A_enc : .fun αx.toSMTType .bool :=
-                Typing.weakening ((hctxR_sub.trans hctxRx_sub).trans hctxRxy_sub) typ_A_enc_B
-              exact fun h => (Typing.bv_notMem_context htyp y h)
-                (by rw [AList.mem_insert]; exact Or.inl rfl)
-            have y_not_bv_B : y ∉ SMT.bv B_enc := by
-              have htyp : (((ctx.insert R τR).insert x αx.toSMTType).insert y βx.toSMTType) ⊢ˢ B_enc : .fun βx.toSMTType .bool :=
-                Typing.weakening ((hctxR_sub.trans hctxRx_sub).trans hctxRxy_sub) typ_B_enc
-              exact fun h => (Typing.bv_notMem_context htyp y h)
-                (by rw [AList.mem_insert]; exact Or.inl rfl)
-            -- Weaken from ctx to St₄.types
-            apply Typing.weakening (h := by
-              rw [St₄_types_eq]
-              exact (((hctxR_sub.trans hctxRx_sub).trans hctxRxy_sub).trans hctxRxyy'_sub))
+            -- bv freshness helpers: A_enc and B_enc have no bound vars from R/x/y/y'.
+            -- Each bound var of A_enc/B_enc is in StB.env.usedVars (by `bvA_used`/
+            -- `bvB_used`), but R, x, y are freshly declared *past* StB.env.usedVars.
+            have bvA_used_StB : ∀ v ∈ SMT.bv A_enc, v ∈ StB.env.usedVars :=
+              fun v hv => StA_used_sub_StB (bvA_used v hv)
+            have R_not_StB : R ∉ StB.env.usedVars := R_not_used
+            have x_not_StB : x ∉ StB.env.usedVars := fun h =>
+              x_not_used (by rw [St₁_used_eq]; exact List.mem_cons_of_mem _ h)
+            have y_not_StB : y ∉ StB.env.usedVars := fun h =>
+              y_not_used (by
+                rw [St₂_used_eq]; exact List.mem_cons_of_mem _
+                  (by rw [St₁_used_eq]; exact List.mem_cons_of_mem _ h))
+            have R_not_bv_A : R ∉ SMT.bv A_enc := fun h => R_not_StB (bvA_used_StB R h)
+            have R_not_bv_B : R ∉ SMT.bv B_enc := fun h => R_not_StB (bvB_used R h)
+            have x_not_bv_A : x ∉ SMT.bv A_enc := fun h => x_not_StB (bvA_used_StB x h)
+            have x_not_bv_B : x ∉ SMT.bv B_enc := fun h => x_not_StB (bvB_used x h)
+            have y_not_bv_A : y ∉ SMT.bv A_enc := fun h => y_not_StB (bvA_used_StB y h)
+            have y_not_bv_B : y ∉ SMT.bv B_enc := fun h => y_not_StB (bvB_used y h)
+            -- The lambda types in `ctx`; the encoder's `eraseFromContext` of R/x/y/y'
+            -- means the final context `StEy'.types` is `ctx` with those binders erased.
+            -- Sound `weakening` lifts `ctx ⊢ˢ … ` to `StEy'.types ⊢ˢ …` because every key
+            -- of `StEy'.types` lies in `ctx` (by `StEy'_mem_ctx`) while the λ-term's bound
+            -- variables avoid `ctx` (by `bv_notMem_context`), discharging the `hbv` premise.
+            suffices typ_pfun_ctx : ctx ⊢ˢ _ : _ by
+              exact Typing.weakening ctx_sub_StEy' typ_pfun_ctx
+                (fun v hv hvErase =>
+                  SMT.Typing.bv_notMem_context typ_pfun_ctx v hv (StEy'_mem_ctx hvErase))
             -- Build lambda typing in ctx
             refine Typing.lambda ctx [R] [τR] _ .bool ?_ ?_ ?_ ?_ ?_
             · -- R ∉ ctx
@@ -3089,15 +3256,42 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                         rw [AList.lookup_insert_ne hx_ne_y, AList.lookup_insert]
                       · apply SMT.Typing.var; rw [AList.lookup_insert]
                   · -- A(x) ∧ B(y) : .bool
+                    -- hbv discharge: bv A_enc / bv B_enc avoid ctx and the binders R, x, y.
+                    have hbv_A : ∀ v ∈ SMT.bv A_enc,
+                        v ∉ (((ctx.insert R τR).insert x αx.toSMTType).insert y βx.toSMTType) := by
+                      intro v hv hmem
+                      rw [AList.mem_insert] at hmem
+                      rcases hmem with rfl | hmem
+                      · exact y_not_bv_A hv
+                      rw [AList.mem_insert] at hmem
+                      rcases hmem with rfl | hmem
+                      · exact x_not_bv_A hv
+                      rw [AList.mem_insert] at hmem
+                      rcases hmem with rfl | hmem
+                      · exact R_not_bv_A hv
+                      · exact Typing.bv_notMem_context typ_A_enc_B v hv hmem
+                    have hbv_B : ∀ v ∈ SMT.bv B_enc,
+                        v ∉ (((ctx.insert R τR).insert x αx.toSMTType).insert y βx.toSMTType) := by
+                      intro v hv hmem
+                      rw [AList.mem_insert] at hmem
+                      rcases hmem with rfl | hmem
+                      · exact y_not_bv_B hv
+                      rw [AList.mem_insert] at hmem
+                      rcases hmem with rfl | hmem
+                      · exact x_not_bv_B hv
+                      rw [AList.mem_insert] at hmem
+                      rcases hmem with rfl | hmem
+                      · exact R_not_bv_B hv
+                      · exact Typing.bv_notMem_context typ_B_enc v hv hmem
                     apply SMT.Typing.and
                     · apply SMT.Typing.app
                       · exact Typing.weakening
-                          ((hctxR_sub.trans hctxRx_sub).trans hctxRxy_sub) typ_A_enc_B
+                          ((hctxR_sub.trans hctxRx_sub).trans hctxRxy_sub) typ_A_enc_B hbv_A
                       · apply SMT.Typing.var
                         rw [AList.lookup_insert_ne hx_ne_y, AList.lookup_insert]
                     · apply SMT.Typing.app
                       · exact Typing.weakening
-                          ((hctxR_sub.trans hctxRx_sub).trans hctxRxy_sub) typ_B_enc
+                          ((hctxR_sub.trans hctxRx_sub).trans hctxRxy_sub) typ_B_enc hbv_B
                       · apply SMT.Typing.var; rw [AList.lookup_insert]
               · -- Right forall: ∀ x y y', R(⟨x,y⟩) ∧ R(⟨x,y'⟩) ⇒ y = y'
                 refine SMT.Typing.forall (ctx.insert R τR) [x, y, y']
@@ -3166,21 +3360,8 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
               A_preserves v (by simpa [St_used_eq] using hv) h1 h2_A
             have hv_not_StB : v ∉ StB.types :=
               B_preserves v hv_StA hv_not_StA h2_B
-            rw [St₄_types_eq]
-            intro hv_in
-            iterate 4 rw [AList.mem_insert] at hv_in
-            rcases hv_in with rfl | rfl | rfl | rfl | hv_in
-            · apply y'_not_used
-              rw [St₃_used_eq, St₂_used_eq, St₁_used_eq]
-              exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (StA_used_sub_StB hv_StA)))
-            · apply y_not_used
-              rw [St₂_used_eq, St₁_used_eq]
-              exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (StA_used_sub_StB hv_StA))
-            · apply x_not_used
-              rw [St₁_used_eq]
-              exact List.mem_cons_of_mem _ (StA_used_sub_StB hv_StA)
-            · exact R_not_used (StA_used_sub_StB hv_StA)
-            · exact hv_not_StB hv_in
+            -- `StEy'.types` keys all lie in `ctx = StB.types`, which `v` avoids.
+            exact fun hv_in => hv_not_StB (StEy'_mem_ctx hv_in)
           · -- ∃ Δ', ... (renaming context + CoversFV + denotation + ih_total)
             -- The output term t_pfun has free variables = fv(A_enc) ∪ fv(B_enc) only
             -- (R, x, y, y' are all bound by lambda/forall)
@@ -3279,7 +3460,8 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
             · -- ∀ v ∉ E'.usedVars, Δ'' v = none
               intro v hv
               exact Δ''_none_out v (by
-                simp only [St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq, List.mem_cons, not_or] at hv
+                simp only [StEy'_used_eq, StEy_used_eq, StEx_used_eq, StER_used_eq,
+                  St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq, List.mem_cons, not_or] at hv
                 exact hv.2.2.2.2)
             · -- denotation + ih_total
               -- Derive fv-freshness: R, x, y, y' ∉ fv(A_enc) ∪ fv(B_enc)
@@ -3318,6 +3500,15 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                 fun h => y'_not_StB (fv_sub_used_A y' h)
               have y'_not_fv_B : y' ∉ SMT.fv B_enc :=
                 fun h => y'_not_StB (fv_sub_used_B y' h)
+              -- bv-freshness of the fresh binders R, x, y w.r.t. A_enc/B_enc.
+              have bvA_used_StB : ∀ v ∈ SMT.bv A_enc, v ∈ StB.env.usedVars :=
+                fun v hv => StA_used_sub_StB (bvA_used v hv)
+              have R_not_bv_A : R ∉ SMT.bv A_enc := fun h => R_not_used (bvA_used_StB R h)
+              have R_not_bv_B : R ∉ SMT.bv B_enc := fun h => R_not_used (bvB_used R h)
+              have x_not_bv_A : x ∉ SMT.bv A_enc := fun h => x_not_StB (bvA_used_StB x h)
+              have x_not_bv_B : x ∉ SMT.bv B_enc := fun h => x_not_StB (bvB_used x h)
+              have y_not_bv_A : y ∉ SMT.bv A_enc := fun h => y_not_StB (bvA_used_StB y h)
+              have y_not_bv_B : y ∉ SMT.bv B_enc := fun h => y_not_StB (bvB_used y h)
               -- Apply pfun_lambda_denotation
               obtain ⟨den_pfun, hden_pfun, hty_pfun, hretract_pfun⟩ :=
                 pfun_lambda_denotation
@@ -3327,6 +3518,7 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                   (den_A_type := rfl) (den_B_type := rfl)
                   R_not_fv_A R_not_fv_B x_not_fv_A x_not_fv_B
                   y_not_fv_A y_not_fv_B y'_not_fv_A y'_not_fv_B
+                  R_not_bv_A R_not_bv_B x_not_bv_A x_not_bv_B y_not_bv_A y_not_bv_B
                   hR_ne_x hR_ne_y hR_ne_y' hx_ne_y hx_ne_y' hy_ne_y'
                   (htyp_A := typ_A_enc_B) (htyp_B := typ_B_enc)
                   (Δctx_wt := SMT.RenamingContext.ExtendsOnSourceFV.wt Δ''_ext_B typ_B_enc)
@@ -3383,7 +3575,7 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
               have Δ₀_alt_A_none : ∀ v ∉ StA.env.usedVars, Δ₀_alt_A v = none := by
                 intro v hv; simp only [Δ₀_alt_A_def]; rw [if_neg hv]
               have Δ₀_alt_A_wt' : ∀ v (d : SMT.Dom), Δ₀_alt_A v = some d → ∀ τ, StA.types.lookup v = some τ → d.snd.fst = τ := by
-                intro v d hv τ hτ; simp only [Δ₀_alt_A_def] at hv; split_ifs at hv with h; exact Δ₀_alt_wt v d hv τ (by rw [St₄_types_eq]; exact AList.mem_lookup_iff.mpr (SMT.TypeContext.entries_subset_insert_of_notMem y'_fresh (SMT.TypeContext.entries_subset_insert_of_notMem y_fresh (SMT.TypeContext.entries_subset_insert_of_notMem x_fresh (SMT.TypeContext.entries_subset_insert_of_notMem R_fresh (StA_eq_StB (AList.mem_lookup_iff.mp hτ)))))))
+                intro v d hv τ hτ; simp only [Δ₀_alt_A_def] at hv; split_ifs at hv with h; exact Δ₀_alt_wt v d hv τ (AList.lookup_of_subset (AList.subset_trans StA_eq_StB ctx_sub_StEy') hτ)
               -- Call A_ih_total
               obtain ⟨Δ'_alt_A, hcov_alt_A, denT_A_alt, hext_alt_A,
                 Δ'_alt_A_none_out, Δ'_alt_A_wt_out, den_A_alt_enc, hRDom_A_alt, _⟩ :=
@@ -3428,14 +3620,7 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                 cases hΔ : Δ₀_alt v with
                 | some d' =>
                   simp [hΔ] at hv; subst hv
-                  exact Δ₀_alt_wt v d' hΔ τ (by
-                    rw [St₄_types_eq]
-                    exact AList.mem_lookup_iff.mpr
-                      (SMT.TypeContext.entries_subset_insert_of_notMem y'_fresh
-                        (SMT.TypeContext.entries_subset_insert_of_notMem y_fresh
-                          (SMT.TypeContext.entries_subset_insert_of_notMem x_fresh
-                            (SMT.TypeContext.entries_subset_insert_of_notMem R_fresh
-                              (AList.mem_lookup_iff.mp hτ))))))
+                  exact Δ₀_alt_wt v d' hΔ τ (AList.lookup_of_subset ctx_sub_StEy' hτ)
                 | none =>
                   simp [hΔ] at hv
                   obtain ⟨hv_types, hv⟩ := hv
@@ -3607,6 +3792,7 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                   (den_A_type := rfl) (den_B_type := rfl)
                   R_not_fv_A R_not_fv_B x_not_fv_A x_not_fv_B
                   y_not_fv_A y_not_fv_B y'_not_fv_A y'_not_fv_B
+                  R_not_bv_A R_not_bv_B x_not_bv_A x_not_bv_B y_not_bv_A y_not_bv_B
                   hR_ne_x hR_ne_y hR_ne_y' hx_ne_y hx_ne_y' hy_ne_y'
                   (htyp_A := typ_A_enc_B) (htyp_B := typ_B_enc)
                   (Δctx_wt := fun v d hv τ hτ => by
@@ -3616,14 +3802,7 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                       rw [h] at hv
                       have hd_eq : some d' = some d := hv
                       injection hd_eq with hd'
-                      exact hd' ▸ Δ₀_alt_wt v d' h τ (by
-                        rw [St₄_types_eq]
-                        exact AList.mem_lookup_iff.mpr
-                          (SMT.TypeContext.entries_subset_insert_of_notMem y'_fresh
-                            (SMT.TypeContext.entries_subset_insert_of_notMem y_fresh
-                              (SMT.TypeContext.entries_subset_insert_of_notMem x_fresh
-                                (SMT.TypeContext.entries_subset_insert_of_notMem R_fresh
-                                  (AList.mem_lookup_iff.mp hτ))))))
+                      exact hd' ▸ Δ₀_alt_wt v d' h τ (AList.lookup_of_subset ctx_sub_StEy' hτ)
                     | none =>
                       rw [h] at hv
                       exact Δ'_alt_B_wt_out v d hv τ hτ)
@@ -3640,7 +3819,8 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                 simp only [Δ'_alt_def]
                 rw [Δ₀_alt_none_out v hv]
                 exact Δ'_alt_B_none_out v (fun hmem => hv (by
-                  rw [St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
+                  rw [StEy'_used_eq, StEy_used_eq, StEx_used_eq, StER_used_eq,
+                    St₄_used_eq, St₃_used_eq, St₂_used_eq, St₁_used_eq]
                   exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hmem)))))
               -- Well-typedness: output wt
               · intro v d hv τ hτ
@@ -3650,16 +3830,8 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                 | none =>
                   simp [hΔ] at hv
                   apply Δ'_alt_B_wt_out v d hv τ
-                  have hv_StB : v ∈ StB.env.usedVars := by
-                    by_contra hv_not
-                    exact absurd (Δ'_alt_B_none_out v hv_not) (by rw [hv]; exact Option.some_ne_none _)
-                  have hv_ne_R : v ≠ R := fun h => R_not_used (h ▸ hv_StB)
-                  have hv_ne_x : v ≠ x := fun h => x_not_used (St₁_used_eq ▸ List.mem_cons_of_mem _ (h ▸ hv_StB))
-                  have hv_ne_y : v ≠ y := fun h => y_not_used (St₂_used_eq ▸ List.mem_cons_of_mem _ (St₁_used_eq ▸ List.mem_cons_of_mem _ (h ▸ hv_StB)))
-                  have hv_ne_y' : v ≠ y' := fun h => y'_not_used (St₃_used_eq ▸ List.mem_cons_of_mem _ (St₂_used_eq ▸ List.mem_cons_of_mem _ (St₁_used_eq ▸ List.mem_cons_of_mem _ (h ▸ hv_StB))))
-                  rw [St₄_types_eq] at hτ
-                  rwa [AList.lookup_insert_ne hv_ne_y', AList.lookup_insert_ne hv_ne_y,
-                    AList.lookup_insert_ne hv_ne_x, AList.lookup_insert_ne hv_ne_R] at hτ
+                  -- `Γ' = StEy'.types`'s lookup of a non-binder key reduces to `ctx = StB.types`.
+                  exact StEy'_lookup_ctx hτ
               -- Denotation under Δ'_alt
               · exact hden_pfun_alt
               -- RDom for alt
@@ -3671,12 +3843,10 @@ theorem encodeTerm_spec.pfun_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B
                 cases hΔ : Δ₀_alt v with
                 | some d =>
                   exact fv_sub_typings (_root_.B.Typing.pfun typ_A typ_B)
-                    (SMT.Typing.bool St₄.types true) v
+                    (SMT.Typing.bool StEy'.types true) v
                     (SMT.RenamingContext.ExtendsOnSourceFV.dom_sub_B_fv Δ₀_alt_ext v
                       (by rw [hΔ]; simp))
                 | none =>
                   simp [hΔ] at hv
                   have h_StB := Δ'_alt_B_dom_out v hv
-                  rw [St₄_types_eq, AList.mem_insert, AList.mem_insert, AList.mem_insert,
-                    AList.mem_insert]
-                  exact Or.inr (Or.inr (Or.inr (Or.inr h_StB)))
+                  exact SMT.TypeContext.mem_of_entries_subset h_StB ctx_sub_StEy'

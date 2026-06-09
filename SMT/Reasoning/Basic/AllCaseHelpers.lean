@@ -3978,12 +3978,13 @@ theorem zs_not_bv_P_helper
     {St₄ St₅ : SMT.TypeContext}
     (St₄_sub_St₅ : St₄ ⊆ St₅)
     (typ_P_enc : St₄ ⊢ˢ P_enc : .bool)
+    (bv_P_notMem_St₅ : ∀ v ∈ SMT.bv P_enc, v ∉ St₅)
     (zs_typing : ∀ (i : ℕ) (hi : i < zs.length),
       St₅.lookup zs[i] = some (τs[i]'(zs_len ▸ hi))) :
     ∀ z ∈ zs, z ∉ SMT.bv P_enc := by
   intro z hz hbv
   have typ_P_enc_St₅ : St₅ ⊢ˢ P_enc : .bool :=
-    SMT.Typing.weakening St₄_sub_St₅ typ_P_enc
+    SMT.Typing.weakening St₄_sub_St₅ typ_P_enc bv_P_notMem_St₅
   obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp hz
   have hz_St₅ : zs[i] ∈ St₅ :=
     AList.lookup_isSome.mp (by rw [zs_typing i hi]; simp)

@@ -14,6 +14,7 @@ abbrev FunExactIH.{u}
     {τ τ' : SMTType} (p : τ ⇝ τ') : Prop :=
   ∀ {Λ : TypeContext} {n : ℕ} {used : List 𝒱} {name : String} {x : Term},
     Λ ⊢ˢ x : τ →
+      (∀ v ∈ bv x, v ∈ used) →
       ∀ («Δ₀» : RenamingContext.Context.{u}) (hx : RenamingContext.CoversFV «Δ₀» x),
         SMT.RenamingContext.RespectsTypeContextOnFV «Δ₀» Λ x →
       ∀ (pf₀ : FunPf «Δ₀»),
@@ -705,6 +706,16 @@ theorem funSpecTermTyping
     (b_not : b ∉ AList.insert a! α' (AList.insert a α Γ))
     (b!_not : b! ∉ AList.insert b β (AList.insert a! α' (AList.insert a α Γ)))
     (a_ne_a! : a ≠ a!)
+    -- Freshness of the four fresh binders `a, b, a!, b!` from the loosen input `x` and
+    -- the `.var a` spec `a!_spec`. These come from the `bv … ⊆ usedVars` invariant
+    -- (`loosenAux_prf_bv`) combined with the binders' `*_not_used` freshness at the call
+    -- site; threading them here keeps `funSpecTermTyping` a pure typing lemma.
+    (a_notbv_x : a ∉ bv x)
+    (b_notbv_x : b ∉ bv x)
+    (a!_notbv_x : a! ∉ bv x)
+    (b!_notbv_x : b! ∉ bv x)
+    (b_notbv_a!_spec : b ∉ bv a!_spec)
+    (b!_notbv_a!_spec : b! ∉ bv a!_spec)
     (typ_a!_spec_ctx :
       AList.insert a! α' (AList.insert a α Γ) ⊢ˢ a!_spec : SMTType.bool)
     (typ_b!_spec_ctx :
@@ -809,6 +820,12 @@ theorem funSpecTermTyping
   have typ_exists_a_body :
       AList.insert a α (AList.insert a! α' Γ) ⊢ˢ a!_spec : SMTType.bool := by
     exact SMT.Typing.weakening (h := hsub_exists_a) typ_a!_spec_ctx
+      (SMT.Typing.bv_notMem_of_subset
+        (fun v hv =>
+          AList.mem_keys.mpr
+            (typeContext_mem_of_subset
+              (typeContext_insert_swap_entries a_ne_a!) (AList.mem_keys.mp hv)))
+        typ_a!_spec_ctx)
   have a_in_exists_a :
       a ∈ AList.insert a α (AList.insert a! α' Γ) := by
     rw [AList.mem_insert]
@@ -847,12 +864,12 @@ theorem funSpecTermTyping
     exact SMT.TypeContext.entries_subset_insert_of_notMem b!_not_Γa! (hsub_Γ_a! hv)
   have typ_var_x!_then :
       AList.insert b! β' (AList.insert a! α' Γ) ⊢ˢ .var x! : α'.fun β' := by
-    exact SMT.Typing.weakening (h := hsub_Γ_then) typ_var_x!
+    exact SMT.Typing.weakening (h := hsub_Γ_then) typ_var_x! (by simp [SMT.bv])
   have typ_var_a!_then :
       AList.insert b! β' (AList.insert a! α' Γ) ⊢ˢ .var a! : α' := by
     exact SMT.Typing.weakening
       (h := SMT.TypeContext.entries_subset_insert_of_notMem b!_not_Γa!)
-      typ_var_a!
+      typ_var_a! (by simp [SMT.bv])
   have typ_var_b!_then :
       AList.insert b! β' (AList.insert a! α' Γ) ⊢ˢ .var b! : β' := by
     apply SMT.Typing.var
@@ -876,7 +893,17 @@ theorem funSpecTermTyping
   have typ_x_body :
       AList.insert b β (AList.insert a α (AList.insert b! β' (AList.insert a! α' Γ))) ⊢ˢ
         x : α.fun β := by
-    exact SMT.Typing.weakening (h := hsub_x_body) typ_x
+    -- CIRCULAR-BV SITE: weakening the loosen input `x` into the body context that adds the
+    -- four fresh binders `a, b, a!, b!`. Sound `weakening` needs `bv x ∉ {a,b,a!,b!} ∪ Γ`.
+    -- `bv x ∉ Γ` holds (bv_notMem_context), and `a,b,a!,b!` are fresh from `x` by global
+    -- freshness, but that disjointness is not packaged in `funSpecTermTyping`'s premises
+    -- (it would need `bv x ⊆ usedVars` threaded from `loosenAux_prf_bv`).
+    refine SMT.Typing.weakening (h := hsub_x_body) typ_x (fun v hv => ?_)
+    have hv_notΓ : v ∉ Γ := SMT.Typing.bv_notMem_context typ_x v hv
+    -- `v ∈ bv x` is fresh from each binder by the new `*_notbv_x` premises, and `∉ Γ`.
+    simp only [AList.mem_insert, not_or]
+    exact ⟨fun h => b_notbv_x (h ▸ hv), fun h => a_notbv_x (h ▸ hv),
+      fun h => b!_notbv_x (h ▸ hv), fun h => a!_notbv_x (h ▸ hv), hv_notΓ⟩
   have typ_var_a_body :
       AList.insert b β (AList.insert a α (AList.insert b! β' (AList.insert a! α' Γ))) ⊢ˢ
         .var a : α := by
@@ -906,7 +933,17 @@ theorem funSpecTermTyping
   have typ_a!_spec_body :
       AList.insert b β (AList.insert a α (AList.insert b! β' (AList.insert a! α' Γ))) ⊢ˢ
         a!_spec : SMTType.bool := by
-    exact SMT.Typing.weakening (h := hsub_a!_body) typ_exists_a_body
+    -- CIRCULAR-BV SITE: weakening the `.var a` spec `a!_spec` into the body context that adds
+    -- the fresh binders `b, b!`. Needs `bv a!_spec ∉ {b, b!}`, which holds by global freshness
+    -- but is not packaged in `funSpecTermTyping`'s premises.
+    refine SMT.Typing.weakening (h := hsub_a!_body) typ_exists_a_body (fun v hv => ?_)
+    have hv_notSrc : v ∉ AList.insert a α (AList.insert a! α' Γ) :=
+      SMT.Typing.bv_notMem_context typ_exists_a_body v hv
+    -- `hv_notSrc` provides `v ≠ a`, `v ≠ a!`, `v ∉ Γ`; the new premises give `v ≠ b`, `v ≠ b!`.
+    simp only [AList.mem_insert, not_or] at hv_notSrc ⊢
+    obtain ⟨hva, hva!, hvΓ⟩ := hv_notSrc
+    exact ⟨fun h => b_notbv_a!_spec (h ▸ hv), hva,
+      fun h => b!_notbv_a!_spec (h ▸ hv), hva!, hvΓ⟩
   have hsub_b!_1 :
       (AList.insert b! β' (AList.insert b β (AList.insert a! α' (AList.insert a α Γ)))).entries ⊆
         (AList.insert b! β' (AList.insert b β (AList.insert a α (AList.insert a! α' Γ)))).entries := by
@@ -923,12 +960,38 @@ theorem funSpecTermTyping
       (AList.insert b β (AList.insert b! β' (AList.insert a α (AList.insert a! α' Γ)))).entries ⊆
         (AList.insert b β (AList.insert a α (AList.insert b! β' (AList.insert a! α' Γ)))).entries := by
     exact SMT.TypeContext.insert_mono hsub_b!_3_inner
+  have hkeys_b!_perm :
+      AList.keys (AList.insert b β (AList.insert a α (AList.insert b! β' (AList.insert a! α' Γ)))) ⊆
+        AList.keys (AList.insert b! β' (AList.insert b β (AList.insert a! α' (AList.insert a α Γ)))) := by
+    -- `target` and `source` are the same context up to a permutation of the four binders
+    -- `b, a, b!, a!`, hence have identical key sets. Build the reverse entries-subset
+    -- (target ⊆ source) by composing the individual binder swaps.
+    have stepA :
+        (AList.insert b β (AList.insert a α (AList.insert b! β' (AList.insert a! α' Γ)))).entries ⊆
+          (AList.insert b β (AList.insert b! β' (AList.insert a α (AList.insert a! α' Γ)))).entries :=
+      SMT.TypeContext.insert_mono (typeContext_insert_swap_entries a_ne_b!)
+    have stepB :
+        (AList.insert b β (AList.insert b! β' (AList.insert a α (AList.insert a! α' Γ)))).entries ⊆
+          (AList.insert b! β' (AList.insert b β (AList.insert a α (AList.insert a! α' Γ)))).entries :=
+      typeContext_insert_swap_entries b_ne_b!
+    have stepC :
+        (AList.insert b! β' (AList.insert b β (AList.insert a α (AList.insert a! α' Γ)))).entries ⊆
+          (AList.insert b! β' (AList.insert b β (AList.insert a! α' (AList.insert a α Γ)))).entries :=
+      SMT.TypeContext.insert_mono
+        (SMT.TypeContext.insert_mono (typeContext_insert_swap_entries a_ne_a!))
+    have hrev :
+        (AList.insert b β (AList.insert a α (AList.insert b! β' (AList.insert a! α' Γ)))).entries ⊆
+          (AList.insert b! β' (AList.insert b β (AList.insert a! α' (AList.insert a α Γ)))).entries :=
+      fun e he => stepC (stepB (stepA he))
+    intro v hv
+    exact AList.mem_keys.mpr (typeContext_mem_of_subset hrev (AList.mem_keys.mp hv))
   have typ_b!_spec_body :
       AList.insert b β (AList.insert a α (AList.insert b! β' (AList.insert a! α' Γ))) ⊢ˢ
         b!_spec : SMTType.bool := by
     exact SMT.Typing.weakening
       (h := fun e he => hsub_b!_3 (hsub_b!_2 (hsub_b!_1 he)))
       typ_b!_spec_ctx
+      (SMT.Typing.bv_notMem_of_subset hkeys_b!_perm typ_b!_spec_ctx)
   have typ_and_specs_body :
       AList.insert b β (AList.insert a α (AList.insert b! β' (AList.insert a! α' Γ))) ⊢ˢ
         (a!_spec ∧ˢ b!_spec) : SMTType.bool := by
@@ -1260,7 +1323,7 @@ theorem funDenVarExactAt.{u}
       exact ⟨x₀, by simp [Δx₀], hx₀_ty⟩
   have ih_var_z_x₀ := p_ih
     (Λ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
-    (name := name) (x := .var z) typ_var_z Δx₀ hcov_var_z_x₀ respects_var_z_x₀ pf_var_z_x₀
+    (name := name) (x := .var z) typ_var_z (by simp [SMT.bv]) Δx₀ hcov_var_z_x₀ respects_var_z_x₀ pf_var_z_x₀
   have post_x₀ := ih_var_z_x₀ St₁ (by exact ⟨rfl, rfl, sub, rfl⟩)
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post_x₀
   rw [hrun] at post_x₀
@@ -1335,6 +1398,7 @@ theorem funDefaultSpecAt.{u}
     {St₁ St₂ : EncoderState} {name : String} {t spec : Term}
     (sub : AList.keys St₁.types ⊆ St₁.env.usedVars)
     (typ_t : St₁.types ⊢ˢ t : τ)
+    (hbv_t : ∀ v ∈ bv t, v ∈ St₁.env.usedVars)
     (ht : RenamingContext.CoversFV «Δ» t)
     (respects : RenamingContext.RespectsTypeContextOnFV «Δ» St₁.types t)
     (hrun : Id.run ((defaultSpecM name τ t) St₁) = Except.ok (spec, St₂)) :
@@ -1346,7 +1410,7 @@ theorem funDefaultSpecAt.{u}
   intro Y den_t
   have hspec := defaultSpecMSpec.{u}
     («Δ» := «Δ») (Γ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
-    (name := name) (t := t) typ_t ht
+    (name := name) (t := t) typ_t hbv_t ht
   have post := hspec St₁ (by exact ⟨rfl, rfl, sub, rfl⟩)
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post
   rw [hrun] at post
@@ -1513,6 +1577,7 @@ theorem funDefaultTrueImpliesDefaultAt.{u}
     {St₁ St₂ : EncoderState} {name : String} {t spec : Term}
     (sub : AList.keys St₁.types ⊆ St₁.env.usedVars)
     (typ_t : St₁.types ⊢ˢ t : τ)
+    (hbv_t : ∀ v ∈ bv t, v ∈ St₁.env.usedVars)
     (ht : RenamingContext.CoversFV «Δ» t)
     (respects : RenamingContext.RespectsTypeContextOnFV «Δ» St₁.types t)
     (hrun : Id.run ((defaultSpecM name τ t) St₁) = Except.ok (spec, St₂)) :
@@ -1524,7 +1589,7 @@ theorem funDefaultTrueImpliesDefaultAt.{u}
   intro Y den_t hφ Φ hdenΦ htrue
   have hspec := defaultSpecMTrueImpliesDefault.{u}
     («Δ» := «Δ») (Γ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
-    (name := name) (t := t) typ_t ht
+    (name := name) (t := t) typ_t hbv_t ht
   have post := hspec St₁ (by exact ⟨rfl, rfl, sub, rfl⟩)
   simp only [wp, PredTrans.pushArg_apply, PredTrans.pushExcept_apply, PredTrans.pure_apply] at post
   rw [hrun] at post
@@ -6066,6 +6131,12 @@ theorem funDenSpecTrueAtCast.{u}
         exact SMT.Typing.weakening
           (h := typeContext_insert_swap_entries a_ne_a!.symm)
           typ_a!_spec_ctx_base
+          (SMT.Typing.bv_notMem_of_subset
+            (fun v hv =>
+              AList.mem_keys.mpr
+                (typeContext_mem_of_subset
+                  (typeContext_insert_swap_entries a_ne_a!) (AList.mem_keys.mp hv)))
+            typ_a!_spec_ctx_base)
       obtain ⟨x₀, hx₀_mem, hcast_x₀_wy0, hX!_app_eq⟩ :=
         hX!_app_range wy0 hwy0_ty hy_ran
       let wx₀ : SMT.Dom := ⟨x₀, α, hx₀_mem⟩
@@ -6656,6 +6727,12 @@ theorem funDenSpecTrueAtCast.{u}
         exact SMT.Typing.weakening
           (h := typeContext_insert_swap_entries a_ne_a!.symm)
           typ_a!_spec_ctx_base
+          (SMT.Typing.bv_notMem_of_subset
+            (fun v hv =>
+              AList.mem_keys.mpr
+                (typeContext_mem_of_subset
+                  (typeContext_insert_swap_entries a_ne_a!) (AList.mem_keys.mp hv)))
+            typ_a!_spec_ctx_base)
       have hden_exists_a_false :
           ⟦exists_a.abstract (Function.update Δx a! (some wy0)) hφ_exists_a⟧ˢ =
             some ⟨zffalse, SMTType.bool, ZFSet.ZFBool.zffalse_mem_𝔹⟩ := by
@@ -7183,6 +7260,12 @@ theorem funSpecTrueImpliesCastAt.{u}
     exact SMT.Typing.weakening
       (h := typeContext_insert_swap_entries a_ne_a!.symm)
       typ_a!_spec_ctx_base
+      (SMT.Typing.bv_notMem_of_subset
+        (fun v hv =>
+          AList.mem_keys.mpr
+            (typeContext_mem_of_subset
+              (typeContext_insert_swap_entries a_ne_a!) (AList.mem_keys.mp hv)))
+        typ_a!_spec_ctx_base)
   have hφ_forall_b_at :
       ∀ wy0 : SMT.Dom,
         RenamingContext.CoversFV
@@ -8266,6 +8349,12 @@ theorem funSpecTotalAt.{u}
     exact SMT.Typing.weakening
       (h := typeContext_insert_swap_entries a_ne_a!.symm)
       typ_a!_spec_ctx_base
+      (SMT.Typing.bv_notMem_of_subset
+        (fun v hv =>
+          AList.mem_keys.mpr
+            (typeContext_mem_of_subset
+              (typeContext_insert_swap_entries a_ne_a!) (AList.mem_keys.mp hv)))
+        typ_a!_spec_ctx_base)
   have hφ_forall_b_at :
       ∀ wy0 : SMT.Dom.{u},
         RenamingContext.CoversFV

@@ -210,6 +210,9 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     let ⟨A', .fun α .bool⟩ ← encodeTerm A E | throw s!"encodeTerm:cprod: Expected a set, got {← encodeTerm A E}"
     let ⟨B', .fun β .bool⟩ ← encodeTerm B E | throw s!"encodeTerm:cprod: Expected a set, got {← encodeTerm B E}"
     let p ← freshVar (.pair α β); let a ← freshVar α; let b ← freshVar β
+    -- `p`, `a`, `b` are only the `λ`/`∃` binders below; erase them from the global
+    -- type context so the result stays typeable there (re-introduced by the binders).
+    SMT.eraseFromContext p; SMT.eraseFromContext a; SMT.eraseFromContext b
     -- λ p:α×β.∃ a:α,b:β. a ∈ A ∧ b ∈ B ∧ p = a ↦ b
     return (.lambda [p] [.pair α β] (.exists [a, b] [α, β] (.and (.app A' (.var a)) (.and (.app B' (.var b)) (.eq (.var p) (.pair (.var a) (.var b)))))),
       .fun (.pair α β) .bool)
@@ -285,6 +288,9 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     let x ← freshVar α
     let y ← freshVar β
     let y' ← freshVar β
+    -- `R`, `x`, `y`, `y'` are only the `λ`/`∀` binders below; erase them from the global
+    -- type context so the result stays typeable there (re-introduced by the binders).
+    SMT.eraseFromContext R; SMT.eraseFromContext x; SMT.eraseFromContext y; SMT.eraseFromContext y'
     return (.lambda [R] [.fun (.pair α β) .bool] (.and
       -- (1) R ⊆ A × B: ∀ x y. R(⟨x,y⟩) ⇒ A(x) ∧ B(y)
       (.forall [x, y] [α, β] (.imp (.app (.var R) (.pair (.var x) (.var y)))

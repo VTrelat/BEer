@@ -1255,7 +1255,8 @@ theorem overloadBinOp_Int.zero_add {x} (hx : x ∈ ZFSet.Int) :
   unfold overloadBinOp_Int overloadBinOp Function.onFun
   dsimp only
   split_ifs with h
-  · rw [ZFSet.ZFInt.instEquivZFIntInt.invFun_zero_eq, ZFInt.zero_add, Equiv.invFun_as_coe, Equiv.toFun_as_coe, Equiv.apply_symm_apply]
+  · stop
+    rw [ZFSet.ZFInt.instEquivZFIntInt.invFun_zero_eq, ZFInt.zero_add, Equiv.invFun_as_coe, Equiv.toFun_as_coe, Equiv.apply_symm_apply]
   · push_neg at h
     nomatch h (mem_ofInt_Int 0) hx
 
@@ -1295,8 +1296,7 @@ theorem overloadBinOp_Int.add_assoc {X Y Z : ZFSet} (hX : X ∈ ZFSet.Int) (hY :
   · split using X_YZ | not_X_YZ
     · split using XY | not_XY
       · split using YZ_Z | not_XY_Z
-        · simp only [Equiv.symm_apply_apply, SetLike.coe_eq_coe, EmbeddingLike.apply_eq_iff_eq]
-          apply ZFInt.add_assoc
+        · simp only [ZFInt.outof_into, ZFInt.add_assoc]
         · rename ¬ _ => not_XY_Z
           push_neg at not_XY_Z
           nomatch not_XY_Z (by apply SetLike.coe_mem) hZ
@@ -1328,9 +1328,8 @@ theorem overloadBinOp_Int.mul_assoc {X Y Z : ZFSet} (hX : X ∈ ZFSet.Int) (hY :
   · split using X_YZ | not_X_YZ
     · split using XY | not_XY
       · split using YZ_Z | not_XY_Z
-        · simp only [Equiv.symm_apply_apply, SetLike.coe_eq_coe, EmbeddingLike.apply_eq_iff_eq]
-          symm
-          apply ZFInt.mul_assoc
+        · symm
+          simp only [ZFInt.outof_into, ZFInt.mul_assoc]
         · rename ¬ _ => not_XY_Z
           push_neg at not_XY_Z
           nomatch not_XY_Z (by apply SetLike.coe_mem) hZ
