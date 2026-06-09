@@ -5,7 +5,7 @@
    "type": "git",
    "subDir": null,
    "scope": "",
-   "rev": "7d6b0d75c6c278fb2abcef1e6472f383063db10b",
+   "rev": "aad80385f0256515d28a63e2598e93933a9032d8",
    "name": "ZFLean",
    "manifestFile": "lake-manifest.json",
    "inputRev": "v4.27.0",
