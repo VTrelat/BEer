@@ -11,6 +11,45 @@ an explicit loosening path casts that value to the canonical SMT type before
 retraction.
 -/
 
+namespace SMT.RenamingContext
+
+theorem RespectsTypeContextOnFV.of_full
+    {Dc : Context} {Γ : SMT.TypeContext} {t : SMT.Term}
+    (h : RespectsTypeContext Dc Γ) : RespectsTypeContextOnFV Dc Γ t := by
+  intro v τ _hv hlookup
+  exact h hlookup
+
+theorem RespectsTypeContextOnFV.mono_fv
+    {Dc : Context} {Γ : SMT.TypeContext} {t s : SMT.Term}
+    (h : RespectsTypeContextOnFV Dc Γ t)
+    (hsub : SMT.fv s ⊆ SMT.fv t) :
+    RespectsTypeContextOnFV Dc Γ s := by
+  intro v τ hv hlookup
+  exact h (hsub hv) hlookup
+
+/-- Preserve target-FV compatibility when both the valuation and type context
+are extended. Typing supplies membership of every relevant free variable in
+the old context, so lookup uniqueness identifies the transported type. -/
+theorem RespectsTypeContextOnFV.of_extends
+    {Dc Dc' : Context} {Γ Γ' : SMT.TypeContext}
+    {t : SMT.Term} {σ : SMTType}
+    (h : RespectsTypeContextOnFV Dc Γ t)
+    (hDc : Extends Dc' Dc) (hΓ : Γ ⊆ Γ')
+    (ht : Γ ⊢ˢ t : σ) :
+    RespectsTypeContextOnFV Dc' Γ' t := by
+  intro v τ hv hlookup'
+  have hvΓ : v ∈ Γ := SMT.Typing.mem_context_of_mem_fv ht hv
+  obtain ⟨τ₀, hlookup⟩ := Option.isSome_iff_exists.mp
+    (AList.lookup_isSome.mpr hvΓ)
+  have hlookup₀' : Γ'.lookup v = some τ₀ :=
+    AList.lookup_of_subset hΓ hlookup
+  rw [hlookup₀'] at hlookup'
+  cases hlookup'
+  obtain ⟨d, hd, hdτ⟩ := h hv hlookup
+  exact ⟨d, hDc hd, hdτ⟩
+
+end SMT.RenamingContext
+
 /-- A reflexive cast acts as the identity on every well-typed SMT value. -/
 theorem castZF_apply_reflexive.{u} (σ : SMTType) {Y : ZFSet.{u}}
     (hY : Y ∈ ⟦σ⟧ᶻ) :

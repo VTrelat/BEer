@@ -309,7 +309,8 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
   dsimp at pre
   obtain ⟨⟨⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
       path_x, typ_x_enc, _shape_x, x_preserves,
-      Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x, Δx_dom,
+      Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
+      target_respects_x, Δx_dom,
       denX, hden_x, hdenX_type, X_rel, x_total⟩,
       bv_x_used, _⟩,
       bv_x_not_used, _⟩ := pre
@@ -361,7 +362,8 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
   dsimp at pre
   obtain ⟨used_sub_y, types_sub_y, keys_sub_y, y_used,
     path_y, typ_y_enc, _shape_y, y_preserves,
-    Δy, hcov_y, Δy_ext, _related_y, Δy_none, _respects_y, Δy_dom,
+    Δy, hcov_y, Δy_ext, _related_y, Δy_none, _respects_y,
+    target_respects_y, Δy_dom,
     denY, hden_y, hdenY_type, Y_rel, y_total⟩ := pre
   rcases denY with ⟨Yenc, σY, hYenc⟩
   dsimp at hdenY_type
@@ -398,6 +400,9 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
     have hcongr := RenamingContext.denote_congr_of_agreesOnFV
       (t := x_enc) (h1 := hcov_x_final) (h2 := hcov_x) hagree
     simpa [RenamingContext.denote] using hcongr.trans hden_x
+  have target_respects_x_final :
+      SMT.RenamingContext.RespectsTypeContextOnFV Δy Sty.types x_enc :=
+    target_respects_x.of_extends Δy_ext types_sub_y typ_x_enc
 
   mspec Std.Do.Spec.pure
   mpure_intro
@@ -426,12 +431,17 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
     exact y_preserves v (used_sub_x (by simpa [St_used_eq] using hv))
       hv_not_Stx hvars.2 hΓ
   · refine ⟨Δy, ?_, Δy_ext₀, related.of_extends Δy_ext₀,
-      Δy_none, ?_, Δy_dom, ?_⟩
+      Δy_none, ?_, ?_, Δy_dom, ?_⟩
     · intro v hv
       rw [SMT.fv, List.mem_append] at hv
       exact hv.elim (hcov_x_final v) (hcov_y v)
     · exact respects.of_extends Δy_ext₀
         (fun _ h => types_sub_y (types_sub_x h)) (fun _ h => h) fv_in_Λ
+    · intro v τ hv hlookup
+      rw [SMT.fv, List.mem_append] at hv
+      exact hv.elim
+        (fun hx => target_respects_x_final hx hlookup)
+        (fun hy => target_respects_y hy hlookup)
     · let denPair : SMT.Dom.{u} :=
         ⟨Xenc.pair Yenc, SMTType.pair σx σy,
           ZFSet.pair_mem_prod.mpr ⟨hXenc, hYenc⟩⟩
@@ -466,7 +476,8 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
             simpa [← St_used_eq] using St_sub hv_Λ
           exact hv (used_sub_x hv_used)
         obtain ⟨Δx_alt, hcov_x_alt, denX_alt, Δx_alt_ext,
-            _related_x_alt, Δx_alt_none, _respects_x_alt, Δx_alt_dom,
+            _related_x_alt, Δx_alt_none, _respects_x_alt,
+            target_respects_x_alt, Δx_alt_dom,
             hden_x_alt, hdenX_alt_type, X_alt_rel⟩ :=
           x_total Δ_alt
             (fun v hv => Δ_fv_alt v (fv_x_sub hv)) Δ₀_alt
@@ -491,7 +502,8 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
           respects_alt.of_extends Δx_alt_ext types_sub_x
             fv_y_sub fv_in_Λ
         obtain ⟨Δy_alt, hcov_y_alt, denY_alt, Δy_alt_ext,
-            _related_y_alt, Δy_alt_none, _respects_y_alt, Δy_alt_dom,
+            _related_y_alt, Δy_alt_none, _respects_y_alt,
+            target_respects_y_alt, Δy_alt_dom,
             hden_y_alt, hdenY_alt_type, Y_alt_rel⟩ :=
           y_total Δ_alt
             (fun v hv => Δ_fv_alt v (fv_y_sub hv)) Δx_alt
@@ -514,6 +526,11 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
             (t := x_enc) (h1 := hcov_x_alt_final)
             (h2 := hcov_x_alt) hagree
           simpa [RenamingContext.denote] using hcongr.trans hden_x_alt
+        have target_respects_x_alt_final :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δy_alt Sty.types x_enc :=
+          target_respects_x_alt.of_extends
+            Δy_alt_ext types_sub_y typ_x_enc
         have hcov_pair_alt : RenamingContext.CoversFV Δy_alt
             (SMT.Term.pair x_enc y_enc) := by
           intro v hv
@@ -526,10 +543,15 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
             ZFSet.pair_mem_prod.mpr ⟨hXenc_alt, hYenc_alt⟩⟩
         refine ⟨Δy_alt, hcov_pair_alt, denPairAlt, Δy_alt_ext₀,
           related_alt.of_extends Δy_alt_ext₀, Δy_alt_none, ?_,
-          Δy_alt_dom, ?_, rfl, ?_⟩
+          ?_, Δy_alt_dom, ?_, rfl, ?_⟩
         · exact respects_alt.of_extends Δy_alt_ext₀
             (fun _ h => types_sub_y (types_sub_x h))
             (fun _ h => h) fv_in_Λ
+        · intro v τ hv hlookup
+          rw [SMT.fv, List.mem_append] at hv
+          exact hv.elim
+            (fun hx => target_respects_x_alt_final hx hlookup)
+            (fun hy => target_respects_y_alt hy hlookup)
         · simp only [denPairAlt, SMT.Term.abstract, SMT.denote,
             Option.pure_def, Option.bind_eq_bind, hden_x_alt_final,
             Option.bind_some, hden_y_alt]
@@ -636,7 +658,8 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
   dsimp at pre
   obtain ⟨⟨⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
       path_x, typ_x_enc, _shape_x, x_preserves,
-      Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x, Δx_dom,
+      Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
+      target_respects_x, Δx_dom,
       denX, hden_x, hdenX_type, X_rel, x_total⟩,
       bv_x_used, _⟩,
       bv_x_not_used, _⟩ := pre
@@ -694,7 +717,8 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
   dsimp at pre
   obtain ⟨used_sub_y, types_sub_y, keys_sub_y, y_used,
     path_y, typ_y_enc, _shape_y, y_preserves,
-    Δy, hcov_y, Δy_ext, _related_y, Δy_none, _respects_y, Δy_dom,
+    Δy, hcov_y, Δy_ext, _related_y, Δy_none, _respects_y,
+    target_respects_y, Δy_dom,
     denY, hden_y, hdenY_type, Y_rel, y_total⟩ := pre
   rcases denY with ⟨Yenc, σY, hYenc⟩
   dsimp at hdenY_type
@@ -731,6 +755,9 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
     have hcongr := RenamingContext.denote_congr_of_agreesOnFV
       (t := x_enc) (h1 := hcov_x_final) (h2 := hcov_x) hagree
     simpa [RenamingContext.denote] using hcongr.trans hden_x
+  have target_respects_x_final :
+      SMT.RenamingContext.RespectsTypeContextOnFV Δy Sty.types x_enc :=
+    target_respects_x.of_extends Δy_ext types_sub_y typ_x_enc
 
   mspec Std.Do.Spec.pure
   mpure_intro
@@ -757,13 +784,20 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
     exact y_preserves v (used_sub_x (by simpa [St_used_eq] using hv))
       hv_not_Stx hvars.2 hΓ
   · refine ⟨Δy, ?_, Δy_ext₀, related.of_extends Δy_ext₀,
-      Δy_none, ?_, Δy_dom, ?_⟩
+      Δy_none, ?_, ?_, Δy_dom, ?_⟩
     · intro v hv
       cases op <;> simp only [EncodeTermRepresentedArith.CheckedOp.smtTerm,
         SMT.fv, List.mem_append] at hv
       all_goals exact hv.elim (hcov_x_final v) (hcov_y v)
     · exact respects.of_extends Δy_ext₀
         (fun _ h => types_sub_y (types_sub_x h)) (fun _ h => h) fv_in_Λ
+    · intro v τ hv hlookup
+      cases op <;> simp only [EncodeTermRepresentedArith.CheckedOp.smtTerm,
+        SMT.fv, List.mem_append] at hv
+      all_goals
+        exact hv.elim
+          (fun hx => target_respects_x_final hx hlookup)
+          (fun hy => target_respects_y hy hlookup)
     · let denOp : SMT.Dom.{u} :=
         ⟨op.eval Xenc Yenc, SMTType.int, op.eval_mem hXenc hYenc⟩
       refine ⟨denOp, ?_, rfl, ?_, ?_⟩
@@ -788,7 +822,8 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
             simpa [← St_used_eq] using St_sub hv_Λ
           exact hv (used_sub_x hv_used)
         obtain ⟨Δx_alt, hcov_x_alt, denX_alt, Δx_alt_ext,
-            _related_x_alt, Δx_alt_none, _respects_x_alt, Δx_alt_dom,
+            _related_x_alt, Δx_alt_none, _respects_x_alt,
+            target_respects_x_alt, Δx_alt_dom,
             hden_x_alt, hdenX_alt_type, X_alt_rel⟩ :=
           x_total Δ_alt
             (fun v hv => Δ_fv_alt v (fv_x_sub hv)) Δ₀_alt
@@ -813,7 +848,8 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
           respects_alt.of_extends Δx_alt_ext types_sub_x
             fv_y_sub fv_in_Λ
         obtain ⟨Δy_alt, hcov_y_alt, denY_alt, Δy_alt_ext,
-            _related_y_alt, Δy_alt_none, _respects_y_alt, Δy_alt_dom,
+            _related_y_alt, Δy_alt_none, _respects_y_alt,
+            target_respects_y_alt, Δy_alt_dom,
             hden_y_alt, hdenY_alt_type, Y_alt_rel⟩ :=
           y_total Δ_alt
             (fun v hv => Δ_fv_alt v (fv_y_sub hv)) Δx_alt
@@ -836,6 +872,11 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
             (t := x_enc) (h1 := hcov_x_alt_final)
             (h2 := hcov_x_alt) hagree
           simpa [RenamingContext.denote] using hcongr.trans hden_x_alt
+        have target_respects_x_alt_final :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δy_alt Sty.types x_enc :=
+          target_respects_x_alt.of_extends
+            Δy_alt_ext types_sub_y typ_x_enc
         have hcov_op_alt : RenamingContext.CoversFV Δy_alt
             (op.smtTerm x_enc y_enc) := by
           intro v hv
@@ -849,10 +890,17 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
             op.eval_mem hXenc_alt hYenc_alt⟩
         refine ⟨Δy_alt, hcov_op_alt, denOpAlt, Δy_alt_ext₀,
           related_alt.of_extends Δy_alt_ext₀, Δy_alt_none, ?_,
-          Δy_alt_dom, ?_, rfl, ?_⟩
+          ?_, Δy_alt_dom, ?_, rfl, ?_⟩
         · exact respects_alt.of_extends Δy_alt_ext₀
             (fun _ h => types_sub_y (types_sub_x h))
             (fun _ h => h) fv_in_Λ
+        · intro v τ hv hlookup
+          cases op <;> simp only [EncodeTermRepresentedArith.CheckedOp.smtTerm,
+            SMT.fv, List.mem_append] at hv
+          all_goals
+            exact hv.elim
+              (fun hx => target_respects_x_alt_final hx hlookup)
+              (fun hy => target_respects_y_alt hy hlookup)
         · cases op <;> simp [denOpAlt,
             EncodeTermRepresentedArith.CheckedOp.smtTerm,
             EncodeTermRepresentedArith.CheckedOp.eval,
@@ -947,7 +995,8 @@ theorem encodeTerm_rep_spec.le_case.{u}
   dsimp at pre
   obtain ⟨used_sub, types_sub, keys_sub, covers_used,
     path_pair, typ_pair, shape_pair, preserves,
-    Δp, hcov_pair, Δp_ext, related_p, Δp_none, respects_p, Δp_dom,
+    Δp, hcov_pair, Δp_ext, related_p, Δp_none, respects_p,
+    target_respects_p, Δp_dom,
     denPair, hden_pair, hdenPair_type, pair_rel, pair_total⟩ := pre
   obtain ⟨x_enc, y_enc, σx_shape, σy_shape, hp, hσp⟩ := shape_pair
   subst p
@@ -1001,10 +1050,12 @@ theorem encodeTerm_rep_spec.le_case.{u}
     · trivial
     · simpa [B.Term.vars, B.fv, B.bv] using preserves
     · refine ⟨Δp, ?_, Δp_ext, (by simpa [B.fv] using related_p),
-        Δp_none, (by simpa [B.fv] using respects_p), Δp_dom, ?_⟩
+        Δp_none, (by simpa [B.fv] using respects_p), ?_, Δp_dom, ?_⟩
       · intro v hv
         rw [SMT.fv, List.mem_append] at hv
         exact hv.elim (hcov_x v) (hcov_y v)
+      · intro v τ hv hlookup
+        exact target_respects_p (by simpa [SMT.fv] using hv) hlookup
       · let denLe : SMT.Dom.{u} :=
           ⟨Xenc ≤ᶻ Yenc, SMTType.bool,
             overloadBinOp_mem hXenc hYenc⟩
@@ -1044,7 +1095,8 @@ theorem encodeTerm_rep_spec.le_case.{u}
             rw [den_x_alt', Option.bind_some, den_y_alt']
             rfl
           obtain ⟨Δp_alt, hcov_pair_alt, denPairAlt, Δp_alt_ext,
-              related_p_alt, Δp_alt_none, respects_p_alt, Δp_alt_dom,
+              related_p_alt, Δp_alt_none, respects_p_alt,
+              target_respects_p_alt, Δp_alt_dom,
               hden_pair_alt, hdenPairAlt_type, pair_alt_rel⟩ :=
             pair_total Δ_alt Δ_fv_pair_alt Δ₀_alt
               (by simpa [B.fv] using related_alt) wf_alt Δ₀_alt_none
@@ -1085,8 +1137,11 @@ theorem encodeTerm_rep_spec.le_case.{u}
             exact hv.elim (hcov_x_alt v) (hcov_y_alt v)
           refine ⟨Δp_alt, hcov_le_alt, denLeAlt, Δp_alt_ext,
             (by simpa [B.fv] using related_p_alt), Δp_alt_none,
-            (by simpa [B.fv] using respects_p_alt), Δp_alt_dom,
+            (by simpa [B.fv] using respects_p_alt), ?_, Δp_alt_dom,
             ?_, rfl, ?_⟩
+          · intro v τ hv hlookup
+            exact target_respects_p_alt
+              (by simpa [SMT.fv] using hv) hlookup
           · simp [denLeAlt, SMT.Term.abstract, SMT.denote,
               hden_x_alt_enc, hden_y_alt_enc]
           · simpa [denLeAlt] using

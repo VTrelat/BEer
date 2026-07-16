@@ -46,6 +46,7 @@ abbrev EncodeTermRepTotal.{u}
         RValuationCastOnFV Δ_alt Δ'_alt t ∧
         (∀ v ∉ used', Δ'_alt v = none) ∧
         B.RenamingContext.RespectsTypeContextOnFV Δ'_alt Γ' t ∧
+        SMT.RenamingContext.RespectsTypeContextOnFV Δ'_alt Γ' t' ∧
         (∀ v, Δ'_alt v ≠ none → v ∈ Γ') ∧
         ⟦t'.abstract Δ'_alt hcov_alt⟧ˢ = some denT_alt ∧
         denT_alt.snd.fst = σ ∧
@@ -73,6 +74,7 @@ abbrev EncodeTermRepPost.{u}
     RValuationCastOnFV «Δ» Δ' t ∧
     (∀ v ∉ E'.usedVars, Δ' v = none) ∧
     B.RenamingContext.RespectsTypeContextOnFV Δ' Γ' t ∧
+    SMT.RenamingContext.RespectsTypeContextOnFV Δ' Γ' t' ∧
     (∀ v, Δ' v ≠ none → v ∈ Γ') ∧
     ∃ denT' : SMT.Dom.{u},
       ⟦t'.abstract Δ' Δ'_covers⟧ˢ = some denT' ∧

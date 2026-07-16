@@ -176,7 +176,7 @@ theorem encodeTerm_rep_spec.var_case.{u}
         · exact SMT.Typing.var St.types v σ τ_lookup
         · simp [EncodeTermResultShape]
         · exact fun _ _ h _ => h
-        · refine ⟨Δ₀, ?_, ?_, related, ?_, respects, Δ₀_dom, ?_⟩
+        · refine ⟨Δ₀, ?_, ?_, related, ?_, respects, ?_, Δ₀_dom, ?_⟩
           · intro w hw
             rw [SMT.fv, List.mem_singleton] at hw
             subst w
@@ -187,6 +187,10 @@ theorem encodeTerm_rep_spec.var_case.{u}
               intro hwu
               exact hw (by simpa [St_used_eq] using hwu)
             exact Δ₀_none_out w hw'
+          · intro w τ hw hlookup
+            rw [SMT.fv, List.mem_singleton] at hw
+            subst w
+            exact respects hv_fv hlookup
           · refine ⟨⟨Y, σ, hY⟩, ?_, rfl, ⟨c, hc⟩, ?_⟩
             · simp [SMT.Term.abstract, SMT.denote, hΔ₀_v]
             · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
@@ -208,11 +212,16 @@ theorem encodeTerm_rep_spec.var_case.{u}
                     simpa [hΔ₀_alt_v] using hrel_alt
                   refine ⟨Δ₀_alt, ?_, d_alt,
                     RenamingContext.extends_refl Δ₀_alt, related_alt,
-                    Δ₀_alt_none, respects_alt, Δ₀_alt_dom, ?_, ?_, hR_alt⟩
+                    Δ₀_alt_none, respects_alt, ?_, Δ₀_alt_dom,
+                    ?_, ?_, hR_alt⟩
                   · intro w hw
                     rw [SMT.fv, List.mem_singleton] at hw
                     subst w
                     simp [hΔ₀_alt_v]
+                  · intro w τ hw hlookup
+                    rw [SMT.fv, List.mem_singleton] at hw
+                    subst w
+                    exact respects_alt hv_fv hlookup
                   · simp [SMT.Term.abstract, SMT.denote, hΔ₀_alt_v]
                   · obtain ⟨dτ, hdτ, hdτ_type⟩ :=
                       respects_alt hv_fv τ_lookup
@@ -275,7 +284,7 @@ theorem encodeTerm_rep_spec.int_case.{u}
   · simp [EncodeTermResultShape]
   · exact fun _ _ h _ => h
   · refine ⟨Δ₀, ?_, RenamingContext.extends_refl Δ₀, related,
-      ?_, respects, Δ₀_dom, ?_⟩
+      ?_, respects, ?_, Δ₀_dom, ?_⟩
     · intro w hw
       simp [SMT.fv] at hw
     · intro w hw
@@ -283,6 +292,8 @@ theorem encodeTerm_rep_spec.int_case.{u}
       intro hused
       apply hw
       simpa [St_used_eq] using hused
+    · intro w τ hw
+      simp [SMT.fv] at hw
     · refine ⟨⟨ZFSet.ofInt i, SMTType.int, hT⟩, ?_, rfl, ?_, ?_⟩
       · simp [SMT.Term.abstract, SMT.denote]
       · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
@@ -295,8 +306,10 @@ theorem encodeTerm_rep_spec.int_case.{u}
         subst T_alt
         refine ⟨Δ₀_alt, ?_, ⟨ZFSet.ofInt i, SMTType.int, hT_alt⟩,
           RenamingContext.extends_refl Δ₀_alt, related_alt,
-          Δ₀_alt_none, respects_alt, Δ₀_alt_dom, ?_, rfl, ?_⟩
+          Δ₀_alt_none, respects_alt, ?_, Δ₀_alt_dom, ?_, rfl, ?_⟩
         · intro w hw
+          simp [SMT.fv] at hw
+        · intro w τ hw
           simp [SMT.fv] at hw
         · simp [SMT.Term.abstract, SMT.denote]
         · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
@@ -355,7 +368,7 @@ theorem encodeTerm_rep_spec.bool_case.{u}
   · simp [EncodeTermResultShape]
   · exact fun _ _ h _ => h
   · refine ⟨Δ₀, ?_, RenamingContext.extends_refl Δ₀, related,
-      ?_, respects, Δ₀_dom, ?_⟩
+      ?_, respects, ?_, Δ₀_dom, ?_⟩
     · intro w hw
       simp [SMT.fv] at hw
     · intro w hw
@@ -363,6 +376,8 @@ theorem encodeTerm_rep_spec.bool_case.{u}
       intro hused
       apply hw
       simpa [St_used_eq] using hused
+    · intro w τ hw
+      simp [SMT.fv] at hw
     · refine ⟨⟨ZFBool.ofBool b, SMTType.bool, hT⟩, ?_, rfl, ?_, ?_⟩
       · simp [SMT.Term.abstract, SMT.denote]
       · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
@@ -375,8 +390,10 @@ theorem encodeTerm_rep_spec.bool_case.{u}
         subst T_alt
         refine ⟨Δ₀_alt, ?_, ⟨ZFBool.ofBool b, SMTType.bool, hT_alt⟩,
           RenamingContext.extends_refl Δ₀_alt, related_alt,
-          Δ₀_alt_none, respects_alt, Δ₀_alt_dom, ?_, rfl, ?_⟩
+          Δ₀_alt_none, respects_alt, ?_, Δ₀_alt_dom, ?_, rfl, ?_⟩
         · intro w hw
+          simp [SMT.fv] at hw
+        · intro w τ hw
           simp [SMT.fv] at hw
         · simp [SMT.Term.abstract, SMT.denote]
         · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
@@ -464,7 +481,7 @@ theorem encodeTerm_rep_spec.ℤ_case.{u}
   · simpa [EncodeTermResultShape] using fv_nil
   · exact preserves
   · refine ⟨Δ₀, hcov₀, RenamingContext.extends_refl Δ₀,
-      related, ?_, ?_, ?_, denOld, hden₀.trans hden_old,
+      related, ?_, ?_, ?_, ?_, denOld, hden₀.trans hden_old,
       den_type, RDom.toRDomCast old_rel, ?_⟩
     · intro v hv
       apply Δ₀_none_out v
@@ -472,6 +489,9 @@ theorem encodeTerm_rep_spec.ℤ_case.{u}
       exact hv (used_sub hused)
     · intro v τ hv
       simp [B.fv] at hv
+    · intro v τ hv
+      rw [fv_nil] at hv
+      contradiction
     · exact fun v hv => AList.mem_of_subset types_sub (Δ₀_dom v hv)
     · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
         Δ₀_alt_none _respects_alt Δ₀_alt_dom
@@ -494,10 +514,13 @@ theorem encodeTerm_rep_spec.ℤ_case.{u}
         (h1 := hcov_alt) (h2 := hcov_old) hagree_alt
       refine ⟨Δ₀_alt, hcov_alt, denOld,
         RenamingContext.extends_refl Δ₀_alt, related_alt,
-        Δ₀_alt_none, ?_, ?_, hden_alt.trans hden_old,
+        Δ₀_alt_none, ?_, ?_, ?_, hden_alt.trans hden_old,
         den_type, ?_⟩
       · intro v τ hv
         simp [B.fv] at hv
+      · intro v τ hv
+        rw [fv_nil] at hv
+        contradiction
       · exact fun v hv =>
           AList.mem_of_subset types_sub (Δ₀_alt_dom v hv)
       · simpa only [proof_irrel_heq] using RDom.toRDomCast old_rel
@@ -585,7 +608,7 @@ theorem encodeTerm_rep_spec.𝔹_case.{u}
   · simpa [EncodeTermResultShape] using fv_nil
   · exact preserves
   · refine ⟨Δ₀, hcov₀, RenamingContext.extends_refl Δ₀,
-      related, ?_, ?_, ?_, denOld, hden₀.trans hden_old,
+      related, ?_, ?_, ?_, ?_, denOld, hden₀.trans hden_old,
       den_type, RDom.toRDomCast old_rel, ?_⟩
     · intro v hv
       apply Δ₀_none_out v
@@ -593,6 +616,9 @@ theorem encodeTerm_rep_spec.𝔹_case.{u}
       exact hv (used_sub hused)
     · intro v τ hv
       simp [B.fv] at hv
+    · intro v τ hv
+      rw [fv_nil] at hv
+      contradiction
     · exact fun v hv => AList.mem_of_subset types_sub (Δ₀_dom v hv)
     · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
         Δ₀_alt_none _respects_alt Δ₀_alt_dom
@@ -615,10 +641,13 @@ theorem encodeTerm_rep_spec.𝔹_case.{u}
         (h1 := hcov_alt) (h2 := hcov_old) hagree_alt
       refine ⟨Δ₀_alt, hcov_alt, denOld,
         RenamingContext.extends_refl Δ₀_alt, related_alt,
-        Δ₀_alt_none, ?_, ?_, hden_alt.trans hden_old,
+        Δ₀_alt_none, ?_, ?_, ?_, hden_alt.trans hden_old,
         den_type, ?_⟩
       · intro v τ hv
         simp [B.fv] at hv
+      · intro v τ hv
+        rw [fv_nil] at hv
+        contradiction
       · exact fun v hv =>
           AList.mem_of_subset types_sub (Δ₀_alt_dom v hv)
       · simpa only [proof_irrel_heq] using RDom.toRDomCast old_rel
