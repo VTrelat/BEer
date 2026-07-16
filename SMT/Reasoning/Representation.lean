@@ -343,6 +343,75 @@ def RDomCastAdmissible : B.Dom → SMT.Dom → Prop
         SetCastAdmissible τ 𝒟 σ
   | d, d' => RDomCast d d'
 
+/-- SMT representation shapes that the encoder can actually emit and consume.
+Besides the canonical encoding, products may combine supported component
+representations and binary relations may use the exact option-function
+encoding selected by `encodeTypeContext`. -/
+inductive BType.SupportedSMT : BType → SMTType → Prop where
+  | int : BType.SupportedSMT BType.int SMTType.int
+  | bool : BType.SupportedSMT BType.bool SMTType.bool
+  | prod {α β : BType} {σ τ : SMTType} :
+      BType.SupportedSMT α σ →
+      BType.SupportedSMT β τ →
+      BType.SupportedSMT (α ×ᴮ β) (SMTType.pair σ τ)
+  | setPred (τ : BType) :
+      BType.SupportedSMT (BType.set τ)
+        (SMTType.fun τ.toSMTType SMTType.bool)
+  | optionFun (α β : BType) :
+      BType.SupportedSMT (BType.set (α ×ᴮ β))
+        (SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
+
+theorem BType.SupportedSMT.canonical (τ : BType) :
+    BType.SupportedSMT τ τ.toSMTType := by
+  induction τ with
+  | int => exact .int
+  | bool => exact .bool
+  | prod α β ihα ihβ => exact .prod ihα ihβ
+  | set τ => exact .setPred τ
+
+theorem BType.SupportedSMT.prodE {α β : BType} {σ : SMTType}
+    (h : BType.SupportedSMT (α ×ᴮ β) σ) :
+    ∃ σα σβ, σ = SMTType.pair σα σβ ∧
+      BType.SupportedSMT α σα ∧ BType.SupportedSMT β σβ := by
+  cases h with
+  | prod hα hβ => exact ⟨_, _, rfl, hα, hβ⟩
+
+theorem BType.SupportedSMT.setE {τ : BType} {σ : SMTType}
+    (h : BType.SupportedSMT (BType.set τ) σ) :
+    σ = SMTType.fun τ.toSMTType SMTType.bool ∨
+      ∃ α β, τ = α ×ᴮ β ∧
+        σ = SMTType.fun α.toSMTType (SMTType.option β.toSMTType) := by
+  cases h with
+  | setPred τ => exact Or.inl rfl
+  | optionFun α β => exact Or.inr ⟨α, β, rfl, rfl⟩
+
+/-- The soundness theorem uses binder-admissible values whose SMT type is in
+the representation grammar implemented by the encoder. -/
+def RDomCastSupported (d : B.Dom) (d' : SMT.Dom) : Prop :=
+  RDomCastAdmissible d d' ∧
+    BType.SupportedSMT d.snd.fst d'.snd.fst
+
+theorem RDomCastSupported.toRDomCastAdmissible.{u}
+    {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
+    (h : RDomCastSupported d d') : RDomCastAdmissible d d' := h.1
+
+theorem RDomCastSupported.toRDomCast.{u}
+    {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
+    (h : RDomCastSupported d d') : RDomCast d d' := by
+  rcases d with ⟨X, α, hX⟩
+  rcases d' with ⟨Y, σ, hY⟩
+  cases α with
+  | set τ =>
+      obtain ⟨c, hret, _⟩ := h.1
+      exact ⟨c, hret⟩
+  | int | bool | prod =>
+      exact h.1
+
+theorem RDomCastSupported.supported.{u}
+    {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
+    (h : RDomCastSupported d d') :
+    BType.SupportedSMT d.snd.fst d'.snd.fst := h.2
+
 theorem RDomCastAdmissible.toRDomCast.{u}
     {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
     (h : RDomCastAdmissible d d') : RDomCast d d' := by
@@ -427,6 +496,17 @@ theorem RDom.toRDomCastAdmissible.{u}
       · exact ⟨castPath.reflexive τ.toSMTType,
           BinderCastAdmissible.reflexive τ hX⟩
 
+/-- Canonical agreement lies in the encoder-supported representation grammar. -/
+theorem RDom.toRDomCastSupported.{u}
+    {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
+    (h : RDom d d') : RDomCastSupported d d' := by
+  refine ⟨RDom.toRDomCastAdmissible h, ?_⟩
+  rcases d with ⟨X, α, hX⟩
+  rcases d' with ⟨Y, σ, hY⟩
+  rw [RDom] at h
+  obtain ⟨rfl, _⟩ := h
+  exact BType.SupportedSMT.canonical α
+
 /-- Direct canonical representatives also satisfy representation-aware
 agreement via the reflexive cast. -/
 theorem B.Dom.rdomCast_canonicalSMT.{u} (d : B.Dom.{u}) :
@@ -448,6 +528,10 @@ theorem B.Dom.rdomCastAdmissible_canonicalSMT.{u} (d : B.Dom.{u}) :
         simpa [castZF_apply_self] using h.2
       · exact ⟨castPath.reflexive τ.toSMTType,
           BinderCastAdmissible.reflexive τ hX⟩
+
+theorem B.Dom.rdomCastSupported_canonicalSMT.{u} (d : B.Dom.{u}) :
+    RDomCastSupported d d.canonicalSMT :=
+  RDom.toRDomCastSupported (B.Dom.rdom_canonicalSMT d)
 
 /-- At the canonical target type, representation-aware agreement is exactly
 the existing `RDom` relation. -/
@@ -755,6 +839,15 @@ def RValuationCastAdmissible (Ξ : B.𝒱 → Option B.Dom)
   | some d, some d' => RDomCastAdmissible d d'
   | _, _ => False
 
+/-- Pointwise agreement restricted to representations supported by the
+encoder, with binder admissibility retained for set-valued assignments. -/
+def RValuationCastSupported (Ξ : B.𝒱 → Option B.Dom)
+    (Θ : SMT.𝒱 → Option SMT.Dom) : Prop := ∀ v,
+  match Ξ v, Θ v with
+  | none, none => True
+  | some d, some d' => RDomCastSupported d d'
+  | _, _ => False
+
 /-- Representation-aware agreement restricted to the source free variables
 of a term. -/
 abbrev RValuationCastOnFV (Ξ : B.𝒱 → Option B.Dom)
@@ -773,6 +866,74 @@ abbrev RValuationCastAdmissibleOnFV
     match Ξ v, Θ v with
     | some d, some d' => RDomCastAdmissible d d'
     | _, _ => False
+
+/-- Encoder-supported, binder-admissible agreement restricted to source free
+variables. -/
+abbrev RValuationCastSupportedOnFV
+    (Ξ : B.𝒱 → Option B.Dom)
+    (Θ : SMT.𝒱 → Option SMT.Dom) (t : B.Term) : Prop :=
+  ∀ v ∈ B.fv t,
+    match Ξ v, Θ v with
+    | some d, some d' => RDomCastSupported d d'
+    | _, _ => False
+
+theorem RValuationCastSupportedOnFV.toRValuationCastAdmissibleOnFV
+    {Ξ : B.𝒱 → Option B.Dom} {Θ : SMT.𝒱 → Option SMT.Dom}
+    {t : B.Term} (h : RValuationCastSupportedOnFV Ξ Θ t) :
+    RValuationCastAdmissibleOnFV Ξ Θ t := by
+  intro v hv
+  have hrel := h v hv
+  cases hΞ : Ξ v with
+  | none =>
+      cases hΘ : Θ v <;> simp [hΞ, hΘ] at hrel
+  | some d =>
+      cases hΘ : Θ v with
+      | none => simp [hΞ, hΘ] at hrel
+      | some d' =>
+          rw [hΞ, hΘ] at hrel
+          simpa using hrel.toRDomCastAdmissible
+
+theorem RValuationCastSupportedOnFV.toRValuationCastOnFV
+    {Ξ : B.𝒱 → Option B.Dom} {Θ : SMT.𝒱 → Option SMT.Dom}
+    {t : B.Term} (h : RValuationCastSupportedOnFV Ξ Θ t) :
+    RValuationCastOnFV Ξ Θ t := by
+  intro v hv
+  have hrel := h v hv
+  cases hΞ : Ξ v with
+  | none =>
+      cases hΘ : Θ v <;> simp [hΞ, hΘ] at hrel
+  | some d =>
+      cases hΘ : Θ v with
+      | none => simp [hΞ, hΘ] at hrel
+      | some d' =>
+          rw [hΞ, hΘ] at hrel
+          simpa using hrel.toRDomCast
+
+theorem RValuationCastSupportedOnFV.mono_fv
+    {Ξ : B.𝒱 → Option B.Dom} {Θ : SMT.𝒱 → Option SMT.Dom}
+    {s t : B.Term} (h : RValuationCastSupportedOnFV Ξ Θ t)
+    (hfv : B.fv s ⊆ B.fv t) :
+    RValuationCastSupportedOnFV Ξ Θ s :=
+  fun v hv => h v (hfv hv)
+
+theorem RValuationCastSupportedOnFV.of_extends.{u}
+    {Ξ : B.𝒱 → Option B.Dom.{u}}
+    {Θ Θ' : SMT.𝒱 → Option SMT.Dom.{u}} {t : B.Term}
+    (h : RValuationCastSupportedOnFV Ξ Θ t)
+    (hext : SMT.RenamingContext.Extends Θ' Θ) :
+    RValuationCastSupportedOnFV Ξ Θ' t := by
+  intro v hv
+  have hv_rel := h v hv
+  cases hΞ : Ξ v with
+  | none =>
+      cases hΘ : Θ v <;> simp [hΞ, hΘ] at hv_rel
+  | some d =>
+      cases hΘ : Θ v with
+      | none => simp [hΞ, hΘ] at hv_rel
+      | some d' =>
+          rw [hΞ, hΘ] at hv_rel
+          have hΘ' : Θ' v = some d' := hext hΘ
+          simpa [hΞ, hΘ']
 
 theorem RValuationCastAdmissibleOnFV.toRValuationCastOnFV
     {Ξ : B.𝒱 → Option B.Dom} {Θ : SMT.𝒱 → Option SMT.Dom}
@@ -948,3 +1109,23 @@ theorem RValuationCastAdmissible_toSMT.{u}
       | some d' =>
           rw [hΞ, hΘ] at hcanonical
           exact RDom.toRDomCastAdmissible hcanonical
+
+/-- Canonical valuations use only encoder-supported representations. -/
+theorem RValuationCastSupported_toSMT.{u}
+    (Ξ : B.𝒱 → Option B.Dom.{u}) :
+    RValuationCastSupported Ξ (B.RenamingContext.toSMT Ξ) := by
+  intro v
+  have hcanonical := RValuation_toSMT Ξ v
+  cases hΞ : Ξ v with
+  | none =>
+      rw [B.RenamingContext.toSMT, Option.pure_def, Option.bind_eq_bind,
+        hΞ, Option.bind_none]
+      trivial
+  | some d =>
+      cases hΘ : B.RenamingContext.toSMT Ξ v with
+      | none =>
+          have : False := by simpa [hΞ, hΘ] using hcanonical
+          exact this.elim
+      | some d' =>
+          rw [hΞ, hΘ] at hcanonical
+          exact RDom.toRDomCastSupported hcanonical

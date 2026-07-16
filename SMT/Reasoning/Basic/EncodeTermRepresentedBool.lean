@@ -152,7 +152,7 @@ theorem encodeTerm_rep_spec.checked_bool_case.{u}
     {«Δ» : B.RenamingContext.Context}
     (Δ_fv : ∀ v ∈ B.fv (op.term x y), («Δ» v).isSome = true)
     {Δ₀ : SMT.RenamingContext.Context.{u}}
-    (related : RValuationCastAdmissibleOnFV «Δ» Δ₀ (op.term x y))
+    (related : RValuationCastSupportedOnFV «Δ» Δ₀ (op.term x y))
     {used : List SMT.𝒱}
     (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
     (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
@@ -254,7 +254,7 @@ theorem encodeTerm_rep_spec.checked_bool_case.{u}
   have hσx : σx = SMTType.bool := castPath.source_eq_bool cx
   subst σx
 
-  have related_y : RValuationCastAdmissibleOnFV «Δ» Δx y :=
+  have related_y : RValuationCastSupportedOnFV «Δ» Δx y :=
     (related.mono_fv fv_y_sub).of_extends Δx_ext
   have respects_y : B.RenamingContext.RespectsTypeContextOnFV
       Δx Stx.types y :=
@@ -388,7 +388,8 @@ theorem encodeTerm_rep_spec.checked_bool_case.{u}
           EncodeTermRepresentedBool.CheckedOp.smtTerm,
           EncodeTermRepresentedBool.CheckedOp.eval,
           SMT.Term.abstract, SMT.denote, hden_x_final, hden_y]
-      · simpa [denOp, RDomCastAdmissible] using
+      · refine ⟨?_, .bool⟩
+        simpa [denOp] using
           op.rdomCast_eval X_rel.toRDomCast Y_rel.toRDomCast
       · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
           Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -424,7 +425,7 @@ theorem encodeTerm_rep_spec.checked_bool_case.{u}
           apply Δx_alt_none v
           intro hvx
           exact hv (used_sub_y hvx)
-        have related_alt_y : RValuationCastAdmissibleOnFV Δ_alt Δx_alt y :=
+        have related_alt_y : RValuationCastSupportedOnFV Δ_alt Δx_alt y :=
           (related_alt.mono_fv fv_y_sub).of_extends Δx_alt_ext
         have respects_alt_y :
             B.RenamingContext.RespectsTypeContextOnFV
@@ -489,7 +490,8 @@ theorem encodeTerm_rep_spec.checked_bool_case.{u}
             EncodeTermRepresentedBool.CheckedOp.eval,
             SMT.Term.abstract, SMT.denote, hden_x_alt_final,
             hden_y_alt]
-        · simpa [denOpAlt, RDomCastAdmissible] using
+        · refine ⟨?_, .bool⟩
+          simpa [denOpAlt] using
             op.rdomCast_eval X_alt_rel.toRDomCast Y_alt_rel.toRDomCast
 
 private theorem denote_not_inv.{u} {Γ : B.TypeContext} {x : B.Term}
@@ -540,7 +542,7 @@ theorem encodeTerm_rep_spec.not_case.{u}
     {«Δ» : B.RenamingContext.Context}
     (Δ_fv : ∀ v ∈ B.fv (¬ᴮ x), («Δ» v).isSome = true)
     {Δ₀ : SMT.RenamingContext.Context.{u}}
-    (related : RValuationCastAdmissibleOnFV «Δ» Δ₀ (¬ᴮ x))
+    (related : RValuationCastSupportedOnFV «Δ» Δ₀ (¬ᴮ x))
     {used : List SMT.𝒱}
     (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
     (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
@@ -637,8 +639,8 @@ theorem encodeTerm_rep_spec.not_case.{u}
         ⟨¬ᶻ Xenc, SMTType.bool, overloadUnaryOp_mem⟩
       refine ⟨denNot, ?_, rfl, ?_, ?_⟩
       · simp [denNot, SMT.Term.abstract, SMT.denote, hden_x]
-      · simpa [denNot, RDomCastAdmissible] using
-          rdomCast_not X_rel.toRDomCast
+      · refine ⟨?_, .bool⟩
+        simpa [denNot] using rdomCast_not X_rel.toRDomCast
       · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
           Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
         obtain ⟨X_alt, hX_alt, den_x_alt, T_alt_eq⟩ :=
@@ -670,5 +672,5 @@ theorem encodeTerm_rep_spec.not_case.{u}
           exact target_respects_x_alt
             (by simpa [SMT.fv] using hv) hlookup
         · simp [denNotAlt, SMT.Term.abstract, SMT.denote, hden_x_alt]
-        · simpa [denNotAlt, RDomCastAdmissible] using
-            rdomCast_not X_alt_rel.toRDomCast
+        · refine ⟨?_, .bool⟩
+          simpa [denNotAlt] using rdomCast_not X_alt_rel.toRDomCast
