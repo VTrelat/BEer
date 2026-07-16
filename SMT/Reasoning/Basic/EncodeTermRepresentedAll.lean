@@ -1,4 +1,5 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedUnion
+import SMT.Reasoning.Basic.CastMembershipExact
 import SMT.Reasoning.Representation
 
 open Std.Do B SMT ZFSet
