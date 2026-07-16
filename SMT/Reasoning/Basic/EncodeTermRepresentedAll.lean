@@ -1,8 +1,123 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedUnion
+import SMT.Reasoning.Representation
 
 open Std.Do B SMT ZFSet
 
 /-! # Representation-aware universal quantification -/
+
+open Classical B in
+/-- Decompose a supported relation between source and SMT tuples into the
+pointwise relation needed by the body induction hypothesis.  This is the
+static binder-update form, where both sides are obtained by projecting one
+whole tuple. -/
+theorem RValuationCastSupportedOnFV.updates_of_reduce_toProdl.{u}
+    {Ξ : B.RenamingContext.Context.{u}}
+    {Θ : SMT.RenamingContext.Context.{u}}
+    {vs : List B.𝒱} (vs_nodup : vs.Nodup)
+    {αs : List BType} (αs_nemp : αs ≠ [])
+    {σs : List SMTType}
+    (vs_αs_len : vs.length = αs.length)
+    (αs_σs_len : αs.length = σs.length)
+    {X Y : ZFSet.{u}}
+    (hX : X ∈ ⟦αs.reduce (· ×ᴮ ·) αs_nemp⟧ᶻ)
+    (hY : Y ∈ ⟦σs.toProdl⟧ᶻ)
+    (hrel : RDomCastSupported
+      (⟨X, αs.reduce (· ×ᴮ ·) αs_nemp, hX⟩ : B.Dom)
+      (⟨Y, σs.toProdl, hY⟩ : SMT.Dom))
+    {t : B.Term}
+    (ambient : ∀ v ∈ B.fv t, v ∉ vs →
+      match Ξ v, Θ v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False) :
+    let bs : Fin vs.length → B.Dom.{u} := fun i =>
+      let j : Fin αs.length := Fin.cast vs_αs_len i
+      ⟨X.get αs.length j, αs[j],
+        BType.mem_get_of_mem_reduce_toZFSet αs_nemp hX⟩
+    let ss : Fin vs.length → SMT.Dom.{u} := fun i =>
+      let j : Fin σs.length := Fin.cast (vs_αs_len.trans αs_σs_len) i
+      ⟨Y.get σs.length j, σs[j],
+        SMTType.mem_get_of_mem_toProdl
+          (fun hs => αs_nemp (List.length_eq_zero_iff.mp
+            (αs_σs_len.trans (by simp [hs])))) hY⟩
+    RValuationCastSupportedOnFV
+      (Function.updates Ξ vs (List.ofFn fun i => some (bs i)))
+      (Function.updates Θ vs (List.ofFn fun i => some (ss i))) t := by
+  dsimp only
+  apply RValuationCastSupportedOnFV.updates vs_nodup
+  · exact ambient
+  · intro i
+    simpa using RDomCastSupported.get_of_reduce_toProdl
+      αs_nemp αs_σs_len hX hY hrel (Fin.cast vs_αs_len i)
+
+open Classical B in
+/-- Dynamic form of `updates_of_reduce_toProdl`: the target components are an
+arbitrary well-typed quantified assignment whose pair fold is the represented
+whole tuple.  Pair-fold injectivity identifies each assignment component with
+the corresponding tuple projection. -/
+theorem RValuationCastSupportedOnFV.updates_of_fold_reduce_toProdl.{u}
+    {Ξ : B.RenamingContext.Context.{u}}
+    {Θ : SMT.RenamingContext.Context.{u}}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {αs : List BType} (αs_nemp : αs ≠ [])
+    {σs : List SMTType}
+    (vs_αs_len : vs.length = αs.length)
+    (αs_σs_len : αs.length = σs.length)
+    {X Y : ZFSet.{u}}
+    (hX : X ∈ ⟦αs.reduce (· ×ᴮ ·) αs_nemp⟧ᶻ)
+    (hY : Y ∈ ⟦σs.toProdl⟧ᶻ)
+    (hrel : RDomCastSupported
+      (⟨X, αs.reduce (· ×ᴮ ·) αs_nemp, hX⟩ : B.Dom)
+      (⟨Y, σs.toProdl, hY⟩ : SMT.Dom))
+    (w : Fin vs.length → SMT.Dom.{u})
+    (hw : ∀ i, (w i).snd.fst =
+        σs[Fin.cast (vs_αs_len.trans αs_σs_len) i] ∧
+      (w i).fst ∈
+        ⟦σs[Fin.cast (vs_αs_len.trans αs_σs_len) i]⟧ᶻ)
+    (hfold : Fin.foldl (vs.length - 1)
+      (fun acc i => acc.pair
+        (w ⟨i.val + 1, Nat.add_lt_of_lt_sub i.isLt⟩).fst)
+      (w ⟨0, List.length_pos_iff.mpr vs_nemp⟩).fst = Y)
+    {t : B.Term}
+    (ambient : ∀ v ∈ B.fv t, v ∉ vs →
+      match Ξ v, Θ v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False) :
+    let bs : Fin vs.length → B.Dom.{u} := fun i =>
+      let j : Fin αs.length := Fin.cast vs_αs_len i
+      ⟨X.get αs.length j, αs[j],
+        BType.mem_get_of_mem_reduce_toZFSet αs_nemp hX⟩
+    RValuationCastSupportedOnFV
+      (Function.updates Ξ vs (List.ofFn fun i => some (bs i)))
+      (Function.updates Θ vs (List.ofFn fun i => some (w i))) t := by
+  dsimp only
+  apply RValuationCastSupportedOnFV.updates vs_nodup
+  · exact ambient
+  · intro i
+    let jα : Fin αs.length := Fin.cast vs_αs_len i
+    let jσ : Fin σs.length :=
+      Fin.cast (vs_αs_len.trans αs_σs_len) i
+    have hcomp := RDomCastSupported.get_of_reduce_toProdl
+      αs_nemp αs_σs_len hX hY hrel jα
+    have hY_arity : Y.hasArity vs.length := by
+      have harity := ZFSet.hasArity_of_mem_toProdl
+        (fun hs => αs_nemp (List.length_eq_zero_iff.mp
+          (αs_σs_len.trans (by simp [hs])))) hY
+      rwa [← αs_σs_len, ← vs_αs_len] at harity
+    have hget : (w i).fst = Y.get vs.length i :=
+      foldl_pair_inj_get (List.length_pos_iff.mpr vs_nemp)
+        hY_arity (fun i => (w i).fst) hfold i
+    have hget' := hget
+    rw [ZFSet.get_cast (vs_αs_len.trans αs_σs_len) i] at hget'
+    rcases wi : w i with ⟨Wi, σi, hWi⟩
+    have htype := (hw i).1
+    rw [wi] at htype
+    change σi = σs[jσ] at htype
+    have hvalue : Wi = Y.get σs.length jσ := by
+      rw [wi] at hget'
+      exact hget'
+    subst σi
+    subst Wi
+    simpa [jα, jσ] using hcomp
 
 open Classical B in
 set_option maxHeartbeats 8000000 in

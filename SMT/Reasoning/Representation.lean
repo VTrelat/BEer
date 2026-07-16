@@ -843,7 +843,9 @@ private theorem ZFSet.get_pair_before_last.{u}
   rw [ZFSet_get_step_down (by omega) hi]
   rw [ZFSet.π₁_pair]
 
-private theorem ZFSet.get_cast.{u}
+/-- Transporting a tuple index along an equality of arities does not change
+the selected component. -/
+theorem ZFSet.get_cast.{u}
     {x : ZFSet.{u}} {n m : ℕ} (h : n = m) (i : Fin n) :
     x.get n i = x.get m (Fin.cast h i) := by
   subst m

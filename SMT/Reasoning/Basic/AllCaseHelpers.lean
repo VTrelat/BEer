@@ -920,6 +920,24 @@ private theorem Fin_foldl_prod_toZFSet_eq_toProdl
   rw [hfold_eq]
   exact Fin_foldl_prod_toZFSet_eq_toProdl_aux τs m hlen hpos
 
+/-- A value of an SMT product assembled by `List.toProdl` has one tuple
+component for every source type in the list.  This packages the internal
+`Fin.foldl` characterization of `toProdl` for clients that need to recover
+individual quantified-variable assignments. -/
+theorem ZFSet.hasArity_of_mem_toProdl.{u}
+    {τs : List SMTType} (hne : τs ≠ [])
+    {x : ZFSet.{u}} (hx : x ∈ ⟦τs.toProdl⟧ᶻ) :
+    x.hasArity τs.length := by
+  have hpos : 0 < τs.length := List.length_pos_iff.mpr hne
+  have hx' : x ∈ Fin.foldl (τs.length - 1)
+      (fun (acc : ZFSet) (i : Fin (τs.length - 1)) =>
+        acc.prod (SMTType.toZFSet (τs[i.val + 1]'(by omega))))
+      (SMTType.toZFSet (τs[0]'hpos)) := by
+    rw [Fin_foldl_prod_toZFSet_eq_toProdl hne]
+    exact hx
+  exact (Fin_foldl_prod_hasArity_and_get' hpos
+    (fun i => SMTType.toZFSet (τs[i.val]'i.isLt)) hx').1
+
 /-- Variant of `Fin_foldl_prod_toZFSet_eq_toProdl` taking an arbitrary length `N`
 equal to `τs.length` (used when the Fin.foldl bound is expressed in terms of a
 dependent variable like `zs.length` rather than `τs.length` directly). -/
