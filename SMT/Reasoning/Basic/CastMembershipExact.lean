@@ -1,5 +1,6 @@
 import SMT.Reasoning.Basic.CastMembershipSpec
 import SMT.Reasoning.Basic.LoosenAuxExactUniv
+import SMT.Reasoning.Basic.EncodeTermStruct
 
 open Std.Do
 
@@ -12,12 +13,12 @@ theorem castMembership_branch2_exact_spec.{u}
     {α τ : SMT.SMTType} {x S : SMT.Term} {Λ : SMT.TypeContext} {n : ℕ}
     (typ_x : Λ ⊢ˢ x : α) (typ_S : Λ ⊢ˢ S : .fun τ .bool)
     (α_ne_τ : α ≠ τ) (α_le_τ : α ⊑ τ)
-    {used : List SMT.𝒱}
+    {used : List SMT.𝒱} {decl : SMT.Chunk}
     (hbv_x : ∀ v ∈ SMT.bv x, v ∈ used)
     (hbv_S : ∀ v ∈ SMT.bv S, v ∈ used) :
     ⦃ fun ⟨E, Λ'⟩ =>
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧
-          E.usedVars = used⌝ ⦄
+          E.usedVars = used ∧ E.declarations = decl⌝ ⦄
       castMembership ⟨x, α⟩ ⟨S, .fun τ .bool⟩
     ⦃ ⇓? ⟨t, σ⟩ ⟨E', Λ'⟩ => ⌜
       n ≤ E'.freshvarsc ∧ Λ ⊆ Λ' ∧
@@ -33,8 +34,11 @@ theorem castMembership_branch2_exact_spec.{u}
           ⟦t.abstract Δctx hcov_t⟧ˢ = some denCM ∧
           denCM.snd.fst = .bool) ∧
       ∃ (x! : SMT.𝒱) (x!_spec : SMT.Term),
+        E'.declarations = decl ++ helperSpecChunk x! τ x!_spec ∧
         t = x!_spec ∧ˢ .app S (.var x!) ∧
         x! ∉ Λ ∧ x! ∉ used ∧
+        Λ'.lookup x! = some τ ∧
+        SMT.fv x!_spec ⊆ SMT.fv x ∪ [x!] ∧
         ∀ («Δctx» : SMT.RenamingContext.Context.{u})
           (hx : SMT.RenamingContext.CoversFV «Δctx» x)
           (_respects : SMT.RenamingContext.RespectsTypeContextOnFV
@@ -50,6 +54,7 @@ theorem castMembership_branch2_exact_spec.{u}
               (Function.update «Δctx» x! (some X!)) x!_spec)
             (_ : ⟦x!_spec.abstract
               (Function.update «Δctx» x! (some X!)) hφ⟧ˢ = some Φ),
+            X!.2.1 = τ ∧
             Φ.2.1 = SMT.SMTType.bool ∧
             (Φ.1 = ZFSet.zftrue ∧
               (X.1.pair X!.1) ∈ (castZF_of_path α_le_τ.toCastPath).1) ∧
@@ -66,24 +71,28 @@ theorem castMembership_branch2_exact_spec.{u}
                   (castZF_of_path α_le_τ.toCastPath).1⌝ ⦄ := by
   mintro pre ∀St
   mpure pre
-  obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+  obtain ⟨rfl, rfl, St_sub, St_used_eq, St_decl_eq⟩ := pre
   unfold castMembership
   conv =>
     enter [2, 1, 1]
     simp only [bind_pure_comp]
   rw [dif_neg α_ne_τ, dif_pos α_le_τ]
-  mspec loosenAux_prf_exact_univ
-    (Λ := St.types) (n := St.env.freshvarsc)
-    (used := St.env.usedVars) typ_x
-    (fun v hv => St_used_eq ▸ hbv_x v hv) α_le_τ.toCastPath
+  mspec (Std.Do.Triple.and _
+    (loosenAux_prf_exact_univ
+      (Λ := St.types) (n := St.env.freshvarsc)
+      (used := St.env.usedVars) typ_x
+      (fun v hv => St_used_eq ▸ hbv_x v hv) α_le_τ.toCastPath)
+    (loosenAux_prf_decls α_le_τ.toCastPath
+      (decl := decl)))
   next out =>
   obtain ⟨x!, x!_spec⟩ := out
   mrename_i pre
   mintro ∀St1
   mpure pre
-  obtain ⟨hn1, St1_types_eq, x!_fresh, x!_not_used,
+  obtain ⟨⟨hn1, St1_types_eq, x!_fresh, x!_not_used,
     used_sub1, keys_sub1, preserves1, typ_x!, typ_x!_spec,
-    typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, hadq_univ⟩ := pre
+    typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, hadq_univ⟩,
+    St1_decl_eq⟩ := pre
   mspec Std.Do.Spec.map
   mspec SMT.declareConst_addSpec_spec
     (x! := x!) (x!_spec := x!_spec) (τ := τ) (decl := St1.env.declarations)
@@ -92,7 +101,7 @@ theorem castMembership_branch2_exact_spec.{u}
   mrename_i pre
   mintro ∀St2
   mpure pre
-  obtain ⟨_, _, St2_fvc_eq, St2_used_eq, St2_types_eq⟩ := pre
+  obtain ⟨St2_decl_eq, _, St2_fvc_eq, St2_used_eq, St2_types_eq⟩ := pre
   have typ_full :
       St2.types ⊢ˢ x!_spec ∧ˢ .app S (.var x!) : .bool := by
     rw [St2_types_eq]
@@ -138,14 +147,18 @@ theorem castMembership_branch2_exact_spec.{u}
   · intro Δctx hcov_t hcompat
     exact SMT.RenamingContext.denote_exists_of_typing
       typ_full hcompat hcov_t
-  · refine ⟨x!, x!_spec, rfl, x!_fresh, ?_, ?_⟩
+  · refine ⟨x!, x!_spec, ?_, rfl, x!_fresh, ?_, ?_, fv_x!_spec, ?_⟩
+    · rw [St2_decl_eq, St1_decl_eq]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
     · rw [St_used_eq] at x!_not_used
       exact x!_not_used
+    · rw [St2_types_eq]
+      exact SMT.Typing.varE typ_x!_St1
     · intro Δctx hx respects pf X hX_den
-      obtain ⟨Φ, X!, hvar, hφ, hspec, _hX!ty,
+      obtain ⟨Φ, X!, hvar, hφ, hspec, hX!ty,
         hΦty, hcast, htot⟩ :=
         hadq_univ Δctx hx respects pf X hX_den
-      exact ⟨Φ, X!, hvar, hφ, hspec, hΦty, hcast, htot⟩
+      exact ⟨Φ, X!, hvar, hφ, hspec, hX!ty, hΦty, hcast, htot⟩
 
 set_option maxHeartbeats 3000000 in
 /-- Exact specification for membership in an option-valued function.  The
@@ -158,12 +171,12 @@ theorem castMembership_option_exact_spec.{u}
     (typ_x : Λ ⊢ˢ x : .pair α β)
     (typ_S : Λ ⊢ˢ S : .fun α' (.option β'))
     (α_le : α ⊑ α') (β_le : β ⊑ β')
-    {used : List SMT.𝒱}
+    {used : List SMT.𝒱} {decl : SMT.Chunk}
     (hbv_x : ∀ v ∈ SMT.bv x, v ∈ used)
     (hbv_S : ∀ v ∈ SMT.bv S, v ∈ used) :
     ⦃ fun ⟨E, Λ'⟩ =>
         ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧
-          E.usedVars = used⌝ ⦄
+          E.usedVars = used ∧ E.declarations = decl⌝ ⦄
       castMembership ⟨x, .pair α β⟩ ⟨S, .fun α' (.option β')⟩
     ⦃ ⇓? ⟨t, σ⟩ ⟨E', Λ'⟩ => ⌜
       n ≤ E'.freshvarsc ∧ Λ ⊆ Λ' ∧
@@ -179,9 +192,13 @@ theorem castMembership_option_exact_spec.{u}
           ⟦t.abstract Δctx hcov_t⟧ˢ = some denCM ∧
           denCM.snd.fst = .bool) ∧
       ∃ (x! : SMT.𝒱) (x!_spec : SMT.Term),
+        E'.declarations = decl ++
+          helperSpecChunk x! (.pair α' β') x!_spec ∧
         t = x!_spec ∧ˢ
           ((.app S (.fst (.var x!))) =ˢ (.some (.snd (.var x!)))) ∧
         x! ∉ Λ ∧ x! ∉ used ∧
+        Λ'.lookup x! = some (.pair α' β') ∧
+        SMT.fv x!_spec ⊆ SMT.fv x ∪ [x!] ∧
         ∀ («Δctx» : SMT.RenamingContext.Context.{u})
           (hx : SMT.RenamingContext.CoversFV «Δctx» x)
           (_respects : SMT.RenamingContext.RespectsTypeContextOnFV
@@ -197,6 +214,7 @@ theorem castMembership_option_exact_spec.{u}
               (Function.update «Δctx» x! (some X!)) x!_spec)
             (_ : ⟦x!_spec.abstract
               (Function.update «Δctx» x! (some X!)) hφ⟧ˢ = some Φ),
+            X!.2.1 = .pair α' β' ∧
             Φ.2.1 = SMT.SMTType.bool ∧
             (Φ.1 = ZFSet.zftrue ∧
               (X.1.pair X!.1) ∈
@@ -216,25 +234,30 @@ theorem castMembership_option_exact_spec.{u}
                     (.pair α_le.toCastPath β_le.toCastPath)).1⌝ ⦄ := by
   mintro pre ∀St
   mpure pre
-  obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+  obtain ⟨rfl, rfl, St_sub, St_used_eq, St_decl_eq⟩ := pre
   unfold castMembership
   conv =>
     enter [2, 1, 1]
     simp only [bind_pure_comp]
   rw [dif_pos α_le, dif_pos β_le]
-  mspec loosenAux_prf_exact_univ
-    (Λ := St.types) (n := St.env.freshvarsc)
-    (used := St.env.usedVars) typ_x
-    (fun v hv => St_used_eq ▸ hbv_x v hv)
-    (.pair α_le.toCastPath β_le.toCastPath)
+  mspec (Std.Do.Triple.and _
+    (loosenAux_prf_exact_univ
+      (Λ := St.types) (n := St.env.freshvarsc)
+      (used := St.env.usedVars) typ_x
+      (fun v hv => St_used_eq ▸ hbv_x v hv)
+      (.pair α_le.toCastPath β_le.toCastPath))
+    (loosenAux_prf_decls
+      (.pair α_le.toCastPath β_le.toCastPath)
+      (decl := decl)))
   next out =>
   obtain ⟨x!, x!_spec⟩ := out
   mrename_i pre
   mintro ∀St1
   mpure pre
-  obtain ⟨hn1, St1_types_eq, x!_fresh, x!_not_used,
+  obtain ⟨⟨hn1, St1_types_eq, x!_fresh, x!_not_used,
     used_sub1, keys_sub1, preserves1, typ_x!, typ_x!_spec,
-    typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, hadq_univ⟩ := pre
+    typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, hadq_univ⟩,
+    St1_decl_eq⟩ := pre
   mspec Std.Do.Spec.map
   mspec SMT.declareConst_addSpec_spec
     (x! := x!) (x!_spec := x!_spec) (τ := .pair α' β')
@@ -244,7 +267,7 @@ theorem castMembership_option_exact_spec.{u}
   mrename_i pre
   mintro ∀St2
   mpure pre
-  obtain ⟨_, _, St2_fvc_eq, St2_used_eq, St2_types_eq⟩ := pre
+  obtain ⟨St2_decl_eq, _, St2_fvc_eq, St2_used_eq, St2_types_eq⟩ := pre
   have typ_full : St2.types ⊢ˢ
       x!_spec ∧ˢ
         ((SMT.Term.app S (.fst (.var x!))) =ˢ
@@ -298,11 +321,15 @@ theorem castMembership_option_exact_spec.{u}
   · intro Δctx hcov_t hcompat
     exact SMT.RenamingContext.denote_exists_of_typing
       typ_full hcompat hcov_t
-  · refine ⟨x!, x!_spec, rfl, x!_fresh, ?_, ?_⟩
+  · refine ⟨x!, x!_spec, ?_, rfl, x!_fresh, ?_, ?_, fv_x!_spec, ?_⟩
+    · rw [St2_decl_eq, St1_decl_eq]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
     · rw [St_used_eq] at x!_not_used
       exact x!_not_used
+    · rw [St2_types_eq]
+      exact SMT.Typing.varE typ_x!_St1
     · intro Δctx hx respects pf X hX_den
-      obtain ⟨Φ, X!, hvar, hφ, hspec, _hX!ty,
+      obtain ⟨Φ, X!, hvar, hφ, hspec, hX!ty,
         hΦty, hcast, htot⟩ :=
         hadq_univ Δctx hx respects pf X hX_den
-      exact ⟨Φ, X!, hvar, hφ, hspec, hΦty, hcast, htot⟩
+      exact ⟨Φ, X!, hvar, hφ, hspec, hX!ty, hΦty, hcast, htot⟩
