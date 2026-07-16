@@ -494,7 +494,7 @@ theorem encodeTerm_rep_spec.checked_bool_case.{u}
           simpa [denOpAlt] using
             op.rdomCast_eval X_alt_rel.toRDomCast Y_alt_rel.toRDomCast
 
-private theorem denote_not_inv.{u} {Γ : B.TypeContext} {x : B.Term}
+theorem denote_not_inv.{u} {Γ : B.TypeContext} {x : B.Term}
     (_typ_t : Γ ⊢ᴮ ¬ᴮ x : .bool)
     {«Δ» : B.RenamingContext.Context}
     (Δ_fv : ∀ v ∈ B.fv (¬ᴮ x), («Δ» v).isSome = true)
@@ -516,7 +516,7 @@ private theorem denote_not_inv.{u} {Γ : B.TypeContext} {x : B.Term}
   refine ⟨X, hX, ?_, T_eq⟩
   simpa only [proof_irrel_heq] using den_x
 
-private theorem rdomCast_not.{u}
+theorem rdomCast_not.{u}
     {X X' : ZFSet.{u}}
     {hX : X ∈ ⟦BType.bool⟧ᶻ} {hX' : X' ∈ ⟦SMTType.bool⟧ᶻ}
     (hx : RDomCast (⟨X, BType.bool, hX⟩ : B.Dom)
