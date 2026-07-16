@@ -189,6 +189,15 @@ def RDomCast : B.Dom → SMT.Dom → Prop
       ∃ c : σ ~> α.toSMTType,
         retract α (castZF_apply c Y) = X
 
+/-- A binder representation is admissible for a source domain when every
+source value quantified over has a preimage at the selected SMT binder type.
+This is the exact surjectivity condition needed to transport a false
+counterexample through a cast and retraction. -/
+def BinderCastAdmissible.{u} (τ : BType) (σ : SMTType)
+    (c : σ ~> τ.toSMTType) (𝒟 : ZFSet.{u}) : Prop :=
+  ∀ x ∈ 𝒟, ∃ x' ∈ ⟦σ⟧ᶻ,
+    retract τ (castZF_apply c x') = x
+
 /-- The canonical SMT representative of one B domain value.  This is the
 pointwise operation used by `B.RenamingContext.toSMT`, exposed directly for
 binder-local representation choices. -/
@@ -215,6 +224,100 @@ theorem B.Dom.rdom_canonicalSMT.{u} (d : B.Dom.{u}) :
   rw [RDom]
   refine ⟨rfl, ?_⟩
   exact retract_of_canonical α hX
+
+/-- Canonical binder representations are always admissible. -/
+theorem BinderCastAdmissible.reflexive.{u}
+    (τ : BType) {𝒟 : ZFSet.{u}} (h𝒟 : 𝒟 ∈ ⟦BType.set τ⟧ᶻ) :
+    BinderCastAdmissible τ τ.toSMTType
+      (castPath.reflexive τ.toSMTType) 𝒟 := by
+  rw [BType.toZFSet, ZFSet.mem_powerset] at h𝒟
+  intro x hx
+  let d : B.Dom.{u} := ⟨x, τ, h𝒟 hx⟩
+  have hy : d.canonicalSMT.fst ∈ ⟦τ.toSMTType⟧ᶻ := by
+    change d.canonicalSMT.fst ∈ ⟦d.snd.fst.toSMTType⟧ᶻ
+    rw [← B.Dom.canonicalSMT_type d]
+    exact d.canonicalSMT.snd.snd
+  refine ⟨d.canonicalSMT.fst, hy, ?_⟩
+  rw [castZF_apply_reflexive τ.toSMTType hy]
+  have hd := B.Dom.rdom_canonicalSMT d
+  rw [RDom] at hd
+  exact hd.2
+
+/-- A functional relation admits the option-function binder representation.
+The hypothesis is deliberately semantic: it concerns the canonical graph of
+each source relation value, rather than merely membership of a variable name
+in `E.flags`. -/
+theorem BinderCastAdmissible.optionFunction.{u}
+    (α β : BType) {𝒟 : ZFSet.{u}}
+    (h𝒟 : 𝒟 ∈
+      ⟦BType.set (BType.set (α ×ᴮ β))⟧ᶻ)
+    (functional : ∀ (x : ZFSet.{u}) (_hx : x ∈ 𝒟)
+      (hx_ty : x ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ),
+      (predGraph α.toSMTType β.toSMTType
+        (B.Dom.canonicalSMT
+          (⟨x, BType.set (α ×ᴮ β), hx_ty⟩ : B.Dom)).fst).IsPFunc
+        ⟦α.toSMTType⟧ᶻ ⟦β.toSMTType⟧ᶻ) :
+    BinderCastAdmissible (BType.set (α ×ᴮ β))
+      (SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
+      (castPath.graph (castPath.reflexive α.toSMTType)
+        (castPath.reflexive β.toSMTType)) 𝒟 := by
+  rw [BType.toZFSet, ZFSet.mem_powerset] at h𝒟
+  intro x hx
+  have hx_ty : x ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ := h𝒟 hx
+  let d : B.Dom.{u} := ⟨x, BType.set (α ×ᴮ β), hx_ty⟩
+  let y : SMT.Dom.{u} := d.canonicalSMT
+  obtain ⟨x', hx', hcast⟩ := castZF_apply_surj_on_isPFunc
+    α.toSMTType β.toSMTType y.fst y.snd.snd
+    (functional x hx hx_ty)
+  refine ⟨x', hx', ?_⟩
+  rw [hcast]
+  have hd := B.Dom.rdom_canonicalSMT d
+  rw [RDom] at hd
+  exact hd.2
+
+/-- Convert binder admissibility to the preimage shape consumed by the
+existing cast-plus-retract universal-quantifier bridge. -/
+theorem BinderCastAdmissible.case_b_preimage.{u}
+    {τ : BType} {σ : SMTType} {c : σ ~> τ.toSMTType}
+    {𝒟 : ZFSet.{u}} (h : BinderCastAdmissible τ σ c 𝒟) :
+    ∀ x ∈ 𝒟, ∃ x' ∈ ⟦σ⟧ᶻ,
+      retract τ (castZF_apply c x') = x :=
+  h
+
+/-- Element-level preimage condition induced by a representation of a B set.
+A characteristic predicate binds one argument of its domain type; an
+option-valued function binds a domain/codomain pair. -/
+def SetCastAdmissible.{u} (τ : BType) (𝒟 : ZFSet.{u}) :
+    SMTType → Prop
+  | SMTType.fun σ SMTType.bool =>
+      ∃ c : σ ~> τ.toSMTType,
+        BinderCastAdmissible τ σ c 𝒟
+  | SMTType.fun σ (SMTType.option ρ) =>
+      ∃ c : SMTType.pair σ ρ ~> τ.toSMTType,
+        BinderCastAdmissible τ (SMTType.pair σ ρ) c 𝒟
+  | _ => False
+
+/-- Representation agreement strengthened by the exact surjectivity invariant
+needed when the represented value is later consumed as a quantifier domain.
+For non-set values this is precisely `RDomCast`. -/
+def RDomCastAdmissible : B.Dom → SMT.Dom → Prop
+  | ⟨𝒟, BType.set τ, _⟩, ⟨Y, σ, _⟩ =>
+      ∃ c : σ ~> (BType.set τ).toSMTType,
+        retract (BType.set τ) (castZF_apply c Y) = 𝒟 ∧
+        SetCastAdmissible τ 𝒟 σ
+  | d, d' => RDomCast d d'
+
+theorem RDomCastAdmissible.toRDomCast.{u}
+    {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
+    (h : RDomCastAdmissible d d') : RDomCast d d' := by
+  rcases d with ⟨X, α, hX⟩
+  rcases d' with ⟨Y, σ, hY⟩
+  cases α with
+  | set τ =>
+      obtain ⟨c, hret, _hadm⟩ := h
+      exact ⟨c, hret⟩
+  | int | bool | prod =>
+      exact h
 
 /-- A representation witness supplies both type correctness of the cast value
 and the defining retraction equation. -/
@@ -264,6 +367,22 @@ agreement via the reflexive cast. -/
 theorem B.Dom.rdomCast_canonicalSMT.{u} (d : B.Dom.{u}) :
     RDomCast d d.canonicalSMT :=
   RDom.toRDomCast (B.Dom.rdom_canonicalSMT d)
+
+/-- Canonical representatives carry binder admissibility automatically. -/
+theorem B.Dom.rdomCastAdmissible_canonicalSMT.{u} (d : B.Dom.{u}) :
+    RDomCastAdmissible d d.canonicalSMT := by
+  rcases d with ⟨X, α, hX⟩
+  cases α with
+  | int | bool | prod =>
+      exact B.Dom.rdomCast_canonicalSMT ⟨X, _, hX⟩
+  | set τ =>
+      refine ⟨castPath.reflexive (BType.set τ).toSMTType, ?_, ?_⟩
+      · have h := B.Dom.rdom_canonicalSMT
+          (⟨X, BType.set τ, hX⟩ : B.Dom)
+        rw [RDom] at h
+        simpa [castZF_apply_self] using h.2
+      · exact ⟨castPath.reflexive τ.toSMTType,
+          BinderCastAdmissible.reflexive τ hX⟩
 
 /-- At the canonical target type, representation-aware agreement is exactly
 the existing `RDom` relation. -/

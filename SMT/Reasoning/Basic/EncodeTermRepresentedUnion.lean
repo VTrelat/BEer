@@ -117,7 +117,10 @@ theorem castUnion_graph_rep_spec.{u}
     (hS : RenamingContext.CoversFV «Δ» S)
     (hT : RenamingContext.CoversFV «Δ» T)
     (Δ_none_out : ∀ v ∉ used, «Δ» v = none)
-    (respects : SMT.RenamingContext.RespectsTypeContext «Δ» Λ)
+    (respects_S :
+      SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ S)
+    (respects_T :
+      SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ T)
     {F G : ZFSet.{u}}
     (hF : F ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ)
     (hG : G ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ)
@@ -187,8 +190,7 @@ theorem castUnion_graph_rep_spec.{u}
     (used := St₀.env.usedVars) typ_S bv_S_used
     (castPath.graph (castPath.reflexive α.toSMTType)
       (castPath.reflexive β.toSMTType)) «Δ» hS
-    (show SMT.RenamingContext.RespectsTypeContextOnFV «Δ» St₀.types S from
-      fun {_ _} _ hlookup => respects hlookup)
+    respects_S
   next out =>
     obtain ⟨S!, S!_spec⟩ := out
     mrename_i pre
@@ -341,10 +343,10 @@ theorem castUnion_graph_rep_spec.{u}
         funNotMemFvOfNotMemContext typ_S!_St₃ z_fresh
       have z_not_fv_T : z ∉ SMT.fv T :=
         funNotMemFvOfNotMemContext typ_T_St₃ z_fresh
-      have denS_type :=
-        denote_type_eq_of_typing typ_S h_den_S respects
-      have denT_type :=
-        denote_type_eq_of_typing typ_T h_den_T respects
+      have denS_type := SMT.RenamingContext.denote_type_of_typing_fv
+        typ_S respects_S hS h_den_S
+      have denT_type := SMT.RenamingContext.denote_type_of_typing_fv
+        typ_T respects_T hT h_den_T
       obtain ⟨denU, h_den_U, U_rel⟩ :=
         castUnion_graph_denotation α β hF hG denS_type denS!_type
           denT_type F_rel G_rel cast_pair hS!_helper hT_helper
