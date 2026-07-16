@@ -11,6 +11,14 @@ initial SMT valuation is therefore allowed to use a noncanonical type such as
 `α → Option β` for a B relation of type `ℙ (α × β)`.
 -/
 
+/-- Constructor-specific successful-result shape information used when one
+encoder branch is factored through another branch with the same recursive
+prefix.  Only shapes needed by such transfers are recorded. -/
+def EncodeTermResultShape : B.Term → SMT.Term → SMTType → Prop
+  | .maplet _ _, t', σ => ∃ x' y' σx σy,
+      t' = SMT.Term.pair x' y' ∧ σ = SMTType.pair σx σy
+  | _, _, _ => True
+
 /-- Totality under an alternative source valuation and a representation-aware
 SMT valuation. Domain containment is explicit; it replaces the unsound legacy
 rule that attempted to derive containment from one-sided extension. -/
@@ -55,6 +63,7 @@ abbrev EncodeTermRepPost.{u}
   B.CoversUsedVars E'.usedVars t ∧
   Nonempty (σ ~> α.toSMTType) ∧
   (Γ' ⊢ˢ t' : σ) ∧
+  EncodeTermResultShape t t' σ ∧
   (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars t → v ∉ Γ') ∧
   ∃ (Δ' : SMT.RenamingContext.Context.{u})
     (Δ'_covers : RenamingContext.CoversFV Δ' t'),

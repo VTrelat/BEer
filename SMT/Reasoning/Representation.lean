@@ -131,6 +131,17 @@ theorem castPath.source_eq_bool {σ : SMTType} (_c : σ ~> SMTType.bool) :
   cases _c
   rfl
 
+/-- A cast from a pair into an integer pair has integer components. -/
+theorem castPath.source_pair_eq_int {σ τ : SMTType}
+    (c : SMTType.pair σ τ ~>
+      SMTType.pair SMTType.int SMTType.int) :
+    σ = SMTType.int ∧ τ = SMTType.int := by
+  cases c with
+  | refl h =>
+      rcases h with h | h | h <;> cases h
+  | pair cx cy =>
+      exact ⟨castPath.source_eq_int cx, castPath.source_eq_int cy⟩
+
 /-- Representation-aware agreement between a B denotation and an SMT
 denotation. The SMT value is first cast to the canonical SMT representation
 of the B type and only then retracted. -/
@@ -247,6 +258,22 @@ theorem RDomCast.congr_right.{u}
   subst d₂'
   rfl
 
+/-- Pair casts act componentwise on well-typed pair values. -/
+theorem castZF_apply_pair_path.{u}
+    {σ τ σ' τ' : SMTType} (cx : σ ~> σ') (cy : τ ~> τ')
+    {X Y : ZFSet.{u}} (hX : X ∈ ⟦σ⟧ᶻ) (hY : Y ∈ ⟦τ⟧ᶻ) :
+    castZF_apply (castPath.pair cx cy) (X.pair Y) =
+      (castZF_apply cx X).pair (castZF_apply cy Y) := by
+  apply castZF_apply_eq_of_pair (castPath.pair cx cy)
+    (ZFSet.pair_mem_prod.mpr ⟨hX, hY⟩)
+  change (X.pair Y).pair
+      ((castZF_apply cx X).pair (castZF_apply cy Y)) ∈
+    (castZF_pair (castZF_of_path cx) (castZF_of_path cy)).1
+  rw [ZFSet.pair_mem_fprod]
+  refine ⟨X, Y, hX, hY, rfl, ?_⟩
+  unfold castZF_apply
+  rw [dif_pos hX, dif_pos hY]
+
 /-- Representation agreement is closed under pairing, using the component
 cast paths pointwise. -/
 theorem RDomCast.pair.{u}
@@ -264,21 +291,30 @@ theorem RDomCast.pair.{u}
   obtain ⟨cx, hcx⟩ := hx
   obtain ⟨cy, hcy⟩ := hy
   refine ⟨castPath.pair cx cy, ?_⟩
-  have hcast_pair :
-      castZF_apply (castPath.pair cx cy) (X'.pair Y') =
-        (castZF_apply cx X').pair (castZF_apply cy Y') := by
-    apply castZF_apply_eq_of_pair (castPath.pair cx cy)
-      (ZFSet.pair_mem_prod.mpr ⟨hX', hY'⟩)
-    change (X'.pair Y').pair
-        ((castZF_apply cx X').pair (castZF_apply cy Y')) ∈
-      (castZF_pair (castZF_of_path cx) (castZF_of_path cy)).1
-    rw [ZFSet.pair_mem_fprod]
-    refine ⟨X', Y', hX', hY', rfl, ?_⟩
-    unfold castZF_apply
-    rw [dif_pos hX', dif_pos hY']
-  rw [hcast_pair]
+  rw [castZF_apply_pair_path cx cy hX' hY']
   simp only [retract, ZFSet.π₁_pair, ZFSet.π₂_pair]
   rw [hcx, hcy]
+
+/-- A represented pair determines represented components. -/
+theorem RDomCast.of_pair.{u}
+    {X Y X' Y' : ZFSet.{u}} {α β : BType} {σ τ : SMTType}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦β⟧ᶻ}
+    {hX' : X' ∈ ⟦σ⟧ᶻ} {hY' : Y' ∈ ⟦τ⟧ᶻ}
+    (h : RDomCast
+      (⟨X.pair Y, α ×ᴮ β, ZFSet.pair_mem_prod.mpr ⟨hX, hY⟩⟩ : B.Dom)
+      (⟨X'.pair Y', SMTType.pair σ τ,
+        ZFSet.pair_mem_prod.mpr ⟨hX', hY'⟩⟩ : SMT.Dom)) :
+    RDomCast (⟨X, α, hX⟩ : B.Dom) (⟨X', σ, hX'⟩ : SMT.Dom) ∧
+      RDomCast (⟨Y, β, hY⟩ : B.Dom) (⟨Y', τ, hY'⟩ : SMT.Dom) := by
+  obtain ⟨c, hc⟩ := h
+  cases c with
+  | refl h =>
+      rcases h with h | h | h <;> cases h
+  | pair cx cy =>
+      rw [castZF_apply_pair_path cx cy hX' hY'] at hc
+      simp only [retract, ZFSet.π₁_pair, ZFSet.π₂_pair,
+        ZFSet.pair_inj] at hc
+      exact ⟨⟨cx, hc.1⟩, ⟨cy, hc.2⟩⟩
 
 /-! ## Option functions and functional graphs -/
 

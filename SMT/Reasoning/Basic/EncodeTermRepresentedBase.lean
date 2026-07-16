@@ -123,6 +123,7 @@ theorem encodeTerm_rep_spec.var_case.{u}
           simpa [St_used_eq] using St_sub hv_in_types
         · exact ⟨c⟩
         · exact SMT.Typing.var St.types v σ τ_lookup
+        · simp [EncodeTermResultShape]
         · exact fun _ _ h _ => h
         · refine ⟨Δ₀, ?_, ?_, related, ?_, respects, Δ₀_dom, ?_⟩
           · intro w hw
@@ -220,6 +221,7 @@ theorem encodeTerm_rep_spec.int_case.{u}
     simp [B.fv] at hw
   · exact ⟨castPath.reflexive SMTType.int⟩
   · exact SMT.Typing.int _ _
+  · simp [EncodeTermResultShape]
   · exact fun _ _ h _ => h
   · refine ⟨Δ₀, ?_, RenamingContext.extends_refl Δ₀, related,
       ?_, respects, Δ₀_dom, ?_⟩
@@ -299,6 +301,7 @@ theorem encodeTerm_rep_spec.bool_case.{u}
     simp [B.fv] at hw
   · exact ⟨castPath.reflexive SMTType.bool⟩
   · exact SMT.Typing.bool _ _
+  · simp [EncodeTermResultShape]
   · exact fun _ _ h _ => h
   · refine ⟨Δ₀, ?_, RenamingContext.extends_refl Δ₀, related,
       ?_, respects, Δ₀_dom, ?_⟩
