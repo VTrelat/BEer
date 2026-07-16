@@ -79,6 +79,31 @@ theorem RDomCast.functionalGraph_as_optionFunction.{u}
       (graphCollapse α.toSMTType β.toSMTType Y)) = X
   rw [optionGraph_graphCollapse α.toSMTType β.toSMTType Y hY hfun, hret]
 
+/-- The option-function witness also carries the preimage condition needed if
+the relation is later used as a quantifier domain. -/
+theorem RDomCastAdmissible.functionalGraph_as_optionFunction.{u}
+    (α β : BType) {X Y : ZFSet.{u}}
+    (hX : X ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ)
+    (hY : Y ∈
+      ⟦SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool⟧ᶻ)
+    (hfun : (predGraph α.toSMTType β.toSMTType Y).IsPFunc
+      ⟦α.toSMTType⟧ᶻ ⟦β.toSMTType⟧ᶻ)
+    (hret : retract (BType.set (α ×ᴮ β)) Y = X) :
+    RDomCastAdmissible
+      (⟨X, BType.set (α ×ᴮ β), hX⟩ : B.Dom)
+      (⟨graphCollapse α.toSMTType β.toSMTType Y,
+        SMTType.fun α.toSMTType (SMTType.option β.toSMTType),
+        graphCollapse_mem α.toSMTType β.toSMTType Y⟩ : SMT.Dom) := by
+  refine ⟨castPath.graph (castPath.reflexive α.toSMTType)
+    (castPath.reflexive β.toSMTType), ?_, ?_⟩
+  · change retract (BType.set (α ×ᴮ β))
+      (optionGraph α.toSMTType β.toSMTType
+        (graphCollapse α.toSMTType β.toSMTType Y)) = X
+    rw [optionGraph_graphCollapse α.toSMTType β.toSMTType Y hY hfun,
+      hret]
+  · exact ⟨castPath.reflexive (α ×ᴮ β).toSMTType,
+      BinderCastAdmissible.reflexive (α ×ᴮ β) hX⟩
+
 /-- Concrete Gate A witness: a free relation variable and its option-function
 SMT declaration satisfy the representation-aware valuation relation. -/
 theorem RValuationCastOnFV.var_optionFunction.{u}
@@ -103,13 +128,37 @@ theorem RValuationCastOnFV.var_optionFunction.{u}
   rw [hΔ, hΔ₀]
   exact RDomCast.functionalGraph_as_optionFunction α β hX hY hfun hret
 
+/-- Binder-admissible form of the concrete Gate A valuation witness. -/
+theorem RValuationCastAdmissibleOnFV.var_optionFunction.{u}
+    (v : B.𝒱) (α β : BType) {X Y : ZFSet.{u}}
+    (hX : X ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ)
+    (hY : Y ∈
+      ⟦SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool⟧ᶻ)
+    (hfun : (predGraph α.toSMTType β.toSMTType Y).IsPFunc
+      ⟦α.toSMTType⟧ᶻ ⟦β.toSMTType⟧ᶻ)
+    (hret : retract (BType.set (α ×ᴮ β)) Y = X)
+    {«Δ» : B.RenamingContext.Context}
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (hΔ : «Δ» v = some (⟨X, BType.set (α ×ᴮ β), hX⟩ : B.Dom))
+    (hΔ₀ : Δ₀ v = some
+      (⟨graphCollapse α.toSMTType β.toSMTType Y,
+        SMTType.fun α.toSMTType (SMTType.option β.toSMTType),
+        graphCollapse_mem α.toSMTType β.toSMTType Y⟩ : SMT.Dom)) :
+    RValuationCastAdmissibleOnFV «Δ» Δ₀ (B.Term.var v) := by
+  intro w hw
+  rw [B.fv, List.mem_singleton] at hw
+  subst w
+  rw [hΔ, hΔ₀]
+  exact RDomCastAdmissible.functionalGraph_as_optionFunction
+    α β hX hY hfun hret
+
 theorem encodeTerm_rep_spec.var_case.{u}
     (v : B.𝒱) (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
     (_typ_t : E.context ⊢ᴮ B.Term.var v : α)
     {«Δ» : B.RenamingContext.Context}
     (Δ_fv : ∀ w ∈ B.fv (B.Term.var v), («Δ» w).isSome = true)
     {Δ₀ : SMT.RenamingContext.Context.{u}}
-    (related : RValuationCastOnFV «Δ» Δ₀ (B.Term.var v))
+    (related : RValuationCastAdmissibleOnFV «Δ» Δ₀ (B.Term.var v))
     {used : List SMT.𝒱}
     (Δ₀_none_out : ∀ w ∉ used, Δ₀ w = none)
     (Δ₀_dom : ∀ w, Δ₀ w ≠ none → w ∈ Λ)
@@ -150,7 +199,7 @@ theorem encodeTerm_rep_spec.var_case.{u}
     | none =>
         simp [hΔ₀_v] at hrel_v
     | some d =>
-        have hR : RDomCast (⟨T, α, hT⟩ : B.Dom) d := by
+        have hR : RDomCastAdmissible (⟨T, α, hT⟩ : B.Dom) d := by
           simpa [hΔ₀_v] using hrel_v
         obtain ⟨dτ, hdτ, hdτ_ty⟩ := respects hv_fv τ_lookup
         have hd_eq : d = dτ := Option.some.inj (hΔ₀_v.symm.trans hdτ)
@@ -158,7 +207,7 @@ theorem encodeTerm_rep_spec.var_case.{u}
         rcases d with ⟨Y, σ, hY⟩
         dsimp at hdτ_ty
         subst τ
-        obtain ⟨c, hc⟩ := hR
+        obtain ⟨c, hc⟩ := hR.toRDomCast
         and_intros
         · intro x hx
           simpa [St_used_eq] using hx
@@ -191,7 +240,7 @@ theorem encodeTerm_rep_spec.var_case.{u}
             rw [SMT.fv, List.mem_singleton] at hw
             subst w
             exact respects hv_fv hlookup
-          · refine ⟨⟨Y, σ, hY⟩, ?_, rfl, ⟨c, hc⟩, ?_⟩
+          · refine ⟨⟨Y, σ, hY⟩, ?_, rfl, hR, ?_⟩
             · simp [SMT.Term.abstract, SMT.denote, hΔ₀_v]
             · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
                 Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -208,7 +257,8 @@ theorem encodeTerm_rep_spec.var_case.{u}
                   simp [hΔ₀_alt_v] at hrel_alt
               | some d_alt =>
                   have hR_alt :
-                      RDomCast (⟨T_alt, α, hT_alt⟩ : B.Dom) d_alt := by
+                      RDomCastAdmissible
+                        (⟨T_alt, α, hT_alt⟩ : B.Dom) d_alt := by
                     simpa [hΔ₀_alt_v] using hrel_alt
                   refine ⟨Δ₀_alt, ?_, d_alt,
                     RenamingContext.extends_refl Δ₀_alt, related_alt,
@@ -236,7 +286,7 @@ theorem encodeTerm_rep_spec.int_case.{u}
     {«Δ» : B.RenamingContext.Context}
     (Δ_fv : ∀ w ∈ B.fv (B.Term.int i), («Δ» w).isSome = true)
     {Δ₀ : SMT.RenamingContext.Context.{u}}
-    (related : RValuationCastOnFV «Δ» Δ₀ (B.Term.int i))
+    (related : RValuationCastAdmissibleOnFV «Δ» Δ₀ (B.Term.int i))
     {used : List SMT.𝒱}
     (Δ₀_none_out : ∀ w ∉ used, Δ₀ w = none)
     (Δ₀_dom : ∀ w, Δ₀ w ≠ none → w ∈ Λ)
@@ -296,7 +346,7 @@ theorem encodeTerm_rep_spec.int_case.{u}
       simp [SMT.fv] at hw
     · refine ⟨⟨ZFSet.ofInt i, SMTType.int, hT⟩, ?_, rfl, ?_, ?_⟩
       · simp [SMT.Term.abstract, SMT.denote]
-      · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
+      · exact RDom.toRDomCastAdmissible ⟨rfl, by simp [retract]⟩
       · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
           Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
         rw [B.Term.abstract, B.denote, Option.pure_def,
@@ -312,7 +362,7 @@ theorem encodeTerm_rep_spec.int_case.{u}
         · intro w τ hw
           simp [SMT.fv] at hw
         · simp [SMT.Term.abstract, SMT.denote]
-        · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
+        · exact RDom.toRDomCastAdmissible ⟨rfl, by simp [retract]⟩
 
 theorem encodeTerm_rep_spec.bool_case.{u}
     (b : Bool) (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
@@ -320,7 +370,7 @@ theorem encodeTerm_rep_spec.bool_case.{u}
     {«Δ» : B.RenamingContext.Context}
     (Δ_fv : ∀ w ∈ B.fv (B.Term.bool b), («Δ» w).isSome = true)
     {Δ₀ : SMT.RenamingContext.Context.{u}}
-    (related : RValuationCastOnFV «Δ» Δ₀ (B.Term.bool b))
+    (related : RValuationCastAdmissibleOnFV «Δ» Δ₀ (B.Term.bool b))
     {used : List SMT.𝒱}
     (Δ₀_none_out : ∀ w ∉ used, Δ₀ w = none)
     (Δ₀_dom : ∀ w, Δ₀ w ≠ none → w ∈ Λ)
@@ -380,7 +430,7 @@ theorem encodeTerm_rep_spec.bool_case.{u}
       simp [SMT.fv] at hw
     · refine ⟨⟨ZFBool.ofBool b, SMTType.bool, hT⟩, ?_, rfl, ?_, ?_⟩
       · simp [SMT.Term.abstract, SMT.denote]
-      · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
+      · exact RDom.toRDomCastAdmissible ⟨rfl, by simp [retract]⟩
       · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
           Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
         rw [B.Term.abstract, B.denote, Option.pure_def,
@@ -396,7 +446,7 @@ theorem encodeTerm_rep_spec.bool_case.{u}
         · intro w τ hw
           simp [SMT.fv] at hw
         · simp [SMT.Term.abstract, SMT.denote]
-        · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
+        · exact RDom.toRDomCastAdmissible ⟨rfl, by simp [retract]⟩
 
 set_option maxHeartbeats 1200000 in
 theorem encodeTerm_rep_spec.ℤ_case.{u}
@@ -405,7 +455,7 @@ theorem encodeTerm_rep_spec.ℤ_case.{u}
     {«Δ» : B.RenamingContext.Context}
     (Δ_fv : ∀ v ∈ B.fv B.Term.ℤ, («Δ» v).isSome = true)
     {Δ₀ : SMT.RenamingContext.Context.{u}}
-    (related : RValuationCastOnFV «Δ» Δ₀ B.Term.ℤ)
+    (related : RValuationCastAdmissibleOnFV «Δ» Δ₀ B.Term.ℤ)
     {used : List SMT.𝒱}
     (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
     (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
@@ -482,7 +532,7 @@ theorem encodeTerm_rep_spec.ℤ_case.{u}
   · exact preserves
   · refine ⟨Δ₀, hcov₀, RenamingContext.extends_refl Δ₀,
       related, ?_, ?_, ?_, ?_, denOld, hden₀.trans hden_old,
-      den_type, RDom.toRDomCast old_rel, ?_⟩
+      den_type, RDom.toRDomCastAdmissible old_rel, ?_⟩
     · intro v hv
       apply Δ₀_none_out v
       intro hused
@@ -523,7 +573,8 @@ theorem encodeTerm_rep_spec.ℤ_case.{u}
         contradiction
       · exact fun v hv =>
           AList.mem_of_subset types_sub (Δ₀_alt_dom v hv)
-      · simpa only [proof_irrel_heq] using RDom.toRDomCast old_rel
+      · simpa only [proof_irrel_heq] using
+          RDom.toRDomCastAdmissible old_rel
 
 set_option maxHeartbeats 1200000 in
 theorem encodeTerm_rep_spec.𝔹_case.{u}
@@ -532,7 +583,7 @@ theorem encodeTerm_rep_spec.𝔹_case.{u}
     {«Δ» : B.RenamingContext.Context}
     (Δ_fv : ∀ v ∈ B.fv B.Term.𝔹, («Δ» v).isSome = true)
     {Δ₀ : SMT.RenamingContext.Context.{u}}
-    (related : RValuationCastOnFV «Δ» Δ₀ B.Term.𝔹)
+    (related : RValuationCastAdmissibleOnFV «Δ» Δ₀ B.Term.𝔹)
     {used : List SMT.𝒱}
     (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
     (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
@@ -609,7 +660,7 @@ theorem encodeTerm_rep_spec.𝔹_case.{u}
   · exact preserves
   · refine ⟨Δ₀, hcov₀, RenamingContext.extends_refl Δ₀,
       related, ?_, ?_, ?_, ?_, denOld, hden₀.trans hden_old,
-      den_type, RDom.toRDomCast old_rel, ?_⟩
+      den_type, RDom.toRDomCastAdmissible old_rel, ?_⟩
     · intro v hv
       apply Δ₀_none_out v
       intro hused
@@ -650,4 +701,5 @@ theorem encodeTerm_rep_spec.𝔹_case.{u}
         contradiction
       · exact fun v hv =>
           AList.mem_of_subset types_sub (Δ₀_alt_dom v hv)
-      · simpa only [proof_irrel_heq] using RDom.toRDomCast old_rel
+      · simpa only [proof_irrel_heq] using
+          RDom.toRDomCastAdmissible old_rel

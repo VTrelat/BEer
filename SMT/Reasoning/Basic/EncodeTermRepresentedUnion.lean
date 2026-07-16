@@ -57,7 +57,7 @@ theorem castUnion_graph_denotation.{u}
       ⟦(SMT.Term.lambda [z] [SMTType.pair α.toSMTType β.toSMTType]
         (.or (.app (.var S!) (.var z)) (.app T (.var z)))).abstract
           «Δ» hcov⟧ˢ = some denU ∧
-      RDomCast
+      RDomCastAdmissible
         (⟨F ∪ G, BType.set (α ×ᴮ β), relation_union_mem hF hG⟩ : B.Dom)
         denU := by
   rcases denS with ⟨Sval, σS, hSval⟩
@@ -94,9 +94,13 @@ theorem castUnion_graph_denotation.{u}
       SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool,
       hUval⟩, hdenU, ?_⟩
   refine ⟨castPath.reflexive
-    (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool), ?_⟩
-  rw [castZF_apply_reflexive _ hUval, hU_retract', hS!_retract,
-    hG_retract]
+    (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool),
+    ?_, ?_⟩
+  · rw [castZF_apply_reflexive _ hUval, hU_retract', hS!_retract,
+      hG_retract]
+  · exact ⟨castPath.reflexive (α ×ᴮ β).toSMTType,
+      BinderCastAdmissible.reflexive (α ×ᴮ β)
+        (relation_union_mem hF hG)⟩
 
 /- Gate B: the real heterogeneous `castUnion` branch, including
 `loosenAux_prf`, declaration and assertion of the helper graph, and the
@@ -146,7 +150,7 @@ theorem castUnion_graph_rep_spec.{u}
           (∀ v ∉ E'.usedVars, Δ' v = none) ∧
           ∃ denU : SMT.Dom.{u},
             ⟦t.abstract Δ' hcov⟧ˢ = some denU ∧
-            RDomCast
+            RDomCastAdmissible
               (⟨F ∪ G, BType.set (α ×ᴮ β), relation_union_mem hF hG⟩ :
                 B.Dom)
               denU⌝ ⦄ := by

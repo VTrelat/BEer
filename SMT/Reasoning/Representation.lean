@@ -362,6 +362,35 @@ theorem RDom.toRDomCast.{u} {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
   refine ⟨castPath.reflexive α.toSMTType, ?_⟩
   rwa [castZF_apply_reflexive α.toSMTType hY]
 
+/-- Canonical agreement also supplies the binder-preimage invariant for set
+values. -/
+theorem RDom.toRDomCastAdmissible.{u}
+    {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
+    (h : RDom d d') : RDomCastAdmissible d d' := by
+  rcases d with ⟨X, α, hX⟩
+  rcases d' with ⟨Y, σ, hY⟩
+  rw [RDom] at h
+  obtain ⟨rfl, hret⟩ := h
+  cases α with
+  | int =>
+      exact RDom.toRDomCast
+        (d := (⟨X, BType.int, hX⟩ : B.Dom))
+        (d' := (⟨Y, SMTType.int, hY⟩ : SMT.Dom)) ⟨rfl, hret⟩
+  | bool =>
+      exact RDom.toRDomCast
+        (d := (⟨X, BType.bool, hX⟩ : B.Dom))
+        (d' := (⟨Y, SMTType.bool, hY⟩ : SMT.Dom)) ⟨rfl, hret⟩
+  | prod α β =>
+      exact RDom.toRDomCast
+        (d := (⟨X, α ×ᴮ β, hX⟩ : B.Dom))
+        (d' := (⟨Y, (α ×ᴮ β).toSMTType, hY⟩ : SMT.Dom))
+        ⟨rfl, hret⟩
+  | set τ =>
+      refine ⟨castPath.reflexive (BType.set τ).toSMTType, ?_, ?_⟩
+      · rwa [castZF_apply_reflexive (BType.set τ).toSMTType hY]
+      · exact ⟨castPath.reflexive τ.toSMTType,
+          BinderCastAdmissible.reflexive τ hX⟩
+
 /-- Direct canonical representatives also satisfy representation-aware
 agreement via the reflexive cast. -/
 theorem B.Dom.rdomCast_canonicalSMT.{u} (d : B.Dom.{u}) :
@@ -681,6 +710,15 @@ def RValuationCast (Ξ : B.𝒱 → Option B.Dom)
   | some d, some d' => RDomCast d d'
   | _, _ => False
 
+/-- Pointwise cast agreement carrying the binder-preimage invariant for every
+set-valued source assignment. -/
+def RValuationCastAdmissible (Ξ : B.𝒱 → Option B.Dom)
+    (Θ : SMT.𝒱 → Option SMT.Dom) : Prop := ∀ v,
+  match Ξ v, Θ v with
+  | none, none => True
+  | some d, some d' => RDomCastAdmissible d d'
+  | _, _ => False
+
 /-- Representation-aware agreement restricted to the source free variables
 of a term. -/
 abbrev RValuationCastOnFV (Ξ : B.𝒱 → Option B.Dom)
@@ -689,6 +727,58 @@ abbrev RValuationCastOnFV (Ξ : B.𝒱 → Option B.Dom)
     match Ξ v, Θ v with
     | some d, some d' => RDomCast d d'
     | _, _ => False
+
+/-- Binder-admissible representation agreement restricted to source free
+variables. -/
+abbrev RValuationCastAdmissibleOnFV
+    (Ξ : B.𝒱 → Option B.Dom)
+    (Θ : SMT.𝒱 → Option SMT.Dom) (t : B.Term) : Prop :=
+  ∀ v ∈ B.fv t,
+    match Ξ v, Θ v with
+    | some d, some d' => RDomCastAdmissible d d'
+    | _, _ => False
+
+theorem RValuationCastAdmissibleOnFV.toRValuationCastOnFV
+    {Ξ : B.𝒱 → Option B.Dom} {Θ : SMT.𝒱 → Option SMT.Dom}
+    {t : B.Term} (h : RValuationCastAdmissibleOnFV Ξ Θ t) :
+    RValuationCastOnFV Ξ Θ t := by
+  intro v hv
+  have hrel := h v hv
+  cases hΞ : Ξ v with
+  | none =>
+      cases hΘ : Θ v <;> simp [hΞ, hΘ] at hrel
+  | some d =>
+      cases hΘ : Θ v with
+      | none => simp [hΞ, hΘ] at hrel
+      | some d' =>
+          rw [hΞ, hΘ] at hrel
+          simpa using hrel.toRDomCast
+
+theorem RValuationCastAdmissibleOnFV.mono_fv
+    {Ξ : B.𝒱 → Option B.Dom} {Θ : SMT.𝒱 → Option SMT.Dom}
+    {s t : B.Term} (h : RValuationCastAdmissibleOnFV Ξ Θ t)
+    (hfv : B.fv s ⊆ B.fv t) :
+    RValuationCastAdmissibleOnFV Ξ Θ s :=
+  fun v hv => h v (hfv hv)
+
+theorem RValuationCastAdmissibleOnFV.of_extends.{u}
+    {Ξ : B.𝒱 → Option B.Dom.{u}}
+    {Θ Θ' : SMT.𝒱 → Option SMT.Dom.{u}} {t : B.Term}
+    (h : RValuationCastAdmissibleOnFV Ξ Θ t)
+    (hext : SMT.RenamingContext.Extends Θ' Θ) :
+    RValuationCastAdmissibleOnFV Ξ Θ' t := by
+  intro v hv
+  have hv_rel := h v hv
+  cases hΞ : Ξ v with
+  | none =>
+      cases hΘ : Θ v <;> simp [hΞ, hΘ] at hv_rel
+  | some d =>
+      cases hΘ : Θ v with
+      | none => simp [hΞ, hΘ] at hv_rel
+      | some d' =>
+          rw [hΞ, hΘ] at hv_rel
+          have hΘ' : Θ' v = some d' := hext hΘ
+          simpa [hΞ, hΘ']
 
 /-- Restrict representation-aware valuation agreement to a smaller
 free-variable set. -/
@@ -801,3 +891,24 @@ theorem RValuationCast_toSMT.{u} (Ξ : B.𝒱 → Option B.Dom.{u}) :
       | some d' =>
           rw [hΞ, hΘ] at hcanonical
           exact RDom.toRDomCast hcanonical
+
+/-- The canonical SMT valuation is binder-admissibly related to the source
+valuation on every variable. -/
+theorem RValuationCastAdmissible_toSMT.{u}
+    (Ξ : B.𝒱 → Option B.Dom.{u}) :
+    RValuationCastAdmissible Ξ (B.RenamingContext.toSMT Ξ) := by
+  intro v
+  have hcanonical := RValuation_toSMT Ξ v
+  cases hΞ : Ξ v with
+  | none =>
+      rw [B.RenamingContext.toSMT, Option.pure_def, Option.bind_eq_bind,
+        hΞ, Option.bind_none]
+      trivial
+  | some d =>
+      cases hΘ : B.RenamingContext.toSMT Ξ v with
+      | none =>
+          have : False := by simpa [hΞ, hΘ] using hcanonical
+          exact this.elim
+      | some d' =>
+          rw [hΞ, hΘ] at hcanonical
+          exact RDom.toRDomCastAdmissible hcanonical

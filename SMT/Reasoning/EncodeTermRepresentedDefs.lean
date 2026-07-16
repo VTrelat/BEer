@@ -31,7 +31,7 @@ abbrev EncodeTermRepTotal.{u}
   ∀ (Δ_alt : B.RenamingContext.Context)
     (Δ_fv_alt : ∀ v ∈ B.fv t, (Δ_alt v).isSome = true)
     (Δ₀_alt : SMT.RenamingContext.Context.{u}),
-    RValuationCastOnFV Δ_alt Δ₀_alt t →
+    RValuationCastAdmissibleOnFV Δ_alt Δ₀_alt t →
     B.RenWF E.context Δ_alt →
     (∀ v ∉ used', Δ₀_alt v = none) →
     B.RenamingContext.RespectsTypeContextOnFV Δ₀_alt Λ t →
@@ -43,14 +43,14 @@ abbrev EncodeTermRepTotal.{u}
         (hcov_alt : RenamingContext.CoversFV Δ'_alt t')
         (denT_alt : SMT.Dom.{u}),
         RenamingContext.Extends Δ'_alt Δ₀_alt ∧
-        RValuationCastOnFV Δ_alt Δ'_alt t ∧
+        RValuationCastAdmissibleOnFV Δ_alt Δ'_alt t ∧
         (∀ v ∉ used', Δ'_alt v = none) ∧
         B.RenamingContext.RespectsTypeContextOnFV Δ'_alt Γ' t ∧
         SMT.RenamingContext.RespectsTypeContextOnFV Δ'_alt Γ' t' ∧
         (∀ v, Δ'_alt v ≠ none → v ∈ Γ') ∧
         ⟦t'.abstract Δ'_alt hcov_alt⟧ˢ = some denT_alt ∧
         denT_alt.snd.fst = σ ∧
-        RDomCast (⟨T_alt, α, hT_alt⟩ : B.Dom) denT_alt
+        RDomCastAdmissible (⟨T_alt, α, hT_alt⟩ : B.Dom) denT_alt
 
 /-- Representation-aware postcondition for one successful `encodeTerm` run. -/
 abbrev EncodeTermRepPost.{u}
@@ -71,7 +71,7 @@ abbrev EncodeTermRepPost.{u}
   ∃ (Δ' : SMT.RenamingContext.Context.{u})
     (Δ'_covers : RenamingContext.CoversFV Δ' t'),
     RenamingContext.Extends Δ' Δ₀ ∧
-    RValuationCastOnFV «Δ» Δ' t ∧
+    RValuationCastAdmissibleOnFV «Δ» Δ' t ∧
     (∀ v ∉ E'.usedVars, Δ' v = none) ∧
     B.RenamingContext.RespectsTypeContextOnFV Δ' Γ' t ∧
     SMT.RenamingContext.RespectsTypeContextOnFV Δ' Γ' t' ∧
@@ -79,7 +79,7 @@ abbrev EncodeTermRepPost.{u}
     ∃ denT' : SMT.Dom.{u},
       ⟦t'.abstract Δ' Δ'_covers⟧ˢ = some denT' ∧
       denT'.snd.fst = σ ∧
-      RDomCast (⟨T, α, hT⟩ : B.Dom) denT' ∧
+      RDomCastAdmissible (⟨T, α, hT⟩ : B.Dom) denT' ∧
       EncodeTermRepTotal.{u} t E α Λ t' σ Γ' E'.usedVars
 
 /-- Induction-hypothesis shape shared by the representation-aware constructor
@@ -90,7 +90,7 @@ abbrev EncodeTermRepIH.{u} (t : B.Term) : Prop :=
     ∀ {«Δ» : B.RenamingContext.Context},
       (Δ_fv : ∀ v ∈ B.fv t, («Δ» v).isSome = true) →
     ∀ {Δ₀ : SMT.RenamingContext.Context.{u}},
-      RValuationCastOnFV «Δ» Δ₀ t →
+      RValuationCastAdmissibleOnFV «Δ» Δ₀ t →
     ∀ {used : List SMT.𝒱},
       (∀ v ∉ used, Δ₀ v = none) →
       (∀ v, Δ₀ v ≠ none → v ∈ Λ) →
@@ -121,3 +121,11 @@ theorem RDomCast.nonempty_path_of_type_eq.{u}
   subst τ
   obtain ⟨c, _⟩ := hrel
   exact ⟨c⟩
+
+theorem RDomCastAdmissible.nonempty_path_of_type_eq.{u}
+    {X Y : ZFSet.{u}} {α : BType} {σ τ : SMTType}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦σ⟧ᶻ}
+    (hrel : RDomCastAdmissible (⟨X, α, hX⟩ : B.Dom)
+      (⟨Y, σ, hY⟩ : SMT.Dom))
+    (hσ : σ = τ) : Nonempty (τ ~> α.toSMTType) :=
+  RDomCast.nonempty_path_of_type_eq hrel.toRDomCast hσ
