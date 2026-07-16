@@ -14,12 +14,229 @@ theorem relation_union_mem.{u} {α β : BType} {F G : ZFSet.{u}}
   rw [ZFSet.mem_union] at hx
   exact hx.elim (fun hxF => hF hxF) (fun hxG => hG hxG)
 
+theorem set_union_mem.{u} {τ : BType} {F G : ZFSet.{u}}
+    (hF : F ∈ ⟦BType.set τ⟧ᶻ)
+    (hG : G ∈ ⟦BType.set τ⟧ᶻ) :
+    F ∪ G ∈ ⟦BType.set τ⟧ᶻ := by
+  rw [BType.toZFSet, ZFSet.mem_powerset] at hF hG ⊢
+  intro x hx
+  rw [ZFSet.mem_union] at hx
+  exact hx.elim (fun hxF => hF hxF) (fun hxG => hG hxG)
+
 private theorem erase_insert_self_rep_union {a : SMT.𝒱} {τ : SMTType}
     {s : SMT.TypeContext} (ha : a ∉ s) : (s.insert a τ).erase a = s := by
   apply AList.ext
   show List.kerase a (AList.insert a τ s).entries = s.entries
   rw [AList.entries_insert_of_notMem ha]
   exact List.kerase_cons_eq rfl
+
+/- The direct characteristic-predicate branch is Δ-universal.  This is the
+contract used by the full union constructor both for its current denotation
+and for the alternative-valuation totality clause. -/
+set_option maxHeartbeats 1600000 in
+@[spec]
+theorem castUnion_direct_rep_spec.{u}
+    (τ : BType) {S T : SMT.Term}
+    {Λ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱}
+    (typ_S : Λ ⊢ˢ S : SMTType.fun τ.toSMTType SMTType.bool)
+    (typ_T : Λ ⊢ˢ T : SMTType.fun τ.toSMTType SMTType.bool)
+    (bv_S_used : ∀ v ∈ SMT.bv S, v ∈ used)
+    (bv_T_used : ∀ v ∈ SMT.bv T, v ∈ used) :
+    ⦃ fun ⟨E, Λ'⟩ =>
+      ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ Λ.keys ⊆ E.usedVars ∧
+        E.usedVars = used⌝ ⦄
+    castUnion
+      ⟨S, SMTType.fun τ.toSMTType SMTType.bool⟩
+      ⟨T, SMTType.fun τ.toSMTType SMTType.bool⟩
+    ⦃ ⇓? ⟨t, σ⟩ ⟨E', Γ'⟩ =>
+      ⌜used ⊆ E'.usedVars ∧
+        Λ ⊆ Γ' ∧
+        Γ'.keys ⊆ E'.usedVars ∧
+        σ = SMTType.fun τ.toSMTType SMTType.bool ∧
+        Γ' ⊢ˢ t : SMTType.fun τ.toSMTType SMTType.bool ∧
+        (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ∧
+        ∀ (Θ : SMT.RenamingContext.Context.{u})
+          (hS : RenamingContext.CoversFV Θ S)
+          (hT : RenamingContext.CoversFV Θ T),
+          (∀ v ∉ used, Θ v = none) →
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ S →
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ T →
+          (∀ v, Θ v ≠ none → v ∈ Λ) →
+          ∀ (F G : ZFSet.{u})
+            (hF : F ∈ ⟦BType.set τ⟧ᶻ)
+            (hG : G ∈ ⟦BType.set τ⟧ᶻ)
+            (denS denT : SMT.Dom.{u}),
+            ⟦S.abstract Θ hS⟧ˢ = some denS →
+            ⟦T.abstract Θ hT⟧ˢ = some denT →
+            RDomCastAdmissible
+              (⟨F, BType.set τ, hF⟩ : B.Dom) denS →
+            RDomCastAdmissible
+              (⟨G, BType.set τ, hG⟩ : B.Dom) denT →
+            ∃ (Θ' : SMT.RenamingContext.Context.{u})
+              (hcov : RenamingContext.CoversFV Θ' t)
+              (denU : SMT.Dom.{u}),
+              RenamingContext.Extends Θ' Θ ∧
+              (∀ v ∉ E'.usedVars, Θ' v = none) ∧
+              SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γ' t ∧
+              (∀ v, Θ' v ≠ none → v ∈ Γ') ∧
+              ⟦t.abstract Θ' hcov⟧ˢ = some denU ∧
+              denU.snd.fst = σ ∧
+              RDomCastAdmissible
+                (⟨F ∪ G, BType.set τ, set_union_mem hF hG⟩ : B.Dom)
+                denU⌝ ⦄ := by
+  have hcastUnion :
+      castUnion
+        (S, SMTType.fun τ.toSMTType SMTType.bool)
+        (T, SMTType.fun τ.toSMTType SMTType.bool) = do
+        let z ← SMT.freshVar τ.toSMTType "union!"
+        SMT.eraseFromContext z
+        return (.lambda [z] [τ.toSMTType]
+          (.or (.app S (.var z)) (.app T (.var z))),
+          SMTType.fun τ.toSMTType SMTType.bool) := by
+    unfold castUnion
+    simp
+  rw [hcastUnion]
+  mintro pre ∀St₀
+  mpure pre
+  obtain ⟨rfl, rfl, St₀_sub, rfl⟩ := pre
+  mspec SMT.freshVar_spec
+  next z =>
+    mrename_i pre
+    mintro ∀St₁
+    mpure pre
+    obtain ⟨St₁_types_eq, z_fresh, St₁_fvc, St₁_used_eq,
+      z_not_used⟩ := pre
+    mspec SMT.eraseFromContext_spec
+    mrename_i preE
+    mintro ∀StE
+    mpure preE
+    obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := preE
+    have StE_types_eq' : StE.types = St₀.types := by
+      rw [StE_types_eq, St₁_types_eq,
+        erase_insert_self_rep_union z_fresh]
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    and_intros
+    · rw [StE_used_eq, St₁_used_eq]
+      exact List.subset_cons_of_subset z fun _ => id
+    · rw [StE_types_eq']
+    · intro v hv
+      rw [StE_types_eq'] at hv
+      rw [StE_used_eq, St₁_used_eq]
+      exact List.mem_cons_of_mem z (St₀_sub hv)
+    · trivial
+    · rw [StE_types_eq']
+      have z_not_bv_S : z ∉ SMT.bv S :=
+        fun hz => z_not_used (bv_S_used z hz)
+      have z_not_bv_T : z ∉ SMT.bv T :=
+        fun hz => z_not_used (bv_T_used z hz)
+      refine SMT.Typing.lambda St₀.types [z] [τ.toSMTType]
+        _ SMTType.bool ?_ ?_ (by simp) rfl ?_
+      · intro v hv
+        rw [List.mem_singleton] at hv
+        simpa [hv] using z_fresh
+      · intro v hv
+        rw [List.mem_singleton] at hv
+        subst v
+        simp only [SMT.bv, List.append_nil, List.mem_append]
+        push_neg
+        exact ⟨z_not_bv_S, z_not_bv_T⟩
+      · have hupdate :
+            TypeContext.update St₀.types [z] [τ.toSMTType] rfl =
+              St₀.types.insert z τ.toSMTType := by
+          simp only [TypeContext.update, List.length_cons, List.length_nil,
+            zero_add, Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin,
+            Fin.val_eq_zero, List.getElem_cons_zero, Fin.foldl_succ,
+            Fin.foldl_zero]
+        rw [hupdate]
+        apply SMT.Typing.or
+        · apply SMT.Typing.app
+          · exact SMT.Typing.weakening
+              (TypeContext.entries_subset_insert_of_notMem z_fresh)
+              typ_S
+              (SMT.Typing.bv_notMem_insert_of_fresh typ_S z_not_bv_S)
+          · exact SMT.Typing.var _ z _ (AList.lookup_insert St₀.types)
+        · apply SMT.Typing.app
+          · exact SMT.Typing.weakening
+              (TypeContext.entries_subset_insert_of_notMem z_fresh)
+              typ_T
+              (SMT.Typing.bv_notMem_insert_of_fresh typ_T z_not_bv_T)
+          · exact SMT.Typing.var _ z _ (AList.lookup_insert St₀.types)
+    · intro v hv hv_not
+      rw [StE_types_eq']
+      exact hv_not
+    · intro Θ hS hT Θ_none respects_S respects_T Θ_dom
+        F G hF hG denS denT hdenS hdenT F_rel G_rel
+      have z_not_fv_S : z ∉ SMT.fv S :=
+        funNotMemFvOfNotMemContext typ_S z_fresh
+      have z_not_fv_T : z ∉ SMT.fv T :=
+        funNotMemFvOfNotMemContext typ_T z_fresh
+      have hcov_out : RenamingContext.CoversFV Θ
+          (.lambda [z] [τ.toSMTType]
+            (.or (.app S (.var z)) (.app T (.var z)))) := by
+        intro v hv
+        simp only [SMT.fv, List.removeAll, List.mem_filter,
+          List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+        obtain ⟨hv_body, hv_ne_z⟩ := hv
+        simp only [List.elem_eq_contains, List.contains_eq_mem,
+          List.mem_cons, List.not_mem_nil, or_false, Bool.not_eq_true',
+          decide_eq_false_iff_not] at hv_ne_z
+        rcases hv_body with ((hv_S | rfl) | (hv_T | rfl))
+        · exact hS v hv_S
+        · exact absurd rfl hv_ne_z
+        · exact hT v hv_T
+        · exact absurd rfl hv_ne_z
+      have target_respects_out :
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ StE.types
+            (.lambda [z] [τ.toSMTType]
+              (.or (.app S (.var z)) (.app T (.var z)))) := by
+        rw [StE_types_eq']
+        intro v σ hv hlookup
+        simp only [SMT.fv, List.removeAll, List.mem_filter,
+          List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+        obtain ⟨hv_body, hv_ne_z⟩ := hv
+        simp only [List.elem_eq_contains, List.contains_eq_mem,
+          List.mem_cons, List.not_mem_nil, or_false, Bool.not_eq_true',
+          decide_eq_false_iff_not] at hv_ne_z
+        rcases hv_body with ((hv_S | rfl) | (hv_T | rfl))
+        · exact respects_S hv_S hlookup
+        · exact absurd rfl hv_ne_z
+        · exact respects_T hv_T hlookup
+        · exact absurd rfl hv_ne_z
+      have denS_type := SMT.RenamingContext.denote_type_of_typing_fv
+        typ_S respects_S hS hdenS
+      have denT_type := SMT.RenamingContext.denote_type_of_typing_fv
+        typ_T respects_T hT hdenT
+      obtain ⟨denU, hdenU, denU_type, hretU⟩ :=
+        castUnion_denotation_direct hS hT hdenS hdenT
+          denS_type denT_type z_not_fv_S z_not_fv_T hcov_out
+      have hFret := ((RDomCast.iff_RDom_of_type_eq
+        (α := BType.set τ) (σ := denS.snd.fst) denS_type).mp
+          F_rel.toRDomCast).2
+      have hGret := ((RDomCast.iff_RDom_of_type_eq
+        (α := BType.set τ) (σ := denT.snd.fst) denT_type).mp
+          G_rel.toRDomCast).2
+      refine ⟨Θ, hcov_out, denU, RenamingContext.extends_refl Θ,
+        ?_, target_respects_out, ?_, hdenU, ?_, ?_⟩
+      · intro v hv
+        apply Θ_none
+        intro hv_used
+        apply hv
+        rw [StE_used_eq, St₁_used_eq]
+        exact List.mem_cons_of_mem z hv_used
+      · intro v hv
+        rw [StE_types_eq']
+        exact Θ_dom v hv
+      · simpa using denU_type
+      · rcases denU with ⟨U, σU, hU⟩
+        dsimp at denU_type
+        subst σU
+        refine ⟨castPath.reflexive
+          (SMTType.fun τ.toSMTType SMTType.bool), ?_, ?_⟩
+        · rw [castZF_apply_reflexive _ hU, hretU τ rfl,
+            hFret, hGret]
+        · exact ⟨castPath.reflexive τ.toSMTType,
+            BinderCastAdmissible.reflexive τ (set_union_mem hF hG)⟩
 
 /-- Semantic core of Gate B.  The helper produced by `loosenAux_prf` denotes
 the graph cast of the option-valued function, and the lambda returned by
