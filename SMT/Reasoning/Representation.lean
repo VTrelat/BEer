@@ -127,6 +127,33 @@ def RDomCast : B.Dom → SMT.Dom → Prop
       ∃ c : σ ~> α.toSMTType,
         retract α (castZF_apply c Y) = X
 
+/-- The canonical SMT representative of one B domain value.  This is the
+pointwise operation used by `B.RenamingContext.toSMT`, exposed directly for
+binder-local representation choices. -/
+noncomputable def B.Dom.canonicalSMT.{u} (d : B.Dom.{u}) : SMT.Dom.{u} :=
+  let ⟨X, α, hX⟩ := d
+  let ζ := (BType.canonicalIsoSMTType α).1
+  let ζ_isfunc := (BType.canonicalIsoSMTType α).2.1
+  let X' : ZFSet.{u} := @ᶻζ ⟨X, by
+    rwa [ZFSet.is_func_dom_eq ζ_isfunc]⟩
+  ⟨X', α.toSMTType, by
+    exact ZFSet.fapply_mem_range (ZFSet.is_func_is_pfunc ζ_isfunc)
+      (by rwa [ZFSet.is_func_dom_eq ζ_isfunc])⟩
+
+@[simp]
+theorem B.Dom.canonicalSMT_type.{u} (d : B.Dom.{u}) :
+    d.canonicalSMT.snd.fst = d.snd.fst.toSMTType := by
+  rcases d with ⟨X, α, hX⟩
+  rfl
+
+/-- Direct canonical representatives satisfy the legacy agreement relation. -/
+theorem B.Dom.rdom_canonicalSMT.{u} (d : B.Dom.{u}) :
+    RDom d d.canonicalSMT := by
+  rcases d with ⟨X, α, hX⟩
+  rw [RDom]
+  refine ⟨rfl, ?_⟩
+  exact retract_of_canonical α hX
+
 /-- A representation witness supplies both type correctness of the cast value
 and the defining retraction equation. -/
 theorem RDomCast.exists_cast.{u}
@@ -149,6 +176,12 @@ theorem RDom.toRDomCast.{u} {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
   obtain ⟨rfl, hret⟩ := h
   refine ⟨castPath.reflexive α.toSMTType, ?_⟩
   rwa [castZF_apply_reflexive α.toSMTType hY]
+
+/-- Direct canonical representatives also satisfy representation-aware
+agreement via the reflexive cast. -/
+theorem B.Dom.rdomCast_canonicalSMT.{u} (d : B.Dom.{u}) :
+    RDomCast d d.canonicalSMT :=
+  RDom.toRDomCast (B.Dom.rdom_canonicalSMT d)
 
 /-- At the canonical target type, representation-aware agreement is exactly
 the existing `RDom` relation. -/
@@ -397,6 +430,44 @@ abbrev RValuationCastOnFV (Ξ : B.𝒱 → Option B.Dom)
     match Ξ v, Θ v with
     | some d, some d' => RDomCast d d'
     | _, _ => False
+
+/-- Restrict representation-aware valuation agreement to a smaller
+free-variable set. -/
+theorem RValuationCastOnFV.mono_fv
+    {Ξ : B.𝒱 → Option B.Dom} {Θ : SMT.𝒱 → Option SMT.Dom}
+    {s t : B.Term} (h : RValuationCastOnFV Ξ Θ t)
+    (hfv : B.fv s ⊆ B.fv t) :
+    RValuationCastOnFV Ξ Θ s :=
+  fun v hv => h v (hfv hv)
+
+/-- Updating a binder with pointwise related values preserves
+representation-aware agreement for its body.  Variables outside the binder
+continue to use the ambient agreement, while bound variables may change SMT
+representation independently at each position. -/
+theorem RValuationCastOnFV.updates.{u}
+    {Ξ : B.𝒱 → Option B.Dom.{u}}
+    {Θ : SMT.𝒱 → Option SMT.Dom.{u}}
+    {vs : List B.𝒱} (vs_nodup : vs.Nodup)
+    (bs : Fin vs.length → B.Dom.{u})
+    (ss : Fin vs.length → SMT.Dom.{u})
+    {t : B.Term}
+    (ambient : ∀ v ∈ B.fv t, v ∉ vs →
+      match Ξ v, Θ v with
+      | some d, some d' => RDomCast d d'
+      | _, _ => False)
+    (bound : ∀ i, RDomCast (bs i) (ss i)) :
+    RValuationCastOnFV
+      (Function.updates Ξ vs (List.ofFn fun i => some (bs i)))
+      (Function.updates Θ vs (List.ofFn fun i => some (ss i))) t := by
+  intro v hv
+  by_cases hvs : v ∈ vs
+  · rw [Function.updates_eq_if (by simp) vs_nodup,
+      Function.updates_eq_if (by simp) vs_nodup,
+      dif_pos hvs, dif_pos hvs]
+    simpa using bound ⟨vs.idxOf v, List.idxOf_lt_length_of_mem hvs⟩
+  · rw [Function.updates_of_not_mem Ξ vs _ v hvs,
+      Function.updates_of_not_mem Θ vs _ v hvs]
+    exact ambient v hv hvs
 
 namespace SMT.RenamingContext
 
