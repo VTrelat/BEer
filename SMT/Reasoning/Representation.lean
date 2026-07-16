@@ -181,6 +181,42 @@ theorem castPath.source_pair_eq_int {σ τ : SMTType}
   | pair cx cy =>
       exact ⟨castPath.source_eq_int cx, castPath.source_eq_int cy⟩
 
+/-- Cast paths between fixed endpoints are unique. -/
+theorem castPath.eq_of_endpoints {σ τ : SMTType}
+    (c d : σ ~> τ) : c = d := by
+  induction c with
+  | refl =>
+      rw [castPath.eq_reflexive d]
+      exact castPath.eq_reflexive _
+  | @pair σ₁ σ₂ τ₁ τ₂ c₁ c₂ ih₁ ih₂ =>
+      cases d with
+      | pair d₁ d₂ =>
+          rw [ih₁ d₁, ih₂ d₂]
+      | refl h =>
+          rcases h with h | h | h <;> cases h
+  | @opt σ τ c ih =>
+      cases d with
+      | opt d => rw [ih d]
+      | refl h =>
+          rcases h with h | h | h <;> cases h
+  | @chpred σ τ c ih =>
+      cases d with
+      | chpred d => rw [ih d]
+      | refl h =>
+          rcases h with h | h | h <;> cases h
+      | «fun» h _ d => exact (h (castPath.source_eq_bool d)).elim
+  | @graph σ ρ τ υ cσ cρ ihσ ihρ =>
+      cases d with
+      | graph dσ dρ => rw [ihσ dσ, ihρ dρ]
+      | «fun» _ _ dρ => cases dρ
+  | @«fun» σ ρ τ υ hρ cσ cρ ihσ ihρ =>
+      cases d with
+      | «fun» _ dσ dρ => rw [ihσ dσ, ihρ dρ]
+      | refl h =>
+          rcases h with h | h | h <;> cases h
+      | graph _ _ => cases cρ
+      | chpred _ => exact (hρ rfl).elim
+
 /-- Representation-aware agreement between a B denotation and an SMT
 denotation. The SMT value is first cast to the canonical SMT representation
 of the B type and only then retracted. -/
