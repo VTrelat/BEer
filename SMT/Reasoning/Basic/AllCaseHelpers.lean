@@ -1114,13 +1114,12 @@ which is the cast emitted by the encoder for has-flag binders).
 
 Used in Path-A discharge of `encodeTerm_all_hasflag_existential_admit`. Combined with
 `pfun_inv` (R1), gives `case_b_preimage` for the has-flag bridge. -/
-theorem castZF_apply_surj_on_isPFunc.{u} (α β : SMTType) (y : ZFSet.{u})
+theorem castZF_apply_option_func_of_pfun.{u} (α β : SMTType) (y : ZFSet.{u})
     (hy : y ∈ ⟦SMTType.fun (SMTType.pair α β) SMTType.bool⟧ᶻ)
     (hpfun : (predGraph α β y).IsPFunc ⟦α⟧ᶻ ⟦β⟧ᶻ) :
-    ∃ x ∈ ⟦SMTType.fun α (SMTType.option β)⟧ᶻ,
-      castZF_apply (castPath.graph (castPath.reflexive α) (castPath.reflexive β)) x = y := by
+    castZF_apply (castPath.graph (castPath.reflexive α) (castPath.reflexive β))
+      (option_func_of_pfun α β y) = y := by
   classical
-  refine ⟨option_func_of_pfun α β y, option_func_of_pfun_mem α β y, ?_⟩
   set F := option_func_of_pfun α β y with hF_def
   set 𝕔 : (SMTType.fun α (SMTType.option β)) ~>
       (SMTType.fun (SMTType.pair α β) SMTType.bool) :=
@@ -1258,6 +1257,16 @@ theorem castZF_apply_surj_on_isPFunc.{u} (α β : SMTType) (y : ZFSet.{u})
     fapply.def hcast_pfunc hF_dom
   exact (hcast_pfunc.2 F y h_pair_in
     (fapply (castZF_of_path 𝕔).1 hcast_pfunc ⟨F, hF_dom⟩).val h_apply_pair).symm
+
+/-- Every functional pair-bool predicate has an option-function preimage under
+the identity-component graph cast. -/
+theorem castZF_apply_surj_on_isPFunc.{u} (α β : SMTType) (y : ZFSet.{u})
+    (hy : y ∈ ⟦SMTType.fun (SMTType.pair α β) SMTType.bool⟧ᶻ)
+    (hpfun : (predGraph α β y).IsPFunc ⟦α⟧ᶻ ⟦β⟧ᶻ) :
+    ∃ x ∈ ⟦SMTType.fun α (SMTType.option β)⟧ᶻ,
+      castZF_apply (castPath.graph (castPath.reflexive α) (castPath.reflexive β)) x = y :=
+  ⟨option_func_of_pfun α β y, option_func_of_pfun_mem α β y,
+    castZF_apply_option_func_of_pfun α β y hy hpfun⟩
 
 /-! ### Factored retract-forall lemma for `all_case`
 
