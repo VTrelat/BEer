@@ -68,9 +68,9 @@ theorem castUnion_direct_rep_spec.{u}
             (denS denT : SMT.Dom.{u}),
             ⟦S.abstract Θ hS⟧ˢ = some denS →
             ⟦T.abstract Θ hT⟧ˢ = some denT →
-            RDomCastAdmissible
+            RDomCast
               (⟨F, BType.set τ, hF⟩ : B.Dom) denS →
-            RDomCastAdmissible
+            RDomCast
               (⟨G, BType.set τ, hG⟩ : B.Dom) denT →
             ∃ (Θ' : SMT.RenamingContext.Context.{u})
               (hcov : RenamingContext.CoversFV Θ' t)
@@ -212,10 +212,10 @@ theorem castUnion_direct_rep_spec.{u}
           denS_type denT_type z_not_fv_S z_not_fv_T hcov_out
       have hFret := ((RDomCast.iff_RDom_of_type_eq
         (α := BType.set τ) (σ := denS.snd.fst) denS_type).mp
-          F_rel.toRDomCast).2
+        F_rel).2
       have hGret := ((RDomCast.iff_RDom_of_type_eq
         (α := BType.set τ) (σ := denT.snd.fst) denT_type).mp
-          G_rel.toRDomCast).2
+        G_rel).2
       refine ⟨Θ, hcov_out, denU, RenamingContext.extends_refl Θ,
         ?_, target_respects_out, ?_, hdenU, ?_, ?_⟩
       · intro v hv
@@ -362,9 +362,9 @@ theorem castUnion_graph_rep_spec.{u}
             (denS denT : SMT.Dom.{u}),
             ⟦S.abstract Θ hS⟧ˢ = some denS →
             ⟦T.abstract Θ hT⟧ˢ = some denT →
-            RDomCastAdmissible
+            RDomCast
               (⟨F, BType.set (α ×ᴮ β), hF⟩ : B.Dom) denS →
-            RDomCastAdmissible
+            RDomCast
               (⟨G, BType.set (α ×ᴮ β), hG⟩ : B.Dom) denT →
             ∃ (Θ' : SMT.RenamingContext.Context.{u})
               (hcov : RenamingContext.CoversFV Θ' t)
@@ -614,7 +614,7 @@ theorem castUnion_graph_rep_spec.{u}
           typ_T respects_T hT h_den_T
         obtain ⟨denU, h_den_U, U_rel⟩ :=
           castUnion_graph_denotation α β hF hG denS_type denS!_type
-            denT_type F_rel.toRDomCast G_rel.toRDomCast cast_pair
+            denT_type F_rel G_rel cast_pair
             hS!_helper hT_helper h_den_S!_helper h_den_T_helper
             z_not_fv_S! z_not_fv_T hcov_out
         have typ_S!_St₅ : St₅.types ⊢ˢ SMT.Term.var S! :
@@ -677,3 +677,107 @@ theorem castUnion_graph_rep_spec.{u}
               (AList.lookup_isSome.mpr hv₀)
             exact AList.lookup_isSome.mp (Option.isSome_of_eq_some
               (AList.lookup_of_subset Λ_sub_final hlookup))
+
+/-! ## Constructor-facing union-helper contract -/
+
+/-- Representation-aware contract required from `castUnion` after both source
+operands have been encoded.  It is intentionally quantified over valuations
+and denotations so one operational run serves the current and totality proofs. -/
+abbrev CastUnionRepSpec.{u} (τ : BType)
+    (S T : SMT.Term) (σS σT : SMTType) : Prop :=
+  ∀ {Λ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱},
+    Λ ⊢ˢ S : σS →
+    Λ ⊢ˢ T : σT →
+    (∀ v ∈ SMT.bv S, v ∈ used) →
+    (∀ v ∈ SMT.bv T, v ∈ used) →
+    ⦃ fun ⟨E, Λ'⟩ =>
+      ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ Λ.keys ⊆ E.usedVars ∧
+        E.usedVars = used⌝ ⦄
+    castUnion ⟨S, σS⟩ ⟨T, σT⟩
+    ⦃ ⇓? ⟨t, σ⟩ ⟨E', Γ'⟩ =>
+      ⌜used ⊆ E'.usedVars ∧
+        Λ ⊆ Γ' ∧
+        Γ'.keys ⊆ E'.usedVars ∧
+        Nonempty (σ ~> (BType.set τ).toSMTType) ∧
+        Γ' ⊢ˢ t : σ ∧
+        (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ∧
+        ∀ (Θ : SMT.RenamingContext.Context.{u})
+          (hS : RenamingContext.CoversFV Θ S)
+          (hT : RenamingContext.CoversFV Θ T),
+          (∀ v ∉ used, Θ v = none) →
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ S →
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ T →
+          (∀ v, Θ v ≠ none → v ∈ Λ) →
+          ∀ (F G : ZFSet.{u})
+            (hF : F ∈ ⟦BType.set τ⟧ᶻ)
+            (hG : G ∈ ⟦BType.set τ⟧ᶻ)
+            (denS denT : SMT.Dom.{u}),
+            ⟦S.abstract Θ hS⟧ˢ = some denS →
+            ⟦T.abstract Θ hT⟧ˢ = some denT →
+            RDomCast (⟨F, BType.set τ, hF⟩ : B.Dom) denS →
+            RDomCast (⟨G, BType.set τ, hG⟩ : B.Dom) denT →
+            ∃ (Θ' : SMT.RenamingContext.Context.{u})
+              (hcov : RenamingContext.CoversFV Θ' t)
+              (denU : SMT.Dom.{u}),
+              RenamingContext.Extends Θ' Θ ∧
+              (∀ v ∉ E'.usedVars, Θ' v = none) ∧
+              SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γ' t ∧
+              (∀ v, Θ' v ≠ none → v ∈ Γ') ∧
+              ⟦t.abstract Θ' hcov⟧ˢ = some denU ∧
+              denU.snd.fst = σ ∧
+              RDomCastAdmissible
+                (⟨F ∪ G, BType.set τ, set_union_mem hF hG⟩ : B.Dom)
+                denU⌝ ⦄
+
+theorem castUnion_direct_rep_contract.{u} (τ : BType)
+    (S T : SMT.Term) :
+    CastUnionRepSpec.{u} τ S T
+      (SMTType.fun τ.toSMTType SMTType.bool)
+      (SMTType.fun τ.toSMTType SMTType.bool) := by
+  unfold CastUnionRepSpec
+  intro Λ n used typ_S typ_T bv_S_used bv_T_used
+  mstart
+  mintro pre ∀St
+  mpure pre
+  mspec castUnion_direct_rep_spec τ typ_S typ_T bv_S_used bv_T_used
+  rename_i out
+  obtain ⟨t, σ⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨used_sub, types_sub, keys_sub, σ_eq, typ_out,
+    preserves, semantic⟩ := post
+  change σ = SMTType.fun τ.toSMTType SMTType.bool at σ_eq
+  subst σ
+  mpure_intro
+  exact ⟨used_sub, types_sub, keys_sub,
+    ⟨castPath.reflexive (BType.set τ).toSMTType⟩,
+    typ_out, preserves, semantic⟩
+
+theorem castUnion_graph_rep_contract.{u}
+    (α β : BType) (S T : SMT.Term) :
+    CastUnionRepSpec.{u} (α ×ᴮ β) S T
+      (SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
+      (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        SMTType.bool) := by
+  unfold CastUnionRepSpec
+  intro Λ n used typ_S typ_T bv_S_used bv_T_used
+  mstart
+  mintro pre ∀St
+  mpure pre
+  mspec castUnion_graph_rep_spec α β typ_S typ_T
+    bv_S_used bv_T_used
+  rename_i out
+  obtain ⟨t, σ⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨used_sub, types_sub, keys_sub, σ_eq, typ_out,
+    preserves, semantic⟩ := post
+  change σ = SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+    SMTType.bool at σ_eq
+  subst σ
+  mpure_intro
+  exact ⟨used_sub, types_sub, keys_sub,
+    ⟨castPath.reflexive (BType.set (α ×ᴮ β)).toSMTType⟩,
+    typ_out, preserves, semantic⟩
