@@ -119,6 +119,18 @@ theorem castPath.eq_graph_reflexive {α β : SMTType}
   | «fun» _ _ cβ =>
       cases cβ
 
+/-- A cast ending at the integer base type must start there as well. -/
+theorem castPath.source_eq_int {σ : SMTType} (_c : σ ~> SMTType.int) :
+    σ = SMTType.int := by
+  cases _c
+  rfl
+
+/-- A cast ending at the Boolean base type must start there as well. -/
+theorem castPath.source_eq_bool {σ : SMTType} (_c : σ ~> SMTType.bool) :
+    σ = SMTType.bool := by
+  cases _c
+  rfl
+
 /-- Representation-aware agreement between a B denotation and an SMT
 denotation. The SMT value is first cast to the canonical SMT representation
 of the B type and only then retracted. -/
@@ -165,6 +177,26 @@ theorem RDomCast.exists_cast.{u}
       retract α (castZF_apply c Y) = X := by
   obtain ⟨c, hc⟩ := h
   exact ⟨c, castZF_apply_mem c hY, hc⟩
+
+/-- An SMT representative of a B integer necessarily has SMT integer type. -/
+theorem RDomCast.target_type_eq_int.{u}
+    {X Y : ZFSet.{u}} {σ : SMTType}
+    {hX : X ∈ ⟦BType.int⟧ᶻ} {hY : Y ∈ ⟦σ⟧ᶻ}
+    (h : RDomCast (⟨X, BType.int, hX⟩ : B.Dom)
+      (⟨Y, σ, hY⟩ : SMT.Dom)) :
+    σ = SMTType.int := by
+  obtain ⟨c, _⟩ := h
+  exact castPath.source_eq_int c
+
+/-- An SMT representative of a B Boolean necessarily has SMT Boolean type. -/
+theorem RDomCast.target_type_eq_bool.{u}
+    {X Y : ZFSet.{u}} {σ : SMTType}
+    {hX : X ∈ ⟦BType.bool⟧ᶻ} {hY : Y ∈ ⟦σ⟧ᶻ}
+    (h : RDomCast (⟨X, BType.bool, hX⟩ : B.Dom)
+      (⟨Y, σ, hY⟩ : SMT.Dom)) :
+    σ = SMTType.bool := by
+  obtain ⟨c, _⟩ := h
+  exact castPath.source_eq_bool c
 
 /-- Ordinary canonical agreement is a special case of representation-aware
 agreement. -/
@@ -214,6 +246,39 @@ theorem RDomCast.congr_right.{u}
     (h : d₁' = d₂') : RDomCast d d₁' ↔ RDomCast d d₂' := by
   subst d₂'
   rfl
+
+/-- Representation agreement is closed under pairing, using the component
+cast paths pointwise. -/
+theorem RDomCast.pair.{u}
+    {X Y X' Y' : ZFSet.{u}} {α β : BType} {σ τ : SMTType}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦β⟧ᶻ}
+    {hX' : X' ∈ ⟦σ⟧ᶻ} {hY' : Y' ∈ ⟦τ⟧ᶻ}
+    (hx : RDomCast (⟨X, α, hX⟩ : B.Dom)
+      (⟨X', σ, hX'⟩ : SMT.Dom))
+    (hy : RDomCast (⟨Y, β, hY⟩ : B.Dom)
+      (⟨Y', τ, hY'⟩ : SMT.Dom)) :
+    RDomCast
+      (⟨X.pair Y, α ×ᴮ β, ZFSet.pair_mem_prod.mpr ⟨hX, hY⟩⟩ : B.Dom)
+      (⟨X'.pair Y', SMTType.pair σ τ,
+        ZFSet.pair_mem_prod.mpr ⟨hX', hY'⟩⟩ : SMT.Dom) := by
+  obtain ⟨cx, hcx⟩ := hx
+  obtain ⟨cy, hcy⟩ := hy
+  refine ⟨castPath.pair cx cy, ?_⟩
+  have hcast_pair :
+      castZF_apply (castPath.pair cx cy) (X'.pair Y') =
+        (castZF_apply cx X').pair (castZF_apply cy Y') := by
+    apply castZF_apply_eq_of_pair (castPath.pair cx cy)
+      (ZFSet.pair_mem_prod.mpr ⟨hX', hY'⟩)
+    change (X'.pair Y').pair
+        ((castZF_apply cx X').pair (castZF_apply cy Y')) ∈
+      (castZF_pair (castZF_of_path cx) (castZF_of_path cy)).1
+    rw [ZFSet.pair_mem_fprod]
+    refine ⟨X', Y', hX', hY', rfl, ?_⟩
+    unfold castZF_apply
+    rw [dif_pos hX', dif_pos hY']
+  rw [hcast_pair]
+  simp only [retract, ZFSet.π₁_pair, ZFSet.π₂_pair]
+  rw [hcx, hcy]
 
 /-! ## Option functions and functional graphs -/
 
@@ -439,6 +504,50 @@ theorem RValuationCastOnFV.mono_fv
     (hfv : B.fv s ⊆ B.fv t) :
     RValuationCastOnFV Ξ Θ s :=
   fun v hv => h v (hfv hv)
+
+/-- Extending the SMT valuation preserves representation agreement: every
+source free variable is already assigned on the SMT side, so extension keeps
+that exact representative. -/
+theorem RValuationCastOnFV.of_extends.{u}
+    {Ξ : B.𝒱 → Option B.Dom.{u}}
+    {Θ Θ' : SMT.𝒱 → Option SMT.Dom.{u}} {t : B.Term}
+    (h : RValuationCastOnFV Ξ Θ t)
+    (hext : SMT.RenamingContext.Extends Θ' Θ) :
+    RValuationCastOnFV Ξ Θ' t := by
+  intro v hv
+  have hv_rel := h v hv
+  cases hΞ : Ξ v with
+  | none =>
+      cases hΘ : Θ v <;> simp [hΞ, hΘ] at hv_rel
+  | some d =>
+      cases hΘ : Θ v with
+      | none => simp [hΞ, hΘ] at hv_rel
+      | some d' =>
+          rw [hΞ, hΘ] at hv_rel
+          have hΘ' : Θ' v = some d' := hext hΘ
+          simpa [hΞ, hΘ']
+
+/-- Transport free-variable type compatibility across both an extending SMT
+valuation and an extending type context. -/
+theorem B.RenamingContext.RespectsTypeContextOnFV.of_extends.{u}
+    {Θ Θ' : SMT.RenamingContext.Context.{u}}
+    {Λ Γ : SMT.TypeContext} {s t : B.Term}
+    (h : B.RenamingContext.RespectsTypeContextOnFV Θ Λ t)
+    (hext : SMT.RenamingContext.Extends Θ' Θ)
+    (hΛΓ : Λ ⊆ Γ)
+    (hfv : B.fv s ⊆ B.fv t)
+    (fv_in_Λ : ∀ v ∈ B.fv t, v ∈ Λ) :
+    B.RenamingContext.RespectsTypeContextOnFV Θ' Γ s := by
+  intro v τ hv_s hΓ
+  have hv_t : v ∈ B.fv t := hfv hv_s
+  have hv_Λ : v ∈ Λ := fv_in_Λ v hv_t
+  obtain ⟨τ₀, hΛ⟩ := Option.isSome_iff_exists.mp
+    (AList.lookup_isSome.mpr hv_Λ)
+  have hΓ₀ : Γ.lookup v = some τ₀ := AList.lookup_of_subset hΛΓ hΛ
+  rw [hΓ₀] at hΓ
+  cases hΓ
+  obtain ⟨d, hd, hd_type⟩ := h hv_t hΛ
+  exact ⟨d, hext hd, hd_type⟩
 
 /-- Updating a binder with pointwise related values preserves
 representation-aware agreement for its body.  Variables outside the binder

@@ -135,7 +135,7 @@ theorem encodeTerm_rep_spec.var_case.{u}
               intro hwu
               exact hw (by simpa [St_used_eq] using hwu)
             exact Δ₀_none_out w hw'
-          · refine ⟨⟨Y, σ, hY⟩, ?_, ⟨c, hc⟩, ?_⟩
+          · refine ⟨⟨Y, σ, hY⟩, ?_, rfl, ⟨c, hc⟩, ?_⟩
             · simp [SMT.Term.abstract, SMT.denote, hΔ₀_v]
             · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
                 Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -156,9 +156,173 @@ theorem encodeTerm_rep_spec.var_case.{u}
                     simpa [hΔ₀_alt_v] using hrel_alt
                   refine ⟨Δ₀_alt, ?_, d_alt,
                     RenamingContext.extends_refl Δ₀_alt, related_alt,
-                    Δ₀_alt_none, respects_alt, Δ₀_alt_dom, ?_, hR_alt⟩
+                    Δ₀_alt_none, respects_alt, Δ₀_alt_dom, ?_, ?_, hR_alt⟩
                   · intro w hw
                     rw [SMT.fv, List.mem_singleton] at hw
                     subst w
                     simp [hΔ₀_alt_v]
                   · simp [SMT.Term.abstract, SMT.denote, hΔ₀_alt_v]
+                  · obtain ⟨dτ, hdτ, hdτ_type⟩ :=
+                      respects_alt hv_fv τ_lookup
+                    have : d_alt = dτ :=
+                      Option.some.inj (hΔ₀_alt_v.symm.trans hdτ)
+                    subst dτ
+                    exact hdτ_type
+
+theorem encodeTerm_rep_spec.int_case.{u}
+    (i : ℤ) (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (_typ_t : E.context ⊢ᴮ B.Term.int i : α)
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ w ∈ B.fv (B.Term.int i), («Δ» w).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastOnFV «Δ» Δ₀ (B.Term.int i))
+    {used : List SMT.𝒱}
+    (Δ₀_none_out : ∀ w ∉ used, Δ₀ w = none)
+    (Δ₀_dom : ∀ w, Δ₀ w ≠ none → w ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (den_t : ⟦(B.Term.int i).abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨T, ⟨α, hT⟩⟩)
+    (_vars_used : ∀ w ∈ (B.Term.int i).vars, w ∈ used)
+    (_Λ_inv : ∀ w ∈ (B.Term.int i).vars, w ∈ Λ → w ∈ E.context)
+    (_bv_nodup : (B.bv (B.Term.int i)).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ (B.Term.int i))
+    (_fv_in_Λ : ∀ w ∈ B.fv (B.Term.int i), w ∈ Λ)
+    (_wf : B.RenWF E.context «Δ»)
+    {n : ℕ} :
+    ⦃ fun ⟨E0, Λ'⟩ ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝ ⦄
+    encodeTerm (B.Term.int i) E
+    ⦃ ⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepPost (B.Term.int i) α Λ «Δ» Δ₀ used T hT
+        E t' σ E' Γ'⌝ ⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+  rw [encodeTerm]
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  rw [B.Term.abstract, B.denote, Option.pure_def,
+    Option.some_inj] at den_t
+  injection den_t with T_eq type_eq
+  subst T
+  injection type_eq with α_eq _
+  subst α
+  and_intros
+  · intro w hw
+    simpa [St_used_eq] using hw
+  · exact fun _ => id
+  · intro w hw
+    simpa [St_used_eq] using St_sub hw
+  · intro w hw
+    simp [B.fv] at hw
+  · exact ⟨castPath.reflexive SMTType.int⟩
+  · exact SMT.Typing.int _ _
+  · exact fun _ _ h _ => h
+  · refine ⟨Δ₀, ?_, RenamingContext.extends_refl Δ₀, related,
+      ?_, respects, Δ₀_dom, ?_⟩
+    · intro w hw
+      simp [SMT.fv] at hw
+    · intro w hw
+      apply Δ₀_none_out w
+      intro hused
+      apply hw
+      simpa [St_used_eq] using hused
+    · refine ⟨⟨ZFSet.ofInt i, SMTType.int, hT⟩, ?_, rfl, ?_, ?_⟩
+      · simp [SMT.Term.abstract, SMT.denote]
+      · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
+      · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
+          Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
+        rw [B.Term.abstract, B.denote, Option.pure_def,
+          Option.some_inj] at den_t_alt
+        have hT_eq : ZFSet.ofInt i = T_alt :=
+          congrArg (fun d => d.fst) den_t_alt
+        subst T_alt
+        refine ⟨Δ₀_alt, ?_, ⟨ZFSet.ofInt i, SMTType.int, hT_alt⟩,
+          RenamingContext.extends_refl Δ₀_alt, related_alt,
+          Δ₀_alt_none, respects_alt, Δ₀_alt_dom, ?_, rfl, ?_⟩
+        · intro w hw
+          simp [SMT.fv] at hw
+        · simp [SMT.Term.abstract, SMT.denote]
+        · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
+
+theorem encodeTerm_rep_spec.bool_case.{u}
+    (b : Bool) (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (_typ_t : E.context ⊢ᴮ B.Term.bool b : α)
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ w ∈ B.fv (B.Term.bool b), («Δ» w).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastOnFV «Δ» Δ₀ (B.Term.bool b))
+    {used : List SMT.𝒱}
+    (Δ₀_none_out : ∀ w ∉ used, Δ₀ w = none)
+    (Δ₀_dom : ∀ w, Δ₀ w ≠ none → w ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (den_t : ⟦(B.Term.bool b).abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨T, ⟨α, hT⟩⟩)
+    (_vars_used : ∀ w ∈ (B.Term.bool b).vars, w ∈ used)
+    (_Λ_inv : ∀ w ∈ (B.Term.bool b).vars, w ∈ Λ → w ∈ E.context)
+    (_bv_nodup : (B.bv (B.Term.bool b)).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ (B.Term.bool b))
+    (_fv_in_Λ : ∀ w ∈ B.fv (B.Term.bool b), w ∈ Λ)
+    (_wf : B.RenWF E.context «Δ»)
+    {n : ℕ} :
+    ⦃ fun ⟨E0, Λ'⟩ ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝ ⦄
+    encodeTerm (B.Term.bool b) E
+    ⦃ ⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepPost (B.Term.bool b) α Λ «Δ» Δ₀ used T hT
+        E t' σ E' Γ'⌝ ⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+  rw [encodeTerm]
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  rw [B.Term.abstract, B.denote, Option.pure_def,
+    Option.some_inj] at den_t
+  injection den_t with T_eq type_eq
+  subst T
+  injection type_eq with α_eq _
+  subst α
+  and_intros
+  · intro w hw
+    simpa [St_used_eq] using hw
+  · exact fun _ => id
+  · intro w hw
+    simpa [St_used_eq] using St_sub hw
+  · intro w hw
+    simp [B.fv] at hw
+  · exact ⟨castPath.reflexive SMTType.bool⟩
+  · exact SMT.Typing.bool _ _
+  · exact fun _ _ h _ => h
+  · refine ⟨Δ₀, ?_, RenamingContext.extends_refl Δ₀, related,
+      ?_, respects, Δ₀_dom, ?_⟩
+    · intro w hw
+      simp [SMT.fv] at hw
+    · intro w hw
+      apply Δ₀_none_out w
+      intro hused
+      apply hw
+      simpa [St_used_eq] using hused
+    · refine ⟨⟨ZFBool.ofBool b, SMTType.bool, hT⟩, ?_, rfl, ?_, ?_⟩
+      · simp [SMT.Term.abstract, SMT.denote]
+      · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
+      · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
+          Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
+        rw [B.Term.abstract, B.denote, Option.pure_def,
+          Option.some_inj] at den_t_alt
+        have hT_eq : ZFBool.ofBool b = T_alt :=
+          congrArg (fun d => d.fst) den_t_alt
+        subst T_alt
+        refine ⟨Δ₀_alt, ?_, ⟨ZFBool.ofBool b, SMTType.bool, hT_alt⟩,
+          RenamingContext.extends_refl Δ₀_alt, related_alt,
+          Δ₀_alt_none, respects_alt, Δ₀_alt_dom, ?_, rfl, ?_⟩
+        · intro w hw
+          simp [SMT.fv] at hw
+        · simp [SMT.Term.abstract, SMT.denote]
+        · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
