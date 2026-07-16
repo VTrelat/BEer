@@ -111,6 +111,36 @@ abbrev EncodeTermRepIH.{u} (t : B.Term) : Prop :=
         ⌜EncodeTermRepPost t α Λ «Δ» Δ₀ used T hT
           E t' σ E' Γ'⌝ ⦄)
 
+/-- Semantic side condition for the representation change performed on
+flagged variables bound by `all`. B typing records a flagged function as a
+set of pairs, so it does not by itself exclude nonfunctional relations from
+the quantified domain. The oracle states exactly the missing fact: for every
+successful flag-type selection made by the encoder, each source-domain value
+has an SMT preimage at the selected binder type.
+
+The proof-obligation layer discharges this condition from the functional
+hypotheses that justify entries in `E.flags`; the raw term theorem keeps it
+explicit. -/
+abbrev EncodeTermAllBinderAdmissible.{u} : Prop :=
+  ∀ (E : B.Env) (vs : List B.𝒱) (D P : B.Term) (τ : BType),
+    E.context ⊢ᴮ B.Term.all vs D P : BType.bool →
+    E.context ⊢ᴮ D : BType.set τ →
+    ∀ («Δ» : B.RenamingContext.Context.{u})
+      (Δ_fv_D : ∀ v ∈ B.fv D, («Δ» v).isSome = true)
+      (𝒟 : ZFSet.{u}) (h𝒟 : 𝒟 ∈ ⟦BType.set τ⟧ᶻ),
+      ⟦D.abstract «Δ» Δ_fv_D⟧ᴮ = some ⟨𝒟, ⟨BType.set τ, h𝒟⟩⟩ →
+      ∀ (τs : List SMTType)
+        (hvs_len : vs.length =
+          (τ.toSMTType.fromProdl (vs.length - 1)).length)
+        (hτs_len : τs.length =
+          (τ.toSMTType.fromProdl (vs.length - 1)).length),
+        (∀ i (hi : i < τs.length),
+          SMTFlagTypeRel (vs[i]'(by omega) ∈ E.flags)
+            ((τ.toSMTType.fromProdl (vs.length - 1))[i]'(hτs_len ▸ hi))
+            (τs[i]'hi)) →
+        ∀ (hcast : τs.toProdl ⊑ τ.toSMTType),
+          BinderCastAdmissible τ τs.toProdl hcast.toCastPath 𝒟
+
 /-- Recover a cast path indexed by an externally known target type tag. -/
 theorem RDomCast.nonempty_path_of_type_eq.{u}
     {X Y : ZFSet.{u}} {α : BType} {σ τ : SMTType}
