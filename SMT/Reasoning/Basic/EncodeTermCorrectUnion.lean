@@ -73,7 +73,7 @@ When both inputs have the same type `.fun γ .bool`, `castUnion` builds
 The renaming context is `Δ` unchanged.
 -/
 set_option maxHeartbeats 4000000 in
-private theorem castUnion_denotation_direct.{u_1}
+theorem castUnion_denotation_direct.{u_1}
     {γ : SMTType} {S T : SMT.Term}
     {z : SMT.𝒱} {«Δ» : SMT.RenamingContext.Context}
     {den_S den_T : SMT.Dom.{u_1}}

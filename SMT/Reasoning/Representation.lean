@@ -96,6 +96,29 @@ theorem castZF_apply_self.{u} {σ : SMTType} (c : σ ~> σ) {Y : ZFSet.{u}}
   rw [castPath.eq_reflexive c]
   exact castZF_apply_reflexive σ hY
 
+/-- A value paired with an input by the relational cast is its functional
+`castZF_apply` image. -/
+theorem castZF_apply_eq_of_pair.{u} {α β : SMTType} (c : α ~> β)
+    {x y : ZFSet.{u}} (hx : x ∈ ⟦α⟧ᶻ)
+    (hxy : x.pair y ∈ (castZF_of_path c).1) :
+    castZF_apply c x = y := by
+  have happ := fapply.of_pair (is_func_is_pfunc (castZF_of_path c).2) hxy
+  unfold castZF_apply
+  rw [dif_pos hx]
+  exact congrArg Subtype.val happ
+
+/-- The only cast from an option-valued function to the matching relational
+characteristic predicate is the graph cast with reflexive component paths. -/
+theorem castPath.eq_graph_reflexive {α β : SMTType}
+    (c : SMTType.fun α (SMTType.option β) ~>
+      SMTType.fun (SMTType.pair α β) SMTType.bool) :
+    c = castPath.graph (castPath.reflexive α) (castPath.reflexive β) := by
+  cases c with
+  | graph cα cβ =>
+      rw [castPath.eq_reflexive cα, castPath.eq_reflexive cβ]
+  | «fun» _ _ cβ =>
+      cases cβ
+
 /-- Representation-aware agreement between a B denotation and an SMT
 denotation. The SMT value is first cast to the canonical SMT representation
 of the B type and only then retracted. -/
@@ -176,6 +199,20 @@ theorem optionGraph_mem.{u} (α β : SMTType) {F : ZFSet.{u}}
       ⟦SMTType.fun (SMTType.pair α β) SMTType.bool⟧ᶻ :=
   castZF_apply_mem
     (castPath.graph (castPath.reflexive α) (castPath.reflexive β)) hF
+
+/-- Unpack representation agreement for the running option-function encoding
+of a B relation. -/
+theorem RDomCast.optionFunction_graph_retract.{u}
+    {α β : BType} {X F : ZFSet.{u}} {hX hF}
+    (hrel : RDomCast
+      (⟨X, BType.set (α ×ᴮ β), hX⟩ : B.Dom)
+      (⟨F, SMTType.fun α.toSMTType (SMTType.option β.toSMTType), hF⟩ :
+        SMT.Dom)) :
+    retract (BType.set (α ×ᴮ β))
+      (optionGraph α.toSMTType β.toSMTType F) = X := by
+  obtain ⟨c, hc⟩ := hrel
+  rw [castPath.eq_graph_reflexive c] at hc
+  exact hc
 
 theorem graphCollapse_mem.{u} (α β : SMTType) (R : ZFSet.{u}) :
     graphCollapse α β R ∈

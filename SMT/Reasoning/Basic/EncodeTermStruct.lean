@@ -54,6 +54,13 @@ theorem mem_of_entries_subset {a : SMT.𝒱} {Γ Γ' : SMT.TypeContext}
 
 end SMT.TypeContext
 
+private theorem castUnion_state.erase_insert_self {a : SMT.𝒱} {τ : SMTType}
+    {s : SMT.TypeContext} (ha : a ∉ s) : (s.insert a τ).erase a = s := by
+  apply AList.ext
+  show List.kerase a (AList.insert a τ s).entries = s.entries
+  rw [AList.entries_insert_of_notMem ha]
+  exact List.kerase_cons_eq rfl
+
 /-- Any computation `m` followed by an unconditional `throw` satisfies every
 `mayThrow` postcondition: the overall computation always throws, and `mayThrow`
 imposes no obligation on thrown outcomes. Used to discharge the (statically
@@ -1180,6 +1187,16 @@ theorem SMT.freshVar_decls {τ : SMTType} {name : String} {decl : SMT.Chunk} :
   mintro pre ∀S; mpure pre
   mspec SMT.incrementFreshVarC_decls
 
+/-- `eraseFromContext` leaves `declarations` unchanged. -/
+theorem SMT.eraseFromContext_decls {v : SMT.𝒱} {decl : SMT.Chunk} :
+    ⦃ fun ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄
+    SMT.eraseFromContext v
+    ⦃ ⇓ _ ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
+  unfold SMT.eraseFromContext
+  mintro pre ∀S
+  mpure pre
+  mspec Std.Do.Spec.modifyGet_StateT
+
 /-- `defaultSpecM` leaves `declarations` unchanged (it only calls `freshVar`). -/
 theorem defaultSpecM_decls (τ : SMTType) {name : String} {t : SMT.Term}
     {decl : SMT.Chunk} :
@@ -1352,49 +1369,49 @@ theorem castUnionAux_state
     mintro ∀St₂
     mpure pre
     obtain ⟨St₂_types_eq, x_fresh, St₂_fvc, St₂_used_eq, x_not_used⟩ := pre
+    rename_i x
+    mspec SMT.eraseFromContext_spec
+    mrename_i pre
+    mintro ∀St₃
+    mpure pre
+    obtain ⟨St₃_types_eq, St₃_fvc, St₃_used_eq⟩ := pre
     mspec Std.Do.Spec.pure
     mpure_intro
-    rename_i x
     rw [hs1_types, hd1_types] at St₂_types_eq x_fresh
     rw [hs1_used, hd1_used] at St₂_used_eq x_not_used
     rw [hs1_fvc, hd1_fvc] at St₂_fvc
+    have St₃_types_base : St₃.types = St₁.types := by
+      rw [St₃_types_eq, St₂_types_eq, castUnion_state.erase_insert_self x_fresh]
     have S!_in : S! ∈ AList.keys St₁.types :=
       AList.mem_keys.mp (AList.mem_of_subset S!_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
     and_intros
-    · omega
-    · refine AList.subset_trans (AList.subset_trans ?_ S!_Λ_sub) ?_
-      · exact SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh
-      · rw [St₂_types_eq]
-        exact SMT.TypeContext.entries_subset_insert_of_notMem x_fresh
+    · rw [St₃_fvc, St₂_fvc]
+      omega
+    · rw [St₃_types_base]
+      exact AList.subset_trans
+        (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh) S!_Λ_sub
     · intro v hv
-      rw [St₂_used_eq]
+      rw [St₃_used_eq, St₂_used_eq]
       exact List.mem_cons_of_mem _ (S!_used_sub hv)
-    · rw [St₂_types_eq, St₂_used_eq]
-      exact keys_insert_subset_cons S!_keys_sub
+    · rw [St₃_types_base, St₃_used_eq, St₂_used_eq]
+      exact List.subset_cons_of_subset x S!_keys_sub
     · intro v hv
       simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
         List.not_mem_nil, or_false] at hv
       obtain ⟨hv_body, hv_ne_x⟩ := hv
-      have mem_St₂ : ∀ w, w ∈ AList.keys St₁.types → w ∈ AList.keys St₂.types := by
-        intro w hw
-        rw [St₂_types_eq, ← AList.mem_keys, AList.mem_insert]
-        exact Or.inr (AList.mem_keys.mp hw)
+      rw [St₃_types_base]
       rcases hv_body with (hvS! | hvx) | (hvT | hvx)
-      · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (hvS! ▸ AList.mem_keys.mpr S!_in)))
+      · exact List.mem_union_iff.mpr (Or.inl (hvS! ▸ AList.mem_keys.mpr S!_in))
       · exact absurd hvx hv_ne_x
       · rcases List.mem_union_iff.mp (hT_fv hvT) with hΛ | hX
-        · exact List.mem_union_iff.mpr (Or.inl (mem_St₂ v (AList.mem_keys.mpr
+        · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mpr
             (AList.mem_of_subset S!_Λ_sub
-              (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ)))))))
+              (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
         · exact List.mem_union_iff.mpr (Or.inr hX)
       · exact absurd hvx hv_ne_x
     · intro v hv hΛ
-      rw [St₂_types_eq]
-      intro hv_in
-      rw [AList.mem_insert] at hv_in
-      rcases hv_in with rfl | hv_in
-      · exact x_not_used (S!_used_sub hv)
-      · exact S!_preserves v hv hΛ hv_in
+      rw [St₃_types_base]
+      exact S!_preserves v hv hΛ
   | @«fun» α β α' β' hβ c_α c_β =>
     mintro pre ∀St
     mpure pre
@@ -3221,12 +3238,18 @@ theorem castUnionAux_decl
       mintro ∀St₂
       mrename_i pref
       mpure pref
+      rename_i x
+      mspec SMT.eraseFromContext_decls (v := x)
+        (decl := St₂.env.declarations)
+      mrename_i pree
+      mintro ∀St₃
+      mpure pree
       mspec Std.Do.Spec.pure
       mpure_intro
-      rename_i x
       refine ⟨[.declare_const S! (.fun (.pair α' β') .bool),
         .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_, ?_, ?_⟩
-      · rw [pref, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+      · rw [pree, pref, hs_decl, hd_decl, S!_decl,
+          List.concat_eq_append, List.concat_eq_append,
           List.append_assoc, List.cons_append, List.nil_append]
       · intro b hb
         simp only [specBodies, List.filterMap_cons, List.filterMap_nil] at hb
@@ -4548,15 +4571,6 @@ theorem SMT.addToContext_forIn_decls (pairs : List (SMT.𝒱 × SMTType))
     mspec Std.Do.Spec.modifyGet_StateT
     mspec Std.Do.Spec.pure
     mspec ih
-
-/-- `eraseFromContext` leaves `declarations` unchanged. -/
-theorem SMT.eraseFromContext_decls {v : SMT.𝒱} {decl : SMT.Chunk} :
-    ⦃ λ ⟨E, _⟩ ↦ ⌜E.declarations = decl⌝ ⦄
-    SMT.eraseFromContext v
-    ⦃ ⇓ () ⟨E, _⟩ => ⌜E.declarations = decl⌝ ⦄ := by
-  unfold SMT.eraseFromContext
-  mintro pre ∀S; mpure pre
-  mspec Std.Do.Spec.modifyGet_StateT
 
 /-- The `eraseFromContext` `forIn` loop leaves `declarations` unchanged. -/
 theorem SMT.eraseFromContext_forIn_decls (zs : List SMT.𝒱) {decl : SMT.Chunk} :

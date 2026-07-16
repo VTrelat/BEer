@@ -178,6 +178,7 @@ def castUnion.graph (S T : Term) {α β α' β' : SMTType} (c_α : α ~> α') (c
   declareConst S! (.fun (.pair α' β') .bool)
   addSpec S! S!_spec
   let x ← freshVar (.pair α' β') "union!"
+  eraseFromContext x
   return (.lambda [x] [.pair α' β'] (.or (.app (.var S!) (.var x)) (.app T (.var x))), .fun (.pair α' β') .bool)
 def castUnion.fun (S T : Term) {α β α' β' : SMTType} (hβ : β ≠ .bool) (c_α : α ~> α') (c_β : β ~> β') : Encoder (Term × SMTType) := do
   -- S : α.fun β, T : α'.fun β', β ≠ .bool
