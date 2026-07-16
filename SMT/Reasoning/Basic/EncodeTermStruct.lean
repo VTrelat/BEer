@@ -233,6 +233,20 @@ def specBodies (decls : SMT.Chunk) : List SMT.Term :=
   · rintro ⟨name, hi⟩
     exact ⟨.define_fun name .unit .bool b, hi, rfl⟩
 
+/-- Declaration fragment emitted for one constrained cast helper. -/
+def helperSpecChunk (v : SMT.𝒱) (τ : SMTType)
+    (spec : SMT.Term) : SMT.Chunk :=
+  [.declare_const v τ,
+    .define_fun s!"{v}_spec" .unit .bool spec]
+
+@[simp] theorem declVars_helperSpecChunk
+    (v : SMT.𝒱) (τ : SMTType) (spec : SMT.Term) :
+    declVars (helperSpecChunk v τ spec) = [v] := rfl
+
+@[simp] theorem specBodies_helperSpecChunk
+    (v : SMT.𝒱) (τ : SMTType) (spec : SMT.Term) :
+    specBodies (helperSpecChunk v τ spec) = [spec] := rfl
+
 set_option maxHeartbeats 4000000 in
 /-- Purely structural specification of `defaultSpecM`: it advances `freshvarsc`,
 only grows `usedVars`, keeps `keys ⊆ usedVars`, preserves source variables, and
@@ -2338,7 +2352,7 @@ theorem castMembership_state
     mpure pre
     obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
       x!_keys_sub, x!_preserves, x!_fv_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -2382,7 +2396,7 @@ theorem castMembership_state
     mpure pre
     obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
       S!_keys_sub, S!_preserves, S!_fv_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -2426,7 +2440,7 @@ theorem castMembership_state
     mpure pre
     obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
       x!_keys_sub, x!_preserves, x!_fv_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -2471,7 +2485,7 @@ theorem castMembership_state
     mpure prex
     obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
       x!_keys_sub, x!_preserves, x!_fv_sub⟩ := prex
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predx
     mintro ∀St₁d
     mpure predx
@@ -2486,7 +2500,7 @@ theorem castMembership_state
     mpure preS
     obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
       S!_keys_sub, S!_preserves, S!_fv_sub⟩ := preS
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -2558,7 +2572,7 @@ theorem castMembership_state
     mpure prey
     obtain ⟨y!_le, y!_Λ_sub, y!_fresh, y!_not_used, y!_used_sub,
       y!_keys_sub, y!_preserves, y!_fv_sub⟩ := prey
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predy
     mintro ∀St₁d
     mpure predy
@@ -2573,7 +2587,7 @@ theorem castMembership_state
     mpure preS
     obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
       S!_keys_sub, S!_preserves, S!_fv_sub⟩ := preS
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -2645,7 +2659,7 @@ theorem castMembership_state
     mpure pre
     obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
       S!_keys_sub, S!_preserves, S!_fv_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -2738,9 +2752,9 @@ theorem loosenAux_prf_state_decls
   exact ⟨a1, a2, a3, a4, a5, a6, a7, a8, hdecl⟩
 
 set_option maxHeartbeats 4000000 in
-/-- `castMembership`'s `declarations` delta is a `declare_const`-only chunk
-(`specBodies Δ = []`), and the encoded membership term's free variables live in
-`fv x ∪ fv S ∪ declVars Δ`. -/
+/-- `castMembership` records every loosened helper together with its Boolean
+specification.  Both the result and each specification mention only the input
+terms and names declared by that delta. -/
 theorem castMembership_decl
     (x S : SMT.Term) (σx σS : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
     {used : List SMT.𝒱} {decl : SMT.Chunk} :
@@ -2751,7 +2765,8 @@ theorem castMembership_decl
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       ∃ Dlt : SMT.Chunk,
         E'.declarations = decl ++ Dlt ∧
-        specBodies Dlt = [] ∧
+        (∀ b ∈ specBodies Dlt,
+          SMT.fv b ⊆ SMT.fv x ∪ SMT.fv S ∪ declVars Dlt) ∧
         SMT.fv t' ⊆ SMT.fv x ∪ SMT.fv S ∪ declVars Dlt ⌝⦄ := by
   unfold castMembership
   mvcgen
@@ -2774,18 +2789,27 @@ theorem castMembership_decl
     mpure pre
     obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
       x!_keys_sub, x!_preserves, x!_fv_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, _, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const x! α'], ?_, by simp, ?_⟩
-    · rw [hd_decl, x!_decl, List.concat_eq_append]
+    refine ⟨helperSpecChunk x! α' x!_spec, ?_, ?_, ?_⟩
+    · rw [hd_decl, x!_decl]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · intro b hb
+      simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
+      subst b
+      intro v hv
+      simp only [declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton]
+      rcases List.mem_union_iff.mp (x!_fv_sub hv) with hx | hx!
+      · exact Or.inl (Or.inl hx)
+      · exact Or.inr (List.mem_singleton.mp hx!)
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
-        declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+        declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton] at hv ⊢
       have hsp : v ∈ SMT.fv x!_spec → v ∈ SMT.fv x ∨ v = x! := by
         intro h
         rcases List.mem_union_iff.mp (x!_fv_sub h) with hm | hm
@@ -2803,18 +2827,27 @@ theorem castMembership_decl
     mpure pre
     obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
       S!_keys_sub, S!_preserves, S!_fv_sub, S!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, _, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const S! (.fun σx .bool)], ?_, by simp, ?_⟩
-    · rw [hd_decl, S!_decl, List.concat_eq_append]
+    refine ⟨helperSpecChunk S! (.fun σx .bool) S!_spec, ?_, ?_, ?_⟩
+    · rw [hd_decl, S!_decl]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · intro b hb
+      simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
+      subst b
+      intro v hv
+      simp only [declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton]
+      rcases List.mem_union_iff.mp (S!_fv_sub hv) with hS | hS!
+      · exact Or.inl (Or.inr hS)
+      · exact Or.inr (List.mem_singleton.mp hS!)
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
-        declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+        declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton] at hv ⊢
       have hsp : v ∈ SMT.fv S!_spec → v ∈ SMT.fv S ∨ v = S! := by
         intro h
         rcases List.mem_union_iff.mp (S!_fv_sub h) with hm | hm
@@ -2832,18 +2865,27 @@ theorem castMembership_decl
     mpure pre
     obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
       x!_keys_sub, x!_preserves, x!_fv_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, _, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const x! (.pair α' β')], ?_, by simp, ?_⟩
-    · rw [hd_decl, x!_decl, List.concat_eq_append]
+    refine ⟨helperSpecChunk x! (.pair α' β') x!_spec, ?_, ?_, ?_⟩
+    · rw [hd_decl, x!_decl]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · intro b hb
+      simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
+      subst b
+      intro v hv
+      simp only [declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton]
+      rcases List.mem_union_iff.mp (x!_fv_sub hv) with hx | hx!
+      · exact Or.inl (Or.inl hx)
+      · exact Or.inr (List.mem_singleton.mp hx!)
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
-        declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+        declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton] at hv ⊢
       have hsp : v ∈ SMT.fv x!_spec → v ∈ SMT.fv x ∨ v = x! := by
         intro h
         rcases List.mem_union_iff.mp (x!_fv_sub h) with hm | hm
@@ -2861,7 +2903,7 @@ theorem castMembership_decl
     mpure prex
     obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
       x!_keys_sub, x!_preserves, x!_fv_sub, x!_decl⟩ := prex
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predx
     mintro ∀St₁d
     mpure predx
@@ -2879,20 +2921,40 @@ theorem castMembership_decl
     mpure preS
     obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
       S!_keys_sub, S!_preserves, S!_fv_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
     obtain ⟨hdS_decl, _, _, _, _⟩ := predS
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const x! α'] ++ [.declare_const S! (.fun α' (.option β))],
-      ?_, by simp [specBodies], ?_⟩
-    · rw [hdS_decl, S!_decl, hdx_decl, x!_decl, List.concat_eq_append, List.concat_eq_append,
-        List.append_assoc]
+    refine ⟨helperSpecChunk x! α' x!_spec ++
+        helperSpecChunk S! (.fun α' (.option β)) S!_spec,
+      ?_, ?_, ?_⟩
+    · rw [hdS_decl, S!_decl, hdx_decl, x!_decl]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · intro b hb
+      simp only [specBodies_append, specBodies_helperSpecChunk, List.mem_append,
+        List.mem_singleton] at hb
+      rcases hb with hb | hb
+      · subst b
+        intro v hv
+        simp only [declVars_append, declVars_helperSpecChunk, List.mem_append,
+          List.mem_union_iff, List.mem_singleton]
+        rcases List.mem_union_iff.mp (x!_fv_sub hv) with hx | hx!
+        · exact Or.inl (Or.inl (by simpa only [SMT.fv] using hx))
+        · exact Or.inr (Or.inl (List.mem_singleton.mp hx!))
+      · subst b
+        intro v hv
+        simp only [declVars_append, declVars_helperSpecChunk, List.mem_append,
+          List.mem_union_iff, List.mem_singleton]
+        rcases List.mem_union_iff.mp (S!_fv_sub hv) with hS | hS!
+        · exact Or.inl (Or.inr hS)
+        · exact Or.inr (Or.inr (List.mem_singleton.mp hS!))
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
-        declVars_append, declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+        declVars_append, declVars_helperSpecChunk, List.mem_union_iff,
+        List.mem_singleton] at hv ⊢
       have hspx : v ∈ SMT.fv x!_spec → v ∈ SMT.fv x ∨ v = x! := by
         intro h
         rcases List.mem_union_iff.mp (x!_fv_sub h) with hm | hm
@@ -2915,7 +2977,7 @@ theorem castMembership_decl
     mpure prey
     obtain ⟨y!_le, y!_Λ_sub, y!_fresh, y!_not_used, y!_used_sub,
       y!_keys_sub, y!_preserves, y!_fv_sub, y!_decl⟩ := prey
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predy
     mintro ∀St₁d
     mpure predy
@@ -2933,20 +2995,40 @@ theorem castMembership_decl
     mpure preS
     obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
       S!_keys_sub, S!_preserves, S!_fv_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
     obtain ⟨hdS_decl, _, _, _, _⟩ := predS
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const y! β'] ++ [.declare_const S! (.fun α (.option β'))],
-      ?_, by simp [specBodies], ?_⟩
-    · rw [hdS_decl, S!_decl, hdy_decl, y!_decl, List.concat_eq_append, List.concat_eq_append,
-        List.append_assoc]
+    refine ⟨helperSpecChunk y! β' y!_spec ++
+        helperSpecChunk S! (.fun α (.option β')) S!_spec,
+      ?_, ?_, ?_⟩
+    · rw [hdS_decl, S!_decl, hdy_decl, y!_decl]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · intro b hb
+      simp only [specBodies_append, specBodies_helperSpecChunk, List.mem_append,
+        List.mem_singleton] at hb
+      rcases hb with hb | hb
+      · subst b
+        intro v hv
+        simp only [declVars_append, declVars_helperSpecChunk, List.mem_append,
+          List.mem_union_iff, List.mem_singleton]
+        rcases List.mem_union_iff.mp (y!_fv_sub hv) with hx | hy!
+        · exact Or.inl (Or.inl (by simpa only [SMT.fv] using hx))
+        · exact Or.inr (Or.inl (List.mem_singleton.mp hy!))
+      · subst b
+        intro v hv
+        simp only [declVars_append, declVars_helperSpecChunk, List.mem_append,
+          List.mem_union_iff, List.mem_singleton]
+        rcases List.mem_union_iff.mp (S!_fv_sub hv) with hS | hS!
+        · exact Or.inl (Or.inr hS)
+        · exact Or.inr (Or.inr (List.mem_singleton.mp hS!))
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
-        declVars_append, declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+        declVars_append, declVars_helperSpecChunk, List.mem_union_iff,
+        List.mem_singleton] at hv ⊢
       have hspy : v ∈ SMT.fv y!_spec → v ∈ SMT.fv x ∨ v = y! := by
         intro h
         rcases List.mem_union_iff.mp (y!_fv_sub h) with hm | hm
@@ -2978,18 +3060,27 @@ theorem castMembership_decl
     mpure pre
     obtain ⟨S!_le, S!_Λ_sub, S!_fresh, S!_not_used, S!_used_sub,
       S!_keys_sub, S!_preserves, S!_fv_sub, S!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, _, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const S! (.fun α (.option β))], ?_, by simp, ?_⟩
-    · rw [hd_decl, S!_decl, List.concat_eq_append]
+    refine ⟨helperSpecChunk S! (.fun α (.option β)) S!_spec, ?_, ?_, ?_⟩
+    · rw [hd_decl, S!_decl]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · intro b hb
+      simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
+      subst b
+      intro v hv
+      simp only [declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton]
+      rcases List.mem_union_iff.mp (S!_fv_sub hv) with hS | hS!
+      · exact Or.inl (Or.inr hS)
+      · exact Or.inr (List.mem_singleton.mp hS!)
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
-        declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+        declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton] at hv ⊢
       have hsp : v ∈ SMT.fv S!_spec → v ∈ SMT.fv S ∨ v = S! := by
         intro h
         rcases List.mem_union_iff.mp (S!_fv_sub h) with hm | hm
@@ -6136,7 +6227,7 @@ theorem encodeTerm_combined
       mintro ∀σ'
       mpure pre
       obtain ⟨⟨h_le, h_Λ_sub, h_used_sub, h_keys_sub, h_fv_sub, h_preserves⟩,
-        Dcm, cm_decl_eq, cm_spec_nil, cm_fv_decl_sub⟩ := pre
+        Dcm, cm_decl_eq, cm_specb, cm_fv_decl_sub⟩ := pre
       mpure_intro
       refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, Δx ++ ΔS ++ Dcm, ?_, ?_, ?_⟩
       · exact fun v hv => h_used_sub (S_used_sub (x_used_sub hv))
@@ -6169,8 +6260,20 @@ theorem encodeTerm_combined
                   exact List.Subset.trans (List.subset_append_right ..)
                     (List.subset_append_left ..))
               (S_specb b hb)
-        · rw [cm_spec_nil] at hb
-          simp at hb
+        · intro v hv
+          have hcm := cm_specb b hb hv
+          rw [declVars_append, declVars_append]
+          rcases List.mem_union_iff.mp hcm with hxS | hdcm
+          · rcases List.mem_union_iff.mp hxS with hx | hS
+            · rcases List.mem_union_iff.mp (x_enc_fv_sub hx) with h | h
+              · exact List.mem_union_iff.mpr (.inl (hvars_x_sub h))
+              · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
+                    (List.mem_append_left _ h)))
+            · rcases List.mem_union_iff.mp (S_enc_fv_sub hS) with h | h
+              · exact List.mem_union_iff.mpr (.inl (hvars_S_sub h))
+              · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
+                    (List.mem_append_right _ h)))
+          · exact List.mem_union_iff.mpr (.inr (List.mem_append_right _ hdcm))
       · intro v hv
         have hv' := cm_fv_decl_sub hv
         rw [declVars_append, declVars_append]
@@ -8375,7 +8478,7 @@ theorem encodeTerm_combined
             mintro ∀St₉
             mpure pre9
             obtain ⟨⟨cm_le, cm_Λ_sub, cm_used_sub, cm_keys_sub, cm_fv_sub₀,
-              cm_preserves⟩, Δcm, cm_decl_eq, cm_specb_nil, cm_fv_decl_sub⟩ := pre9
+              cm_preserves⟩, Δcm, cm_decl_eq, cm_specb, cm_fv_decl_sub⟩ := pre9
             split
             · -- `castMembership` returned a boolean-typed membership term
               rename_i heqcm
@@ -8419,9 +8522,8 @@ theorem encodeTerm_combined
               have spec_bodies_eq :
                   (St₉.env.declarations.drop St₂.env.declarations.length).filterMap
                     (fun | .define_fun _ .unit .bool b => some b | _ => none)
-                    = specBodies ΔP := by
-                rw [new_decls_eq, filterMap_specBodies_eq, specBodies_append,
-                  cm_specb_nil, List.append_nil]
+                    = specBodies ΔP ++ specBodies Δcm := by
+                rw [new_decls_eq, filterMap_specBodies_eq, specBodies_append]
               have ex_binders_fst_eq :
                   ((St₉.env.declarations.drop St₂.env.declarations.length).filterMap
                     (fun | .declare_const v τ => some (v, τ) | _ => none)).map Prod.fst
@@ -8444,7 +8546,7 @@ theorem encodeTerm_combined
                       ((spB.map (SMT.substList vs (zs.map SMT.Term.var))).foldr (.imp · ·)
                         (.imp z_mem_D' (SMT.substList vs (zs.map SMT.Term.var) P_enc))))),
                     v ∉ zs ∧ v ∉ declVars ΔP ∧ v ∉ declVars Δcm ∧
-                    ((∃ b ∈ specBodies ΔP, v ∈ SMT.fv b) ∨
+                    ((∃ b ∈ specBodies ΔP ++ specBodies Δcm, v ∈ SMT.fv b) ∨
                       v ∈ SMT.fv z_mem_D' ∨
                       v ∈ SMT.fv (SMT.substList vs (zs.map SMT.Term.var) P_enc)) := by
                 intro v hv
@@ -8486,9 +8588,19 @@ theorem encodeTerm_combined
                 obtain ⟨hv_notMem_zs, hv_notMem_dvP, hv_notMem_dvcm, hcases⟩ := body_fv v hv
                 rw [StF_types_eq]
                 rcases hcases with ⟨b, hb, hvb⟩ | hz_mem | hsubst
-                · rcases List.mem_union_iff.mp (P_specb b hb hvb) with hkP | hdP
-                  · exact List.mem_union_iff.mpr (Or.inr (hvars_P_sub hkP))
-                  · exact absurd hdP hv_notMem_dvP
+                · rcases List.mem_append.mp hb with hbP | hbcm
+                  · rcases List.mem_union_iff.mp (P_specb b hbP hvb) with hkP | hdP
+                    · exact List.mem_union_iff.mpr (Or.inr (hvars_P_sub hkP))
+                    · exact absurd hdP hv_notMem_dvP
+                  · have hcm := cm_specb b hbcm hvb
+                    rcases List.mem_union_iff.mp hcm with hxD | hdcm
+                    · rcases List.mem_union_iff.mp hxD with hpairl | hD
+                      · exact absurd (encodeTerm_state.fv_toPairl_map_var_subset zs v hpairl)
+                          hv_notMem_zs
+                      · rcases List.mem_union_iff.mp (D_state_fv_sub hD) with hk | hbv
+                        · exact List.mem_union_iff.mpr (Or.inl (St₁_keys_sub_St₂ hk))
+                        · exact List.mem_union_iff.mpr (Or.inr (hvars_D_sub hbv))
+                    · exact absurd hdcm hv_notMem_dvcm
                 · have hcm := cm_fv_decl_sub hz_mem
                   rcases List.mem_union_iff.mp hcm with hxD | hdcm
                   · rcases List.mem_union_iff.mp hxD with hpairl | hD
@@ -8520,9 +8632,19 @@ theorem encodeTerm_combined
               · intro v hv
                 obtain ⟨hv_notMem_zs, hv_notMem_dvP, hv_notMem_dvcm, hcases⟩ := body_fv v hv
                 rcases hcases with ⟨b, hb, hvb⟩ | hz_mem | hsubst
-                · rcases List.mem_union_iff.mp (P_specb b hb hvb) with hkP | hdP
-                  · exact List.mem_union_iff.mpr (Or.inl (hvars_P_sub hkP))
-                  · exact absurd hdP hv_notMem_dvP
+                · rcases List.mem_append.mp hb with hbP | hbcm
+                  · rcases List.mem_union_iff.mp (P_specb b hbP hvb) with hkP | hdP
+                    · exact List.mem_union_iff.mpr (Or.inl (hvars_P_sub hkP))
+                    · exact absurd hdP hv_notMem_dvP
+                  · have hcm := cm_specb b hbcm hvb
+                    rcases List.mem_union_iff.mp hcm with hxD | hdcm
+                    · rcases List.mem_union_iff.mp hxD with hpairl | hD
+                      · exact absurd (encodeTerm_state.fv_toPairl_map_var_subset zs v hpairl)
+                          hv_notMem_zs
+                      · rcases List.mem_union_iff.mp (D_fv_sub hD) with hbd | hdd
+                        · exact List.mem_union_iff.mpr (Or.inl (hvars_D_sub hbd))
+                        · exact List.mem_union_iff.mpr (Or.inr hdd)
+                    · exact absurd hdcm hv_notMem_dvcm
                 · have hcm := cm_fv_decl_sub hz_mem
                   rcases List.mem_union_iff.mp hcm with hxD | hdcm
                   · rcases List.mem_union_iff.mp hxD with hpairl | hD
@@ -8723,7 +8845,7 @@ theorem encodeTerm_combined
             mintro ∀St₉
             mpure pre9
             obtain ⟨⟨cm_le, cm_Λ_sub, cm_used_sub, cm_keys_sub, cm_fv_sub₀,
-              cm_preserves⟩, Δcm, cm_decl_eq, cm_specb_nil, cm_fv_decl_sub⟩ := pre9
+              cm_preserves⟩, Δcm, cm_decl_eq, cm_specb, cm_fv_decl_sub⟩ := pre9
             mspec Std.Do.Spec.get_StateT
             simp only [modify]
             mspec Std.Do.Spec.modifyGet_StateT
@@ -8765,9 +8887,8 @@ theorem encodeTerm_combined
             have spec_bodies_eq :
                 (St₉.env.declarations.drop St₃.env.declarations.length).filterMap
                   (fun | .define_fun _ .unit .bool b => some b | _ => none)
-                  = specBodies ΔP := by
-              rw [new_decls_eq, filterMap_specBodies_eq, specBodies_append,
-                cm_specb_nil, List.append_nil]
+                  = specBodies ΔP ++ specBodies Δcm := by
+              rw [new_decls_eq, filterMap_specBodies_eq, specBodies_append]
             have ex_binders_fst_eq :
                 ((St₉.env.declarations.drop St₃.env.declarations.length).filterMap
                   (fun | .declare_const v τ => some (v, τ) | _ => none)).map Prod.fst
@@ -8790,7 +8911,7 @@ theorem encodeTerm_combined
                     ((spB.map (SMT.substList vs (xs.map SMT.Term.var))).foldr (.imp · ·)
                       (.imp xsy_mem_D (SMT.substList vs (xs.map SMT.Term.var) P_enc))))),
                   v ∉ xs ∧ v ∉ declVars ΔP ∧ v ∉ declVars Δcm ∧
-                  ((∃ b ∈ specBodies ΔP, v ∈ SMT.fv b) ∨
+                  ((∃ b ∈ specBodies ΔP ++ specBodies Δcm, v ∈ SMT.fv b) ∨
                     v ∈ SMT.fv xsy_mem_D ∨
                     v ∈ SMT.fv (SMT.substList vs (xs.map SMT.Term.var) P_enc)) := by
               intro v hv
@@ -8831,9 +8952,19 @@ theorem encodeTerm_combined
               obtain ⟨hv_notMem_xs, hv_notMem_dvP, hv_notMem_dvcm, hcases⟩ := body_fv v hv
               rw [StF_types_eq]
               rcases hcases with ⟨b, hb, hvb⟩ | hz_mem | hsubst
-              · rcases List.mem_union_iff.mp (P_specb b hb hvb) with hkP | hdP
-                · exact List.mem_union_iff.mpr (Or.inr (hvars_P_sub hkP))
-                · exact absurd hdP hv_notMem_dvP
+              · rcases List.mem_append.mp hb with hbP | hbcm
+                · rcases List.mem_union_iff.mp (P_specb b hbP hvb) with hkP | hdP
+                  · exact List.mem_union_iff.mpr (Or.inr (hvars_P_sub hkP))
+                  · exact absurd hdP hv_notMem_dvP
+                · have hcm := cm_specb b hbcm hvb
+                  rcases List.mem_union_iff.mp hcm with hxD | hdcm
+                  · rcases List.mem_union_iff.mp hxD with hpairl | hD
+                    · exact absurd (encodeTerm_state.fv_toPairl_map_var_subset xs v hpairl)
+                        hv_notMem_xs
+                    · rcases List.mem_union_iff.mp (D_state_fv_sub hD) with hk | hbv
+                      · exact List.mem_union_iff.mpr (Or.inl (St₁_keys_sub_St₂ hk))
+                      · exact List.mem_union_iff.mpr (Or.inr (hvars_D_sub hbv))
+                  · exact absurd hdcm hv_notMem_dvcm
               · have hcm := cm_fv_decl_sub hz_mem
                 rcases List.mem_union_iff.mp hcm with hxD | hdcm
                 · rcases List.mem_union_iff.mp hxD with hpairl | hD
@@ -8865,9 +8996,19 @@ theorem encodeTerm_combined
             · intro v hv
               obtain ⟨hv_notMem_xs, hv_notMem_dvP, hv_notMem_dvcm, hcases⟩ := body_fv v hv
               rcases hcases with ⟨b, hb, hvb⟩ | hz_mem | hsubst
-              · rcases List.mem_union_iff.mp (P_specb b hb hvb) with hkP | hdP
-                · exact List.mem_union_iff.mpr (Or.inl (hvars_P_sub hkP))
-                · exact absurd hdP hv_notMem_dvP
+              · rcases List.mem_append.mp hb with hbP | hbcm
+                · rcases List.mem_union_iff.mp (P_specb b hbP hvb) with hkP | hdP
+                  · exact List.mem_union_iff.mpr (Or.inl (hvars_P_sub hkP))
+                  · exact absurd hdP hv_notMem_dvP
+                · have hcm := cm_specb b hbcm hvb
+                  rcases List.mem_union_iff.mp hcm with hxD | hdcm
+                  · rcases List.mem_union_iff.mp hxD with hpairl | hD
+                    · exact absurd (encodeTerm_state.fv_toPairl_map_var_subset xs v hpairl)
+                        hv_notMem_xs
+                    · rcases List.mem_union_iff.mp (D_fv_sub hD) with hbd | hdd
+                      · exact List.mem_union_iff.mpr (Or.inl (hvars_D_sub hbd))
+                      · exact List.mem_union_iff.mpr (Or.inr hdd)
+                  · exact absurd hdcm hv_notMem_dvcm
               · have hcm := cm_fv_decl_sub hz_mem
                 rcases List.mem_union_iff.mp hcm with hxD | hdcm
                 · rcases List.mem_union_iff.mp hxD with hpairl | hD

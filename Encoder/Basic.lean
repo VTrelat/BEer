@@ -116,6 +116,14 @@ def SMT.addSpec (x! : 𝒱) (x!_spec : Term) : Encoder Unit := do
   defineFun s!"{x!}_spec" .unit .bool x!_spec
   addAssert <| .var s!"{x!}_spec"
 
+/-- Declare a cast helper and assert its defining specification.  Keeping the
+pair as one encoder operation lets quantifier encoding collect and re-scope
+both declarations together. -/
+def SMT.declareConstWithSpec (x! : 𝒱) (τ : SMTType)
+    (x!_spec : Term) : Encoder Unit := do
+  declareConst x! τ
+  addSpec x! x!_spec
+
 def SMT.addAssert' (t : Term) : Encoder Unit := do
   let ass := (←get).env.asserts
   modify λ e => { e with env := { e.env with asserts := go t ass}}

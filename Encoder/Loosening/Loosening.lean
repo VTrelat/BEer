@@ -100,7 +100,7 @@ def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SM
       x ∈ S    ↪    x!_spec ⇒ S x!
     -/
       let ⟨x!, x!_spec⟩ ← loosenAux_prf "mem!" h.toCastPath x
-      declareConst x! α'
+      declareConstWithSpec x! α' x!_spec
       return (x!_spec ∧ˢ .app S (.var x!), .bool)
     else if h : α' ⊑ α then do
     /-
@@ -109,7 +109,7 @@ def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SM
       x ∈ S    ↪    S!_spec ⇒ S! x
     -/
       let ⟨S!, S!_spec⟩ ← loosenAux_prf "mem!" (castPath.chpred h.toCastPath) S
-      declareConst S! (.fun α .bool)
+      declareConstWithSpec S! (.fun α .bool) S!_spec
       return (S!_spec ∧ˢ .app (.var S!) x, .bool)
     else throw s!"castMembership:1: Failed to unify {α} with {α'}"
   | .fun α' (.option β') => do
@@ -123,7 +123,7 @@ def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SM
           x ∈ S    ↪    x!_spec ⇒ S (fst x!) = some (snd x!)
         -/
           let ⟨x!, x!_spec⟩ ← loosenAux_prf "mem!" (α := .pair α β) (β := .pair α' β') (.pair hα.toCastPath hβ.toCastPath) x
-          declareConst x! (.pair α' β')
+          declareConstWithSpec x! (.pair α' β') x!_spec
           return (x!_spec ∧ˢ (.app S (.fst (.var x!)) =ˢ .some (.snd (.var x!))), .bool)
         else if hβ : β' ⊑ β then
         /-
@@ -132,9 +132,9 @@ def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SM
           x ∈ S    ↪    x!_spec ∧ S!_spec ⇒ S! (fst x!) = some (snd x)
         -/
           let ⟨x!, x!_spec⟩ ← loosenAux_prf "mem!" hα.toCastPath (.fst x)
-          declareConst x! α'
+          declareConstWithSpec x! α' x!_spec
           let ⟨S!, S!_spec⟩ ← loosenAux_prf "mem!" (β := .fun α' (.option β)) (.fun (not_eq_of_beq_eq_false rfl) (castPath.reflexive α') (.opt hβ.toCastPath)) S
-          declareConst S! (.fun α' (.option β))
+          declareConstWithSpec S! (.fun α' (.option β)) S!_spec
           return (x!_spec ∧ˢ S!_spec ∧ˢ (.app (.var S!) (.var x!) =ˢ .some (.snd x)), .bool)
         else throw s!"castMembership:3: Failed to unify {β} with {β'}"
       else if hα : α' ⊑ α then
@@ -145,11 +145,11 @@ def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SM
           x ∈ S    ↪    y!_spec ∧ S!_spec ⇒ S! (fst x) = some y!
         -/
           let ⟨y!, y!_spec⟩ ← loosenAux_prf "mem!" hβ.toCastPath (.snd x)
-          declareConst y! β'
+          declareConstWithSpec y! β' y!_spec
           let ⟨S!, S!_spec⟩ ← loosenAux_prf "mem!"
             (β := .fun α (.option β'))
             (.fun (not_eq_of_beq_eq_false rfl) hα.toCastPath (castPath.reflexive (.option β'))) S
-          declareConst S! (.fun α (.option β'))
+          declareConstWithSpec S! (.fun α (.option β')) S!_spec
           return (y!_spec ∧ˢ S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.var y!)), .bool)
         else if hβ : β' ⊑ β then
         /-
@@ -160,7 +160,7 @@ def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SM
           let ⟨S!, S!_spec⟩ ← loosenAux_prf "mem!"
             (β := .fun α (.option β))
             (.fun (not_eq_of_beq_eq_false rfl) hα.toCastPath (.opt hβ.toCastPath)) S
-          declareConst S! (.fun α (.option β))
+          declareConstWithSpec S! (.fun α (.option β)) S!_spec
           return (S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.snd x)), .bool)
         else throw s!"castMembership:4: Failed to unify {β} with {β'}"
       else throw s!"castMembership:5: Failed to unify {α} with {α'}"

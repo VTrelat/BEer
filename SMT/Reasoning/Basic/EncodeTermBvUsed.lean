@@ -1099,7 +1099,7 @@ theorem castMembership_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -1122,7 +1122,7 @@ theorem castMembership_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -1145,7 +1145,7 @@ theorem castMembership_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -1168,7 +1168,7 @@ theorem castMembership_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure preX
     obtain ⟨x!_used, x!_bv, x!_used_sub⟩ := preX
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predX
     mintro ∀St₁d
     mpure predX
@@ -1179,7 +1179,7 @@ theorem castMembership_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.�
     mintro ∀St₂
     mpure preS
     obtain ⟨S!_used, S!_bv, S!_used_sub⟩ := preS
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -1205,7 +1205,7 @@ theorem castMembership_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure preY
     obtain ⟨y!_used, y!_bv, y!_used_sub⟩ := preY
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predY
     mintro ∀St₁d
     mpure predY
@@ -1216,7 +1216,7 @@ theorem castMembership_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.�
     mintro ∀St₂
     mpure preS
     obtain ⟨S!_used, S!_bv, S!_used_sub⟩ := preS
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -1242,7 +1242,7 @@ theorem castMembership_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -1759,6 +1759,15 @@ theorem DeltaBvOk.define_fun_spec {nm : String} {b : SMT.Term} {U : List SMT.�
     cases hmem
     exact hb w hw
 
+/-- One constrained helper contributes a declaration and its Boolean
+specification, both covered by `DeltaBvOk`. -/
+theorem DeltaBvOk.helperSpecChunk {v : SMT.𝒱} {τ : SMTType} {b : SMT.Term}
+    {U : List SMT.𝒱} (hv : v ∈ U) (hb : ∀ w ∈ SMT.bv b, w ∈ U) :
+    DeltaBvOk (_root_.helperSpecChunk v τ b) U := by
+  simpa [_root_.helperSpecChunk] using
+    DeltaBvOk.append (DeltaBvOk.declare_const (τ := τ) hv)
+      (DeltaBvOk.define_fun_spec (nm := s!"{v}_spec") hb)
+
 set_option maxHeartbeats 4000000 in
 /-- Declarations-delta spec of `castEq`: like `castMembership`, it only
 `declareConst`s (the loosen spec is embedded in the result term, not `addSpec`ed),
@@ -1819,9 +1828,8 @@ theorem castEq_decls_bv (A B : SMT.Term) (σA σB : SMTType) {used : List SMT.�
     · exact fun v hv => by rw [hd_used]; exact B!_used_sub hv
 
 set_option maxHeartbeats 4000000 in
-/-- Declarations-delta spec of `castMembership`: it only `declareConst`s (no
-`addSpec`), so its delta `Dl` is a list of `declare_const`s whose names are the
-fresh loosen heads (all in `usedVars`) and `specBodies Dl = []`. -/
+/-- Declarations-delta spec of `castMembership`: every loosened helper is paired
+with the `define_fun` specification asserted by `declareConstWithSpec`. -/
 theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.𝒱} {n : ℕ}
     {decl : SMT.Chunk}
     (hbvx : ∀ v ∈ SMT.bv x, v ∈ used) (hbvS : ∀ v ∈ SMT.bv S, v ∈ used) :
@@ -1846,17 +1854,20 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     rename_i xout
     obtain ⟨x!, x!_spec⟩ := xout
     mpure pre
-    obtain ⟨x!_used, _, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨x!_used, x!_bv, x!_used_sub, x!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const x! α'], ?_, ?_, fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    · rw [hd_decl, x!_decl, List.concat_eq_append]
-    · rw [hd_used]; exact DeltaBvOk.declare_const x!_used
+    refine ⟨_root_.helperSpecChunk x! α' x!_spec, ?_, ?_,
+      fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
+    · rw [hd_decl, x!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · rw [hd_used]
+      exact DeltaBvOk.helperSpecChunk x!_used x!_bv
   case vc3.h_1.isFalse.isFalse.isTrue =>
     rename_i α' hσS hσx_ne hσx_nle hα'_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -1866,18 +1877,20 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     rename_i Sout
     obtain ⟨S!, S!_spec⟩ := Sout
     mpure pre
-    obtain ⟨x!_used, _, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨S!_used, S!_bv, S!_used_sub, S!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const S! (.fun sx .bool)], ?_, ?_,
-      fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    · rw [hd_decl, x!_decl, List.concat_eq_append]
-    · rw [hd_used]; exact DeltaBvOk.declare_const x!_used
+    refine ⟨_root_.helperSpecChunk S! (.fun sx .bool) S!_spec, ?_, ?_,
+      fun v hv => by rw [hd_used]; exact S!_used_sub hv⟩
+    · rw [hd_decl, S!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · rw [hd_used]
+      exact DeltaBvOk.helperSpecChunk S!_used S!_bv
   case vc4.h_2.h_1.isTrue.isTrue =>
     rename_i α' β' hσS α β hσx hα_le hβ_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -1887,18 +1900,20 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     rename_i xout
     obtain ⟨x!, x!_spec⟩ := xout
     mpure pre
-    obtain ⟨x!_used, _, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨x!_used, x!_bv, x!_used_sub, x!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const x! (.pair α' β')], ?_, ?_,
+    refine ⟨_root_.helperSpecChunk x! (.pair α' β') x!_spec, ?_, ?_,
       fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    · rw [hd_decl, x!_decl, List.concat_eq_append]
-    · rw [hd_used]; exact DeltaBvOk.declare_const x!_used
+    · rw [hd_decl, x!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · rw [hd_used]
+      exact DeltaBvOk.helperSpecChunk x!_used x!_bv
   case vc5.h_2.h_1.isTrue.isFalse.isTrue =>
     rename_i α' β' hσS α β hσx hα_le hβ_nle hβ'_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -1908,8 +1923,8 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     rename_i xout
     obtain ⟨x!, x!_spec⟩ := xout
     mpure preX
-    obtain ⟨x!_used, _, x!_used_sub, x!_decl⟩ := preX
-    mspec SMT.declareConst_spec
+    obtain ⟨x!_used, x!_bv, x!_used_sub, x!_decl⟩ := preX
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predX
     mintro ∀St₁d
     mpure predX
@@ -1921,8 +1936,8 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     rename_i Sout
     obtain ⟨S!, S!_spec⟩ := Sout
     mpure preS
-    obtain ⟨S!_used, _, S!_used_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_spec
+    obtain ⟨S!_used, S!_bv, S!_used_sub, S!_decl⟩ := preS
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -1931,13 +1946,16 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     mpure_intro
     have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂d.env.usedVars :=
       fun {w} h => by rw [hdS_used]; exact S!_used_sub (by rw [hdX_used]; exact h)
-    refine ⟨[.declare_const x! α'] ++ [.declare_const S! (.fun α' (.option β))],
+    refine ⟨_root_.helperSpecChunk x! α' x!_spec ++
+        _root_.helperSpecChunk S! (.fun α' (.option β)) S!_spec,
       ?_, ?_, fun v hv => lift1 (x!_used_sub hv)⟩
-    · rw [hdS_decl, S!_decl, hdX_decl, x!_decl, List.concat_eq_append, List.concat_eq_append,
-        List.append_assoc]
+    · rw [hdS_decl, S!_decl, hdX_decl, x!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
     · refine DeltaBvOk.append ?_ ?_
-      · exact DeltaBvOk.declare_const (lift1 x!_used)
-      · rw [hdS_used]; exact DeltaBvOk.declare_const S!_used
+      · exact DeltaBvOk.helperSpecChunk (lift1 x!_used)
+          (fun v hv => lift1 (x!_bv v hv))
+      · rw [hdS_used]
+        exact DeltaBvOk.helperSpecChunk S!_used S!_bv
   case vc6.h_2.h_1.isFalse.isTrue.isTrue =>
     rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -1947,8 +1965,8 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     rename_i yout
     obtain ⟨y!, y!_spec⟩ := yout
     mpure preY
-    obtain ⟨y!_used, _, y!_used_sub, y!_decl⟩ := preY
-    mspec SMT.declareConst_spec
+    obtain ⟨y!_used, y!_bv, y!_used_sub, y!_decl⟩ := preY
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predY
     mintro ∀St₁d
     mpure predY
@@ -1960,8 +1978,8 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     rename_i Sout
     obtain ⟨S!, S!_spec⟩ := Sout
     mpure preS
-    obtain ⟨S!_used, _, S!_used_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_spec
+    obtain ⟨S!_used, S!_bv, S!_used_sub, S!_decl⟩ := preS
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -1970,13 +1988,16 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     mpure_intro
     have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂d.env.usedVars :=
       fun {w} h => by rw [hdS_used]; exact S!_used_sub (by rw [hdY_used]; exact h)
-    refine ⟨[.declare_const y! β'] ++ [.declare_const S! (.fun α (.option β'))],
+    refine ⟨_root_.helperSpecChunk y! β' y!_spec ++
+        _root_.helperSpecChunk S! (.fun α (.option β')) S!_spec,
       ?_, ?_, fun v hv => lift1 (y!_used_sub hv)⟩
-    · rw [hdS_decl, S!_decl, hdY_decl, y!_decl, List.concat_eq_append, List.concat_eq_append,
-        List.append_assoc]
+    · rw [hdS_decl, S!_decl, hdY_decl, y!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
     · refine DeltaBvOk.append ?_ ?_
-      · exact DeltaBvOk.declare_const (lift1 y!_used)
-      · rw [hdS_used]; exact DeltaBvOk.declare_const S!_used
+      · exact DeltaBvOk.helperSpecChunk (lift1 y!_used)
+          (fun v hv => lift1 (y!_bv v hv))
+      · rw [hdS_used]
+        exact DeltaBvOk.helperSpecChunk S!_used S!_bv
   case vc7.h_2.h_1.isFalse.isTrue.isFalse.isTrue =>
     rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_nle hβ'_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -1986,18 +2007,20 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     rename_i Sout
     obtain ⟨S!, S!_spec⟩ := Sout
     mpure pre
-    obtain ⟨x!_used, _, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨S!_used, S!_bv, S!_used_sub, S!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const S! (.fun α (.option β))], ?_, ?_,
-      fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    · rw [hd_decl, x!_decl, List.concat_eq_append]
-    · rw [hd_used]; exact DeltaBvOk.declare_const x!_used
+    refine ⟨_root_.helperSpecChunk S! (.fun α (.option β)) S!_spec, ?_, ?_,
+      fun v hv => by rw [hd_used]; exact S!_used_sub hv⟩
+    · rw [hd_decl, S!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · rw [hd_used]
+      exact DeltaBvOk.helperSpecChunk S!_used S!_bv
 
 set_option maxHeartbeats 4000000 in
 /-- Declarations-delta spec of `castUnionAux`: each non-throw branch loosens `S`
@@ -4086,6 +4109,14 @@ theorem DeltaBvNotMem.define_fun_spec {nm : String} {b : SMT.Term} {a : List SMT
     cases hmem
     exact hb w hw
 
+/-- Freshness form of `DeltaBvOk.helperSpecChunk`. -/
+theorem DeltaBvNotMem.helperSpecChunk {v : SMT.𝒱} {τ : SMTType} {b : SMT.Term}
+    {a : List SMT.𝒱} (hv : v ∉ a) (hb : ∀ w ∈ SMT.bv b, w ∉ a) :
+    DeltaBvNotMem (_root_.helperSpecChunk v τ b) a := by
+  simpa [_root_.helperSpecChunk] using
+    DeltaBvNotMem.append (DeltaBvNotMem.declare_const (τ := τ) hv)
+      (DeltaBvNotMem.define_fun_spec (nm := s!"{v}_spec") hb)
+
 /-- Freshness companion of `defaultSpecM_bv`: every bound variable of the produced
 default term avoids the *input* `usedVars`. -/
 theorem defaultSpecM_bv_notMem (τ : SMTType) :
@@ -4829,7 +4860,7 @@ theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -4852,7 +4883,7 @@ theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -4875,7 +4906,7 @@ theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -4898,7 +4929,7 @@ theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mintro ∀St₁
     mpure preX
     obtain ⟨x!_notMem, x!_bv, x!_used_sub⟩ := preX
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predX
     mintro ∀St₁d
     mpure predX
@@ -4910,7 +4941,7 @@ theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mintro ∀St₂
     mpure preS
     obtain ⟨S!_notMem, S!_bv, S!_used_sub⟩ := preS
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -4936,7 +4967,7 @@ theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mintro ∀St₁
     mpure preY
     obtain ⟨y!_notMem, y!_bv, y!_used_sub⟩ := preY
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predY
     mintro ∀St₁d
     mpure predY
@@ -4948,7 +4979,7 @@ theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mintro ∀St₂
     mpure preS
     obtain ⟨S!_notMem, S!_bv, S!_used_sub⟩ := preS
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -4974,7 +5005,7 @@ theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -5536,8 +5567,8 @@ theorem castEq_decls_bv_notMem (A B : SMT.Term) (σA σB : SMTType)
     · exact fun v hv => by rw [hd_used]; exact B!_used_sub hv
 
 set_option maxHeartbeats 4000000 in
-/-- Dual declarations-delta spec of `castMembership`: the delta declares only loosen
-heads (`∉ avoid`); `specBodies Dl = []`. -/
+/-- Dual declarations-delta spec of `castMembership`: each constrained helper
+and every bound variable of its recorded specification avoid `avoid`. -/
 theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     {avoid used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk} (havsub : avoid ⊆ used)
     (hbvx : ∀ v ∈ SMT.bv x, v ∉ avoid) (hbvS : ∀ v ∈ SMT.bv S, v ∉ avoid) :
@@ -5562,17 +5593,19 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     rename_i xout
     obtain ⟨x!, x!_spec⟩ := xout
     mpure pre
-    obtain ⟨x!_notMem, _, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨x!_notMem, x!_bv, x!_used_sub, x!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const x! α'], ?_, DeltaBvNotMem.declare_const x!_notMem,
+    refine ⟨_root_.helperSpecChunk x! α' x!_spec, ?_,
+      DeltaBvNotMem.helperSpecChunk x!_notMem x!_bv,
       fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    rw [hd_decl, x!_decl, List.concat_eq_append]
+    rw [hd_decl, x!_decl]
+    simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
   case vc3.h_1.isFalse.isFalse.isTrue =>
     rename_i α' hσS hσx_ne hσx_nle hα'_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -5582,17 +5615,19 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     rename_i Sout
     obtain ⟨S!, S!_spec⟩ := Sout
     mpure pre
-    obtain ⟨x!_notMem, _, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨S!_notMem, S!_bv, S!_used_sub, S!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const S! (.fun sx .bool)], ?_, DeltaBvNotMem.declare_const x!_notMem,
-      fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    rw [hd_decl, x!_decl, List.concat_eq_append]
+    refine ⟨_root_.helperSpecChunk S! (.fun sx .bool) S!_spec, ?_,
+      DeltaBvNotMem.helperSpecChunk S!_notMem S!_bv,
+      fun v hv => by rw [hd_used]; exact S!_used_sub hv⟩
+    rw [hd_decl, S!_decl]
+    simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
   case vc4.h_2.h_1.isTrue.isTrue =>
     rename_i α' β' hσS α β hσx hα_le hβ_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -5602,17 +5637,19 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     rename_i xout
     obtain ⟨x!, x!_spec⟩ := xout
     mpure pre
-    obtain ⟨x!_notMem, _, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨x!_notMem, x!_bv, x!_used_sub, x!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const x! (.pair α' β')], ?_, DeltaBvNotMem.declare_const x!_notMem,
+    refine ⟨_root_.helperSpecChunk x! (.pair α' β') x!_spec, ?_,
+      DeltaBvNotMem.helperSpecChunk x!_notMem x!_bv,
       fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    rw [hd_decl, x!_decl, List.concat_eq_append]
+    rw [hd_decl, x!_decl]
+    simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
   case vc5.h_2.h_1.isTrue.isFalse.isTrue =>
     rename_i α' β' hσS α β hσx hα_le hβ_nle hβ'_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -5622,8 +5659,8 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     rename_i xout
     obtain ⟨x!, x!_spec⟩ := xout
     mpure preX
-    obtain ⟨x!_notMem, _, x!_used_sub, x!_decl⟩ := preX
-    mspec SMT.declareConst_spec
+    obtain ⟨x!_notMem, x!_bv, x!_used_sub, x!_decl⟩ := preX
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predX
     mintro ∀St₁d
     mpure predX
@@ -5636,8 +5673,8 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     rename_i Sout
     obtain ⟨S!, S!_spec⟩ := Sout
     mpure preS
-    obtain ⟨S!_notMem, _, S!_used_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_spec
+    obtain ⟨S!_notMem, S!_bv, S!_used_sub, S!_decl⟩ := preS
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -5646,12 +5683,14 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mpure_intro
     have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂d.env.usedVars :=
       fun {w} h => by rw [hdS_used]; exact S!_used_sub (by rw [hdX_used]; exact h)
-    refine ⟨[.declare_const x! α'] ++ [.declare_const S! (.fun α' (.option β))],
+    refine ⟨_root_.helperSpecChunk x! α' x!_spec ++
+        _root_.helperSpecChunk S! (.fun α' (.option β)) S!_spec,
       ?_, ?_, fun v hv => lift1 (x!_used_sub hv)⟩
-    · rw [hdS_decl, S!_decl, hdX_decl, x!_decl, List.concat_eq_append, List.concat_eq_append,
-        List.append_assoc]
-    · exact DeltaBvNotMem.append (DeltaBvNotMem.declare_const x!_notMem)
-        (DeltaBvNotMem.declare_const S!_notMem)
+    · rw [hdS_decl, S!_decl, hdX_decl, x!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · exact DeltaBvNotMem.append
+        (DeltaBvNotMem.helperSpecChunk x!_notMem x!_bv)
+        (DeltaBvNotMem.helperSpecChunk S!_notMem S!_bv)
   case vc6.h_2.h_1.isFalse.isTrue.isTrue =>
     rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -5661,8 +5700,8 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     rename_i yout
     obtain ⟨y!, y!_spec⟩ := yout
     mpure preY
-    obtain ⟨y!_notMem, _, y!_used_sub, y!_decl⟩ := preY
-    mspec SMT.declareConst_spec
+    obtain ⟨y!_notMem, y!_bv, y!_used_sub, y!_decl⟩ := preY
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predY
     mintro ∀St₁d
     mpure predY
@@ -5675,8 +5714,8 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     rename_i Sout
     obtain ⟨S!, S!_spec⟩ := Sout
     mpure preS
-    obtain ⟨S!_notMem, _, S!_used_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_spec
+    obtain ⟨S!_notMem, S!_bv, S!_used_sub, S!_decl⟩ := preS
+    mspec SMT.declareConst_addSpec_spec
     mrename_i predS
     mintro ∀St₂d
     mpure predS
@@ -5685,12 +5724,14 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     mpure_intro
     have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂d.env.usedVars :=
       fun {w} h => by rw [hdS_used]; exact S!_used_sub (by rw [hdY_used]; exact h)
-    refine ⟨[.declare_const y! β'] ++ [.declare_const S! (.fun α (.option β'))],
+    refine ⟨_root_.helperSpecChunk y! β' y!_spec ++
+        _root_.helperSpecChunk S! (.fun α (.option β')) S!_spec,
       ?_, ?_, fun v hv => lift1 (y!_used_sub hv)⟩
-    · rw [hdS_decl, S!_decl, hdY_decl, y!_decl, List.concat_eq_append, List.concat_eq_append,
-        List.append_assoc]
-    · exact DeltaBvNotMem.append (DeltaBvNotMem.declare_const y!_notMem)
-        (DeltaBvNotMem.declare_const S!_notMem)
+    · rw [hdS_decl, S!_decl, hdY_decl, y!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · exact DeltaBvNotMem.append
+        (DeltaBvNotMem.helperSpecChunk y!_notMem y!_bv)
+        (DeltaBvNotMem.helperSpecChunk S!_notMem S!_bv)
   case vc7.h_2.h_1.isFalse.isTrue.isFalse.isTrue =>
     rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_nle hβ'_le St hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -5700,17 +5741,19 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     rename_i Sout
     obtain ⟨S!, S!_spec⟩ := Sout
     mpure pre
-    obtain ⟨x!_notMem, _, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨S!_notMem, S!_bv, S!_used_sub, S!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const S! (.fun α (.option β))], ?_, DeltaBvNotMem.declare_const x!_notMem,
-      fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    rw [hd_decl, x!_decl, List.concat_eq_append]
+    refine ⟨_root_.helperSpecChunk S! (.fun α (.option β)) S!_spec, ?_,
+      DeltaBvNotMem.helperSpecChunk S!_notMem S!_bv,
+      fun v hv => by rw [hd_used]; exact S!_used_sub hv⟩
+    rw [hd_decl, S!_decl]
+    simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
 
 set_option maxHeartbeats 4000000 in
 /-- Dual declarations-delta spec of `castApp`: the spliced declarations' declared

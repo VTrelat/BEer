@@ -820,6 +820,38 @@ theorem SMT.addSpec_spec {x! : SMT.𝒱} {x!_spec : Term} {decl : SMT.Chunk} {as
   obtain ⟨⟩ := pre
   mspec SMT.addAssert_spec
 
+/-- Record a fresh cast helper and its defining specification as one state
+transition.  `castMembership` uses this pair so the specification is asserted
+globally and can be re-scoped as a quantifier guard by `encodeTerm .all`. -/
+@[spec]
+theorem SMT.declareConst_addSpec_spec
+    {x! : SMT.𝒱} {x!_spec : Term} {τ : SMTType}
+    {decl : SMT.Chunk} {as : SMT.Stages} {n} {Γ} {used} :
+  ⦃ fun ⟨E, Λ⟩ ↦
+      ⌜E.declarations = decl ∧ E.asserts = as ∧
+        E.freshvarsc = n ∧ E.usedVars = used ∧ Λ = Γ⌝ ⦄
+  SMT.declareConstWithSpec x! τ x!_spec
+  ⦃ ⇓? () ⟨E, Λ⟩ =>
+      ⌜E.declarations =
+          (decl.concat (.declare_const x! τ)).concat
+            (.define_fun s!"{x!}_spec" .unit .bool x!_spec) ∧
+        E.asserts = addAssertAux as [.assert (.var s!"{x!}_spec")] ∧
+        E.freshvarsc = n ∧ E.usedVars = used ∧ Λ = Γ⌝ ⦄ := by
+  unfold SMT.declareConstWithSpec
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := pre
+  mspec SMT.declareConst_spec
+  mrename_i pre
+  mintro ∀St'
+  mpure pre
+  obtain ⟨hdecl, hasserts, hfvc, hused, htypes⟩ := pre
+  mspec SMT.addSpec_spec
+    (decl := St.env.declarations.concat (.declare_const x! τ))
+    (as := St.env.asserts) (n := St.env.freshvarsc)
+    (Γ := St.types) (used := St.env.usedVars)
+
 @[spec]
 theorem SMT.Term.getType_spec {Γ : TypeContext} {t : Term} {α : SMTType} (typ_t : Γ ⊢ˢ t : α):
   ⦃ λ ⟨_, Γ'⟩ ↦ ⌜Γ' = Γ⌝ ⦄

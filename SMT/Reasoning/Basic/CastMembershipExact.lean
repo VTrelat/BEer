@@ -85,8 +85,8 @@ theorem castMembership_branch2_exact_spec.{u}
     used_sub1, keys_sub1, preserves1, typ_x!, typ_x!_spec,
     typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, hadq_univ⟩ := pre
   mspec Std.Do.Spec.map
-  mspec SMT.declareConst_spec
-    (v := x!) (τ := τ) (decl := St1.env.declarations)
+  mspec SMT.declareConst_addSpec_spec
+    (x! := x!) (x!_spec := x!_spec) (τ := τ) (decl := St1.env.declarations)
     (as := St1.env.asserts) (n := St1.env.freshvarsc)
     (Γ := St1.types) (used := St1.env.usedVars)
   mrename_i pre
@@ -236,8 +236,9 @@ theorem castMembership_option_exact_spec.{u}
     used_sub1, keys_sub1, preserves1, typ_x!, typ_x!_spec,
     typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, hadq_univ⟩ := pre
   mspec Std.Do.Spec.map
-  mspec SMT.declareConst_spec
-    (v := x!) (τ := .pair α' β') (decl := St1.env.declarations)
+  mspec SMT.declareConst_addSpec_spec
+    (x! := x!) (x!_spec := x!_spec) (τ := .pair α' β')
+    (decl := St1.env.declarations)
     (as := St1.env.asserts) (n := St1.env.freshvarsc)
     (Γ := St1.types) (used := St1.env.usedVars)
   mrename_i pre

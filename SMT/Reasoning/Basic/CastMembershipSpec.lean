@@ -103,15 +103,25 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
         mintro ∀St1
         mpure pre
         obtain ⟨hn1, St1_types_eq, x!_fresh, x!_not_used, used_sub1, keys_sub1, preserves1, typ_x!, typ_x!_spec, typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, _⟩ := pre
+        unfold SMT.declareConstWithSpec
         mspec Std.Do.Spec.map
-        mspec SMT.declareConst_spec (v := x!) (τ := τ) (decl := St1.env.declarations)
+        mspec SMT.declareConst_spec (v := x!) (τ := τ)
+          (decl := St1.env.declarations)
           (as := St1.env.asserts) (n := St1.env.freshvarsc) (Γ := St1.types) (used := St1.env.usedVars)
         mrename_i pre
         mintro ∀St2
         mpure pre
         obtain ⟨_, _, St2_fvc_eq, St2_used_eq, St2_types_eq⟩ := pre
-        have typ_full : St2.types ⊢ˢ x!_spec ∧ˢ .app S (.var x!) : .bool := by
-          rw [St2_types_eq]
+        mspec SMT.addSpec_spec (x! := x!) (x!_spec := x!_spec)
+          (decl := St2.env.declarations) (as := St2.env.asserts)
+          (n := St2.env.freshvarsc) (Γ := St2.types)
+          (used := St2.env.usedVars)
+        mrename_i pre
+        mintro ∀St3
+        mpure pre
+        obtain ⟨_, _, St3_fvc_eq, St3_used_eq, St3_types_eq⟩ := pre
+        have typ_full : St3.types ⊢ˢ x!_spec ∧ˢ .app S (.var x!) : .bool := by
+          rw [St3_types_eq, St2_types_eq]
           apply SMT.Typing.and
           · exact typ_x!_spec_St1
           · apply SMT.Typing.app
@@ -122,14 +132,14 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             · exact typ_x!_St1
         mpure_intro
         and_intros
-        · rw [St2_fvc_eq]
+        · rw [St3_fvc_eq, St2_fvc_eq]
           exact hn1
         · intro v hv
-          rw [St2_types_eq]
+          rw [St3_types_eq, St2_types_eq]
           exact St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh hv)
-        · rw [St2_types_eq, St2_used_eq]
+        · rw [St3_types_eq, St3_used_eq, St2_types_eq, St2_used_eq]
           exact keys_sub1
-        · rw [←St_used_eq, St2_used_eq]
+        · rw [←St_used_eq, St3_used_eq, St2_used_eq]
           exact used_sub1
         · trivial
         · exact typ_full
@@ -151,7 +161,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
         · -- preservation: v ∈ used ∧ v ∉ Λ → v ∉ Λ'
           -- St2.types = St1.types, and preserves1 gives v ∉ St1.types directly.
           intro v hv_used hv_notΛ
-          rw [St2_types_eq]
+          rw [St3_types_eq, St2_types_eq]
           rw [St_used_eq] at preserves1
           exact preserves1 v hv_used hv_notΛ
         · -- totality: typing of full term plus `denote_exists_of_typing`.
@@ -167,15 +177,25 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
         mintro ∀St1
         mpure pre
         obtain ⟨hn1, St1_types_eq, S!_fresh, S!_not_used, used_sub1, keys_sub1, preserves1, typ_S!, typ_S!_spec, typ_S!_St1, typ_S!_spec_St1, fv_S!_spec, _⟩ := pre
+        unfold SMT.declareConstWithSpec
         mspec Std.Do.Spec.map
-        mspec SMT.declareConst_spec (v := S!) (τ := .fun α .bool) (decl := St1.env.declarations)
+        mspec SMT.declareConst_spec (v := S!) (τ := .fun α .bool)
+          (decl := St1.env.declarations)
           (as := St1.env.asserts) (n := St1.env.freshvarsc) (Γ := St1.types) (used := St1.env.usedVars)
         mrename_i pre
         mintro ∀St2
         mpure pre
         obtain ⟨_, _, St2_fvc_eq, St2_used_eq, St2_types_eq⟩ := pre
-        have typ_full : St2.types ⊢ˢ S!_spec ∧ˢ .app (.var S!) x : .bool := by
-          rw [St2_types_eq]
+        mspec SMT.addSpec_spec (x! := S!) (x!_spec := S!_spec)
+          (decl := St2.env.declarations) (as := St2.env.asserts)
+          (n := St2.env.freshvarsc) (Γ := St2.types)
+          (used := St2.env.usedVars)
+        mrename_i pre
+        mintro ∀St3
+        mpure pre
+        obtain ⟨_, _, St3_fvc_eq, St3_used_eq, St3_types_eq⟩ := pre
+        have typ_full : St3.types ⊢ˢ S!_spec ∧ˢ .app (.var S!) x : .bool := by
+          rw [St3_types_eq, St2_types_eq]
           apply SMT.Typing.and
           · exact typ_S!_spec_St1
           · apply SMT.Typing.app
@@ -186,14 +206,14 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
                 (fun v hv => preserves1 v (St_used_eq ▸ hbv_x v hv) (SMT.Typing.bv_notMem_context typ_x v hv))
         mpure_intro
         and_intros
-        · rw [St2_fvc_eq]
+        · rw [St3_fvc_eq, St2_fvc_eq]
           exact hn1
         · intro v hv
-          rw [St2_types_eq]
+          rw [St3_types_eq, St2_types_eq]
           exact St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv)
-        · rw [St2_types_eq, St2_used_eq]
+        · rw [St3_types_eq, St3_used_eq, St2_types_eq, St2_used_eq]
           exact keys_sub1
-        · rw [←St_used_eq, St2_used_eq]
+        · rw [←St_used_eq, St3_used_eq, St2_used_eq]
           exact used_sub1
         · trivial
         · exact typ_full
@@ -213,7 +233,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
           · exact Or.inl h_x
         · -- preservation: St2.types = St1.types, use preserves1.
           intro v hv_used hv_notΛ
-          rw [St2_types_eq]
+          rw [St3_types_eq, St2_types_eq]
           rw [St_used_eq] at preserves1
           exact preserves1 v hv_used hv_notΛ
         · -- totality: typing of full term plus `denote_exists_of_typing`.
@@ -242,17 +262,27 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
           mintro ∀St1
           mpure pre
           obtain ⟨hn1, St1_types_eq, x!_fresh, _, used_sub1, keys_sub1, preserves1, typ_x!, typ_x!_spec, typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, _⟩ := pre
+          unfold SMT.declareConstWithSpec
           mspec Std.Do.Spec.map
-          mspec SMT.declareConst_spec (v := x!) (τ := .pair τ β') (decl := St1.env.declarations)
+          mspec SMT.declareConst_spec (v := x!) (τ := .pair τ β')
+            (decl := St1.env.declarations)
             (as := St1.env.asserts) (n := St1.env.freshvarsc) (Γ := St1.types) (used := St1.env.usedVars)
           mrename_i pre
           mintro ∀St2
           mpure pre
           obtain ⟨_, _, St2_fvc_eq, St2_used_eq, St2_types_eq⟩ := pre
-          have typ_full : St2.types ⊢ˢ
+          mspec SMT.addSpec_spec (x! := x!) (x!_spec := x!_spec)
+            (decl := St2.env.declarations) (as := St2.env.asserts)
+            (n := St2.env.freshvarsc) (Γ := St2.types)
+            (used := St2.env.usedVars)
+          mrename_i pre
+          mintro ∀St3
+          mpure pre
+          obtain ⟨_, _, St3_fvc_eq, St3_used_eq, St3_types_eq⟩ := pre
+          have typ_full : St3.types ⊢ˢ
               x!_spec ∧ˢ ((SMT.Term.app S (.fst (.var x!))) =ˢ (SMT.Term.snd (.var x!)).some) :
               .bool := by
-            rw [St2_types_eq]
+            rw [St3_types_eq, St2_types_eq]
             apply SMT.Typing.and
             · exact typ_x!_spec_St1
             · apply SMT.Typing.eq
@@ -268,14 +298,14 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
                 exact typ_x!_St1
           mpure_intro
           and_intros
-          · rw [St2_fvc_eq]
+          · rw [St3_fvc_eq, St2_fvc_eq]
             exact hn1
           · intro v hv
-            rw [St2_types_eq]
+            rw [St3_types_eq, St2_types_eq]
             exact St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh hv)
-          · rw [St2_types_eq, St2_used_eq]
+          · rw [St3_types_eq, St3_used_eq, St2_types_eq, St2_used_eq]
             exact keys_sub1
-          · rw [←St_used_eq, St2_used_eq]
+          · rw [←St_used_eq, St3_used_eq, St2_used_eq]
             exact used_sub1
           · trivial
           · exact typ_full
@@ -295,7 +325,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             · exact Or.inr (Or.inr (fun hΛ => x!_fresh hΛ))
           · -- preservation: St2.types = St1.types, use preserves1.
             intro v hv_used hv_notΛ
-            rw [St2_types_eq]
+            rw [St3_types_eq, St2_types_eq]
             rw [St_used_eq] at preserves1
             exact preserves1 v hv_used hv_notΛ
           · -- totality: typing of full term plus `denote_exists_of_typing`.
@@ -317,7 +347,8 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
           mintro ∀St1
           mpure pre
           obtain ⟨⟨_x!_used, bv_x!_spec_used, _⟩, hn1, St1_types_eq, x!_fresh, x!_not_used, used_sub1, keys_sub1, preserves1, typ_x!, typ_x!_spec, typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, _⟩ := pre
-          mspec SMT.declareConst_spec (v := x!) (τ := τ) (decl := St1.env.declarations)
+          mspec SMT.declareConst_addSpec_spec (x! := x!) (x!_spec := x!_spec)
+            (τ := τ) (decl := St1.env.declarations)
             (as := St1.env.asserts) (n := St1.env.freshvarsc) (Γ := St1.types) (used := St1.env.usedVars)
           mrename_i pre
           mintro ∀St2
@@ -351,7 +382,8 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             dsimp [S!, S!_spec] at pre
             obtain ⟨hn2, St3_types_eq, S!_fresh, S!_not_used, used_sub2, keys_sub2, preserves2, typ_S!, typ_S!_spec, typ_S!_St3, typ_S!_spec_St3, fv_S!_spec, _⟩ := pre
             mspec Std.Do.Spec.map
-            mspec SMT.declareConst_spec (v := S!) (τ := .fun τ (.option β0)) (decl := St3.env.declarations)
+            mspec SMT.declareConst_addSpec_spec (x! := S!) (x!_spec := S!_spec)
+              (τ := .fun τ (.option β0)) (decl := St3.env.declarations)
               (as := St3.env.asserts) (n := St3.env.freshvarsc) (Γ := St3.types) (used := St3.env.usedVars)
             mrename_i pre
             mintro ∀St4
@@ -503,7 +535,8 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
           mintro ∀St1
           mpure pre
           obtain ⟨⟨_y!_used, bv_y!_spec_used, _⟩, hn1, St1_types_eq, y!_fresh, y!_not_used, used_sub1, keys_sub1, preserves1, typ_y!, typ_y!_spec, typ_y!_St1, typ_y!_spec_St1, fv_y!_spec, _⟩ := pre
-          mspec SMT.declareConst_spec (v := y!) (τ := β') (decl := St1.env.declarations)
+          mspec SMT.declareConst_addSpec_spec (x! := y!) (x!_spec := y!_spec)
+            (τ := β') (decl := St1.env.declarations)
             (as := St1.env.asserts) (n := St1.env.freshvarsc) (Γ := St1.types) (used := St1.env.usedVars)
           mrename_i pre
           mintro ∀St2
@@ -537,7 +570,8 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
             dsimp [S!, S!_spec] at pre
             obtain ⟨hn2, St3_types_eq, S!_fresh, S!_not_used, used_sub2, keys_sub2, preserves2, typ_S!, typ_S!_spec, typ_S!_St3, typ_S!_spec_St3, fv_S!_spec, _⟩ := pre
             mspec Std.Do.Spec.map
-            mspec SMT.declareConst_spec (v := S!) (τ := .fun α0 (.option β')) (decl := St3.env.declarations)
+            mspec SMT.declareConst_addSpec_spec (x! := S!) (x!_spec := S!_spec)
+              (τ := .fun α0 (.option β')) (decl := St3.env.declarations)
               (as := St3.env.asserts) (n := St3.env.freshvarsc) (Γ := St3.types) (used := St3.env.usedVars)
             mrename_i pre
             mintro ∀St4
@@ -684,19 +718,29 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
           set S!_spec : SMT.Term := out.2
           dsimp [S!, S!_spec] at pre
           obtain ⟨hn1, St1_types_eq, S!_fresh, S!_not_used, used_sub1, keys_sub1, preserves1, typ_S!, typ_S!_spec, typ_S!_St1, typ_S!_spec_St1, fv_S!_spec, _⟩ := pre
+          unfold SMT.declareConstWithSpec
           mspec Std.Do.Spec.map
-          mspec SMT.declareConst_spec (v := S!) (τ := .fun α0 (.option β0)) (decl := St1.env.declarations)
+          mspec SMT.declareConst_spec (v := S!)
+            (τ := .fun α0 (.option β0)) (decl := St1.env.declarations)
             (as := St1.env.asserts) (n := St1.env.freshvarsc) (Γ := St1.types) (used := St1.env.usedVars)
           mrename_i pre
           mintro ∀St2
           mpure pre
           obtain ⟨_, _, St2_fvc_eq, St2_used_eq, St2_types_eq⟩ := pre
+          mspec SMT.addSpec_spec (x! := S!) (x!_spec := S!_spec)
+            (decl := St2.env.declarations) (as := St2.env.asserts)
+            (n := St2.env.freshvarsc) (Γ := St2.types)
+            (used := St2.env.usedVars)
+          mrename_i pre
+          mintro ∀St3
+          mpure pre
+          obtain ⟨_, _, St3_fvc_eq, St3_used_eq, St3_types_eq⟩ := pre
           have typ_full :
-              St2.types ⊢ˢ
+              St3.types ⊢ˢ
                 S!_spec ∧ˢ
                   ((SMT.Term.app (.var out.1) (.fst x)) =ˢ (SMT.Term.snd x).some) :
                 .bool := by
-            rw [St2_types_eq]
+            rw [St3_types_eq, St2_types_eq]
             dsimp [S!, S!_spec] at *
             have typ_fst_x : St.types ⊢ˢ .fst x : α0 := by
               apply SMT.Typing.fst
@@ -730,14 +774,14 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
                 exact typ_snd_x_St1
           mpure_intro
           and_intros
-          · rw [St2_fvc_eq]
+          · rw [St3_fvc_eq, St2_fvc_eq]
             exact hn1
           · intro v hv
-            rw [St2_types_eq]
+            rw [St3_types_eq, St2_types_eq]
             exact St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv)
-          · rw [St2_types_eq, St2_used_eq]
+          · rw [St3_types_eq, St3_used_eq, St2_types_eq, St2_used_eq]
             exact keys_sub1
-          · rw [←St_used_eq, St2_used_eq]
+          · rw [←St_used_eq, St3_used_eq, St2_used_eq]
             exact used_sub1
           · trivial
           · exact typ_full
@@ -763,7 +807,7 @@ theorem castMembership_spec.{u} {α β : SMT.SMTType} {x S : SMT.Term} {Λ : SMT
               exact Or.inl h_snd_x
           · -- preservation: St2.types = St1.types, use preserves1.
             intro v hv_used hv_notΛ
-            rw [St2_types_eq]
+            rw [St3_types_eq, St2_types_eq]
             rw [St_used_eq] at preserves1
             exact preserves1 v hv_used hv_notΛ
           · -- totality: typing of full term plus `denote_exists_of_typing`.
@@ -855,16 +899,26 @@ theorem castMembership_branch2_spec.{u}
   mpure pre
   obtain ⟨hn1, St1_types_eq, x!_fresh, x!_not_used, used_sub1, keys_sub1, preserves1,
     typ_x!, typ_x!_spec, typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, hadq_univ⟩ := pre
+  unfold SMT.declareConstWithSpec
   mspec Std.Do.Spec.map
-  mspec SMT.declareConst_spec (v := x!) (τ := τ) (decl := St1.env.declarations)
+  mspec SMT.declareConst_spec (v := x!) (τ := τ)
+    (decl := St1.env.declarations)
     (as := St1.env.asserts) (n := St1.env.freshvarsc) (Γ := St1.types)
     (used := St1.env.usedVars)
   mrename_i pre
   mintro ∀St2
   mpure pre
   obtain ⟨_, _, St2_fvc_eq, St2_used_eq, St2_types_eq⟩ := pre
-  have typ_full : St2.types ⊢ˢ x!_spec ∧ˢ .app S (.var x!) : .bool := by
-    rw [St2_types_eq]
+  mspec SMT.addSpec_spec (x! := x!) (x!_spec := x!_spec)
+    (decl := St2.env.declarations) (as := St2.env.asserts)
+    (n := St2.env.freshvarsc) (Γ := St2.types)
+    (used := St2.env.usedVars)
+  mrename_i pre
+  mintro ∀St3
+  mpure pre
+  obtain ⟨_, _, St3_fvc_eq, St3_used_eq, St3_types_eq⟩ := pre
+  have typ_full : St3.types ⊢ˢ x!_spec ∧ˢ .app S (.var x!) : .bool := by
+    rw [St3_types_eq, St2_types_eq]
     apply SMT.Typing.and
     · exact typ_x!_spec_St1
     · apply SMT.Typing.app
@@ -876,12 +930,12 @@ theorem castMembership_branch2_spec.{u}
       · exact typ_x!_St1
   mpure_intro
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · rw [St2_fvc_eq]; exact hn1
+  · rw [St3_fvc_eq, St2_fvc_eq]; exact hn1
   · intro v hv
-    rw [St2_types_eq]
+    rw [St3_types_eq, St2_types_eq]
     exact St1_types_eq (SMT.TypeContext.entries_subset_insert_of_notMem x!_fresh hv)
-  · rw [St2_types_eq, St2_used_eq]; exact keys_sub1
-  · rw [←St_used_eq, St2_used_eq]; exact used_sub1
+  · rw [St3_types_eq, St3_used_eq, St2_types_eq, St2_used_eq]; exact keys_sub1
+  · rw [←St_used_eq, St3_used_eq, St2_used_eq]; exact used_sub1
   · trivial
   · exact typ_full
   · -- fv tracking
@@ -897,7 +951,7 @@ theorem castMembership_branch2_spec.{u}
     · exact Or.inr (Or.inl h_S)
     · exact Or.inr (Or.inr (fun hΛ => x!_fresh hΛ))
   · intro v hv_used hv_notΛ
-    rw [St2_types_eq]
+    rw [St3_types_eq, St2_types_eq]
     rw [St_used_eq] at preserves1
     exact preserves1 v hv_used hv_notΛ
   · intro Δctx hcov_t hcompat
