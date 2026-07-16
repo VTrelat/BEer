@@ -385,6 +385,164 @@ theorem BType.SupportedSMT.setE {τ : BType} {σ : SMTType}
   | setPred τ => exact Or.inl rfl
   | optionFun α β => exact Or.inr ⟨α, β, rfl, rfl⟩
 
+/-- The per-variable type transformation used by the `all` encoder remains
+inside the supported representation grammar. -/
+theorem SMTFlagTypeRel.supported
+    {flagged : Bool} {τ : BType} {σ : SMTType}
+    (h : SMTFlagTypeRel flagged τ.toSMTType σ) :
+    BType.SupportedSMT τ σ := by
+  cases flagged with
+  | false =>
+      simp only [SMTFlagTypeRel, Bool.false_eq_true, if_false] at h
+      subst σ
+      exact BType.SupportedSMT.canonical τ
+  | true =>
+      simp only [SMTFlagTypeRel, if_true] at h
+      rcases h with ⟨α, β, hin, hout⟩ | ⟨α, β, hin, hout⟩
+      · cases τ with
+        | int => nomatch hin
+        | bool => nomatch hin
+        | prod => nomatch hin
+        | set γ =>
+            cases γ with
+            | int => nomatch hin
+            | bool => nomatch hin
+            | set => nomatch hin
+            | prod γ δ =>
+                simp only [BType.toSMTType, SMTType.fun.injEq,
+                  SMTType.pair.injEq] at hin
+                obtain ⟨⟨hα, hβ⟩, _⟩ := hin
+                subst α
+                subst β
+                rw [hout]
+                exact .optionFun γ δ
+      · cases τ <;> nomatch hin
+
+private theorem List.toProdl_cons_eq_foldl
+    (σ : SMTType) (σs : List SMTType) :
+    (σ :: σs).toProdl = σs.foldl SMTType.pair σ := by
+  induction σs using List.reverseRecOn with
+  | nil => rfl
+  | append_singleton σs ρ ih =>
+      rw [← List.concat_eq_append]
+      change ((σ :: σs).concat ρ).toProdl =
+        (σs.concat ρ).foldl SMTType.pair σ
+      rw [List.toProdl_concat_of_nonempty _ _ (by simp)]
+      rw [List.concat_eq_append, List.foldl_concat, ih]
+
+private theorem BType.SupportedSMT.foldl_prod
+    {α : BType} {σ : SMTType} (h : BType.SupportedSMT α σ)
+    {αs : List BType} {σs : List SMTType}
+    (hs : List.Forall₂ BType.SupportedSMT αs σs) :
+    BType.SupportedSMT
+      (αs.foldl (· ×ᴮ ·) α)
+      (σs.foldl SMTType.pair σ) := by
+  induction hs generalizing α σ with
+  | nil => exact h
+  | cons hxy _ ih =>
+      simp only [List.foldl_cons]
+      exact ih (.prod h hxy)
+
+/-- Pointwise supported representations assemble into the left-associated
+product representation used by B tuples and SMT binder lists. -/
+theorem BType.SupportedSMT.reduce_toProdl
+    {αs : List BType} {σs : List SMTType}
+    (hs : List.Forall₂ BType.SupportedSMT αs σs)
+    (hne : αs ≠ []) :
+    BType.SupportedSMT
+      (αs.reduce (· ×ᴮ ·) hne) σs.toProdl := by
+  cases hs with
+  | nil => exact (hne rfl).elim
+  | cons h hs =>
+      rw [List.toProdl_cons_eq_foldl]
+      exact BType.SupportedSMT.foldl_prod h hs
+
+private theorem List.reduce_append_singleton
+    {α : Type} (f : α → α → α) (xs : List α) (x : α)
+    (hne : xs ≠ []) (hne' : xs ++ [x] ≠ []) :
+    (xs ++ [x]).reduce f hne' = f (xs.reduce f hne) x := by
+  obtain ⟨a, as, rfl⟩ := List.ne_nil_iff_exists_cons.mp hne
+  simp only [List.reduce, List.head_cons, List.tail_cons,
+    List.cons_append]
+  rw [List.foldl_concat]
+
+/-- An element of an SMT tuple has the component type selected by its list
+index. This is the SMT analogue of
+`BType.mem_get_of_mem_reduce_toZFSet`. -/
+theorem SMTType.mem_get_of_mem_toProdl.{u}
+    {σs : List SMTType} (σs_nemp : σs ≠ [])
+    {x : ZFSet.{u}} {i : Fin σs.length}
+    (hx : x ∈ ⟦σs.toProdl⟧ᶻ) :
+    x.get σs.length i ∈ ⟦σs[i]⟧ᶻ := by
+  obtain ⟨σ₀, σs, rfl⟩ := List.ne_nil_iff_exists_cons.mp σs_nemp
+  rw [List.toProdl_cons_eq_foldl] at hx
+  induction σs using List.reverseRecOn generalizing σ₀ x with
+  | nil =>
+      simp only [List.foldl_nil] at hx
+      simp only [List.length_cons, List.length_nil, Nat.reduceAdd, get.eq_1]
+      obtain ⟨i, hi⟩ := i
+      simp only [List.length_cons, List.length_nil, zero_add,
+        Nat.lt_one_iff] at hi
+      subst i
+      simpa
+  | append_singleton σs σ₁ ih =>
+      obtain ⟨i, hi⟩ := i
+      simp only [List.length_cons, List.length_append, List.length_nil,
+        zero_add, Nat.lt_succ_iff] at hi
+      rw [Nat.le_iff_lt_or_eq] at hi
+      rw [List.foldl_concat, SMTType.toZFSet, ZFSet.mem_prod] at hx
+      obtain ⟨x₀, x₀_def, x₁, x₁_def, rfl⟩ := hx
+      simp only [List.length_cons, Fin.getElem_fin]
+      rcases hi with hi | rfl
+      · have : (σ₀ :: (σs ++ [σ₁]))[i] = (σ₀ :: σs)[i] := by
+          cases i with
+          | zero => iterate 2 rw [List.getElem_cons_zero]
+          | succ i =>
+              exact List.getElem_append_left (Nat.lt_of_succ_lt_succ hi)
+        rw [this]
+        unfold ZFSet.get
+        split using h _ | _ _ n i _ hlen heq
+        · rw [List.length_append, List.length_cons, List.length_nil,
+            zero_add, Nat.add_eq_right, Nat.add_eq_zero_iff,
+            List.length_eq_zero_iff] at h
+          nomatch h.2
+        · rw [List.length_append, List.length_cons, List.length_nil,
+            zero_add, Nat.succ_eq_add_one, Nat.succ_inj, Nat.succ_inj] at hlen
+          subst i
+          rw [Fin.heq_ext_iff] at heq
+          · dsimp at heq
+            subst i
+            split_ifs
+            · subst_eqs
+              nomatch lt_irrefl _ ‹_›
+            · rw [π₁_pair]
+              exact ih σ₀ (List.cons_ne_nil _ _) x₀_def
+          · rw [List.length_append, List.length_cons, List.length_nil]
+      · simp only [List.getElem_cons_succ, le_refl,
+          List.getElem_append_right, Nat.sub_self, List.getElem_cons_zero]
+        unfold ZFSet.get
+        simp
+        split using h _ | _ n i _ hlen heq
+        · rw [List.length_append, List.length_cons, List.length_nil,
+            zero_add, Nat.add_eq_right, Nat.add_eq_zero_iff,
+            List.length_eq_zero_iff] at h
+          nomatch h.2
+        · split_ifs
+          · exact x₁_def
+          · simp only [List.length_append, List.length_cons,
+              List.length_nil, zero_add, Nat.succ_eq_add_one,
+              Nat.add_right_cancel_iff] at hlen
+            subst i
+            rename σs.length + 1 < _ => h_σs_len
+            simp only [Nat.succ_eq_add_one] at heq
+            rw [Fin.heq_ext_iff] at heq
+            · dsimp at heq
+              rename ¬_ = Fin.last _ => hi
+              rw [Fin.ext_iff, ← heq] at hi
+              contradiction
+            · rw [List.length_append, List.length_cons, List.length_nil,
+                zero_add, Nat.add_right_cancel_iff]
+
 /-- The soundness theorem uses binder-admissible values whose SMT type is in
 the representation grammar implemented by the encoder. -/
 def RDomCastSupported (d : B.Dom) (d' : SMT.Dom) : Prop :=
@@ -411,6 +569,26 @@ theorem RDomCastSupported.supported.{u}
     {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
     (h : RDomCastSupported d d') :
     BType.SupportedSMT d.snd.fst d'.snd.fst := h.2
+
+/-- Core representation agreement at a supported target shape carries the
+binder-admissibility component required by the strengthened theorem. -/
+theorem RDomCast.toRDomCastAdmissible_of_supported.{u}
+    {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
+    (h : RDomCast d d')
+    (hs : BType.SupportedSMT d.snd.fst d'.snd.fst) :
+    RDomCastAdmissible d d' := by
+  rcases d with ⟨X, γ, hX⟩
+  rcases d' with ⟨Y, σ, hY⟩
+  cases hs with
+  | int | bool | prod => exact h
+  | setPred τ =>
+      obtain ⟨c, hret⟩ := h
+      exact ⟨c, hret, castPath.reflexive τ.toSMTType,
+        BinderCastAdmissible.reflexive τ hX⟩
+  | optionFun α β =>
+      obtain ⟨c, hret⟩ := h
+      exact ⟨c, hret, castPath.reflexive (α ×ᴮ β).toSMTType,
+        BinderCastAdmissible.reflexive (α ×ᴮ β) hX⟩
 
 theorem RDomCastAdmissible.toRDomCast.{u}
     {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
@@ -622,6 +800,355 @@ theorem RDomCast.of_pair.{u}
       simp only [retract, ZFSet.π₁_pair, ZFSet.π₂_pair,
         ZFSet.pair_inj] at hc
       exact ⟨⟨cx, hc.1⟩, ⟨cy, hc.2⟩⟩
+
+/-- A supported represented pair determines supported represented
+components. -/
+theorem RDomCastSupported.of_pair.{u}
+    {X Y X' Y' : ZFSet.{u}} {α β : BType} {σ τ : SMTType}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦β⟧ᶻ}
+    {hX' : X' ∈ ⟦σ⟧ᶻ} {hY' : Y' ∈ ⟦τ⟧ᶻ}
+    (h : RDomCastSupported
+      (⟨X.pair Y, α ×ᴮ β, ZFSet.pair_mem_prod.mpr ⟨hX, hY⟩⟩ : B.Dom)
+      (⟨X'.pair Y', SMTType.pair σ τ,
+        ZFSet.pair_mem_prod.mpr ⟨hX', hY'⟩⟩ : SMT.Dom)) :
+    RDomCastSupported
+        (⟨X, α, hX⟩ : B.Dom) (⟨X', σ, hX'⟩ : SMT.Dom) ∧
+      RDomCastSupported
+        (⟨Y, β, hY⟩ : B.Dom) (⟨Y', τ, hY'⟩ : SMT.Dom) := by
+  obtain ⟨σ', τ', htarget, hs, ht⟩ := h.supported.prodE
+  injection htarget with hσ hτ
+  subst σ'
+  subst τ'
+  obtain ⟨hx, hy⟩ := RDomCast.of_pair h.toRDomCast
+  exact ⟨⟨hx.toRDomCastAdmissible_of_supported hs, hs⟩,
+    ⟨hy.toRDomCastAdmissible_of_supported ht, ht⟩⟩
+
+private theorem List.toProdl_append_singleton
+    (xs : List SMTType) (x : SMTType) (hne : xs ≠ []) :
+    (xs ++ [x]).toProdl = SMTType.pair xs.toProdl x := by
+  rw [← List.concat_eq_append]
+  exact List.toProdl_concat_of_nonempty xs x hne
+
+private theorem ZFSet.get_pair_last.{u}
+    {X Y : ZFSet.{u}} {n : ℕ} (hn : 0 < n) :
+    (X.pair Y).get (n + 1) ⟨n, by omega⟩ = Y := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_one.mpr hn
+  simp [ZFSet.get, Fin.ext_iff, Fin.val_last]
+
+private theorem ZFSet.get_pair_before_last.{u}
+    {X Y : ZFSet.{u}} {n i : ℕ} (hn : 0 < n) (hi : i < n) :
+    (X.pair Y).get (n + 1) ⟨i, by omega⟩ =
+      X.get n ⟨i, hi⟩ := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_one.mpr hn
+  rw [ZFSet_get_step_down (by omega) hi]
+  rw [ZFSet.π₁_pair]
+
+private theorem ZFSet.get_cast.{u}
+    {x : ZFSet.{u}} {n m : ℕ} (h : n = m) (i : Fin n) :
+    x.get n i = x.get m (Fin.cast h i) := by
+  subst m
+  rfl
+
+private theorem BDom_eq_of_type_value.{u}
+    {X Y : ZFSet.{u}} {α β : BType}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦β⟧ᶻ}
+    (hα : α = β) (hXY : X = Y) :
+    (⟨X, α, hX⟩ : B.Dom) = (⟨Y, β, hY⟩ : B.Dom) := by
+  subst β
+  subst Y
+  rfl
+
+private theorem SMTDom_eq_of_type_value.{u}
+    {X Y : ZFSet.{u}} {α β : SMTType}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦β⟧ᶻ}
+    (hα : α = β) (hXY : X = Y) :
+    (⟨X, α, hX⟩ : SMT.Dom) = (⟨Y, β, hY⟩ : SMT.Dom) := by
+  subst β
+  subst Y
+  rfl
+
+/-- Whole-tuple supported agreement projects to supported agreement at each
+component. The source tuple uses B's reduced-product convention and the
+target tuple uses the encoder's `toProdl` convention. -/
+theorem RDomCastSupported.get_of_reduce_toProdl.{u}
+    {αs : List BType} {σs : List SMTType}
+    (αs_nemp : αs ≠ []) (hlen : αs.length = σs.length)
+    {X Y : ZFSet.{u}}
+    (hX : X ∈ ⟦αs.reduce (· ×ᴮ ·) αs_nemp⟧ᶻ)
+    (hY : Y ∈ ⟦σs.toProdl⟧ᶻ)
+    (h : RDomCastSupported
+      (⟨X, αs.reduce (· ×ᴮ ·) αs_nemp, hX⟩ : B.Dom)
+      (⟨Y, σs.toProdl, hY⟩ : SMT.Dom))
+    (i : Fin αs.length) :
+    let j : Fin σs.length := ⟨i.val, hlen ▸ i.isLt⟩
+    RDomCastSupported
+      (⟨X.get αs.length i, αs[i],
+        BType.mem_get_of_mem_reduce_toZFSet αs_nemp hX⟩ : B.Dom)
+      (⟨Y.get σs.length j, σs[j],
+        SMTType.mem_get_of_mem_toProdl
+          (fun hs => αs_nemp (List.length_eq_zero_iff.mp
+            (hlen.trans (by simp [hs])))) hY⟩ : SMT.Dom) := by
+  induction αs using List.reverseRecOn generalizing σs X Y with
+  | nil => exact (αs_nemp rfl).elim
+  | append_singleton αs α ih =>
+      cases αs with
+      | nil =>
+          cases σs with
+          | nil => simp at hlen
+          | cons σ σrest =>
+              cases σrest with
+              | nil =>
+                  have hi0v : i.val = 0 := by simpa using i.isLt
+                  have hi0 : i = ⟨0, by simp⟩ := Fin.ext hi0v
+                  rw [hi0]
+                  simpa [ZFSet.get] using h
+              | cons σ' σrest => simp at hlen
+      | cons α₀ αrest =>
+          let αprefix := α₀ :: αrest
+          have αprefix_nemp : αprefix ≠ [] := List.cons_ne_nil _ _
+          obtain ⟨σprefix, σlast, rfl⟩ :
+              ∃ (σprefix : List SMTType) (σlast : SMTType),
+                σs = σprefix ++ [σlast] := by
+            cases hrev : σs.reverse with
+            | nil =>
+                have hnil : σs = [] := by
+                  have := congrArg List.reverse hrev
+                  simpa using this
+                subst σs
+                simp at hlen
+            | cons σlast revprefix =>
+                refine ⟨revprefix.reverse, σlast, ?_⟩
+                have := congrArg List.reverse hrev
+                rw [List.reverse_reverse, List.reverse_cons] at this
+                exact this
+          have hlen' : Nat.succ αprefix.length =
+              Nat.succ σprefix.length := by
+            simpa [αprefix] using hlen
+          have hprefix_len : αprefix.length = σprefix.length :=
+            Nat.succ.inj hlen'
+          have σprefix_nemp : σprefix ≠ [] := by
+            intro hnil
+            have : αprefix.length = 0 := hprefix_len.trans
+              (List.length_eq_zero_iff.mpr hnil)
+            exact αprefix_nemp (List.length_eq_zero_iff.mp this)
+          have hreduce :
+              (αprefix ++ [α]).reduce (· ×ᴮ ·) αs_nemp =
+                (αprefix.reduce (· ×ᴮ ·) αprefix_nemp) ×ᴮ α :=
+            List.reduce_append_singleton _ _ _ αprefix_nemp αs_nemp
+          have hXprod :
+              X ∈ ⟦(αprefix.reduce (· ×ᴮ ·) αprefix_nemp) ×ᴮ α⟧ᶻ := by
+            rw [← hreduce]
+            exact hX
+          obtain ⟨X₀, hX₀, X₁, hX₁, rfl⟩ := ZFSet.mem_prod.mp hXprod
+          have htoProdl :
+              (σprefix ++ [σlast]).toProdl =
+                SMTType.pair σprefix.toProdl σlast :=
+            List.toProdl_append_singleton _ _ σprefix_nemp
+          have hYprod :
+              Y ∈ ⟦SMTType.pair σprefix.toProdl σlast⟧ᶻ := by
+            rw [← htoProdl]
+            exact hY
+          obtain ⟨Y₀, hY₀, Y₁, hY₁, rfl⟩ := ZFSet.mem_prod.mp hYprod
+          have dB_eq :
+              (⟨X₀.pair X₁,
+                (αprefix ++ [α]).reduce (· ×ᴮ ·) αs_nemp, hX⟩ : B.Dom) =
+              (⟨X₀.pair X₁,
+                (αprefix.reduce (· ×ᴮ ·) αprefix_nemp) ×ᴮ α,
+                ZFSet.pair_mem_prod.mpr ⟨hX₀, hX₁⟩⟩ : B.Dom) :=
+            BDom_eq_of_type_value hreduce rfl
+          have dS_eq :
+              (⟨Y₀.pair Y₁, (σprefix ++ [σlast]).toProdl, hY⟩ : SMT.Dom) =
+              (⟨Y₀.pair Y₁, SMTType.pair σprefix.toProdl σlast,
+                ZFSet.pair_mem_prod.mpr ⟨hY₀, hY₁⟩⟩ : SMT.Dom) :=
+            SMTDom_eq_of_type_value htoProdl rfl
+          have hpair : RDomCastSupported
+              (⟨X₀.pair X₁,
+                (αprefix.reduce (· ×ᴮ ·) αprefix_nemp) ×ᴮ α,
+                ZFSet.pair_mem_prod.mpr ⟨hX₀, hX₁⟩⟩ : B.Dom)
+              (⟨Y₀.pair Y₁, SMTType.pair σprefix.toProdl σlast,
+                ZFSet.pair_mem_prod.mpr ⟨hY₀, hY₁⟩⟩ : SMT.Dom) := by
+            rw [← dB_eq, ← dS_eq]
+            exact h
+          obtain ⟨hleft, hright⟩ := RDomCastSupported.of_pair hpair
+          obtain ⟨i, hi⟩ := i
+          dsimp only
+          have hiα : i < (αprefix ++ [α]).length := by
+            simpa [αprefix] using hi
+          have hiα' : i < αprefix.length + 1 := by
+            simpa using hiα
+          have hiσ' : i < σprefix.length + 1 := by omega
+          have hiσ : i < (σprefix ++ [σlast]).length := by
+            simpa using hiσ'
+          by_cases hilast : i = αprefix.length
+          · have hαlast : (αprefix ++ [α])[i]'hiα = α :=
+              List.getElem_concat_length hilast _
+            have hXlast :
+                (X₀.pair X₁).get (αprefix ++ [α]).length ⟨i, hiα⟩ =
+                  X₁ := by
+              have hn : (αprefix ++ [α]).length =
+                  αprefix.length + 1 := by simp
+              calc
+                (X₀.pair X₁).get (αprefix ++ [α]).length ⟨i, hiα⟩ =
+                    (X₀.pair X₁).get (αprefix.length + 1)
+                      (Fin.cast hn ⟨i, hiα⟩) :=
+                  ZFSet.get_cast hn ⟨i, hiα⟩
+                _ = (X₀.pair X₁).get (αprefix.length + 1)
+                      ⟨αprefix.length, by omega⟩ := by
+                  have hfin : Fin.cast hn ⟨i, hiα⟩ =
+                      (⟨αprefix.length, by omega⟩ :
+                        Fin (αprefix.length + 1)) := by
+                    apply Fin.ext
+                    exact hilast
+                  rw [hfin]
+                _ = X₁ := ZFSet.get_pair_last
+                  (List.length_pos_iff.mpr αprefix_nemp)
+            have hσlast : (σprefix ++ [σlast])[i]'hiσ = σlast := by
+              apply List.getElem_concat_length
+              exact hilast.trans hprefix_len
+            have hYlast :
+                (Y₀.pair Y₁).get (σprefix ++ [σlast]).length ⟨i, hiσ⟩ =
+                  Y₁ := by
+              have hn : (σprefix ++ [σlast]).length =
+                  σprefix.length + 1 := by simp
+              calc
+                (Y₀.pair Y₁).get (σprefix ++ [σlast]).length ⟨i, hiσ⟩ =
+                    (Y₀.pair Y₁).get (σprefix.length + 1)
+                      (Fin.cast hn ⟨i, hiσ⟩) :=
+                  ZFSet.get_cast hn ⟨i, hiσ⟩
+                _ = (Y₀.pair Y₁).get (σprefix.length + 1)
+                      ⟨σprefix.length, by omega⟩ := by
+                  have hfin : Fin.cast hn ⟨i, hiσ⟩ =
+                      (⟨σprefix.length, by omega⟩ :
+                        Fin (σprefix.length + 1)) := by
+                    apply Fin.ext
+                    exact hilast.trans hprefix_len
+                  rw [hfin]
+                _ = Y₁ := ZFSet.get_pair_last
+                  (List.length_pos_iff.mpr σprefix_nemp)
+            have σall_nemp : σprefix ++ [σlast] ≠ [] := by simp
+            have hαlast_goal :
+                (α₀ :: αrest ++ [α])[
+                  (⟨i, hi⟩ : Fin (α₀ :: αrest ++ [α]).length)] = α := by
+              simpa [αprefix] using hαlast
+            have hXlast_goal :
+                (X₀.pair X₁).get (α₀ :: αrest ++ [α]).length
+                  ⟨i, hi⟩ = X₁ := by
+              simpa [αprefix] using hXlast
+            have hσlast_goal :
+                (σprefix ++ [σlast])[
+                  (⟨i, hlen ▸ hi⟩ : Fin (σprefix ++ [σlast]).length)] =
+                    σlast := by
+              simpa using hσlast
+            have hYlast_goal :
+                (Y₀.pair Y₁).get (σprefix ++ [σlast]).length
+                  ⟨i, hlen ▸ hi⟩ = Y₁ := by
+              simpa using hYlast
+            have hdB :
+                (⟨(X₀.pair X₁).get (α₀ :: αrest ++ [α]).length ⟨i, hi⟩,
+                  (α₀ :: αrest ++ [α])[
+                    (⟨i, hi⟩ : Fin (α₀ :: αrest ++ [α]).length)],
+                  BType.mem_get_of_mem_reduce_toZFSet αs_nemp hX⟩ : B.Dom) =
+                (⟨X₁, α, hX₁⟩ : B.Dom) :=
+              BDom_eq_of_type_value hαlast_goal hXlast_goal
+            have hdS :
+                (⟨(Y₀.pair Y₁).get (σprefix ++ [σlast]).length
+                    ⟨i, hlen ▸ hi⟩,
+                  (σprefix ++ [σlast])[
+                    (⟨i, hlen ▸ hi⟩ : Fin (σprefix ++ [σlast]).length)],
+                  SMTType.mem_get_of_mem_toProdl σall_nemp hY⟩ : SMT.Dom) =
+                (⟨Y₁, σlast, hY₁⟩ : SMT.Dom) :=
+              SMTDom_eq_of_type_value hσlast_goal hYlast_goal
+            rw [hdB, hdS]
+            exact hright
+          · have hiprefix : i < αprefix.length :=
+              Nat.lt_of_le_of_ne (Nat.le_of_lt_succ hiα') hilast
+            have hrec := ih (σs := σprefix) αprefix_nemp hprefix_len
+              hX₀ hY₀ hleft ⟨i, hiprefix⟩
+            dsimp only at hrec
+            have hαinit : (αprefix ++ [α])[i]'hiα = αprefix[i] :=
+              List.getElem_append_left hiprefix
+            have hXinit :
+                (X₀.pair X₁).get (αprefix ++ [α]).length ⟨i, hiα⟩ =
+                  X₀.get αprefix.length ⟨i, hiprefix⟩ := by
+              have hn : (αprefix ++ [α]).length =
+                  αprefix.length + 1 := by simp
+              calc
+                (X₀.pair X₁).get (αprefix ++ [α]).length ⟨i, hiα⟩ =
+                    (X₀.pair X₁).get (αprefix.length + 1)
+                      (Fin.cast hn ⟨i, hiα⟩) :=
+                  ZFSet.get_cast hn ⟨i, hiα⟩
+                _ = (X₀.pair X₁).get (αprefix.length + 1)
+                      ⟨i, by omega⟩ := by
+                  congr 1
+                _ = X₀.get αprefix.length ⟨i, hiprefix⟩ :=
+                  ZFSet.get_pair_before_last
+                    (List.length_pos_iff.mpr αprefix_nemp) hiprefix
+            have hσinit :
+                (σprefix ++ [σlast])[i]'hiσ = σprefix[i] :=
+              List.getElem_append_left (hprefix_len ▸ hiprefix)
+            have hYinit :
+                (Y₀.pair Y₁).get (σprefix ++ [σlast]).length ⟨i, hiσ⟩ =
+                  Y₀.get σprefix.length ⟨i, hprefix_len ▸ hiprefix⟩ := by
+              have hn : (σprefix ++ [σlast]).length =
+                  σprefix.length + 1 := by simp
+              calc
+                (Y₀.pair Y₁).get (σprefix ++ [σlast]).length ⟨i, hiσ⟩ =
+                    (Y₀.pair Y₁).get (σprefix.length + 1)
+                      (Fin.cast hn ⟨i, hiσ⟩) :=
+                  ZFSet.get_cast hn ⟨i, hiσ⟩
+                _ = (Y₀.pair Y₁).get (σprefix.length + 1)
+                      ⟨i, by omega⟩ := by
+                  congr 1
+                _ = Y₀.get σprefix.length
+                      ⟨i, hprefix_len ▸ hiprefix⟩ :=
+                  ZFSet.get_pair_before_last
+                    (List.length_pos_iff.mpr σprefix_nemp)
+                    (hprefix_len ▸ hiprefix)
+            have σall_nemp : σprefix ++ [σlast] ≠ [] := by simp
+            have hαinit_goal :
+                (α₀ :: αrest ++ [α])[
+                    (⟨i, hi⟩ : Fin (α₀ :: αrest ++ [α]).length)] =
+                  αprefix[(⟨i, hiprefix⟩ : Fin αprefix.length)] := by
+              simpa [αprefix] using hαinit
+            have hXinit_goal :
+                (X₀.pair X₁).get (α₀ :: αrest ++ [α]).length
+                  ⟨i, hi⟩ = X₀.get αprefix.length ⟨i, hiprefix⟩ := by
+              simpa [αprefix] using hXinit
+            have hσinit_goal :
+                (σprefix ++ [σlast])[
+                    (⟨i, hlen ▸ hi⟩ : Fin (σprefix ++ [σlast]).length)] =
+                  σprefix[(⟨i, hprefix_len ▸ hiprefix⟩ :
+                    Fin σprefix.length)] := by
+              simpa using hσinit
+            have hYinit_goal :
+                (Y₀.pair Y₁).get (σprefix ++ [σlast]).length
+                  ⟨i, hlen ▸ hi⟩ =
+                    Y₀.get σprefix.length
+                      ⟨i, hprefix_len ▸ hiprefix⟩ := by
+              simpa using hYinit
+            have hdB :
+                (⟨(X₀.pair X₁).get (α₀ :: αrest ++ [α]).length ⟨i, hi⟩,
+                  (α₀ :: αrest ++ [α])[
+                    (⟨i, hi⟩ : Fin (α₀ :: αrest ++ [α]).length)],
+                  BType.mem_get_of_mem_reduce_toZFSet αs_nemp hX⟩ : B.Dom) =
+                (⟨X₀.get αprefix.length ⟨i, hiprefix⟩,
+                  αprefix[(⟨i, hiprefix⟩ : Fin αprefix.length)],
+                  BType.mem_get_of_mem_reduce_toZFSet αprefix_nemp hX₀⟩ :
+                    B.Dom) :=
+              BDom_eq_of_type_value hαinit_goal hXinit_goal
+            have hdS :
+                (⟨(Y₀.pair Y₁).get (σprefix ++ [σlast]).length
+                    ⟨i, hlen ▸ hi⟩,
+                  (σprefix ++ [σlast])[
+                    (⟨i, hlen ▸ hi⟩ : Fin (σprefix ++ [σlast]).length)],
+                  SMTType.mem_get_of_mem_toProdl σall_nemp hY⟩ : SMT.Dom) =
+                (⟨Y₀.get σprefix.length ⟨i, hprefix_len ▸ hiprefix⟩,
+                  σprefix[(⟨i, hprefix_len ▸ hiprefix⟩ :
+                    Fin σprefix.length)],
+                  SMTType.mem_get_of_mem_toProdl σprefix_nemp hY₀⟩ : SMT.Dom) :=
+              SMTDom_eq_of_type_value hσinit_goal hYinit_goal
+            rw [hdB, hdS]
+            exact hrec
 
 /-! ## Option functions and functional graphs -/
 
@@ -1047,6 +1574,34 @@ theorem RValuationCastOnFV.updates.{u}
       | _, _ => False)
     (bound : ∀ i, RDomCast (bs i) (ss i)) :
     RValuationCastOnFV
+      (Function.updates Ξ vs (List.ofFn fun i => some (bs i)))
+      (Function.updates Θ vs (List.ofFn fun i => some (ss i))) t := by
+  intro v hv
+  by_cases hvs : v ∈ vs
+  · rw [Function.updates_eq_if (by simp) vs_nodup,
+      Function.updates_eq_if (by simp) vs_nodup,
+      dif_pos hvs, dif_pos hvs]
+    simpa using bound ⟨vs.idxOf v, List.idxOf_lt_length_of_mem hvs⟩
+  · rw [Function.updates_of_not_mem Ξ vs _ v hvs,
+      Function.updates_of_not_mem Θ vs _ v hvs]
+    exact ambient v hv hvs
+
+/-- Updating a binder with pointwise supported representatives preserves the
+strengthened agreement used by the representation-aware induction
+hypothesis. -/
+theorem RValuationCastSupportedOnFV.updates.{u}
+    {Ξ : B.𝒱 → Option B.Dom.{u}}
+    {Θ : SMT.𝒱 → Option SMT.Dom.{u}}
+    {vs : List B.𝒱} (vs_nodup : vs.Nodup)
+    (bs : Fin vs.length → B.Dom.{u})
+    (ss : Fin vs.length → SMT.Dom.{u})
+    {t : B.Term}
+    (ambient : ∀ v ∈ B.fv t, v ∉ vs →
+      match Ξ v, Θ v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False)
+    (bound : ∀ i, RDomCastSupported (bs i) (ss i)) :
+    RValuationCastSupportedOnFV
       (Function.updates Ξ vs (List.ofFn fun i => some (bs i)))
       (Function.updates Θ vs (List.ofFn fun i => some (ss i))) t := by
   intro v hv
