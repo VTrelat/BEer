@@ -333,23 +333,7 @@ theorem castUnion_graph_rep_spec.{u}
     (typ_T : Λ ⊢ˢ T :
       SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool)
     (bv_S_used : ∀ v ∈ SMT.bv S, v ∈ used)
-    (bv_T_used : ∀ v ∈ SMT.bv T, v ∈ used)
-    {«Δ» : SMT.RenamingContext.Context.{u}}
-    (hS : RenamingContext.CoversFV «Δ» S)
-    (hT : RenamingContext.CoversFV «Δ» T)
-    (Δ_none_out : ∀ v ∉ used, «Δ» v = none)
-    (respects_S :
-      SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ S)
-    (respects_T :
-      SMT.RenamingContext.RespectsTypeContextOnFV «Δ» Λ T)
-    {F G : ZFSet.{u}}
-    (hF : F ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ)
-    (hG : G ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ)
-    {denS denT : SMT.Dom.{u}}
-    (h_den_S : ⟦S.abstract «Δ» hS⟧ˢ = some denS)
-    (h_den_T : ⟦T.abstract «Δ» hT⟧ˢ = some denT)
-    (F_rel : RDomCast (⟨F, BType.set (α ×ᴮ β), hF⟩ : B.Dom) denS)
-    (G_rel : RDomCast (⟨G, BType.set (α ×ᴮ β), hG⟩ : B.Dom) denT) :
+    (bv_T_used : ∀ v ∈ SMT.bv T, v ∈ used) :
     ⦃ fun ⟨E, Λ'⟩ =>
       ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ Λ.keys ⊆ E.usedVars ∧
         E.usedVars = used⌝ ⦄
@@ -357,20 +341,43 @@ theorem castUnion_graph_rep_spec.{u}
       ⟨S, SMTType.fun α.toSMTType (SMTType.option β.toSMTType)⟩
       ⟨T, SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool⟩
     ⦃ ⇓? ⟨t, σ⟩ ⟨E', Γ'⟩ =>
-      ⌜σ = SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+      ⌜used ⊆ E'.usedVars ∧
+        Λ ⊆ Γ' ∧
+        Γ'.keys ⊆ E'.usedVars ∧
+        σ = SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
           SMTType.bool ∧
         Γ' ⊢ˢ t : SMTType.fun
           (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool ∧
-        ∃ (Δ' : SMT.RenamingContext.Context.{u})
-          (hcov : RenamingContext.CoversFV Δ' t),
-          RenamingContext.Extends Δ' «Δ» ∧
-          (∀ v ∉ E'.usedVars, Δ' v = none) ∧
-          ∃ denU : SMT.Dom.{u},
-            ⟦t.abstract Δ' hcov⟧ˢ = some denU ∧
+        (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ∧
+        ∀ (Θ : SMT.RenamingContext.Context.{u})
+          (hS : RenamingContext.CoversFV Θ S)
+          (hT : RenamingContext.CoversFV Θ T),
+          (∀ v ∉ used, Θ v = none) →
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ S →
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ T →
+          (∀ v, Θ v ≠ none → v ∈ Λ) →
+          ∀ (F G : ZFSet.{u})
+            (hF : F ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ)
+            (hG : G ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ)
+            (denS denT : SMT.Dom.{u}),
+            ⟦S.abstract Θ hS⟧ˢ = some denS →
+            ⟦T.abstract Θ hT⟧ˢ = some denT →
             RDomCastAdmissible
-              (⟨F ∪ G, BType.set (α ×ᴮ β), relation_union_mem hF hG⟩ :
-                B.Dom)
-              denU⌝ ⦄ := by
+              (⟨F, BType.set (α ×ᴮ β), hF⟩ : B.Dom) denS →
+            RDomCastAdmissible
+              (⟨G, BType.set (α ×ᴮ β), hG⟩ : B.Dom) denT →
+            ∃ (Θ' : SMT.RenamingContext.Context.{u})
+              (hcov : RenamingContext.CoversFV Θ' t)
+              (denU : SMT.Dom.{u}),
+              RenamingContext.Extends Θ' Θ ∧
+              (∀ v ∉ E'.usedVars, Θ' v = none) ∧
+              SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γ' t ∧
+              (∀ v, Θ' v ≠ none → v ∈ Γ') ∧
+              ⟦t.abstract Θ' hcov⟧ˢ = some denU ∧
+              denU.snd.fst = σ ∧
+              RDomCastAdmissible
+                (⟨F ∪ G, BType.set (α ×ᴮ β),
+                  relation_union_mem hF hG⟩ : B.Dom) denU⌝ ⦄ := by
   have hcastUnion :
       castUnion
         (S, SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
@@ -407,11 +414,11 @@ theorem castUnion_graph_rep_spec.{u}
   mintro pre ∀St₀
   mpure pre
   obtain ⟨rfl, rfl, St₀_sub, rfl⟩ := pre
-  mspec loosenAux_prf_spec (Λ := St₀.types) (n := St₀.env.freshvarsc)
+  mspec loosenAux_prf_spec_univ (Λ := St₀.types)
+    (n := St₀.env.freshvarsc)
     (used := St₀.env.usedVars) typ_S bv_S_used
     (castPath.graph (castPath.reflexive α.toSMTType)
-      (castPath.reflexive β.toSMTType)) «Δ» hS
-    respects_S
+      (castPath.reflexive β.toSMTType))
   next out =>
     obtain ⟨S!, S!_spec⟩ := out
     mrename_i pre
@@ -519,78 +526,154 @@ theorem castUnion_graph_rep_spec.{u}
                 typ_T_St₃
                 (SMT.Typing.bv_notMem_insert_of_fresh typ_T_St₃ z_not_bv_T)
             · exact SMT.Typing.var _ z _ (AList.lookup_insert St₃.types)
-      obtain ⟨Φ, denS!, h_den_var, _hφ, _h_den_φ, denS!_type,
-        _Φ_type, ⟨_Φ_true, cast_pair⟩, _helper_total⟩ :=
-        adequacy denS h_den_S
-      let Δhelper := Function.update «Δ» S! (some denS!)
-      have Δ_S!_none : «Δ» S! = none := Δ_none_out S! S!_not_used
-      have hS!_not_fv_T : S! ∉ SMT.fv T :=
-        funNotMemFvOfNotMemContext typ_T S!_fresh
-      have hT_helper : RenamingContext.CoversFV Δhelper T :=
-        SMT.RenamingContext.coversFV_update_of_notMem hS!_not_fv_T hT
-      have h_den_T_helper : ⟦T.abstract Δhelper hT_helper⟧ˢ = some denT := by
-        have heq : ⟦T.abstract «Δ» hT⟧ˢ =
-            ⟦T.abstract Δhelper hT_helper⟧ˢ := by
-          rw [← SMT.RenamingContext.denote, ← SMT.RenamingContext.denote]
-          exact SMT.RenamingContext.denote_update_of_notMem hS!_not_fv_T
-        rw [← heq]
-        exact h_den_T
-      have hS!_helper :
-          RenamingContext.CoversFV Δhelper (SMT.Term.var S!) := by
-        intro v hv
-        rw [SMT.fv, List.mem_singleton] at hv
-        subst v
-        simp [Δhelper, Function.update_self]
-      have h_den_S!_helper :
-          ⟦(SMT.Term.var S!).abstract Δhelper hS!_helper⟧ˢ =
-            some denS! := by
-        convert h_den_var using 1
-      have hcov_out : RenamingContext.CoversFV Δhelper
-          (.lambda [z] [SMTType.pair α.toSMTType β.toSMTType]
-            (.or (.app (.var S!) (.var z)) (.app T (.var z)))) := by
-        intro v hv
-        simp only [SMT.fv, List.removeAll, List.mem_filter, List.mem_append,
-          List.mem_cons, List.not_mem_nil, or_false] at hv
-        obtain ⟨hv_body, hv_ne_z⟩ := hv
-        simp only [List.elem_eq_contains, List.contains_eq_mem, List.mem_cons,
-          List.not_mem_nil, or_false, Bool.not_eq_true',
-          decide_eq_false_iff_not] at hv_ne_z
-        rcases hv_body with ((rfl | rfl) | (hv_T | rfl))
-        · exact hS!_helper v (by simp [SMT.fv])
-        · exact absurd rfl hv_ne_z
-        · exact hT_helper v hv_T
-        · exact absurd rfl hv_ne_z
-      have z_not_fv_S! : z ∉ SMT.fv (SMT.Term.var S!) :=
-        funNotMemFvOfNotMemContext typ_S!_St₃ z_fresh
-      have z_not_fv_T : z ∉ SMT.fv T :=
-        funNotMemFvOfNotMemContext typ_T_St₃ z_fresh
-      have denS_type := SMT.RenamingContext.denote_type_of_typing_fv
-        typ_S respects_S hS h_den_S
-      have denT_type := SMT.RenamingContext.denote_type_of_typing_fv
-        typ_T respects_T hT h_den_T
-      obtain ⟨denU, h_den_U, U_rel⟩ :=
-        castUnion_graph_denotation α β hF hG denS_type denS!_type
-          denT_type F_rel G_rel cast_pair hS!_helper hT_helper
-          h_den_S!_helper h_den_T_helper z_not_fv_S! z_not_fv_T hcov_out
       mspec Std.Do.Spec.pure
       mpure_intro
-      refine ⟨by trivial, typ_out, Δhelper, hcov_out, ?_, ?_, denU,
-        h_den_U, U_rel⟩
-      · exact RenamingContext.extends_update_of_none Δ_S!_none
-      · intro v hv_final
-        have hv_not_St₁ : v ∉ St₁.env.usedVars := by
-          intro hv₁
-          apply hv_final
-          rw [St₅_used_eq, St₄_used_eq, St₃_used_eq, St₂_used_eq]
-          exact List.mem_cons_of_mem z hv₁
-        by_cases hvS! : v = S!
-        · subst v
-          exfalso
-          apply hv_not_St₁
-          apply St₁_keys_sub
-          exact (AList.lookup_isSome).1
-            (Option.isSome_of_eq_some (SMT.Typing.varE typ_S!_St₁))
-        · simp only [Δhelper, Function.update_of_ne hvS!]
-          apply Δ_none_out
-          intro hv_used
-          exact hv_not_St₁ (used_sub₁ hv_used)
+      and_intros
+      · intro v hv
+        rw [St₅_used_eq, St₄_used_eq, St₃_used_eq, St₂_used_eq]
+        exact List.mem_cons_of_mem z (used_sub₁ hv)
+      · intro e he
+        rw [St₅_types_eq', St₃_types_eq, St₂_types_eq]
+        exact St₁_types_sub
+          (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh he)
+      · intro v hv
+        rw [St₅_types_eq', St₃_types_eq, St₂_types_eq] at hv
+        rw [St₅_used_eq, St₄_used_eq, St₃_used_eq, St₂_used_eq]
+        exact List.mem_cons_of_mem z (St₁_keys_sub hv)
+      · trivial
+      · exact typ_out
+      · intro v hv hv_not
+        rw [St₅_types_eq', St₃_types_eq, St₂_types_eq]
+        exact preserves₁ v hv hv_not
+      · intro Θ hS hT Θ_none respects_S respects_T Θ_dom
+          F G hF hG denS denT h_den_S h_den_T F_rel G_rel
+        have pf : ∀ (x! : SMT.𝒱) (X! : SMT.Dom.{u}),
+            ∀ v ∈ SMT.fv (SMT.Term.var x!),
+              (Function.update Θ x! (some X!) v).isSome = true := by
+          intro x! X! v hv
+          rw [SMT.fv, List.mem_singleton] at hv
+          subst v
+          simp [Function.update_self]
+        obtain ⟨Φ, denS!, h_den_var, _hφ, _h_den_φ, denS!_type,
+          _Φ_type, ⟨_Φ_true, cast_pair⟩, _helper_total⟩ :=
+          adequacy Θ hS respects_S pf denS h_den_S
+        let Δhelper := Function.update Θ S! (some denS!)
+        have Δ_S!_none : Θ S! = none := Θ_none S! S!_not_used
+        have Δhelper_ext : RenamingContext.Extends Δhelper Θ :=
+          RenamingContext.extends_update_of_none Δ_S!_none
+        have Λ_sub_final : St₀.types ⊆ St₅.types := by
+          intro e he
+          rw [St₅_types_eq', St₃_types_eq, St₂_types_eq]
+          exact St₁_types_sub
+            (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh he)
+        have hS!_not_fv_T : S! ∉ SMT.fv T :=
+          funNotMemFvOfNotMemContext typ_T S!_fresh
+        have hT_helper : RenamingContext.CoversFV Δhelper T :=
+          SMT.RenamingContext.coversFV_update_of_notMem hS!_not_fv_T hT
+        have h_den_T_helper :
+            ⟦T.abstract Δhelper hT_helper⟧ˢ = some denT := by
+          have heq : ⟦T.abstract Θ hT⟧ˢ =
+              ⟦T.abstract Δhelper hT_helper⟧ˢ := by
+            rw [← SMT.RenamingContext.denote,
+              ← SMT.RenamingContext.denote]
+            exact SMT.RenamingContext.denote_update_of_notMem hS!_not_fv_T
+          rw [← heq]
+          exact h_den_T
+        have hS!_helper :
+            RenamingContext.CoversFV Δhelper (SMT.Term.var S!) := by
+          intro v hv
+          rw [SMT.fv, List.mem_singleton] at hv
+          subst v
+          simp [Δhelper, Function.update_self]
+        have h_den_S!_helper :
+            ⟦(SMT.Term.var S!).abstract Δhelper hS!_helper⟧ˢ =
+              some denS! := by
+          convert h_den_var using 1
+        have hcov_out : RenamingContext.CoversFV Δhelper
+            (.lambda [z] [SMTType.pair α.toSMTType β.toSMTType]
+              (.or (.app (.var S!) (.var z)) (.app T (.var z)))) := by
+          intro v hv
+          simp only [SMT.fv, List.removeAll, List.mem_filter,
+            List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+          obtain ⟨hv_body, hv_ne_z⟩ := hv
+          simp only [List.elem_eq_contains, List.contains_eq_mem,
+            List.mem_cons, List.not_mem_nil, or_false, Bool.not_eq_true',
+            decide_eq_false_iff_not] at hv_ne_z
+          rcases hv_body with ((rfl | rfl) | (hv_T | rfl))
+          · exact hS!_helper v (by simp [SMT.fv])
+          · exact absurd rfl hv_ne_z
+          · exact hT_helper v hv_T
+          · exact absurd rfl hv_ne_z
+        have z_not_fv_S! : z ∉ SMT.fv (SMT.Term.var S!) :=
+          funNotMemFvOfNotMemContext typ_S!_St₃ z_fresh
+        have z_not_fv_T : z ∉ SMT.fv T :=
+          funNotMemFvOfNotMemContext typ_T_St₃ z_fresh
+        have denS_type := SMT.RenamingContext.denote_type_of_typing_fv
+          typ_S respects_S hS h_den_S
+        have denT_type := SMT.RenamingContext.denote_type_of_typing_fv
+          typ_T respects_T hT h_den_T
+        obtain ⟨denU, h_den_U, U_rel⟩ :=
+          castUnion_graph_denotation α β hF hG denS_type denS!_type
+            denT_type F_rel.toRDomCast G_rel.toRDomCast cast_pair
+            hS!_helper hT_helper h_den_S!_helper h_den_T_helper
+            z_not_fv_S! z_not_fv_T hcov_out
+        have typ_S!_St₅ : St₅.types ⊢ˢ SMT.Term.var S! :
+            SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+              SMTType.bool := by
+          rw [St₅_types_eq', St₃_types_eq, St₂_types_eq]
+          exact typ_S!_St₁
+        have respects_T_final :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δhelper St₅.types T :=
+          respects_T.of_extends Δhelper_ext Λ_sub_final typ_T
+        have target_respects_out :
+            SMT.RenamingContext.RespectsTypeContextOnFV Δhelper St₅.types
+              (.lambda [z] [SMTType.pair α.toSMTType β.toSMTType]
+                (.or (.app (.var S!) (.var z)) (.app T (.var z)))) := by
+          intro v σ hv hlookup
+          simp only [SMT.fv, List.removeAll, List.mem_filter,
+            List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+          obtain ⟨hv_body, hv_ne_z⟩ := hv
+          simp only [List.elem_eq_contains, List.contains_eq_mem,
+            List.mem_cons, List.not_mem_nil, or_false, Bool.not_eq_true',
+            decide_eq_false_iff_not] at hv_ne_z
+          rcases hv_body with ((rfl | rfl) | (hv_T | rfl))
+          · have hlookup_S! := SMT.Typing.varE typ_S!_St₅
+            rw [hlookup] at hlookup_S!
+            cases hlookup_S!
+            exact ⟨denS!, Function.update_self _ _ _, denS!_type⟩
+          · exact absurd rfl hv_ne_z
+          · exact respects_T_final hv_T hlookup
+          · exact absurd rfl hv_ne_z
+        have denU_type := SMT.RenamingContext.denote_type_of_typing_fv
+          typ_out target_respects_out hcov_out h_den_U
+        refine ⟨Δhelper, hcov_out, denU, Δhelper_ext, ?_,
+          target_respects_out, ?_, h_den_U, denU_type, U_rel⟩
+        · intro v hv_final
+          have hv_not_St₁ : v ∉ St₁.env.usedVars := by
+            intro hv₁
+            apply hv_final
+            rw [St₅_used_eq, St₄_used_eq, St₃_used_eq, St₂_used_eq]
+            exact List.mem_cons_of_mem z hv₁
+          by_cases hvS! : v = S!
+          · subst v
+            exfalso
+            apply hv_not_St₁
+            apply St₁_keys_sub
+            exact (AList.lookup_isSome).1
+              (Option.isSome_of_eq_some (SMT.Typing.varE typ_S!_St₁))
+          · simp only [Δhelper, Function.update_of_ne hvS!]
+            apply Θ_none
+            intro hv_used
+            exact hv_not_St₁ (used_sub₁ hv_used)
+        · intro v hv
+          by_cases hvS! : v = S!
+          · subst v
+            exact (AList.lookup_isSome).1
+              (Option.isSome_of_eq_some (SMT.Typing.varE typ_S!_St₅))
+          · have hv₀ : v ∈ St₀.types := Θ_dom v (by
+              simpa [Δhelper, Function.update_of_ne hvS!] using hv)
+            obtain ⟨τv, hlookup⟩ := Option.isSome_iff_exists.mp
+              (AList.lookup_isSome.mpr hv₀)
+            exact AList.lookup_isSome.mp (Option.isSome_of_eq_some
+              (AList.lookup_of_subset Λ_sub_final hlookup))
