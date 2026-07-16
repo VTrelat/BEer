@@ -1,4 +1,4 @@
-import SMT.Reasoning.Basic.EncodeTermRepresentedBase
+import SMT.Reasoning.Basic.EncodeTermRepresentedArith
 import SMT.Reasoning.Basic.EncodeTermCorrectUnion
 
 open Std.Do B SMT ZFSet
@@ -781,3 +781,390 @@ theorem castUnion_graph_rep_contract.{u}
   exact ⟨used_sub, types_sub, keys_sub,
     ⟨castPath.reflexive (BType.set (α ×ᴮ β)).toSMTType⟩,
     typ_out, preserves, semantic⟩
+
+/-! ## Union constructor composition -/
+
+private theorem encodeTerm_union_via_maplet (A B : B.Term)
+    (E : _root_.B.Env) :
+    encodeTerm (A ∪ᴮ B) E = (do
+      let ⟨p, σp⟩ ← encodeTerm (A ↦ᴮ B) E
+      match p, σp with
+      | .pair A' B', .pair σA σB => castUnion ⟨A', σA⟩ ⟨B', σB⟩
+      | _, _ => throw "encodeTerm:union: impossible maplet result") := by
+  simp [encodeTerm]
+
+private theorem denote_pair_inv_union.{u}
+    {x y : SMT.Term} {Θ : SMT.RenamingContext.Context.{u}}
+    (hcov : RenamingContext.CoversFV Θ (SMT.Term.pair x y))
+    {d : SMT.Dom.{u}}
+    (hden : ⟦(SMT.Term.pair x y).abstract Θ hcov⟧ˢ = some d) :
+    ∃ (dx dy : SMT.Dom.{u}),
+      ⟦x.abstract Θ (fun v hv => hcov v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl hv))⟧ˢ = some dx ∧
+      ⟦y.abstract Θ (fun v hv => hcov v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv))⟧ˢ = some dy ∧
+      d = ⟨dx.fst.pair dy.fst, SMTType.pair dx.snd.fst dy.snd.fst,
+        ZFSet.pair_mem_prod.mpr ⟨dx.snd.snd, dy.snd.snd⟩⟩ := by
+  rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+    Option.bind_eq_bind, Option.bind_eq_some_iff] at hden
+  obtain ⟨dx, hdx, hrest⟩ := hden
+  rw [Option.bind_eq_some_iff] at hrest
+  obtain ⟨dy, hdy, hout⟩ := hrest
+  refine ⟨dx, dy, ?_, ?_, ?_⟩
+  · simpa only [proof_irrel_heq] using hdx
+  · simpa only [proof_irrel_heq] using hdy
+  · simpa using hout.symm
+
+private theorem denote_union_inv_rep.{u}
+    {S T : B.Term} {τ : BType}
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ v ∈ B.fv (S ∪ᴮ T), («Δ» v).isSome = true)
+    {U : ZFSet.{u}} {hU : U ∈ ⟦BType.set τ⟧ᶻ}
+    (hden : ⟦(S ∪ᴮ T).abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨U, ⟨BType.set τ, hU⟩⟩) :
+    ∃ (F G : ZFSet.{u})
+      (hF : F ∈ ⟦BType.set τ⟧ᶻ)
+      (hG : G ∈ ⟦BType.set τ⟧ᶻ),
+      ⟦S.abstract «Δ» (fun v hv => Δ_fv v (by
+        rw [B.fv, List.mem_append]
+        exact Or.inl hv))⟧ᴮ = some ⟨F, ⟨BType.set τ, hF⟩⟩ ∧
+      ⟦T.abstract «Δ» (fun v hv => Δ_fv v (by
+        rw [B.fv, List.mem_append]
+        exact Or.inr hv))⟧ᴮ = some ⟨G, ⟨BType.set τ, hG⟩⟩ ∧
+      U = F ∪ G := by
+  rw [B.Term.abstract, B.denote, Option.pure_def,
+    Option.bind_eq_bind, Option.bind_eq_some_iff] at hden
+  obtain ⟨⟨F, α', hF⟩, denS, hrest⟩ := hden
+  cases α' <;>
+    first | rw [Option.bind_eq_some_iff] at hrest |
+      exact absurd hrest (by simp)
+  rename_i αi
+  obtain ⟨⟨G, β', hG⟩, denT, hout⟩ := hrest
+  cases β' <;>
+    [exact absurd hout (by simp); exact absurd hout (by simp); skip;
+      exact absurd hout (by simp)]
+  rename_i βi
+  dsimp only at hout
+  split at hout
+  on_goal 2 => exact absurd hout (by simp)
+  rename_i hαβ
+  rw [Option.some_inj] at hout
+  injection hout with U_eq hτeq
+  subst U
+  simp only [heq_eq_eq, PSigma.mk.injEq, BType.set.injEq] at hτeq
+  obtain ⟨hτeq, _⟩ := hτeq
+  subst αi
+  subst βi
+  refine ⟨F, G, hF, hG, ?_, ?_, ?_⟩
+  · simpa only [proof_irrel_heq] using denS
+  · simpa only [proof_irrel_heq] using denT
+  · rfl
+
+set_option maxHeartbeats 5000000 in
+theorem encodeTerm_rep_spec.union_case.{u}
+    (S T : B.Term)
+    (S_ih : EncodeTermRepIH.{u} S)
+    (T_ih : EncodeTermRepIH.{u} T)
+    (cast_union : ∀ (τ : BType) (S' T' : SMT.Term)
+      (σS σT : SMTType), CastUnionRepSpec.{u} τ S' T' σS σT)
+    (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (typ_t : E.context ⊢ᴮ S ∪ᴮ T : α)
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ v ∈ B.fv (S ∪ᴮ T), («Δ» v).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastAdmissibleOnFV «Δ» Δ₀ (S ∪ᴮ T))
+    {used : List SMT.𝒱}
+    (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
+    (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
+    {U : ZFSet.{u}} {hU : U ∈ ⟦α⟧ᶻ}
+    (den_t : ⟦(S ∪ᴮ T).abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨U, ⟨α, hU⟩⟩)
+    (vars_used : ∀ v ∈ (S ∪ᴮ T).vars, v ∈ used)
+    (Λ_inv : ∀ v ∈ (S ∪ᴮ T).vars, v ∈ Λ → v ∈ E.context)
+    (bv_nodup : (B.bv (S ∪ᴮ T)).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ (S ∪ᴮ T))
+    (fv_in_Λ : ∀ v ∈ B.fv (S ∪ᴮ T), v ∈ Λ)
+    (wf : B.RenWF E.context «Δ»)
+    {n : ℕ} :
+    ⦃fun ⟨E0, Λ'⟩ ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
+    encodeTerm (S ∪ᴮ T) E
+    ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepPost (S ∪ᴮ T) α Λ «Δ» Δ₀ used U hU
+        E t' σ E' Γ'⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+  rw [encodeTerm_union_via_maplet]
+
+  obtain ⟨τ, rfl, typ_S, typ_T⟩ := B.Typing.unionE typ_t
+  obtain ⟨F, G, hF, hG, den_S, den_T, rfl⟩ :=
+    denote_union_inv_rep Δ_fv den_t
+
+  let Δ_fv_pair : ∀ v ∈ B.fv (S ↦ᴮ T), («Δ» v).isSome = true :=
+    fun v hv => Δ_fv v (by simpa [B.fv] using hv)
+  have den_pair :
+      ⟦(S ↦ᴮ T).abstract «Δ» Δ_fv_pair⟧ᴮ =
+        some ⟨F.pair G,
+          ⟨BType.set τ ×ᴮ BType.set τ,
+            ZFSet.pair_mem_prod.mpr ⟨hF, hG⟩⟩⟩ := by
+    rw [B.Term.abstract, B.denote, Option.pure_def,
+      Option.bind_eq_bind]
+    have den_S' :
+        ⟦S.abstract «Δ» (fun v hv => Δ_fv_pair v (by
+          rw [B.fv, List.mem_append]
+          exact Or.inl hv))⟧ᴮ =
+          some ⟨F, ⟨BType.set τ, hF⟩⟩ := by
+      simpa only [proof_irrel_heq] using den_S
+    have den_T' :
+        ⟦T.abstract «Δ» (fun v hv => Δ_fv_pair v (by
+          rw [B.fv, List.mem_append]
+          exact Or.inr hv))⟧ᴮ =
+          some ⟨G, ⟨BType.set τ, hG⟩⟩ := by
+      simpa only [proof_irrel_heq] using den_T
+    rw [den_S', Option.bind_some, den_T']
+    rfl
+
+  mspec (Std.Do.Triple.and _
+    (encodeTerm_rep_spec.maplet_case S T S_ih T_ih E
+      (B.Typing.maplet typ_S typ_T) Δ_fv_pair
+      (by simpa [B.fv] using related)
+      Δ₀_none_out Δ₀_dom den_pair
+      (fun v hv => vars_used v (by
+        simpa [B.Term.vars, B.fv, B.bv] using hv))
+      (fun v hv => Λ_inv v (by
+        simpa [B.Term.vars, B.fv, B.bv] using hv))
+      (by simpa [B.bv] using bv_nodup)
+      (by simpa [B.fv] using respects)
+      (fun v hv => fv_in_Λ v (by simpa [B.fv] using hv)) wf
+      (n := St.env.freshvarsc))
+    (encodeTerm_bv_used E (t := S ↦ᴮ T)
+      (used := St.env.usedVars) (n := St.env.freshvarsc)
+      (decl := St.env.declarations)))
+  rename_i out_pair
+  obtain ⟨p, σp⟩ := out_pair
+  mrename_i pre
+  mintro ∀Stp
+  mpure pre
+  dsimp at pre
+  obtain ⟨maplet_post, bv_pair_used, _bv_used_sub, _bv_delta⟩ := pre
+  obtain ⟨used_sub, types_sub, keys_sub, covers_used,
+    _path_pair, typ_pair, shape_pair, preserves,
+    Δp, hcov_pair, Δp_ext, related_p, Δp_none, respects_p,
+    target_respects_p, Δp_dom,
+    denPair, hden_pair, hdenPair_type, pair_rel, pair_total⟩ :=
+    maplet_post
+  obtain ⟨Senc, Tenc, σS_shape, σT_shape, hp, hσp⟩ := shape_pair
+  subst p
+  subst σp
+  focus
+    rw [hσp] at typ_pair pair_total
+    rw [hσp]
+    obtain ⟨σS, σT, hpair_type, typ_Senc, typ_Tenc⟩ :=
+      SMT.Typing.pairE typ_pair
+    injection hpair_type with hσS_type hσT_type
+    subst σS
+    subst σT
+
+    have hcov_Senc : RenamingContext.CoversFV Δp Senc := by
+      intro v hv
+      exact hcov_pair v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl hv)
+    have hcov_Tenc : RenamingContext.CoversFV Δp Tenc := by
+      intro v hv
+      exact hcov_pair v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv)
+    have target_respects_Senc :
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          Δp Stp.types Senc := by
+      intro v ξ hv hlookup
+      exact target_respects_p (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl hv) hlookup
+    have target_respects_Tenc :
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          Δp Stp.types Tenc := by
+      intro v ξ hv hlookup
+      exact target_respects_p (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv) hlookup
+    obtain ⟨denS, denT, hden_Senc, hden_Tenc, denPair_eq⟩ :=
+      denote_pair_inv_union hcov_pair hden_pair
+    rw [denPair_eq] at hσp pair_rel
+    rcases denS with ⟨Fenc, τS, hFenc⟩
+    rcases denT with ⟨Genc, τT, hGenc⟩
+    dsimp at hσp
+    injection hσp with hτS hτT
+    subst τS
+    subst τT
+    have component_rel := RDomCast.of_pair
+      (hX := hF) (hY := hG) (hX' := hFenc) (hY' := hGenc)
+      (by simpa using pair_rel.toRDomCast)
+    have bv_Senc_used : ∀ v ∈ SMT.bv Senc, v ∈ Stp.env.usedVars := by
+      intro v hv
+      exact bv_pair_used v (by
+        rw [SMT.bv, List.mem_append]
+        exact Or.inl hv)
+    have bv_Tenc_used : ∀ v ∈ SMT.bv Tenc, v ∈ Stp.env.usedVars := by
+      intro v hv
+      exact bv_pair_used v (by
+        rw [SMT.bv, List.mem_append]
+        exact Or.inr hv)
+
+    mspec cast_union τ Senc Tenc σS_shape σT_shape
+      typ_Senc typ_Tenc bv_Senc_used bv_Tenc_used
+    rename_i out_union
+    obtain ⟨Uenc, σU⟩ := out_union
+    mrename_i post_union
+    mintro ∀Stu
+    mpure post_union
+    obtain ⟨used_sub_u, types_sub_u, keys_sub_u, path_u, typ_Uenc,
+      preserves_u, semantic_u⟩ := post_union
+    obtain ⟨Δu, hcov_Uenc, denU, Δu_ext, Δu_none,
+        target_respects_Uenc, Δu_dom, hden_Uenc, hdenU_type,
+        U_rel⟩ :=
+      semantic_u Δp hcov_Senc hcov_Tenc Δp_none
+        target_respects_Senc target_respects_Tenc Δp_dom
+        F G hF hG
+        (⟨Fenc, σS_shape, hFenc⟩ : SMT.Dom)
+        (⟨Genc, σT_shape, hGenc⟩ : SMT.Dom)
+        hden_Senc hden_Tenc component_rel.1 component_rel.2
+    have Δu_ext₀ := RenamingContext.extends_trans Δu_ext Δp_ext
+    have types_sub₀ : St.types ⊆ Stu.types :=
+      fun _ h => types_sub_u (types_sub h)
+
+    mpure_intro
+    and_intros
+    · intro v hv
+      exact used_sub_u (used_sub (by simpa [St_used_eq] using hv))
+    · exact types_sub₀
+    · exact keys_sub_u
+    · simpa [B.fv] using
+        (B.CoversUsedVars.mono used_sub_u covers_used)
+    · exact path_u
+    · exact typ_Uenc
+    · trivial
+    · intro v hv hΛ hvars
+      apply preserves_u v (used_sub (by simpa [St_used_eq] using hv))
+      exact preserves v (by simpa [St_used_eq] using hv) hΛ
+        (by simpa [B.Term.vars, B.fv, B.bv] using hvars)
+    · refine ⟨Δu, hcov_Uenc, Δu_ext₀,
+        related.of_extends Δu_ext₀, Δu_none, ?_,
+        target_respects_Uenc, Δu_dom, denU, hden_Uenc,
+        hdenU_type, ?_, ?_⟩
+      · exact respects.of_extends Δu_ext₀ types_sub₀
+          (fun _ h => h) fv_in_Λ
+      · simpa only [proof_irrel_heq] using U_rel
+      · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
+          Δ₀_alt_none respects_alt Δ₀_alt_dom U_alt hU_alt den_t_alt
+        obtain ⟨F_alt, G_alt, hF_alt, hG_alt,
+            den_S_alt, den_T_alt, rfl⟩ :=
+          denote_union_inv_rep Δ_fv_alt den_t_alt
+        let Δ_fv_pair_alt :
+            ∀ v ∈ B.fv (S ↦ᴮ T), (Δ_alt v).isSome = true :=
+          fun v hv => Δ_fv_alt v (by simpa [B.fv] using hv)
+        have den_pair_alt :
+            ⟦(S ↦ᴮ T).abstract Δ_alt Δ_fv_pair_alt⟧ᴮ =
+              some ⟨F_alt.pair G_alt,
+                ⟨BType.set τ ×ᴮ BType.set τ,
+                  ZFSet.pair_mem_prod.mpr ⟨hF_alt, hG_alt⟩⟩⟩ := by
+          rw [B.Term.abstract, B.denote, Option.pure_def,
+            Option.bind_eq_bind]
+          have den_S_alt' :
+              ⟦S.abstract Δ_alt (fun v hv => Δ_fv_pair_alt v (by
+                rw [B.fv, List.mem_append]
+                exact Or.inl hv))⟧ᴮ =
+                some ⟨F_alt, ⟨BType.set τ, hF_alt⟩⟩ := by
+            simpa only [proof_irrel_heq] using den_S_alt
+          have den_T_alt' :
+              ⟦T.abstract Δ_alt (fun v hv => Δ_fv_pair_alt v (by
+                rw [B.fv, List.mem_append]
+                exact Or.inr hv))⟧ᴮ =
+                some ⟨G_alt, ⟨BType.set τ, hG_alt⟩⟩ := by
+            simpa only [proof_irrel_heq] using den_T_alt
+          rw [den_S_alt', Option.bind_some, den_T_alt']
+          rfl
+        have Δ₀_alt_none_pair : ∀ v ∉ Stp.env.usedVars,
+            Δ₀_alt v = none := by
+          intro v hv
+          by_contra hne
+          have hv_Λ := Δ₀_alt_dom v hne
+          have hv_used : v ∈ used := by
+            rw [← St_used_eq]
+            exact St_sub hv_Λ
+          exact hv (used_sub hv_used)
+        obtain ⟨Δp_alt, hcov_pair_alt, denPairAlt, Δp_alt_ext,
+            related_p_alt, Δp_alt_none, respects_p_alt,
+            target_respects_p_alt, Δp_alt_dom,
+            hden_pair_alt, hdenPairAlt_type, pair_alt_rel⟩ :=
+          pair_total Δ_alt Δ_fv_pair_alt Δ₀_alt
+            (by simpa [B.fv] using related_alt) wf_alt
+            Δ₀_alt_none_pair (by simpa [B.fv] using respects_alt)
+            Δ₀_alt_dom (F_alt.pair G_alt)
+            (ZFSet.pair_mem_prod.mpr ⟨hF_alt, hG_alt⟩)
+            den_pair_alt
+        have hcov_Senc_alt : RenamingContext.CoversFV Δp_alt Senc := by
+          intro v hv
+          exact hcov_pair_alt v (by
+            rw [SMT.fv, List.mem_append]
+            exact Or.inl hv)
+        have hcov_Tenc_alt : RenamingContext.CoversFV Δp_alt Tenc := by
+          intro v hv
+          exact hcov_pair_alt v (by
+            rw [SMT.fv, List.mem_append]
+            exact Or.inr hv)
+        have target_respects_Senc_alt :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δp_alt Stp.types Senc := by
+          intro v ξ hv hlookup
+          exact target_respects_p_alt (by
+            rw [SMT.fv, List.mem_append]
+            exact Or.inl hv) hlookup
+        have target_respects_Tenc_alt :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δp_alt Stp.types Tenc := by
+          intro v ξ hv hlookup
+          exact target_respects_p_alt (by
+            rw [SMT.fv, List.mem_append]
+            exact Or.inr hv) hlookup
+        obtain ⟨denSAlt, denTAlt, hden_Senc_alt,
+            hden_Tenc_alt, denPairAlt_eq⟩ :=
+          denote_pair_inv_union hcov_pair_alt hden_pair_alt
+        rw [denPairAlt_eq] at hdenPairAlt_type pair_alt_rel
+        rcases denSAlt with ⟨Fenc_alt, τS_alt, hFenc_alt⟩
+        rcases denTAlt with ⟨Genc_alt, τT_alt, hGenc_alt⟩
+        dsimp at hdenPairAlt_type
+        injection hdenPairAlt_type with hτS_alt hτT_alt
+        subst τS_alt
+        subst τT_alt
+        have component_alt_rel := RDomCast.of_pair
+          (hX := hF_alt) (hY := hG_alt)
+          (hX' := hFenc_alt) (hY' := hGenc_alt)
+          (by simpa using pair_alt_rel.toRDomCast)
+        obtain ⟨Δu_alt, hcov_Uenc_alt, denU_alt, Δu_alt_ext,
+            Δu_alt_none, target_respects_Uenc_alt, Δu_alt_dom,
+            hden_Uenc_alt, hdenU_alt_type, U_alt_rel⟩ :=
+          semantic_u Δp_alt hcov_Senc_alt hcov_Tenc_alt
+            Δp_alt_none target_respects_Senc_alt
+            target_respects_Tenc_alt Δp_alt_dom
+            F_alt G_alt hF_alt hG_alt
+            (⟨Fenc_alt, σS_shape, hFenc_alt⟩ : SMT.Dom)
+            (⟨Genc_alt, σT_shape, hGenc_alt⟩ : SMT.Dom)
+            hden_Senc_alt hden_Tenc_alt
+            component_alt_rel.1 component_alt_rel.2
+        have Δu_alt_ext₀ :=
+          RenamingContext.extends_trans Δu_alt_ext Δp_alt_ext
+        refine ⟨Δu_alt, hcov_Uenc_alt, denU_alt, Δu_alt_ext₀,
+          related_alt.of_extends Δu_alt_ext₀, Δu_alt_none, ?_,
+          target_respects_Uenc_alt, Δu_alt_dom,
+          hden_Uenc_alt, hdenU_alt_type, ?_⟩
+        · exact respects_alt.of_extends Δu_alt_ext₀ types_sub₀
+            (fun _ h => h) fv_in_Λ
+        · simpa only [proof_irrel_heq] using U_alt_rel
