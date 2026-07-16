@@ -1,8 +1,59 @@
 import SMT.Reasoning.EncodeTermRepresentedDefs
+import SMT.Reasoning.Basic.EncodeTermCorrectBase
 
 open Std.Do B SMT ZFSet
 
 /-! # Representation-aware base cases -/
+
+private theorem encodeTerm_ℤ_fv_nil
+    (E : B.Env) {Λ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱} :
+    ⦃fun (⟨E0, Λ'⟩ : EncoderState) ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
+    encodeTerm B.Term.ℤ E
+    ⦃⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) _St' =>
+      ⌜SMT.fv t' = []⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, _St_sub, rfl⟩ := pre
+  rw [encodeTerm]
+  mspec Std.Do.Spec.get_StateT
+  mspec SMT.freshVar_spec (Γ := St.types) (τ := .int)
+    (n := St.env.freshvarsc) (used := St.env.usedVars)
+  next v =>
+    mrename_i pre
+    mintro ∀St'
+    mpure pre
+    mspec Std.Do.Spec.modifyGet_StateT
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    simp [SMT.fv]
+
+private theorem encodeTerm_𝔹_fv_nil
+    (E : B.Env) {Λ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱} :
+    ⦃fun (⟨E0, Λ'⟩ : EncoderState) ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
+    encodeTerm B.Term.𝔹 E
+    ⦃⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) _St' =>
+      ⌜SMT.fv t' = []⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, _St_sub, rfl⟩ := pre
+  rw [encodeTerm]
+  mspec Std.Do.Spec.get_StateT
+  mspec SMT.freshVar_spec (Γ := St.types) (τ := .bool)
+    (n := St.env.freshvarsc) (used := St.env.usedVars)
+  next v =>
+    mrename_i pre
+    mintro ∀St'
+    mpure pre
+    mspec Std.Do.Spec.modifyGet_StateT
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    simp [SMT.fv]
 
 /-- A functional B relation may be supplied to a variable through its
 option-function representation.  The graph cast is the witness required by
@@ -329,3 +380,245 @@ theorem encodeTerm_rep_spec.bool_case.{u}
           simp [SMT.fv] at hw
         · simp [SMT.Term.abstract, SMT.denote]
         · exact RDom.toRDomCast ⟨rfl, by simp [retract]⟩
+
+set_option maxHeartbeats 1200000 in
+theorem encodeTerm_rep_spec.ℤ_case.{u}
+    (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (typ_t : E.context ⊢ᴮ B.Term.ℤ : α)
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ v ∈ B.fv B.Term.ℤ, («Δ» v).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastOnFV «Δ» Δ₀ B.Term.ℤ)
+    {used : List SMT.𝒱}
+    (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
+    (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (den_t : ⟦B.Term.ℤ.abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨T, ⟨α, hT⟩⟩)
+    (vars_used : ∀ v ∈ B.Term.ℤ.vars, v ∈ used)
+    (Λ_inv : ∀ v ∈ B.Term.ℤ.vars, v ∈ Λ → v ∈ E.context)
+    (bv_nodup : (B.bv B.Term.ℤ).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ B.Term.ℤ)
+    (fv_in_Λ : ∀ v ∈ B.fv B.Term.ℤ, v ∈ Λ)
+    (wf : B.RenWF E.context «Δ»)
+    {n : ℕ} :
+    ⦃fun (⟨E0, Λ'⟩ : EncoderState) ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
+    encodeTerm B.Term.ℤ E
+    ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepPost B.Term.ℤ α Λ «Δ» Δ₀ used T hT
+        E t' σ E' Γ'⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+  have Δ₀_ext : RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» B.Term.ℤ := by
+    intro v d hv
+    simp [B.RenamingContext.toSMTOnFV, B.RenamingContext.toSMT,
+      B.RenamingContext.restrictToFV,
+      B.RenamingContext.restrictToVars, B.fv] at hv
+  have canonical_respects :
+      B.RenamingContext.RespectsTypeContextOnFV
+        (B.RenamingContext.toSMT «Δ») St.types B.Term.ℤ := by
+    intro v τ hv
+    simp [B.fv] at hv
+  mspec (Std.Do.Triple.and _
+    (encodeTerm_spec.ℤ_case E typ_t Δ_fv Δ₀_ext
+      Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+      canonical_respects fv_in_Λ wf)
+    (encodeTerm_ℤ_fv_nil E))
+  rename_i out
+  obtain ⟨t', σ⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨old_post, fv_nil⟩ := post
+  obtain ⟨used_sub, types_sub, keys_sub, source_used, σ_eq,
+    typ_t', preserves, Δold, hcov_old, _Δold_ext,
+    _Δold_source, _Δold_none, denOld, hden_old, old_rel,
+    _old_total⟩ := old_post
+  have hcov₀ : RenamingContext.CoversFV Δ₀ t' := by
+    intro v hv
+    rw [fv_nil] at hv
+    contradiction
+  have hagree₀ : RenamingContext.AgreesOnFV Δ₀ Δold t' := by
+    intro v hv
+    rw [fv_nil] at hv
+    contradiction
+  have hden₀ := RenamingContext.denote_congr_of_agreesOnFV
+    (h1 := hcov₀) (h2 := hcov_old) hagree₀
+  have den_type : denOld.snd.fst = σ := by
+    rw [RDom] at old_rel
+    exact old_rel.1.trans σ_eq.symm
+  mpure_intro
+  and_intros
+  · exact used_sub
+  · exact types_sub
+  · exact keys_sub
+  · exact source_used
+  · rw [σ_eq]
+    exact ⟨castPath.reflexive α.toSMTType⟩
+  · exact typ_t'
+  · simpa [EncodeTermResultShape] using fv_nil
+  · exact preserves
+  · refine ⟨Δ₀, hcov₀, RenamingContext.extends_refl Δ₀,
+      related, ?_, ?_, ?_, denOld, hden₀.trans hden_old,
+      den_type, RDom.toRDomCast old_rel, ?_⟩
+    · intro v hv
+      apply Δ₀_none_out v
+      intro hused
+      exact hv (used_sub hused)
+    · intro v τ hv
+      simp [B.fv] at hv
+    · exact fun v hv => AList.mem_of_subset types_sub (Δ₀_dom v hv)
+    · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
+        Δ₀_alt_none _respects_alt Δ₀_alt_dom
+        T_alt hT_alt den_t_alt
+      have T_alt_eq : T_alt = T := by
+        rw [B.Term.abstract, B.denote, Option.pure_def,
+          Option.some_inj] at den_t den_t_alt
+        exact (congrArg (fun d => d.fst) den_t_alt).symm.trans
+          (congrArg (fun d => d.fst) den_t)
+      subst T_alt
+      have hcov_alt : RenamingContext.CoversFV Δ₀_alt t' := by
+        intro v hv
+        rw [fv_nil] at hv
+        contradiction
+      have hagree_alt : RenamingContext.AgreesOnFV Δ₀_alt Δold t' := by
+        intro v hv
+        rw [fv_nil] at hv
+        contradiction
+      have hden_alt := RenamingContext.denote_congr_of_agreesOnFV
+        (h1 := hcov_alt) (h2 := hcov_old) hagree_alt
+      refine ⟨Δ₀_alt, hcov_alt, denOld,
+        RenamingContext.extends_refl Δ₀_alt, related_alt,
+        Δ₀_alt_none, ?_, ?_, hden_alt.trans hden_old,
+        den_type, ?_⟩
+      · intro v τ hv
+        simp [B.fv] at hv
+      · exact fun v hv =>
+          AList.mem_of_subset types_sub (Δ₀_alt_dom v hv)
+      · simpa only [proof_irrel_heq] using RDom.toRDomCast old_rel
+
+set_option maxHeartbeats 1200000 in
+theorem encodeTerm_rep_spec.𝔹_case.{u}
+    (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (typ_t : E.context ⊢ᴮ B.Term.𝔹 : α)
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ v ∈ B.fv B.Term.𝔹, («Δ» v).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastOnFV «Δ» Δ₀ B.Term.𝔹)
+    {used : List SMT.𝒱}
+    (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
+    (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (den_t : ⟦B.Term.𝔹.abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨T, ⟨α, hT⟩⟩)
+    (vars_used : ∀ v ∈ B.Term.𝔹.vars, v ∈ used)
+    (Λ_inv : ∀ v ∈ B.Term.𝔹.vars, v ∈ Λ → v ∈ E.context)
+    (bv_nodup : (B.bv B.Term.𝔹).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ B.Term.𝔹)
+    (fv_in_Λ : ∀ v ∈ B.fv B.Term.𝔹, v ∈ Λ)
+    (wf : B.RenWF E.context «Δ»)
+    {n : ℕ} :
+    ⦃fun (⟨E0, Λ'⟩ : EncoderState) ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
+    encodeTerm B.Term.𝔹 E
+    ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepPost B.Term.𝔹 α Λ «Δ» Δ₀ used T hT
+        E t' σ E' Γ'⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+  have Δ₀_ext : RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» B.Term.𝔹 := by
+    intro v d hv
+    simp [B.RenamingContext.toSMTOnFV, B.RenamingContext.toSMT,
+      B.RenamingContext.restrictToFV,
+      B.RenamingContext.restrictToVars, B.fv] at hv
+  have canonical_respects :
+      B.RenamingContext.RespectsTypeContextOnFV
+        (B.RenamingContext.toSMT «Δ») St.types B.Term.𝔹 := by
+    intro v τ hv
+    simp [B.fv] at hv
+  mspec (Std.Do.Triple.and _
+    (encodeTerm_spec.𝔹_case E typ_t Δ_fv Δ₀_ext
+      Δ₀_none_out den_t vars_used Λ_inv bv_nodup
+      canonical_respects fv_in_Λ wf)
+    (encodeTerm_𝔹_fv_nil E))
+  rename_i out
+  obtain ⟨t', σ⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨old_post, fv_nil⟩ := post
+  obtain ⟨used_sub, types_sub, keys_sub, source_used, σ_eq,
+    typ_t', preserves, Δold, hcov_old, _Δold_ext,
+    _Δold_source, _Δold_none, denOld, hden_old, old_rel,
+    _old_total⟩ := old_post
+  have hcov₀ : RenamingContext.CoversFV Δ₀ t' := by
+    intro v hv
+    rw [fv_nil] at hv
+    contradiction
+  have hagree₀ : RenamingContext.AgreesOnFV Δ₀ Δold t' := by
+    intro v hv
+    rw [fv_nil] at hv
+    contradiction
+  have hden₀ := RenamingContext.denote_congr_of_agreesOnFV
+    (h1 := hcov₀) (h2 := hcov_old) hagree₀
+  have den_type : denOld.snd.fst = σ := by
+    rw [RDom] at old_rel
+    exact old_rel.1.trans σ_eq.symm
+  mpure_intro
+  and_intros
+  · exact used_sub
+  · exact types_sub
+  · exact keys_sub
+  · exact source_used
+  · rw [σ_eq]
+    exact ⟨castPath.reflexive α.toSMTType⟩
+  · exact typ_t'
+  · simpa [EncodeTermResultShape] using fv_nil
+  · exact preserves
+  · refine ⟨Δ₀, hcov₀, RenamingContext.extends_refl Δ₀,
+      related, ?_, ?_, ?_, denOld, hden₀.trans hden_old,
+      den_type, RDom.toRDomCast old_rel, ?_⟩
+    · intro v hv
+      apply Δ₀_none_out v
+      intro hused
+      exact hv (used_sub hused)
+    · intro v τ hv
+      simp [B.fv] at hv
+    · exact fun v hv => AList.mem_of_subset types_sub (Δ₀_dom v hv)
+    · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
+        Δ₀_alt_none _respects_alt Δ₀_alt_dom
+        T_alt hT_alt den_t_alt
+      have T_alt_eq : T_alt = T := by
+        rw [B.Term.abstract, B.denote, Option.pure_def,
+          Option.some_inj] at den_t den_t_alt
+        exact (congrArg (fun d => d.fst) den_t_alt).symm.trans
+          (congrArg (fun d => d.fst) den_t)
+      subst T_alt
+      have hcov_alt : RenamingContext.CoversFV Δ₀_alt t' := by
+        intro v hv
+        rw [fv_nil] at hv
+        contradiction
+      have hagree_alt : RenamingContext.AgreesOnFV Δ₀_alt Δold t' := by
+        intro v hv
+        rw [fv_nil] at hv
+        contradiction
+      have hden_alt := RenamingContext.denote_congr_of_agreesOnFV
+        (h1 := hcov_alt) (h2 := hcov_old) hagree_alt
+      refine ⟨Δ₀_alt, hcov_alt, denOld,
+        RenamingContext.extends_refl Δ₀_alt, related_alt,
+        Δ₀_alt_none, ?_, ?_, hden_alt.trans hden_old,
+        den_type, ?_⟩
+      · intro v τ hv
+        simp [B.fv] at hv
+      · exact fun v hv =>
+          AList.mem_of_subset types_sub (Δ₀_alt_dom v hv)
+      · simpa only [proof_irrel_heq] using RDom.toRDomCast old_rel

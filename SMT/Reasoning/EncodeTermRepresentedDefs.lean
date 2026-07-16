@@ -17,6 +17,8 @@ prefix.  Only shapes needed by such transfers are recorded. -/
 def EncodeTermResultShape : B.Term → SMT.Term → SMTType → Prop
   | .maplet _ _, t', σ => ∃ x' y' σx σy,
       t' = SMT.Term.pair x' y' ∧ σ = SMTType.pair σx σy
+  | .ℤ, t', _ => SMT.fv t' = []
+  | .𝔹, t', _ => SMT.fv t' = []
   | _, _, _ => True
 
 /-- Totality under an alternative source valuation and a representation-aware
