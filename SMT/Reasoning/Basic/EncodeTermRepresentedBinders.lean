@@ -104,4 +104,41 @@ theorem denote_substList_bool_truth_of_agrees.{u}
       hagrees hden
   · exact represented_bool_truth_iff hrel
 
+/-- Transfer a substituted body from its evaluation context to an extension
+of the body-totality context.  The only free variables contributed by the
+replacement terms are the freshly bound variable `z`; all remaining body
+variables are inherited through the extension. -/
+theorem agreesOnFV_substList_update_of_extends.{u}
+    {DeltaCtx ThetaBase ThetaBody : Context.{u}}
+    {z : SMT.𝒱} {W : SMT.Dom.{u}}
+    {xs : List SMT.𝒱} {ts : List SMT.Term} {body : SMT.Term}
+    (hcov : CoversFV (Function.update DeltaCtx z (some W))
+      (SMT.substList xs ts body))
+    (hsubst_not_xs : ∀ v ∈ SMT.fv (SMT.substList xs ts body),
+      v ≠ z → v ∉ xs)
+    (hts_fv_z : ∀ t ∈ ts, ∀ v ∈ SMT.fv t, v = z)
+    (hctx_base : ∀ v ∈ SMT.fv body, v ∉ xs →
+      DeltaCtx v = ThetaBase v)
+    (hbody_ext : Extends ThetaBody ThetaBase) :
+    AgreesOnFV (Function.update DeltaCtx z (some W))
+      (Function.update ThetaBody z (some W))
+      (SMT.substList xs ts body) := by
+  intro v hv
+  by_cases hvz : v = z
+  · subst hvz
+    simp [Function.update_self]
+  · rw [Function.update_of_ne hvz, Function.update_of_ne hvz]
+    rcases SMT_mem_fv_substList hv with hvbody | ⟨t, ht, hvt⟩
+    · have hvxs : v ∉ xs := hsubst_not_xs v hv hvz
+      have hbase : DeltaCtx v = ThetaBase v := hctx_base v hvbody hvxs
+      cases hctx : DeltaCtx v with
+      | none =>
+          have hcontr := hcov v hv
+          rw [Function.update_of_ne hvz, hctx] at hcontr
+          simp at hcontr
+      | some d =>
+          have hbase_some : ThetaBase v = some d := hbase.symm.trans hctx
+          exact (hbody_ext hbase_some).symm
+    · exact (hvz (hts_fv_z t ht v hvt)).elim
+
 end SMT.RenamingContext
