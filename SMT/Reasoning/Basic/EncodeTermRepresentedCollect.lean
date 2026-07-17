@@ -1120,6 +1120,35 @@ theorem denote_the_of_some.{u}
     rw [hDopt_eq, hthe]
 
 open Classical in
+/-- If an option-valued term is known to be `some` of a represented payload,
+then eliminating it with `the` yields a supported representative of that
+source payload.  This supplies the final binder component in the
+function-valued collection encoding. -/
+theorem represented_option_payload_of_some.{u}
+    {beta : BType} {b : ZFSet.{u}} {hb : b ∈ ⟦beta⟧ᶻ}
+    {Dapp : SMT.Term} {Theta : SMT.RenamingContext.Context.{u}}
+    {DappVal Wb : SMT.Dom.{u}}
+    (hcov_Dapp : SMT.RenamingContext.CoversFV Theta Dapp)
+    (hden_Dapp : ⟦Dapp.abstract Theta hcov_Dapp⟧ˢ = some DappVal)
+    (hDapp_type : DappVal.snd.fst = SMTType.option beta.toSMTType)
+    (hWb_type : Wb.snd.fst = beta.toSMTType)
+    (hWb_retract : retract beta Wb.fst = b)
+    (hDapp_value : DappVal.fst = (ZFSet.Option.some
+      (S := ⟦beta.toSMTType⟧ᶻ) ⟨Wb.fst, by rw [← hWb_type]; exact Wb.snd.snd⟩).val) :
+    ∃ (hcov_the : SMT.RenamingContext.CoversFV Theta (SMT.Term.the Dapp))
+      (Dthe : SMT.Dom.{u}),
+      ⟦(SMT.Term.the Dapp).abstract Theta hcov_the⟧ˢ = some Dthe ∧
+      RDomCastSupported (⟨b, beta, hb⟩ : B.Dom) Dthe := by
+  obtain ⟨hcov_the, Dthe, hden_the, hDthe_type, hDthe_value⟩ :=
+    denote_the_of_some hcov_Dapp hden_Dapp hDapp_type hWb_type hDapp_value
+  refine ⟨hcov_the, Dthe, hden_the, ?_⟩
+  apply RDom.toRDomCastSupported
+  rw [RDom]
+  refine ⟨hDthe_type, ?_⟩
+  rw [hDthe_value]
+  exact hWb_retract
+
+open Classical in
 /-- The guarded option payload used by the function-valued `collect` encoder
 returns `some W` when its domain application is `some W` and its substituted
 predicate is true.  The input is phrased at the PHOAS level so callers can
