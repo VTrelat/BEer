@@ -5062,3 +5062,403 @@ theorem castApp_relation_supported_rep_scoped_contract.{u}
       castable?_of_castPath supported_x.toCanonicalCastPath
     exact castApp_relation_arg_scoped_contract gamma alpha f x sx
       hforward hback (supported_x.toCastPath_faithful hback)
+
+/-! ## Application constructor composition -/
+
+private theorem encodeTerm_app_via_maplet (f x : B.Term) (E : B.Env) :
+    encodeTerm (.app f x) E = (do
+      let ⟨p, sigmaP⟩ ← encodeTerm (f ↦ᴮ x) E
+      match p, sigmaP with
+      | .pair f' x', .pair sigmaF sigmaX =>
+          castApp ⟨f', sigmaF⟩ ⟨x', sigmaX⟩
+      | _, _ => throw "encodeTerm:app: impossible maplet result") := by
+  simp [encodeTerm]
+
+private theorem denote_pair_inv_app.{u}
+    {f x : SMT.Term} {Theta : SMT.RenamingContext.Context.{u}}
+    (hcov : RenamingContext.CoversFV Theta (SMT.Term.pair f x))
+    {d : SMT.Dom.{u}}
+    (hden : ⟦(SMT.Term.pair f x).abstract Theta hcov⟧ˢ = some d) :
+    ∃ (df dx : SMT.Dom.{u}),
+      ⟦f.abstract Theta (fun v hv => hcov v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl hv))⟧ˢ = some df ∧
+      ⟦x.abstract Theta (fun v hv => hcov v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv))⟧ˢ = some dx ∧
+      d = ⟨df.fst.pair dx.fst,
+        SMTType.pair df.snd.fst dx.snd.fst,
+        ZFSet.pair_mem_prod.mpr ⟨df.snd.snd, dx.snd.snd⟩⟩ := by
+  rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+    Option.bind_eq_bind, Option.bind_eq_some_iff] at hden
+  obtain ⟨df, hdenf, hrest⟩ := hden
+  rw [Option.bind_eq_some_iff] at hrest
+  obtain ⟨dx, hdenx, hout⟩ := hrest
+  refine ⟨df, dx, ?_, ?_, ?_⟩
+  · simpa only [proof_irrel_heq] using hdenf
+  · simpa only [proof_irrel_heq] using hdenx
+  · simpa using hout.symm
+
+set_option maxHeartbeats 6000000 in
+theorem encodeTerm_rep_spec.app_case.{u}
+    (f x : B.Term)
+    (f_ih : EncodeTermRepIH.{u} f)
+    (x_ih : EncodeTermRepIH.{u} x)
+    (E : B.Env) {Lambda : SMT.TypeContext} {alpha : BType}
+    (typ_t : E.context ⊢ᴮ .app f x : alpha)
+    {Xi : B.RenamingContext.Context}
+    (Xi_fv : ∀ v ∈ B.fv (.app f x), (Xi v).isSome = true)
+    {Theta0 : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastSupportedOnFV Xi Theta0 (.app f x))
+    {used : List SMT.𝒱}
+    (Theta0_none : ∀ v ∉ used, Theta0 v = none)
+    (Theta0_dom : ∀ v, Theta0 v ≠ none → v ∈ Lambda)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦alpha⟧ᶻ}
+    (den_t : ⟦(B.Term.app f x).abstract Xi Xi_fv⟧ᴮ =
+      some ⟨T, ⟨alpha, hT⟩⟩)
+    (vars_used : ∀ v ∈ (B.Term.app f x).vars, v ∈ used)
+    (Lambda_inv : ∀ v ∈ (B.Term.app f x).vars,
+      v ∈ Lambda → v ∈ E.context)
+    (bv_nodup : (B.bv (B.Term.app f x)).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Theta0 Lambda (B.Term.app f x))
+    (fv_in_Lambda : ∀ v ∈ B.fv (B.Term.app f x), v ∈ Lambda)
+    (wf : B.RenWF E.context Xi)
+    {n : ℕ} :
+    ⦃fun ⟨E0, Lambda'⟩ =>
+      ⌜Lambda' = Lambda ∧ E0.freshvarsc = n ∧
+        Lambda.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
+    encodeTerm (B.Term.app f x) E
+    ⦃⇓? (⟨t', sigma⟩ : SMT.Term × SMTType) ⟨E', Gamma'⟩ =>
+      ⌜EncodeTermRepPost (B.Term.app f x) alpha Lambda Xi Theta0
+        used T hT E t' sigma E' Gamma'⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, St_used_eq⟩ := pre
+  rw [encodeTerm_app_via_maplet]
+
+  obtain ⟨gamma, typ_f, typ_x⟩ := B.Typing.appE typ_t
+  obtain ⟨F, X, hF, hX, den_f, den_x, hfun, hdom, hresult⟩ :=
+    B.denote_app_inv_rep typ_f typ_x Xi_fv wf den_t
+
+  let Xi_fv_pair : ∀ v ∈ B.fv (f ↦ᴮ x), (Xi v).isSome = true :=
+    fun v hv => Xi_fv v (by simpa [B.fv] using hv)
+  have den_pair :
+      ⟦(f ↦ᴮ x).abstract Xi Xi_fv_pair⟧ᴮ =
+        some ⟨F.pair X,
+          ⟨BType.set (gamma ×ᴮ alpha) ×ᴮ gamma,
+            ZFSet.pair_mem_prod.mpr ⟨hF, hX⟩⟩⟩ := by
+    rw [B.Term.abstract, B.denote, Option.pure_def,
+      Option.bind_eq_bind]
+    have den_f' :
+        ⟦f.abstract Xi (fun v hv => Xi_fv_pair v (by
+          rw [B.fv, List.mem_append]
+          exact Or.inl hv))⟧ᴮ =
+          some ⟨F, ⟨BType.set (gamma ×ᴮ alpha), hF⟩⟩ := by
+      simpa only [proof_irrel_heq] using den_f
+    have den_x' :
+        ⟦x.abstract Xi (fun v hv => Xi_fv_pair v (by
+          rw [B.fv, List.mem_append]
+          exact Or.inr hv))⟧ᴮ = some ⟨X, ⟨gamma, hX⟩⟩ := by
+      simpa only [proof_irrel_heq] using den_x
+    rw [den_f', Option.bind_some, den_x']
+    rfl
+
+  mspec (Std.Do.Triple.and _
+    (encodeTerm_rep_spec.maplet_case f x f_ih x_ih E
+      (B.Typing.maplet typ_f typ_x) Xi_fv_pair
+      (by simpa [B.fv] using related)
+      Theta0_none Theta0_dom den_pair
+      (fun v hv => vars_used v (by
+        simpa [B.Term.vars, B.fv, B.bv] using hv))
+      (fun v hv => Lambda_inv v (by
+        simpa [B.Term.vars, B.fv, B.bv] using hv))
+      (by simpa [B.bv] using bv_nodup)
+      (by simpa [B.fv] using respects)
+      (fun v hv => fv_in_Lambda v (by simpa [B.fv] using hv)) wf
+      (n := St.env.freshvarsc))
+    (encodeTerm_bv_used E (t := f ↦ᴮ x)
+      (used := St.env.usedVars) (n := St.env.freshvarsc)
+      (decl := St.env.declarations)))
+  rename_i out_pair
+  obtain ⟨pairTerm, pairType⟩ := out_pair
+  mrename_i pre
+  mintro ∀Stp
+  mpure pre
+  dsimp at pre
+  obtain ⟨maplet_post, bv_pair_used, _bv_used_sub, _bv_delta⟩ := pre
+  obtain ⟨used_sub, types_sub, keys_sub, covers_used,
+    _path_pair, typ_pair, shape_pair, preserves,
+    Thetap, hcov_pair, Thetap_ext, related_p, Thetap_none, respects_p,
+    target_respects_p, Thetap_dom,
+    denPair, hden_pair, hdenPair_type, pair_rel, pair_total⟩ :=
+    maplet_post
+  obtain ⟨fEnc, xEnc, sigmaF, sigmaX,
+    hpairTerm, hpairType⟩ := shape_pair
+  subst pairTerm
+  subst pairType
+  focus
+    rw [hpairType] at typ_pair pair_total
+    rw [hpairType]
+    obtain ⟨sigmaF0, sigmaX0, hpair_type, typ_fEnc, typ_xEnc⟩ :=
+      SMT.Typing.pairE typ_pair
+    injection hpair_type with hsigmaF hsigmaX
+    subst sigmaF0
+    subst sigmaX0
+
+    have hcov_fEnc : RenamingContext.CoversFV Thetap fEnc := by
+      intro v hv
+      exact hcov_pair v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl hv)
+    have hcov_xEnc : RenamingContext.CoversFV Thetap xEnc := by
+      intro v hv
+      exact hcov_pair v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv)
+    have target_respects_fEnc :
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          Thetap Stp.types fEnc := by
+      intro v tau hv hlookup
+      exact target_respects_p (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl hv) hlookup
+    have target_respects_xEnc :
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          Thetap Stp.types xEnc := by
+      intro v tau hv hlookup
+      exact target_respects_p (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv) hlookup
+    obtain ⟨denF, denX, hden_fEnc, hden_xEnc, denPair_eq⟩ :=
+      denote_pair_inv_app hcov_pair hden_pair
+    rw [denPair_eq] at hpairType pair_rel
+    rcases denF with ⟨Fenc, tauF, hFenc⟩
+    rcases denX with ⟨Xenc, tauX, hXenc⟩
+    dsimp at hpairType
+    injection hpairType with htauF htauX
+    subst tauF
+    subst tauX
+    have pair_rel' : RDomCastSupported
+        (⟨F.pair X,
+          BType.set (gamma ×ᴮ alpha) ×ᴮ gamma,
+          ZFSet.pair_mem_prod.mpr ⟨hF, hX⟩⟩ : B.Dom)
+        (⟨Fenc.pair Xenc, SMTType.pair sigmaF sigmaX,
+          ZFSet.pair_mem_prod.mpr ⟨hFenc, hXenc⟩⟩ : SMT.Dom) := by
+      simpa only [proof_irrel_heq] using pair_rel
+    obtain ⟨F_rel, X_rel⟩ := RDomCastSupported.of_pair pair_rel'
+    have bv_fEnc_used : ∀ v ∈ SMT.bv fEnc, v ∈ Stp.env.usedVars := by
+      intro v hv
+      exact bv_pair_used v (by
+        rw [SMT.bv, List.mem_append]
+        exact Or.inl hv)
+    have bv_xEnc_used : ∀ v ∈ SMT.bv xEnc, v ∈ Stp.env.usedVars := by
+      intro v hv
+      exact bv_pair_used v (by
+        rw [SMT.bv, List.mem_append]
+        exact Or.inr hv)
+
+    have cast_contract : CastAppRepScopedSpec.{u}
+        gamma alpha fEnc xEnc sigmaF sigmaX := by
+      cases F_rel.supported with
+      | setPred tau =>
+          exact castApp_relation_supported_rep_scoped_contract
+            gamma alpha fEnc xEnc sigmaX X_rel.supported
+      | optionFun gamma' alpha' =>
+          exact castApp_option_supported_rep_scoped_contract
+            gamma alpha fEnc xEnc sigmaX X_rel.supported
+
+    mspec cast_contract typ_fEnc typ_xEnc bv_fEnc_used bv_xEnc_used
+    rename_i out_app
+    obtain ⟨appEnc, sigmaApp⟩ := out_app
+    mrename_i post_app
+    mintro ∀StA
+    mpure post_app
+    obtain ⟨used_sub_app, types_sub_app, keys_sub_app, sigmaApp_eq,
+      typ_appEnc, app_preserves, Dlt, _decl_eq, _ctx_gen, _ctx_trace,
+      _decl_fresh, app_sem, _specs_typing, _scoped_typing⟩ := post_app
+    change sigmaApp = alpha.toSMTType at sigmaApp_eq
+    subst sigmaApp
+    have types_sub0 : St.types ⊆ StA.types :=
+      fun _ h => types_sub_app (types_sub h)
+    have target_respects_fEnc_A :
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          Thetap StA.types fEnc :=
+      target_respects_fEnc.of_extends
+        (SMT.RenamingContext.extends_refl Thetap)
+        types_sub_app typ_fEnc
+    have target_respects_xEnc_A :
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          Thetap StA.types xEnc :=
+      target_respects_xEnc.of_extends
+        (SMT.RenamingContext.extends_refl Thetap)
+        types_sub_app typ_xEnc
+    have Thetap_dom_A : ∀ v, Thetap v ≠ none → v ∈ StA.types :=
+      fun v hv => AList.mem_of_subset types_sub_app (Thetap_dom v hv)
+    obtain ⟨good, _guarded⟩ := app_sem StA.types (fun _ h => h)
+      Thetap hcov_fEnc hcov_xEnc Thetap_none
+      target_respects_fEnc_A target_respects_xEnc_A Thetap_dom_A
+      F X T hF hX hT hfun hdom hresult
+      (⟨Fenc, sigmaF, hFenc⟩ : SMT.Dom)
+      (⟨Xenc, sigmaX, hXenc⟩ : SMT.Dom)
+      hden_fEnc hden_xEnc rfl rfl F_rel X_rel
+    obtain ⟨ThetaA, hcov_app, denA, ThetaA_ext, ThetaA_none,
+      target_respects_app, ThetaA_dom, _specs_A, hden_app,
+      hdenA_type, result_rel⟩ := good
+    have ThetaA_ext0 :=
+      SMT.RenamingContext.extends_trans ThetaA_ext Thetap_ext
+
+    mpure_intro
+    refine ⟨?_, types_sub0, keys_sub_app, ?_,
+      ⟨castPath.reflexive alpha.toSMTType⟩, typ_appEnc, trivial,
+      ?_, ThetaA, hcov_app, ThetaA_ext0,
+      related.of_extends ThetaA_ext0, ThetaA_none, ?_,
+      target_respects_app, ThetaA_dom, denA, hden_app,
+      hdenA_type, result_rel, ?_⟩
+    · intro v hv
+      exact used_sub_app (used_sub (by simpa [St_used_eq] using hv))
+    · simpa [B.fv] using
+        (B.CoversUsedVars.mono used_sub_app covers_used)
+    · intro v hv hLambda hvars
+      apply app_preserves v (used_sub (by simpa [St_used_eq] using hv))
+      exact preserves v (by simpa [St_used_eq] using hv) hLambda
+        (by simpa [B.Term.vars, B.fv, B.bv] using hvars)
+    · exact respects.of_extends ThetaA_ext0 types_sub0
+        (fun _ h => h) fv_in_Lambda
+    · intro Xi_alt Xi_fv_alt Theta0_alt related_alt wf_alt
+        Theta0_alt_none respects_alt Theta0_alt_dom
+        T_alt hT_alt den_t_alt
+      obtain ⟨F_alt, X_alt, hF_alt, hX_alt, den_f_alt, den_x_alt,
+          hfun_alt, hdom_alt, hresult_alt⟩ :=
+        B.denote_app_inv_rep typ_f typ_x Xi_fv_alt wf_alt den_t_alt
+      let Xi_fv_pair_alt :
+          ∀ v ∈ B.fv (f ↦ᴮ x), (Xi_alt v).isSome = true :=
+        fun v hv => Xi_fv_alt v (by simpa [B.fv] using hv)
+      have den_pair_alt :
+          ⟦(f ↦ᴮ x).abstract Xi_alt Xi_fv_pair_alt⟧ᴮ =
+            some ⟨F_alt.pair X_alt,
+              ⟨BType.set (gamma ×ᴮ alpha) ×ᴮ gamma,
+                ZFSet.pair_mem_prod.mpr ⟨hF_alt, hX_alt⟩⟩⟩ := by
+        rw [B.Term.abstract, B.denote, Option.pure_def,
+          Option.bind_eq_bind]
+        have den_f_alt' :
+            ⟦f.abstract Xi_alt (fun v hv => Xi_fv_pair_alt v (by
+              rw [B.fv, List.mem_append]
+              exact Or.inl hv))⟧ᴮ =
+              some ⟨F_alt,
+                ⟨BType.set (gamma ×ᴮ alpha), hF_alt⟩⟩ := by
+          simpa only [proof_irrel_heq] using den_f_alt
+        have den_x_alt' :
+            ⟦x.abstract Xi_alt (fun v hv => Xi_fv_pair_alt v (by
+              rw [B.fv, List.mem_append]
+              exact Or.inr hv))⟧ᴮ =
+              some ⟨X_alt, ⟨gamma, hX_alt⟩⟩ := by
+          simpa only [proof_irrel_heq] using den_x_alt
+        rw [den_f_alt', Option.bind_some, den_x_alt']
+        rfl
+      have Theta0_alt_none_pair : ∀ v ∉ Stp.env.usedVars,
+          Theta0_alt v = none := by
+        intro v hv
+        by_contra hne
+        have hv_Lambda := Theta0_alt_dom v hne
+        have hv_used : v ∈ used := by
+          rw [← St_used_eq]
+          exact St_keys hv_Lambda
+        exact hv (used_sub hv_used)
+      obtain ⟨Thetap_alt, hcov_pair_alt, denPairAlt,
+          Thetap_alt_ext, _related_p_alt, Thetap_alt_none,
+          _respects_p_alt, target_respects_p_alt, Thetap_alt_dom,
+          hden_pair_alt, hdenPairAlt_type, pair_alt_rel⟩ :=
+        pair_total Xi_alt Xi_fv_pair_alt Theta0_alt
+          (by simpa [B.fv] using related_alt) wf_alt
+          Theta0_alt_none_pair
+          (by simpa [B.fv] using respects_alt)
+          Theta0_alt_dom (F_alt.pair X_alt)
+          (ZFSet.pair_mem_prod.mpr ⟨hF_alt, hX_alt⟩)
+          den_pair_alt
+      have hcov_fEnc_alt : RenamingContext.CoversFV Thetap_alt fEnc := by
+        intro v hv
+        exact hcov_pair_alt v (by
+          rw [SMT.fv, List.mem_append]
+          exact Or.inl hv)
+      have hcov_xEnc_alt : RenamingContext.CoversFV Thetap_alt xEnc := by
+        intro v hv
+        exact hcov_pair_alt v (by
+          rw [SMT.fv, List.mem_append]
+          exact Or.inr hv)
+      have target_respects_fEnc_alt :
+          SMT.RenamingContext.RespectsTypeContextOnFV
+            Thetap_alt Stp.types fEnc := by
+        intro v tau hv hlookup
+        exact target_respects_p_alt (by
+          rw [SMT.fv, List.mem_append]
+          exact Or.inl hv) hlookup
+      have target_respects_xEnc_alt :
+          SMT.RenamingContext.RespectsTypeContextOnFV
+            Thetap_alt Stp.types xEnc := by
+        intro v tau hv hlookup
+        exact target_respects_p_alt (by
+          rw [SMT.fv, List.mem_append]
+          exact Or.inr hv) hlookup
+      obtain ⟨denFAlt, denXAlt, hden_fEnc_alt,
+          hden_xEnc_alt, denPairAlt_eq⟩ :=
+        denote_pair_inv_app hcov_pair_alt hden_pair_alt
+      rw [denPairAlt_eq] at hdenPairAlt_type pair_alt_rel
+      rcases denFAlt with ⟨Fenc_alt, tauF_alt, hFenc_alt⟩
+      rcases denXAlt with ⟨Xenc_alt, tauX_alt, hXenc_alt⟩
+      dsimp at hdenPairAlt_type
+      injection hdenPairAlt_type with htauF_alt htauX_alt
+      subst tauF_alt
+      subst tauX_alt
+      have pair_alt_rel' : RDomCastSupported
+          (⟨F_alt.pair X_alt,
+            BType.set (gamma ×ᴮ alpha) ×ᴮ gamma,
+            ZFSet.pair_mem_prod.mpr ⟨hF_alt, hX_alt⟩⟩ : B.Dom)
+          (⟨Fenc_alt.pair Xenc_alt,
+            SMTType.pair sigmaF sigmaX,
+            ZFSet.pair_mem_prod.mpr
+              ⟨hFenc_alt, hXenc_alt⟩⟩ : SMT.Dom) := by
+        simpa only [proof_irrel_heq] using pair_alt_rel
+      obtain ⟨F_alt_rel, X_alt_rel⟩ :=
+        RDomCastSupported.of_pair pair_alt_rel'
+      have target_respects_fEnc_alt_A :
+          SMT.RenamingContext.RespectsTypeContextOnFV
+            Thetap_alt StA.types fEnc :=
+        target_respects_fEnc_alt.of_extends
+          (SMT.RenamingContext.extends_refl Thetap_alt)
+          types_sub_app typ_fEnc
+      have target_respects_xEnc_alt_A :
+          SMT.RenamingContext.RespectsTypeContextOnFV
+            Thetap_alt StA.types xEnc :=
+        target_respects_xEnc_alt.of_extends
+          (SMT.RenamingContext.extends_refl Thetap_alt)
+          types_sub_app typ_xEnc
+      have Thetap_alt_dom_A :
+          ∀ v, Thetap_alt v ≠ none → v ∈ StA.types :=
+        fun v hv => AList.mem_of_subset types_sub_app
+          (Thetap_alt_dom v hv)
+      obtain ⟨good_alt, _guarded_alt⟩ :=
+        app_sem StA.types (fun _ h => h) Thetap_alt
+          hcov_fEnc_alt hcov_xEnc_alt Thetap_alt_none
+          target_respects_fEnc_alt_A target_respects_xEnc_alt_A
+          Thetap_alt_dom_A
+          F_alt X_alt T_alt hF_alt hX_alt hT_alt
+          hfun_alt hdom_alt hresult_alt
+          (⟨Fenc_alt, sigmaF, hFenc_alt⟩ : SMT.Dom)
+          (⟨Xenc_alt, sigmaX, hXenc_alt⟩ : SMT.Dom)
+          hden_fEnc_alt hden_xEnc_alt rfl rfl F_alt_rel X_alt_rel
+      obtain ⟨ThetaA_alt, hcov_app_alt, denA_alt,
+          ThetaA_alt_ext, ThetaA_alt_none,
+          target_respects_app_alt, ThetaA_alt_dom,
+          _specs_A_alt, hden_app_alt, hdenA_alt_type,
+          result_alt_rel⟩ := good_alt
+      have ThetaA_alt_ext0 := SMT.RenamingContext.extends_trans
+        ThetaA_alt_ext Thetap_alt_ext
+      refine ⟨ThetaA_alt, hcov_app_alt, denA_alt,
+        ThetaA_alt_ext0, related_alt.of_extends ThetaA_alt_ext0,
+        ThetaA_alt_none, ?_, target_respects_app_alt,
+        ThetaA_alt_dom, hden_app_alt, hdenA_alt_type,
+        result_alt_rel⟩
+      exact respects_alt.of_extends ThetaA_alt_ext0 types_sub0
+        (fun _ h => h) fv_in_Lambda
