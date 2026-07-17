@@ -132,6 +132,23 @@ theorem toDestPair_length_gen :
       rw [ih (.fst d) (.fst d) (.snd d :: acc) (List.cons_ne_nil y ys)]
       simp [List.length_cons]; omega
 
+/-- Appending one payload to a destination-tuple projection is equivalent to
+starting the projection with that payload in its accumulator.  The
+function-valued collection encoder uses this form to append `the (D z)` to
+the projections of its input tuple. -/
+theorem toDestPair_concat
+    (vs : List SMT.𝒱) (zp d : SMT.Term) (acc : List SMT.Term) (w : SMT.Term) :
+    (toDestPair vs zp acc d).concat w =
+      toDestPair vs zp (acc.concat w) d := by
+  induction vs generalizing zp d acc with
+  | nil => rfl
+  | cons x xs ih =>
+    cases xs with
+    | nil => rfl
+    | cons y ys =>
+      simp only [toDestPair]
+      exact ih (SMT.Term.fst d) (SMT.Term.fst d) (SMT.Term.snd d :: acc)
+
 theorem fromProdl_zero_eq (σ : SMTType) : σ.fromProdl 0 = [σ] := by
   cases σ <;> simp [SMT.SMTType.fromProdl]
 
