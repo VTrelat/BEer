@@ -917,6 +917,103 @@ theorem represented_option_app_some_of_mem_canonical.{u}
       ⟨Wb.fst, hWb_mem⟩ |>.property)] at hsem
   simpa [Dval, Wa, Wb, proof_irrel_heq] using hsem.mpr hmem
 
+open Classical in
+/-- At canonical source endpoints, an option-function representative returns
+the canonical `some` payload exactly when the corresponding source pair lies
+in the represented relation. -/
+theorem represented_option_app_some_iff_canonical.{u}
+    {alpha beta : BType} {S : ZFSet.{u}}
+    {hS : S ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    {Denc : SMT.Term} {z : SMT.𝒱}
+    {Delta : SMT.RenamingContext.Context.{u}} {Dval : SMT.Dom.{u}}
+    (hcov_D_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update Delta z (some W)) Denc)
+    (den_D_upd : ∀ W : SMT.Dom,
+      ⟦Denc.abstract (Function.update Delta z (some W))
+        (hcov_D_upd W)⟧ˢ = some Dval)
+    (hD_type : Dval.snd.fst = alpha.toSMTType.fun
+      (SMTType.option beta.toSMTType))
+    (hD_func : ⟦alpha.toSMTType⟧ᶻ.IsFunc
+      ⟦SMTType.option beta.toSMTType⟧ᶻ Dval.fst)
+    (D_rel : RDomCastSupported
+      (⟨S, BType.set (alpha ×ᴮ beta), hS⟩ : B.Dom) Dval)
+    {a b : ZFSet.{u}} (ha : a ∈ ⟦alpha⟧ᶻ)
+    (hb : b ∈ ⟦beta⟧ᶻ) :
+    let Wa : SMT.Dom.{u} := B.Dom.canonicalSMT
+      (⟨a, alpha, ha⟩ : B.Dom)
+    let Wb : SMT.Dom.{u} := B.Dom.canonicalSMT
+      (⟨b, beta, hb⟩ : B.Dom)
+    ∃ (hcov : SMT.RenamingContext.CoversFV
+        (Function.update Delta z (some Wa)) ((@ˢDenc) (.var z)))
+      (Dapp : SMT.Dom.{u}),
+      ⟦((@ˢDenc) (.var z)).abstract
+        (Function.update Delta z (some Wa)) hcov⟧ˢ = some Dapp ∧
+      Dapp.snd.fst = SMTType.option beta.toSMTType ∧
+      (Dapp.fst = (ZFSet.Option.some
+        (S := ⟦beta.toSMTType⟧ᶻ) ⟨Wb.fst, Wb.snd.snd⟩).val ↔
+        a.pair b ∈ S) := by
+  dsimp only
+  rcases Dval with ⟨G, sigma, hG⟩
+  dsimp at hD_type
+  subst sigma
+  let Dval : SMT.Dom := ⟨G,
+    alpha.toSMTType.fun (SMTType.option beta.toSMTType), hG⟩
+  have hD_type : Dval.snd.fst = alpha.toSMTType.fun
+      (SMTType.option beta.toSMTType) := rfl
+  have hD_func' : ⟦alpha.toSMTType⟧ᶻ.IsFunc
+      ⟦SMTType.option beta.toSMTType⟧ᶻ Dval.fst := by
+    simpa [Dval] using hD_func
+  have D_rel' : RDomCastSupported
+      (⟨S, BType.set (alpha ×ᴮ beta), hS⟩ : B.Dom) Dval := by
+    simpa [Dval] using D_rel
+  let Wa : SMT.Dom := B.Dom.canonicalSMT
+    (⟨a, alpha, ha⟩ : B.Dom)
+  let Wb : SMT.Dom := B.Dom.canonicalSMT
+    (⟨b, beta, hb⟩ : B.Dom)
+  have hWa_type : Wa.snd.fst = alpha.toSMTType :=
+    B.Dom.canonicalSMT_type _
+  have hWa_mem : Wa.fst ∈ ⟦alpha.toSMTType⟧ᶻ := by
+    rw [← hWa_type]
+    exact Wa.snd.snd
+  have hWb_type : Wb.snd.fst = beta.toSMTType :=
+    B.Dom.canonicalSMT_type _
+  have hWb_mem : Wb.fst ∈ ⟦beta.toSMTType⟧ᶻ := by
+    rw [← hWb_type]
+    exact Wb.snd.snd
+  obtain ⟨hcov_app, Dapp, hDapp_type, hDapp_value, hden_app⟩ :=
+    funDenoteAppAt (Δctx := Delta) (t := Denc) (x := z)
+      (α := alpha.toSMTType) (β := SMTType.option beta.toSMTType)
+      (Y := Dval) hcov_D_upd den_D_upd hD_type hD_func'
+      Wa hWa_type hWa_mem
+  refine ⟨hcov_app, Dapp, hden_app, hDapp_type, ?_⟩
+  rw [hDapp_value]
+  have hWb_retract : retract beta Wb.fst = b := by
+    have hcanonical := B.Dom.rdom_canonicalSMT
+      (⟨b, beta, hb⟩ : B.Dom)
+    rw [RDom] at hcanonical
+    simpa [Wb] using hcanonical.2
+  have hpair_retract : retract (alpha ×ᴮ beta) (Wa.fst.pair Wb.fst) =
+      a.pair b := by
+    have hWa_retract : retract alpha Wa.fst = a := by
+      have hcanonical := B.Dom.rdom_canonicalSMT
+        (⟨a, alpha, ha⟩ : B.Dom)
+      rw [RDom] at hcanonical
+      simpa [Wa] using hcanonical.2
+    simp [retract, hWa_retract, hWb_retract]
+  have hgraph_retract : retract (BType.set (alpha ×ᴮ beta))
+      (optionGraph alpha.toSMTType beta.toSMTType Dval.fst) = S :=
+    RDomCast.optionFunction_graph_retract D_rel'.toRDomCast
+  have hsem := RDomCast.optionFunction_eq_some_eq_zftrue_iff
+    (hX := ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)
+    (ha := hWa_mem) (hb := hWb_mem) (hF := Dval.snd.snd)
+    hpair_retract hgraph_retract
+  dsimp only at hsem
+  rw [zfEqIn_eq_zftrue_iff (ZFSet.fapply_mem_range _ _)
+    (ZFSet.Option.some (S := ⟦beta.toSMTType⟧ᶻ)
+      ⟨Wb.fst, hWb_mem⟩ |>.property)] at hsem
+  simpa [Dval, Wa, Wb, proof_irrel_heq] using hsem
+
 /-- Eliminating an option-valued target term whose value is a canonical
 `some` produces the corresponding payload.  The conclusion deliberately
 keeps only the value and type tag, so it is insensitive to proof fields in
