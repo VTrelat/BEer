@@ -4906,7 +4906,7 @@ theorem mem_fv_foldr_forall {ps : List (SMT.𝒱 × SMTType)} {inner : SMT.Term}
 /-- The substitution in the option-function `collect` arm can introduce only
 the predicate's existing free variables, the domain-function free variables,
 or the freshly bound tuple variable. -/
-private theorem collectOption_subst_fv (D P : SMT.Term) (z : SMT.𝒱)
+theorem collectOption_subst_fv (D P : SMT.Term) (z : SMT.𝒱)
     (vs : List SMT.𝒱) :
     ∀ v ∈ SMT.fv
       (SMT.substList vs
@@ -4927,7 +4927,7 @@ private theorem collectOption_subst_fv (D P : SMT.Term) (z : SMT.𝒱)
 
 /-- The single-tuple lambda emitted for an option-function `collect` has no
 free variables beyond its encoded domain and predicate bodies. -/
-private theorem collectOption_lambda_fv (D P : SMT.Term) (z : SMT.𝒱)
+theorem collectOption_lambda_fv (D P : SMT.Term) (z : SMT.𝒱)
     (vs : List SMT.𝒱) (alpha beta : SMTType) :
     SMT.fv ((λˢ [z]) [alpha]
       (.ite (.and (.eq (.app D (.var z)) (.some (.the (.app D (.var z)))))
