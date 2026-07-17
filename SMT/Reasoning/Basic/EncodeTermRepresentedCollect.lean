@@ -1071,6 +1071,78 @@ theorem denote_the_of_some.{u}
     rw [hDopt_eq, hthe]
 
 open Classical in
+/-- The guarded option payload used by the function-valued `collect` encoder
+returns `some W` when its domain application is `some W` and its substituted
+predicate is true.  The input is phrased at the PHOAS level so callers can
+reuse the lemma after establishing coverage for their concrete syntax. -/
+theorem denote_guarded_option_some_of.{u}
+    {d p : SMT.PHOAS.Term SMT.Dom}
+    {Dd Dp Dthe W : SMT.Dom.{u}} {beta : SMTType}
+    (hden_d : ⟦d⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta)
+    (hW_type : W.snd.fst = beta)
+    (hD_value : Dd.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val)
+    (hden_the : ⟦SMT.PHOAS.Term.the d⟧ˢ = some Dthe)
+    (hDthe_type : Dthe.snd.fst = beta)
+    (hDthe_value : Dthe.fst = W.fst)
+    (hden_p : ⟦p⟧ˢ = some Dp)
+    (hP_type : Dp.snd.fst = SMTType.bool)
+    (hP_true : Dp.fst = ZFSet.zftrue) :
+    ∃ Dsome : SMT.Dom.{u},
+      ⟦SMT.PHOAS.Term.ite
+        (SMT.PHOAS.Term.and
+          (SMT.PHOAS.Term.eq d (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))) p)
+        (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))
+        (SMT.PHOAS.Term.none beta)⟧ˢ = some Dsome ∧
+      Dsome.snd.fst = SMTType.option beta ∧
+      Dsome.fst = (ZFSet.Option.some
+        (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val := by
+  rcases Dthe with ⟨T, tau, hT⟩
+  dsimp at hDthe_type hDthe_value hden_the
+  subst tau
+  let Dsome : SMT.Dom := ⟨(ZFSet.Option.some
+    (S := ⟦beta⟧ᶻ) ⟨T, hT⟩).val,
+    SMTType.option beta, SetLike.coe_mem _⟩
+  have hDsome_type : Dsome.snd.fst = SMTType.option beta := rfl
+  have hDsome_value : Dsome.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val := by
+    dsimp [Dsome]
+    apply congrArg (fun x : {x // x ∈ ⟦beta⟧ᶻ} =>
+      (ZFSet.Option.some x).val)
+    apply Subtype.ext
+    exact hDthe_value
+  have hden_some_the : ⟦SMT.PHOAS.Term.some
+      (SMT.PHOAS.Term.the d)⟧ˢ = some Dsome := by
+    rw [SMT.denote, hden_the]
+    rfl
+  have heq_value : Dd.fst = Dsome.fst := by
+    rw [hD_value, hDsome_value]
+  have hden_eq : ⟦SMT.PHOAS.Term.eq d
+      (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))⟧ˢ =
+        some ⟨ZFSet.zftrue, SMTType.bool,
+          ZFSet.ZFBool.zftrue_mem_𝔹⟩ :=
+    denote_eq_eq_zftrue_of_fst_eq hden_d hden_some_the
+      (hD_type.trans hDsome_type.symm) heq_value
+  have hden_guard : ⟦SMT.PHOAS.Term.and
+      (SMT.PHOAS.Term.eq d (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))) p⟧ˢ =
+        some ⟨ZFSet.zftrue, SMTType.bool,
+          ZFSet.ZFBool.zftrue_mem_𝔹⟩ :=
+    denote_and_eq_zftrue_of_some_zftrue hden_eq rfl rfl hden_p hP_type hP_true
+  refine ⟨Dsome, ?_, hDsome_type, hDsome_value⟩
+  rw [SMT.denote, hden_guard]
+  change (if ZFSet.ZFBool.toBool
+      ⟨ZFSet.zftrue, ZFSet.ZFBool.zftrue_mem_𝔹⟩ then
+      ⟦SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d)⟧ˢ else
+      ⟦SMT.PHOAS.Term.none beta⟧ˢ) = some Dsome
+  have htoBool : ZFSet.ZFBool.toBool
+      ⟨ZFSet.zftrue, ZFSet.ZFBool.zftrue_mem_𝔹⟩ = true := by
+    change (⊤ : ZFSet.ZFBool).toBool = true
+    exact ZFSet.ZFBool.toBool_true
+  rw [htoBool, if_pos rfl]
+  exact hden_some_the
+
+open Classical in
 /-- A one-binder SMT lambda evaluates at a typed argument to the denotation
 of its body.  This is phrased with an arbitrary functional codomain so it can
 be reused by both Boolean and option-valued binder encodings. -/
