@@ -799,7 +799,7 @@ theorem castEq_bv (A B : SMT.Term) (σA σB : SMTType) {used : List SMT.𝒱} {n
     mintro ∀St₁
     mpure pre
     obtain ⟨A!_used, A!_bv, A!_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -821,7 +821,7 @@ theorem castEq_bv (A B : SMT.Term) (σA σB : SMTType) {used : List SMT.𝒱} {n
     mintro ∀St₁
     mpure pre
     obtain ⟨B!_used, B!_bv, B!_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -1775,9 +1775,8 @@ theorem DeltaBvOk.helperSpecChunk {v : SMT.𝒱} {τ : SMTType} {b : SMT.Term}
       (DeltaBvOk.define_fun_spec (nm := s!"{v}_spec") hb)
 
 set_option maxHeartbeats 4000000 in
-/-- Declarations-delta spec of `castEq`: like `castMembership`, it only
-`declareConst`s (the loosen spec is embedded in the result term, not `addSpec`ed),
-so its delta is `declare_const`-only with names in `usedVars`. -/
+/-- Declarations-delta spec of `castEq`: every loosened equality helper is paired
+with the Boolean specification asserted by `declareConstWithSpec`. -/
 theorem castEq_decls_bv (A B : SMT.Term) (σA σB : SMTType) {used : List SMT.𝒱} {n : ℕ}
     {decl : SMT.Chunk}
     (hbvA : ∀ v ∈ SMT.bv A, v ∈ used) (hbvB : ∀ v ∈ SMT.bv B, v ∈ used) :
@@ -1800,17 +1799,19 @@ theorem castEq_decls_bv (A B : SMT.Term) (σA σB : SMTType) {used : List SMT.�
     rename_i Aout
     obtain ⟨A!, A!_spec⟩ := Aout
     mpure pre
-    obtain ⟨A!_used, _, A!_used_sub, A!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨A!_used, A!_bv, A!_used_sub, A!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const A! σB], ?_, ?_, ?_⟩
-    · rw [hd_decl, A!_decl, List.concat_eq_append]
-    · rw [hd_used]; exact DeltaBvOk.declare_const A!_used
+    refine ⟨_root_.helperSpecChunk A! σB A!_spec, ?_, ?_, ?_⟩
+    · rw [hd_decl, A!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · rw [hd_used]
+      exact DeltaBvOk.helperSpecChunk A!_used A!_bv
     · exact fun v hv => by rw [hd_used]; exact A!_used_sub hv
   · rename_i hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -1820,17 +1821,19 @@ theorem castEq_decls_bv (A B : SMT.Term) (σA σB : SMTType) {used : List SMT.�
     rename_i Bout
     obtain ⟨B!, B!_spec⟩ := Bout
     mpure pre
-    obtain ⟨B!_used, _, B!_used_sub, B!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨B!_used, B!_bv, B!_used_sub, B!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const B! σA], ?_, ?_, ?_⟩
-    · rw [hd_decl, B!_decl, List.concat_eq_append]
-    · rw [hd_used]; exact DeltaBvOk.declare_const B!_used
+    refine ⟨_root_.helperSpecChunk B! σA B!_spec, ?_, ?_, ?_⟩
+    · rw [hd_decl, B!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · rw [hd_used]
+      exact DeltaBvOk.helperSpecChunk B!_used B!_bv
     · exact fun v hv => by rw [hd_used]; exact B!_used_sub hv
 
 set_option maxHeartbeats 4000000 in
@@ -5468,7 +5471,7 @@ theorem castEq_bv_notMem (A B : SMT.Term) (σA σB : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨A!_notMem, A!_bv, A!_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -5490,7 +5493,7 @@ theorem castEq_bv_notMem (A B : SMT.Term) (σA σB : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨B!_notMem, B!_bv, B!_used_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -5534,8 +5537,8 @@ theorem loosenAux_prf_bv_declsEq_notMem {α β : SMTType} (c : α ~> β)
   exact ⟨x!_notMem, spec_bv, used_sub, decl_eq⟩
 
 set_option maxHeartbeats 4000000 in
-/-- Dual declarations-delta spec of `castEq`: the delta declares only loosen heads
-(`∉ avoid`); `specBodies Dl = []`. -/
+/-- Dual declarations-delta spec of `castEq`: each constrained helper and every
+bound variable of its recorded specification avoid `avoid`. -/
 theorem castEq_decls_bv_notMem (A B : SMT.Term) (σA σB : SMTType)
     {avoid used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk} (havsub : avoid ⊆ used)
     (hbvA : ∀ v ∈ SMT.bv A, v ∉ avoid) (hbvB : ∀ v ∈ SMT.bv B, v ∉ avoid) :
@@ -5558,16 +5561,18 @@ theorem castEq_decls_bv_notMem (A B : SMT.Term) (σA σB : SMTType)
     rename_i Aout
     obtain ⟨A!, A!_spec⟩ := Aout
     mpure pre
-    obtain ⟨A!_notMem, _, A!_used_sub, A!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨A!_notMem, A!_bv, A!_used_sub, A!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const A! σB], ?_, DeltaBvNotMem.declare_const A!_notMem, ?_⟩
-    · rw [hd_decl, A!_decl, List.concat_eq_append]
+    refine ⟨_root_.helperSpecChunk A! σB A!_spec, ?_,
+      DeltaBvNotMem.helperSpecChunk A!_notMem A!_bv, ?_⟩
+    · rw [hd_decl, A!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
     · exact fun v hv => by rw [hd_used]; exact A!_used_sub hv
   · rename_i hpre
     obtain ⟨rfl, rfl, rfl⟩ := hpre
@@ -5577,16 +5582,18 @@ theorem castEq_decls_bv_notMem (A B : SMT.Term) (σA σB : SMTType)
     rename_i Bout
     obtain ⟨B!, B!_spec⟩ := Bout
     mpure pre
-    obtain ⟨B!_notMem, _, B!_used_sub, B!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    obtain ⟨B!_notMem, B!_bv, B!_used_sub, B!_decl⟩ := pre
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const B! σA], ?_, DeltaBvNotMem.declare_const B!_notMem, ?_⟩
-    · rw [hd_decl, B!_decl, List.concat_eq_append]
+    refine ⟨_root_.helperSpecChunk B! σA B!_spec, ?_,
+      DeltaBvNotMem.helperSpecChunk B!_notMem B!_bv, ?_⟩
+    · rw [hd_decl, B!_decl]
+      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
     · exact fun v hv => by rw [hd_used]; exact B!_used_sub hv
 
 set_option maxHeartbeats 4000000 in

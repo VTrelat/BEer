@@ -13,11 +13,11 @@ def castEq : Term × SMTType → Term × SMTType → Encoder (Term × SMTType) |
     return (A =ˢ B, .bool)
   else if h : α ⊑ β then
     let ⟨A!, A!_spec⟩ ← loosenAux_prf "eq!" (castable?.toCastPath h) A
-    declareConst A! β
+    declareConstWithSpec A! β A!_spec
     return (((.var A!) =ˢ B) ∧ˢ A!_spec, .bool)
   else if h : β ⊑ α then
     let ⟨B!, B!_spec⟩ ← loosenAux_prf "eq!" (castable?.toCastPath h) B
-    declareConst B! α
+    declareConstWithSpec B! α B!_spec
     return (((.var B!) =ˢ A) ∧ˢ B!_spec, .bool)
   else throw s!"castEq: Failed to unify {α} with {β}"
 

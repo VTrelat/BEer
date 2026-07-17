@@ -419,7 +419,8 @@ theorem castEq_supported_rep_contract.{u}
         obtain ⟨_, St1_types_sub, helper_fresh, helper_not_used,
           used_sub1, St1_keys, preserves1, _, _, typ_helper,
           typ_spec, spec_fv, exactness⟩ := pre
-        mspec SMT.declareConst_spec (v := helper) (τ := sigmaB)
+        mspec SMT.declareConst_addSpec_spec (x! := helper)
+          (x!_spec := spec) (τ := sigmaB)
           (decl := St1.env.declarations) (as := St1.env.asserts)
           (n := St1.env.freshvarsc) (Γ := St1.types)
           (used := St1.env.usedVars)
@@ -469,7 +470,8 @@ theorem castEq_supported_rep_contract.{u}
           obtain ⟨_, St1_types_sub, helper_fresh, helper_not_used,
             used_sub1, St1_keys, preserves1, _, _, typ_helper,
             typ_spec, spec_fv, exactness⟩ := pre
-          mspec SMT.declareConst_spec (v := helper) (τ := sigmaA)
+          mspec SMT.declareConst_addSpec_spec (x! := helper)
+            (x!_spec := spec) (τ := sigmaA)
             (decl := St1.env.declarations) (as := St1.env.asserts)
             (n := St1.env.freshvarsc) (Γ := St1.types)
             (used := St1.env.usedVars)
@@ -931,4 +933,3 @@ theorem encodeTerm_rep_spec.eq_case.{u}
         · exact respects_alt.of_extends ThetaEq_alt_ext0 types_sub0
             (fun _ h => h) fv_in_Lambda
         · simpa only [proof_irrel_heq] using Eq_alt_rel
-

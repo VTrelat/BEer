@@ -3128,7 +3128,7 @@ theorem castEq_state
     mpure pre
     obtain ⟨A!_le, A!_Λ_sub, A!_fresh, A!_not_used, A!_used_sub,
       A!_keys_sub, A!_preserves, A!_fv_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -3168,7 +3168,7 @@ theorem castEq_state
     mpure pre
     obtain ⟨B!_le, B!_Λ_sub, B!_fresh, B!_not_used, B!_used_sub,
       B!_keys_sub, B!_preserves, B!_fv_sub⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
@@ -3199,9 +3199,9 @@ theorem castEq_state
       · exact List.mem_union_iff.mpr (Or.inl (List.mem_singleton.mp hB! ▸ B!_in))
 
 set_option maxHeartbeats 4000000 in
-/-- `castEq`'s `declarations` delta is a `declare_const`-only chunk
-(`specBodies Δ = []` — `castEq` never calls `addSpec`), and the encoded equality
-term's free variables live in `fv A ∪ fv B ∪ declVars Δ`. -/
+/-- `castEq` records every loosened helper together with its Boolean
+specification. Both the result and each specification mention only the input
+terms and names declared by that delta. -/
 theorem castEq_decl
     (A B : SMT.Term) (σA σB : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
     {used : List SMT.𝒱} {decl : SMT.Chunk} :
@@ -3212,7 +3212,8 @@ theorem castEq_decl
     ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', Γ'⟩ : EncoderState) => ⌜
       ∃ Dlt : SMT.Chunk,
         E'.declarations = decl ++ Dlt ∧
-        specBodies Dlt = [] ∧
+        (∀ b ∈ specBodies Dlt,
+          SMT.fv b ⊆ SMT.fv A ∪ SMT.fv B ∪ declVars Dlt) ∧
         SMT.fv t' ⊆ SMT.fv A ∪ SMT.fv B ∪ declVars Dlt ⌝⦄ := by
   unfold castEq
   mvcgen
@@ -3235,18 +3236,28 @@ theorem castEq_decl
     mpure pre
     obtain ⟨A!_le, A!_Λ_sub, A!_fresh, A!_not_used, A!_used_sub,
       A!_keys_sub, A!_preserves, A!_fv_sub, A!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, _, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const A! σB], ?_, by simp, ?_⟩
-    · rw [hd_decl, A!_decl, List.concat_eq_append]
+    refine ⟨helperSpecChunk A! σB A!_spec, ?_, ?_, ?_⟩
+    · rw [hd_decl, A!_decl]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · intro b hb
+      simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
+      subst b
+      intro v hv
+      simp only [declVars_helperSpecChunk, List.mem_union_iff,
+        List.mem_singleton]
+      rcases List.mem_union_iff.mp (A!_fv_sub hv) with hA | hA!
+      · exact Or.inl (Or.inl hA)
+      · exact Or.inr (List.mem_singleton.mp hA!)
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
-        declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+        declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton] at hv ⊢
       have hsp : v ∈ SMT.fv A!_spec → v ∈ SMT.fv A ∨ v = A! := by
         intro h
         rcases List.mem_union_iff.mp (A!_fv_sub h) with hm | hm
@@ -3264,18 +3275,28 @@ theorem castEq_decl
     mpure pre
     obtain ⟨B!_le, B!_Λ_sub, B!_fresh, B!_not_used, B!_used_sub,
       B!_keys_sub, B!_preserves, B!_fv_sub, B!_decl⟩ := pre
-    mspec SMT.declareConst_spec
+    mspec SMT.declareConst_addSpec_spec
     mrename_i pred
     mintro ∀St₁d
     mpure pred
     obtain ⟨hd_decl, _, _, _, _⟩ := pred
     mspec Std.Do.Spec.pure
     mpure_intro
-    refine ⟨[.declare_const B! σA], ?_, by simp, ?_⟩
-    · rw [hd_decl, B!_decl, List.concat_eq_append]
+    refine ⟨helperSpecChunk B! σA B!_spec, ?_, ?_, ?_⟩
+    · rw [hd_decl, B!_decl]
+      simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · intro b hb
+      simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
+      subst b
+      intro v hv
+      simp only [declVars_helperSpecChunk, List.mem_union_iff,
+        List.mem_singleton]
+      rcases List.mem_union_iff.mp (B!_fv_sub hv) with hB | hB!
+      · exact Or.inl (Or.inr hB)
+      · exact Or.inr (List.mem_singleton.mp hB!)
     · intro v hv
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
-        declVars_declare_const, List.mem_union_iff, List.mem_singleton] at hv ⊢
+        declVars_helperSpecChunk, List.mem_union_iff, List.mem_singleton] at hv ⊢
       have hsp : v ∈ SMT.fv B!_spec → v ∈ SMT.fv B ∨ v = B! := by
         intro h
         rcases List.mem_union_iff.mp (B!_fv_sub h) with hm | hm
@@ -6382,7 +6403,7 @@ theorem encodeTerm_combined
       mintro ∀σ'
       mpure pre
       obtain ⟨⟨h_le, h_Λ_sub, h_used_sub, h_keys_sub, h_fv_sub, h_preserves⟩,
-        Dce, ce_decl_eq, ce_spec_nil, ce_fv_decl_sub⟩ := pre
+        Dce, ce_decl_eq, ce_specb, ce_fv_decl_sub⟩ := pre
       mpure_intro
       refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, Δx ++ Δy ++ Dce, ?_, ?_, ?_⟩
       · exact fun v hv => h_used_sub (y_used_sub (x_used_sub hv))
@@ -6415,8 +6436,20 @@ theorem encodeTerm_combined
                   exact List.Subset.trans (List.subset_append_right ..)
                     (List.subset_append_left ..))
               (y_specb b hb)
-        · rw [ce_spec_nil] at hb
-          simp at hb
+        · intro v hv
+          have hv' := ce_specb b hb hv
+          rw [declVars_append, declVars_append]
+          rcases List.mem_union_iff.mp hv' with h | h
+          · rcases List.mem_union_iff.mp h with h | h
+            · rcases List.mem_union_iff.mp (x_enc_fv_sub h) with h | h
+              · exact List.mem_union_iff.mpr (.inl (hvars_x_sub h))
+              · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
+                  (List.mem_append_left _ h)))
+            · rcases List.mem_union_iff.mp (y_enc_fv_sub h) with h | h
+              · exact List.mem_union_iff.mpr (.inl (hvars_y_sub h))
+              · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
+                  (List.mem_append_right _ h)))
+          · exact List.mem_union_iff.mpr (.inr (List.mem_append_right _ h))
       · intro v hv
         have hv' := ce_fv_decl_sub hv
         rw [declVars_append, declVars_append]
