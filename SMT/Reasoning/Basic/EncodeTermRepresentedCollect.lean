@@ -364,6 +364,37 @@ theorem B.denote_collect_eq_sep.{u}
       ⟨BType.hasArity_of_foldl_defaultZFSet tau_hasArity, tau_hasArity⟩
       h_neg
 
+open Classical in
+/-- At a tuple with the collection's expected arity and type, source
+collection membership is exactly domain membership together with truth of the
+instantiated source predicate.  This is the source-side counterpart of the
+guarded option body emitted for a function-valued collection. -/
+theorem B.denote_collect_member_iff.{u}
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom))
+    {x : ZFSet.{u}}
+    (hx_arity : x.hasArity vs.length)
+    (hx_type : x ∈ ⟦tau⟧ᶻ)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦BType.bool⟧ᶻ}
+    (den_P : ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+      (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry
+        (fun i => ⟨x.get vs.length i, ⟨tau.get vs.length i,
+          get_mem_type_of_isTuple hx_arity tau_hasArity hx_type⟩⟩)⟧ᴮ =
+      some (⟨Pval, BType.bool, hPval⟩ : B.Dom)) :
+    x ∈ T ↔ x ∈ Dval ∧ Pval = ZFSet.zftrue := by
+  rw [← B.denote_collect_eq_sep Xi_fv tau_hasArity den_D den_collect,
+    ZFSet.mem_sep, dif_pos ⟨hx_arity, tau_hasArity, hx_type⟩]
+  simp [den_P]
+
 /- A source collection is a subrelation of its domain.  In particular, when
 the domain is a partial function, the collection result remains a partial
 function.  This supplies the functionality certificate required when the
