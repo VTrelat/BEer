@@ -1155,3 +1155,107 @@ theorem encodeTerm_rep_spec.le_case.{u}
           · refine ⟨?_, .bool⟩
             simpa [denLeAlt] using
               rdomCast_le component_alt_rel.1 component_alt_rel.2
+
+/-! ## Unsupported arithmetic constructors
+
+`encodeTerm` deliberately falls through to its error branch for `min`, `max`,
+and `card`.  Their `mayThrow` triples therefore have no successful result to
+relate.  Keeping the cases explicit makes the representation-aware induction
+exhaustive while recording that these are unsupported encodings, not semantic
+gaps in the logical relation. -/
+
+theorem encodeTerm_rep_spec.min_case.{u}
+    (S : B.Term) (_ih : EncodeTermRepIH.{u} S)
+    (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (_typ_t : E.context ⊢ᴮ B.Term.min S : α)
+    {«Δ» : B.RenamingContext.Context}
+    (_Δ_fv : ∀ v ∈ B.fv (B.Term.min S), («Δ» v).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (_related : RValuationCastSupportedOnFV «Δ» Δ₀ (B.Term.min S))
+    {used : List SMT.𝒱}
+    (_Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
+    (_Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (_den_t : ⟦(B.Term.min S).abstract «Δ» _Δ_fv⟧ᴮ =
+      some ⟨T, ⟨α, hT⟩⟩)
+    (_vars_used : ∀ v ∈ (B.Term.min S).vars, v ∈ used)
+    (_Λ_inv : ∀ v ∈ (B.Term.min S).vars,
+      v ∈ Λ → v ∈ E.context)
+    (_bv_nodup : (B.bv (B.Term.min S)).Nodup)
+    (_respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ (B.Term.min S))
+    (_fv_in_Λ : ∀ v ∈ B.fv (B.Term.min S), v ∈ Λ)
+    (_wf : B.RenWF E.context «Δ»)
+    {n : ℕ} :
+    ⦃fun ⟨E0, Λ'⟩ ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
+    encodeTerm (B.Term.min S) E
+    ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepPost (B.Term.min S) α Λ «Δ» Δ₀ used T hT
+        E t' σ E' Γ'⌝⦄ := by
+  exact fun _ _ => trivial
+
+theorem encodeTerm_rep_spec.max_case.{u}
+    (S : B.Term) (_ih : EncodeTermRepIH.{u} S)
+    (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (_typ_t : E.context ⊢ᴮ B.Term.max S : α)
+    {«Δ» : B.RenamingContext.Context}
+    (_Δ_fv : ∀ v ∈ B.fv (B.Term.max S), («Δ» v).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (_related : RValuationCastSupportedOnFV «Δ» Δ₀ (B.Term.max S))
+    {used : List SMT.𝒱}
+    (_Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
+    (_Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (_den_t : ⟦(B.Term.max S).abstract «Δ» _Δ_fv⟧ᴮ =
+      some ⟨T, ⟨α, hT⟩⟩)
+    (_vars_used : ∀ v ∈ (B.Term.max S).vars, v ∈ used)
+    (_Λ_inv : ∀ v ∈ (B.Term.max S).vars,
+      v ∈ Λ → v ∈ E.context)
+    (_bv_nodup : (B.bv (B.Term.max S)).Nodup)
+    (_respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ (B.Term.max S))
+    (_fv_in_Λ : ∀ v ∈ B.fv (B.Term.max S), v ∈ Λ)
+    (_wf : B.RenWF E.context «Δ»)
+    {n : ℕ} :
+    ⦃fun ⟨E0, Λ'⟩ ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
+    encodeTerm (B.Term.max S) E
+    ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepPost (B.Term.max S) α Λ «Δ» Δ₀ used T hT
+        E t' σ E' Γ'⌝⦄ := by
+  exact fun _ _ => trivial
+
+theorem encodeTerm_rep_spec.card_case.{u}
+    (S : B.Term) (_ih : EncodeTermRepIH.{u} S)
+    (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (_typ_t : E.context ⊢ᴮ B.Term.card S : α)
+    {«Δ» : B.RenamingContext.Context}
+    (_Δ_fv : ∀ v ∈ B.fv (B.Term.card S), («Δ» v).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (_related : RValuationCastSupportedOnFV «Δ» Δ₀ (B.Term.card S))
+    {used : List SMT.𝒱}
+    (_Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
+    (_Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (_den_t : ⟦(B.Term.card S).abstract «Δ» _Δ_fv⟧ᴮ =
+      some ⟨T, ⟨α, hT⟩⟩)
+    (_vars_used : ∀ v ∈ (B.Term.card S).vars, v ∈ used)
+    (_Λ_inv : ∀ v ∈ (B.Term.card S).vars,
+      v ∈ Λ → v ∈ E.context)
+    (_bv_nodup : (B.bv (B.Term.card S)).Nodup)
+    (_respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ (B.Term.card S))
+    (_fv_in_Λ : ∀ v ∈ B.fv (B.Term.card S), v ∈ Λ)
+    (_wf : B.RenWF E.context «Δ»)
+    {n : ℕ} :
+    ⦃fun ⟨E0, Λ'⟩ ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝⦄
+    encodeTerm (B.Term.card S) E
+    ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepPost (B.Term.card S) α Λ «Δ» Δ₀ used T hT
+        E t' σ E' Γ'⌝⦄ := by
+  exact fun _ _ => trivial
