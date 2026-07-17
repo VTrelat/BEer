@@ -1430,6 +1430,51 @@ theorem denote_guarded_option_some_iff.{u}
     rw [hbody_eq, hDsome_value]
 
 open Classical in
+/-- Lift guarded-option semantics from PHOAS back to the concrete SMT syntax
+emitted by the function-valued collection encoder.  The separate coverage
+proofs keep the raw encoder case free to reuse its operational witnesses. -/
+theorem denote_guarded_option_term_some_iff.{u}
+    {Dapp Psub : SMT.Term}
+    {Theta : SMT.RenamingContext.Context.{u}}
+    {Dd Dp Dbody W : SMT.Dom.{u}} {beta : SMTType}
+    {domain_ok predicate_ok member : Prop}
+    (hcov_Dapp : SMT.RenamingContext.CoversFV Theta Dapp)
+    (hden_Dapp : ⟦Dapp.abstract Theta hcov_Dapp⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta)
+    (hcov_Psub : SMT.RenamingContext.CoversFV Theta Psub)
+    (hden_Psub : ⟦Psub.abstract Theta hcov_Psub⟧ˢ = some Dp)
+    (hP_type : Dp.snd.fst = SMTType.bool)
+    (hW_type : W.snd.fst = beta)
+    (hcov_body : SMT.RenamingContext.CoversFV Theta
+      (SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq Dapp (SMT.Term.some (SMT.Term.the Dapp))) Psub)
+        (SMT.Term.some (SMT.Term.the Dapp)) (none$ beta)))
+    (hden_body : ⟦(SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq Dapp (SMT.Term.some (SMT.Term.the Dapp))) Psub)
+        (SMT.Term.some (SMT.Term.the Dapp)) (none$ beta)).abstract Theta hcov_body⟧ˢ =
+        some Dbody)
+    (hdomain : Dd.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val ↔
+        domain_ok)
+    (hpredicate : Dp.fst = ZFSet.zftrue ↔ predicate_ok)
+    (hmembership : member ↔ domain_ok ∧ predicate_ok) :
+    Dbody.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val ↔
+      member := by
+  have hden_body' : ⟦SMT.PHOAS.Term.ite
+      (SMT.PHOAS.Term.and
+        (SMT.PHOAS.Term.eq (Dapp.abstract Theta hcov_Dapp)
+          (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the
+            (Dapp.abstract Theta hcov_Dapp))))
+        (Psub.abstract Theta hcov_Psub))
+      (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the
+        (Dapp.abstract Theta hcov_Dapp)))
+      (SMT.PHOAS.Term.none beta)⟧ˢ = some Dbody := by
+    simpa only [noneCast, SMT.Term.abstract, proof_irrel_heq] using hden_body
+  exact denote_guarded_option_some_iff hden_Dapp hD_type hden_Psub hP_type
+    hW_type hden_body' hdomain hpredicate hmembership
+
+open Classical in
 /-- A one-binder SMT lambda evaluates at a typed argument to the denotation
 of its body.  This is phrased with an arbitrary functional codomain so it can
 be reused by both Boolean and option-valued binder encodings. -/
