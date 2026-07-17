@@ -973,6 +973,113 @@ theorem denote_the_of_some.{u}
   · dsimp [Dthe]
     rw [hDopt_eq, hthe]
 
+open Classical in
+/-- A one-binder SMT lambda evaluates at a typed argument to the denotation
+of its body.  This is phrased with an arbitrary functional codomain so it can
+be reused by both Boolean and option-valued binder encodings. -/
+theorem single_lambda_fapply_eq_body.{u}
+    {Delta : SMT.RenamingContext.Context.{u}} {z : SMT.𝒱}
+    {alpha beta : SMTType} {body : SMT.Term} {lamVal : SMT.Dom.{u}}
+    (hcov_lambda : SMT.RenamingContext.CoversFV Delta
+      ((λˢ [z]) [alpha] body))
+    (hlamVal : ⟦((λˢ [z]) [alpha] body).abstract Delta hcov_lambda⟧ˢ =
+      some lamVal)
+    (hlamVal_func : ⟦alpha⟧ᶻ.IsFunc ⟦beta⟧ᶻ lamVal.fst)
+    {W bodyVal : SMT.Dom.{u}}
+    (hW_type : W.snd.fst = alpha)
+    (hW_mem : W.fst ∈ ⟦alpha⟧ᶻ)
+    (hcov_body : SMT.RenamingContext.CoversFV
+      (Function.update Delta z (some W)) body)
+    (hden_body : ⟦body.abstract (Function.update Delta z (some W))
+      hcov_body⟧ˢ = some bodyVal) :
+    (ZFSet.fapply lamVal.fst (ZFSet.is_func_is_pfunc hlamVal_func)
+      ⟨W.fst, by
+        rw [ZFSet.is_func_dom_eq hlamVal_func]
+        exact hW_mem⟩).val = bodyVal.fst := by
+  have hW_normalized : W = ⟨W.fst, alpha,
+      by simpa [hW_type] using W.snd.snd⟩ := by
+    rcases W with ⟨Wval, Wtype, hWval⟩
+    dsimp at hW_type ⊢
+    subst Wtype
+    rfl
+  have hgo_cov : ∀ x ∈ SMT.fv body, x ∉ [z] → (Delta x).isSome = true := by
+    intro x hx hxz
+    exact hcov_lambda x (SMT.fv.mem_lambda ⟨hx, hxz⟩)
+  have hcov_body_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV (Function.update Delta z (some W)) body := by
+    intro W x hx
+    by_cases hxz : x = z
+    · subst x
+      simp [Function.update]
+    · rw [Function.update_of_ne hxz]
+      exact hgo_cov x hx (by simp [hxz])
+  have hden_body_upd : ⟦body.abstract (Function.update Delta z (some W))
+      (hcov_body_upd W)⟧ˢ = some bodyVal := by
+    rw [SMT.RenamingContext.denote_abstract_proof_irrel body
+      (Function.update Delta z (some W)) hcov_body (hcov_body_upd W)]
+    exact hden_body
+  have hlamVal' := hlamVal
+  rw [SMT.Term.abstract, dif_pos (by rfl)] at hlamVal'
+  simp only [SMT.denote] at hlamVal'
+  rw [dif_pos (show [z].length > 0 by exact Nat.zero_lt_succ 0)] at hlamVal'
+  split_ifs at hlamVal' with h_isSome h_typ_det
+  · let xW : Fin 1 → SMT.Dom := fun _ => W
+    have hxW_spec : ∀ i, (xW i).snd.fst = [alpha][↑i] ∧
+        (xW i).fst ∈ ⟦[alpha][↑i]⟧ᶻ := by
+      intro ⟨i, hi⟩
+      simp only [Nat.lt_one_iff] at hi
+      subst hi
+      exact ⟨hW_type, hW_mem⟩
+    have hgo_W := funAbstractGoSingle (Δctx := Delta) (P := body) (v := z)
+      (τ := alpha) hgo_cov hcov_body_upd xW hxW_spec
+    have hden_W : ⟦(SMT.Term.abstract.go body [z] Delta hgo_cov).uncurry
+        xW⟧ˢ = some bodyVal := by
+      rw [hgo_W]
+      exact hden_body_upd
+    simp only [Option.pure_def, Option.some.injEq] at hlamVal'
+    have hlamVal_fst_eq : lamVal.fst = _ := congrArg (·.fst) hlamVal'.symm
+    simp only [List.length_cons, List.length_nil, Nat.reduceAdd, Nat.sub_self,
+      Fin.foldr_zero, List.getElem_cons_zero] at hlamVal_fst_eq
+    have h_pair_mem : W.fst.pair bodyVal.fst ∈ lamVal.fst := by
+      rw [hlamVal_fst_eq, ZFSet.mem_lambda]
+      refine ⟨W.fst, bodyVal.fst, rfl, hW_mem, ?_, ?_⟩
+      · let xd : Fin 1 → SMT.Dom := fun _ =>
+          ⟨alpha.defaultZFSet, alpha,
+            SMTType.mem_toZFSet_of_defaultZFSet⟩
+        have hxd_spec : ∀ i, (xd i).snd.fst = [alpha][↑i] ∧
+            (xd i).fst ∈ ⟦[alpha][↑i]⟧ᶻ := by
+          intro ⟨i, hi⟩
+          simp only [Nat.lt_one_iff] at hi
+          subst hi
+          exact ⟨rfl, SMTType.mem_toZFSet_of_defaultZFSet⟩
+        have hgamma := h_typ_det xW xd hxW_spec hxd_spec
+        rw [congrArg (·.snd.fst) (Option.get_of_eq_some _ hden_W)] at hgamma
+        exact hgamma ▸ bodyVal.snd.snd
+      · split_ifs with hW_cond
+        · let xW' := fun i : Fin 1 =>
+            (⟨W.fst.get 1 i, [alpha][↑i], hW_cond.2 i⟩ : SMT.Dom)
+          have hgo' := funAbstractGoSingle (Δctx := Delta) (P := body) (v := z)
+            (τ := alpha) hgo_cov hcov_body_upd xW'
+              (fun i => ⟨rfl, hW_cond.2 i⟩)
+          have hxW'_eq : xW' ⟨0, Nat.zero_lt_one⟩ = W := by
+            rw [hW_normalized]
+            rfl
+          have hden' : ⟦(SMT.Term.abstract.go body [z] Delta hgo_cov).uncurry
+              xW'⟧ˢ = some bodyVal := by
+            rw [hgo', hxW'_eq]
+            exact hden_body_upd
+          exact (congrArg (·.fst) (Option.get_of_eq_some _ hden')).symm
+        · exfalso
+          apply hW_cond
+          exact ⟨trivial, fun ⟨i, hi⟩ => by
+            have hi' : i = 0 := Nat.lt_one_iff.mp hi
+            subst hi'
+            exact hW_mem⟩
+    have h_fapply := ZFSet.fapply.of_pair
+      (ZFSet.is_func_is_pfunc hlamVal_func) h_pair_mem
+    rw [Subtype.ext_iff] at h_fapply
+    exact h_fapply
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
