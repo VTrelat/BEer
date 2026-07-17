@@ -40,7 +40,7 @@ theorem encodeTerm_rep_scoped.var_case.{u}
   rw [encodeTerm]
   mvcgen
   case vc1 τ τ_lookup =>
-    refine ⟨[], ?_, ?_, ?_⟩
+    refine ⟨[], ?_, ContextGeneratedByDeclarations.refl _, ?_, ?_⟩
     · simpa [St_decl_eq]
     · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
         Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -145,7 +145,7 @@ theorem encodeTerm_rep_scoped.int_case.{u}
   subst T
   injection type_eq with α_eq _
   subst α
-  refine ⟨[], ?_, ?_, ?_⟩
+  refine ⟨[], ?_, ContextGeneratedByDeclarations.refl _, ?_, ?_⟩
   · simpa [St_decl_eq]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -222,7 +222,7 @@ theorem encodeTerm_rep_scoped.bool_case.{u}
   subst T
   injection type_eq with α_eq _
   subst α
-  refine ⟨[], ?_, ?_, ?_⟩
+  refine ⟨[], ?_, ContextGeneratedByDeclarations.refl _, ?_, ?_⟩
   · simpa [St_decl_eq]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt

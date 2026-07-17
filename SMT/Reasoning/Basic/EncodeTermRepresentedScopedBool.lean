@@ -150,7 +150,7 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_sc_total, x_guard⟩⟩ := pre
+  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard⟩⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
     path_x, typ_x_enc, _shape_x, x_preserves,
     Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
@@ -220,7 +220,7 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mintro ∀Sty
   mpure pre
   dsimp at pre
-  obtain ⟨y_post, ⟨Dlty, y_decl_eq, y_sc_total, y_guard⟩⟩ := pre
+  obtain ⟨y_post, ⟨Dlty, y_decl_eq, y_ctx, y_sc_total, y_guard⟩⟩ := pre
   obtain ⟨used_sub_y, types_sub_y, keys_sub_y, y_used,
     path_y, typ_y_enc, _shape_y, y_preserves,
     Δy, hcov_y, Δy_ext, _related_y, Δy_none, _respects_y,
@@ -235,7 +235,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
 
   mspec Std.Do.Spec.pure
   mpure_intro
-  refine ⟨Dltx ++ Dlty, ?_, ?_, ?_⟩
+  refine ⟨Dltx ++ Dlty, ?_,
+    ContextGeneratedByDeclarations.append x_ctx y_ctx, ?_, ?_⟩
   · rw [y_decl_eq, List.append_assoc]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -348,8 +349,10 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
     obtain ⟨Xenc_alt, hXenc_alt, hden_x_target,
       Yenc_alt, hYenc_alt, hden_y_target, denOut_eq⟩ :=
       op.smt_denote_inv hcov hdenOut
-    have Γx_sub_sup : Stx.types ⊆ Γ_sup :=
-      AList.subset_trans types_sub_y Γ_sub
+    have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
+      Γ_sub.left_of_append
+    have y_scope : ScopedContextExtends Stx.types Dlty Γ_sup :=
+      ScopedContextExtends.right_of_generated x_ctx Γ_sub
     have hcov_x_target : RenamingContext.CoversFV Θ x_enc := by
       intro v hv
       apply hcov v
@@ -376,14 +379,14 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
         cases op <;> simp only [EncodeTermRepresentedBool.CheckedOp.smtTerm,
           SMT.fv, List.mem_append]
         exact Or.inr hv)
-    have X_rel_target := x_guard Γ_sup Γx_sub_sup Δ_alt
+    have X_rel_target := x_guard Γ_sup x_scope Δ_alt
       (fun v hv => Δ_fv_alt v (fv_x_sub hv)) Θ
       (related_alt.mono_fv fv_x_sub) wf_alt
       (respects_B.mono_fv fv_x_sub) target_respects_x_sup
       specs_true.left_of_append X_alt hX_alt den_x_alt
       hcov_x_target ⟨Xenc_alt, SMTType.bool, hXenc_alt⟩
       hden_x_target rfl
-    have Y_rel_target := y_guard Γ_sup Γ_sub Δ_alt
+    have Y_rel_target := y_guard Γ_sup y_scope Δ_alt
       (fun v hv => Δ_fv_alt v (fv_y_sub hv)) Θ
       (related_alt.mono_fv fv_y_sub) wf_alt
       (respects_B.mono_fv fv_y_sub) target_respects_y_sup
@@ -490,7 +493,7 @@ theorem encodeTerm_rep_scoped.not_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_sc_total, x_guard⟩⟩ := pre
+  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard⟩⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
     path_x, typ_x_enc, _shape_x, x_preserves,
     Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
@@ -504,7 +507,7 @@ theorem encodeTerm_rep_scoped.not_case.{u}
   subst σx
   mspec Std.Do.Spec.pure
   mpure_intro
-  refine ⟨Dltx, x_decl_eq, ?_, ?_⟩
+  refine ⟨Dltx, x_decl_eq, x_ctx, ?_, ?_⟩
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
     obtain ⟨X_alt, hX_alt, den_x_alt, T_alt_eq⟩ :=

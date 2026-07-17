@@ -61,6 +61,106 @@ existential totality is not enough at that boundary: soundness also needs
 correctness for every typed helper assignment satisfying those guards, and a
 proof that one such assignment exists. -/
 
+/-- The typed entries introduced by `declare_const` instructions in a
+declaration delta.  Unlike `declVars`, this retains the declared SMT type; that
+extra information is essential when the declarations are turned into local
+quantifier binders. -/
+def declEntries (Dlt : SMT.Chunk) :
+    List (Sigma fun _ : SMT.𝒱 => SMTType) :=
+  Dlt.filterMap fun
+    | .declare_const v τ => some ⟨v, τ⟩
+    | _ => none
+
+@[simp] theorem declEntries_nil : declEntries [] = [] := rfl
+
+@[simp] theorem declEntries_append (D₁ D₂ : SMT.Chunk) :
+    declEntries (D₁ ++ D₂) = declEntries D₁ ++ declEntries D₂ := by
+  simp [declEntries, List.filterMap_append]
+
+@[simp] theorem declEntries_helperSpecChunk
+    (v : SMT.𝒱) (τ : SMTType) (spec : SMT.Term) :
+    declEntries (helperSpecChunk v τ spec) = [⟨v, τ⟩] := rfl
+
+/-- Every entry in the operational result context is either an entry of the
+input context or the typed declaration of a generated helper. -/
+abbrev ContextGeneratedByDeclarations
+    (Λ Γ : SMT.TypeContext) (Dlt : SMT.Chunk) : Prop :=
+  Γ.entries ⊆ Λ.entries ++ declEntries Dlt
+
+/-- A context in which a generated term is evaluated contains both the input
+context and all typed helper declarations that the encoder later re-scopes. -/
+abbrev ScopedContextExtends
+    (Λ : SMT.TypeContext) (Dlt : SMT.Chunk) (Γ : SMT.TypeContext) : Prop :=
+  Λ.entries ++ declEntries Dlt ⊆ Γ.entries
+
+theorem ContextGeneratedByDeclarations.refl
+    (Λ : SMT.TypeContext) :
+    ContextGeneratedByDeclarations Λ Λ [] := by
+  simpa using (List.Subset.refl Λ.entries)
+
+theorem ContextGeneratedByDeclarations.insert_helper
+    (Λ : SMT.TypeContext) (v : SMT.𝒱) (τ : SMTType)
+    (spec : SMT.Term) (hv : v ∉ Λ) :
+    ContextGeneratedByDeclarations Λ (Λ.insert v τ)
+      (helperSpecChunk v τ spec) := by
+  intro e he
+  rw [AList.entries_insert_of_notMem hv] at he
+  simpa [declEntries_helperSpecChunk, or_comm] using he
+
+theorem ContextGeneratedByDeclarations.append
+    {Λ Γ₁ Γ₂ : SMT.TypeContext} {D₁ D₂ : SMT.Chunk}
+    (h₁ : ContextGeneratedByDeclarations Λ Γ₁ D₁)
+    (h₂ : ContextGeneratedByDeclarations Γ₁ Γ₂ D₂) :
+    ContextGeneratedByDeclarations Λ Γ₂ (D₁ ++ D₂) := by
+  intro e he
+  rw [declEntries_append]
+  rcases List.mem_append.mp (h₂ he) with he₁ | heD₂
+  · rcases List.mem_append.mp (h₁ he₁) with heΛ | heD₁
+    · exact List.mem_append.mpr (.inl heΛ)
+    · exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl heD₁)))
+  · exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inr heD₂)))
+
+theorem ScopedContextExtends.left_of_append
+    {Λ Γ : SMT.TypeContext} {D₁ D₂ : SMT.Chunk}
+    (h : ScopedContextExtends Λ (D₁ ++ D₂) Γ) :
+    ScopedContextExtends Λ D₁ Γ := by
+  intro e he
+  apply h
+  rw [declEntries_append]
+  rcases List.mem_append.mp he with heΛ | heD₁
+  · exact List.mem_append.mpr (.inl heΛ)
+  · exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl heD₁)))
+
+theorem ScopedContextExtends.base
+    {Λ Γ : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : ScopedContextExtends Λ Dlt Γ) : Λ ⊆ Γ := by
+  intro e he
+  exact h (List.mem_append.mpr (.inl he))
+
+theorem ScopedContextExtends.lookup_of_declared
+    {Λ Γ : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : ScopedContextExtends Λ Dlt Γ)
+    {v : SMT.𝒱} {τ : SMTType}
+    (he : ⟨v, τ⟩ ∈ declEntries Dlt) :
+    Γ.lookup v = some τ := by
+  apply Option.mem_def.mp
+  apply AList.mem_lookup_iff.mpr
+  exact h (List.mem_append.mpr (.inr he))
+
+theorem ScopedContextExtends.right_of_generated
+    {Λ Γ₁ Γ : SMT.TypeContext} {D₁ D₂ : SMT.Chunk}
+    (hgen : ContextGeneratedByDeclarations Λ Γ₁ D₁)
+    (h : ScopedContextExtends Λ (D₁ ++ D₂) Γ) :
+    ScopedContextExtends Γ₁ D₂ Γ := by
+  intro e he
+  apply h
+  rw [declEntries_append]
+  rcases List.mem_append.mp he with heΓ₁ | heD₂
+  · rcases List.mem_append.mp (hgen heΓ₁) with heΛ | heD₁
+    · exact List.mem_append.mpr (.inl heΛ)
+    · exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl heD₁)))
+  · exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inr heD₂)))
+
 /-- Every generated Boolean helper specification is covered, well typed under
 the supplied valuation, and evaluates to true. -/
 abbrev SpecBodiesTrue.{u}
@@ -167,9 +267,9 @@ helpers.  When all generated specifications hold, any target denotation is the
 supported representation of the corresponding source denotation. -/
 abbrev EncodeTermRepGuardedSound.{u}
     (t : B.Term) (E : B.Env) (α : BType)
-    (t' : SMT.Term) (σ : SMTType) (Γ' : SMT.TypeContext)
+    (t' : SMT.Term) (σ : SMTType) (Λ : SMT.TypeContext)
     (Dlt : SMT.Chunk) : Prop :=
-  ∀ (Γ_sup : SMT.TypeContext), Γ' ⊆ Γ_sup →
+  ∀ (Γ_sup : SMT.TypeContext), ScopedContextExtends Λ Dlt Γ_sup →
     ∀ (Δ_alt : B.RenamingContext.Context)
     (Δ_fv_alt : ∀ v ∈ B.fv t, (Δ_alt v).isSome = true)
     (Θ : SMT.RenamingContext.Context.{u}),
@@ -196,8 +296,9 @@ abbrev EncodeTermRepScopedPost.{u}
     (E' : SMT.Env) (Γ' : SMT.TypeContext) : Prop :=
   ∃ Dlt : SMT.Chunk,
     E'.declarations = decl ++ Dlt ∧
+    ContextGeneratedByDeclarations Λ Γ' Dlt ∧
     EncodeTermRepScopedTotal.{u} t E α Λ t' σ Γ' E'.usedVars Dlt ∧
-    EncodeTermRepGuardedSound.{u} t E α t' σ Γ' Dlt
+    EncodeTermRepGuardedSound.{u} t E α t' σ Λ Dlt
 
 /-- Representation-aware postcondition for one successful `encodeTerm` run. -/
 abbrev EncodeTermRepPost.{u}

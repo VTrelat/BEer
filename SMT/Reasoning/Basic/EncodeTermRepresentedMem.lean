@@ -435,8 +435,8 @@ must not inherit the pre-cast support condition: re-scoping deliberately
 assigns those fresh helpers before invoking it. -/
 abbrev CastMembershipRepGuardedSemantics.{u}
     (τ : BType) (x S t : SMT.Term) (σx σS : SMTType)
-    (Γ : SMT.TypeContext) (Dlt : SMT.Chunk) : Prop :=
-  ∀ (Γsup : SMT.TypeContext), Γ ⊆ Γsup →
+    (Λ : SMT.TypeContext) (Dlt : SMT.Chunk) : Prop :=
+  ∀ (Γsup : SMT.TypeContext), ScopedContextExtends Λ Dlt Γsup →
     ∀ (Θ : SMT.RenamingContext.Context.{u})
       (hcov_x : SMT.RenamingContext.CoversFV Θ x)
       (hcov_S : SMT.RenamingContext.CoversFV Θ S),
@@ -463,7 +463,7 @@ clause constructs a satisfying helper assignment; the second proves exactness
 for every assignment satisfying the generated helper guards. -/
 abbrev CastMembershipRepSemantics.{u}
     (τ : BType) (x S t : SMT.Term) (σx σS : SMTType)
-    (Γ : SMT.TypeContext) (used₀ used₁ : List SMT.𝒱)
+    (Λ Γ : SMT.TypeContext) (used₀ used₁ : List SMT.𝒱)
     (Dlt : SMT.Chunk) : Prop :=
   ∀ (Γsup : SMT.TypeContext), Γ ⊆ Γsup →
     ∀ (Θ : SMT.RenamingContext.Context.{u})
@@ -493,7 +493,7 @@ abbrev CastMembershipRepSemantics.{u}
           denM.snd.fst = SMTType.bool ∧
           (denM.fst = ZFSet.zftrue ↔ X ∈ A)) ∧
         CastMembershipRepGuardedSemantics.{u}
-          τ x S t σx σS Γ Dlt
+          τ x S t σx σS Λ Dlt
 
 /-- Operational and semantic contract selected from the supported target
 representations of an element and its set. -/
@@ -520,7 +520,8 @@ abbrev CastMembershipRepSpec.{u} (τ : BType)
         (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ∧
         ∃ Dlt : SMT.Chunk,
           E'.declarations = decl ++ Dlt ∧
-          CastMembershipRepSemantics.{u} τ x S t σx σS Γ'
+          ContextGeneratedByDeclarations Λ Γ' Dlt ∧
+          CastMembershipRepSemantics.{u} τ x S t σx σS Λ Γ'
             used E'.usedVars Dlt⌝⦄
 
 theorem castMembership_direct_rep_contract.{u}
@@ -538,7 +539,8 @@ theorem castMembership_direct_rep_contract.{u}
   mspec Std.Do.Spec.pure
   mpure_intro
   refine ⟨List.Subset.refl _, (fun _ h => h), St_sub, trivial,
-    SMT.Typing.app _ _ _ _ _ typ_S typ_x, ?_, ?_, ?_, [], by simp, ?_⟩
+    SMT.Typing.app _ _ _ _ _ typ_S typ_x, ?_, ?_, ?_, [], by simp,
+    ContextGeneratedByDeclarations.refl _, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inr hv
@@ -670,20 +672,23 @@ theorem castMembership_setPred_cast_rep_contract.{u}
   obtain ⟨_fvc, types_sub, keys_sub, used_sub, σ_eq, typ_t,
     _fv_t, preserves, _total,
     helper, spec, decl_eq, t_eq, helper_fresh, helper_not_used,
-    helper_lookup, spec_fv, source_fv_spec, exactness⟩ := post
+    helper_lookup, helper_ctx_eq, spec_fv, source_fv_spec, exactness⟩ := post
   change σ = SMTType.bool at σ_eq
   subst σ
   change t = spec ∧ˢ .app S (.var helper) at t_eq
   subst t
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
-    helperSpecChunk helper τ.toSMTType spec, decl_eq, ?_⟩
+    helperSpecChunk helper τ.toSMTType spec, decl_eq, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
   · intro v hv
     simp only [SMT.fv, List.mem_append, List.mem_singleton]
     exact Or.inr (Or.inl hv)
+  · rw [helper_ctx_eq]
+    exact ContextGeneratedByDeclarations.insert_helper
+      Λ helper τ.toSMTType spec helper_fresh
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -873,8 +878,7 @@ theorem castMembership_setPred_cast_rep_contract.{u}
     dsimp at hdenXg_ty hdenAg_ty
     subst σXg
     subst σAg
-    have Λ_sub_supg : Λ ⊆ Γsupg :=
-      AList.subset_trans types_sub Γsubg
+    have Λ_sub_supg : Λ ⊆ Γsupg := Γsubg.base
     have respects_x_Λg :
         SMT.RenamingContext.RespectsTypeContextOnFV Θg Λ x :=
       respects_xg.of_super Λ_sub_supg
@@ -917,15 +921,19 @@ theorem castMembership_setPred_cast_rep_contract.{u}
         rw [SMT.fv, List.mem_append]
         exact Or.inr (by simp [SMT.fv]))
     obtain ⟨Yg, hYg⟩ := Option.isSome_iff_exists.mp helper_some
-    have hYg_ty : Yg.snd.fst = τ.toSMTType := by
-      have helper_fv_t : helper ∈
-          SMT.fv (spec ∧ˢ .app S (.var helper)) := by
+    have helper_fv_t : helper ∈
+        SMT.fv (spec ∧ˢ .app S (.var helper)) := by
+      rw [SMT.fv, List.mem_append]
+      exact Or.inr (by
         rw [SMT.fv, List.mem_append]
-        exact Or.inr (by
-          rw [SMT.fv, List.mem_append]
-          exact Or.inr (by simp [SMT.fv]))
+        exact Or.inr (by simp [SMT.fv]))
+    have hYg_ty : Yg.snd.fst = τ.toSMTType := by
+      have helper_lookup_supg :
+          Γsupg.lookup helper = some τ.toSMTType :=
+        Γsubg.lookup_of_declared (by
+          simp [declEntries_helperSpecChunk])
       obtain ⟨d, hd, hdty⟩ := respects_tg helper_fv_t
-        (AList.lookup_of_subset Γsubg helper_lookup)
+        helper_lookup_supg
       rw [hYg] at hd
       injection hd with hdeq
       subst d
@@ -1027,7 +1035,7 @@ theorem castMembership_option_rep_contract.{u}
   obtain ⟨_fvc, types_sub, keys_sub, used_sub, σ_eq, typ_t,
     _fv_t, preserves, _total,
     helper, spec, decl_eq, t_eq, helper_fresh, helper_not_used,
-    helper_lookup, spec_fv, source_fv_spec, exactness⟩ := post
+    helper_lookup, helper_ctx_eq, spec_fv, source_fv_spec, exactness⟩ := post
   change σ = SMTType.bool at σ_eq
   subst σ
   change t = spec ∧ˢ
@@ -1036,13 +1044,16 @@ theorem castMembership_option_rep_contract.{u}
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec,
-    decl_eq, ?_⟩
+    decl_eq, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
   · intro v hv
     simp only [SMT.fv, List.mem_append, List.mem_singleton]
     exact Or.inr (Or.inl (Or.inl hv))
+  · rw [helper_ctx_eq]
+    exact ContextGeneratedByDeclarations.insert_helper Λ helper
+      (.pair a.toSMTType b.toSMTType) spec helper_fresh
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -1319,8 +1330,7 @@ theorem castMembership_option_rep_contract.{u}
     dsimp at hdenXg_ty hdenAg_ty
     subst σXg
     subst σAg
-    have Λ_sub_supg : Λ ⊆ Γsupg :=
-      AList.subset_trans types_sub Γsubg
+    have Λ_sub_supg : Λ ⊆ Γsupg := Γsubg.base
     have respects_x_Λg :
         SMT.RenamingContext.RespectsTypeContextOnFV Θg Λ x :=
       respects_xg.of_super Λ_sub_supg
@@ -1365,8 +1375,12 @@ theorem castMembership_option_rep_contract.{u}
       simp [eqTerm, SMT.fv]
     have hYg_ty : Yg.snd.fst =
         SMTType.pair a.toSMTType b.toSMTType := by
+      have helper_lookup_supg : Γsupg.lookup helper =
+          some (SMTType.pair a.toSMTType b.toSMTType) :=
+        Γsubg.lookup_of_declared (by
+          simp [declEntries_helperSpecChunk])
       obtain ⟨d, hd, hdty⟩ := respects_tg helper_fv_t
-        (AList.lookup_of_subset Γsubg helper_lookup)
+        helper_lookup_supg
       rw [hYg] at hd
       injection hd with hdeq
       subst d
@@ -1784,7 +1798,7 @@ theorem encodeTerm_rep_spec.mem_case.{u}
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
     typ_mem, _fv_x_mem, _fv_S_mem, mem_preserves,
-    Dlt, decl_eq, mem_sem⟩ := pre
+    Dlt, decl_eq, _mem_ctx, mem_sem⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
   mpure_intro

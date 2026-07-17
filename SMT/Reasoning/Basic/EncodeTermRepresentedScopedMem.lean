@@ -115,7 +115,7 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_sc_total, x_guard⟩⟩,
+  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard⟩⟩,
       bv_x_used, _⟩, bv_x_not_used, _⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
       _path_x, typ_x_enc, _shape_x, x_preserves,
@@ -199,7 +199,7 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mintro ∀StS
   mpure pre
   dsimp at pre
-  obtain ⟨⟨S_post, ⟨DltS, S_decl_eq, S_sc_total, S_guard⟩⟩,
+  obtain ⟨⟨S_post, ⟨DltS, S_decl_eq, S_ctx, S_sc_total, S_guard⟩⟩,
       bv_S_used, _⟩ := pre
   obtain ⟨used_sub_S, types_sub_S, keys_sub_S, S_used,
       _path_S, typ_S_enc, _shape_S, S_preserves,
@@ -252,11 +252,15 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
     typ_mem, fv_x_mem, fv_S_mem, mem_preserves,
-    DltM, mem_decl_eq, mem_sem⟩ := pre
+    DltM, mem_decl_eq, mem_ctx, mem_sem⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
   mpure_intro
-  refine ⟨(Dltx ++ DltS) ++ DltM, ?_, ?_, ?_⟩
+  have children_ctx : ContextGeneratedByDeclarations St.types
+      StS.types (Dltx ++ DltS) :=
+    ContextGeneratedByDeclarations.append x_ctx S_ctx
+  refine ⟨(Dltx ++ DltS) ++ DltM, ?_,
+    ContextGeneratedByDeclarations.append children_ctx mem_ctx, ?_, ?_⟩
   · rw [mem_decl_eq, S_decl_eq]
     simp only [List.append_assoc]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
@@ -426,29 +430,39 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
         intro v hv
         exact mem_preserves v (bv_S_used v hv)
           (SMT.Typing.bv_notMem_context typ_S_enc v hv))
+    have result_ctx : ContextGeneratedByDeclarations St.types
+        StM.types ((Dltx ++ DltS) ++ DltM) :=
+      ContextGeneratedByDeclarations.append children_ctx mem_ctx
+    have StM_sub_sup : StM.types ⊆ Γ_sup := by
+      intro e he
+      exact Γ_sub (result_ctx he)
     have target_respects_x_M :
         SMT.RenamingContext.RespectsTypeContextOnFV Θ StM.types x_enc :=
-      target_respects_x_sup.of_super Γ_sub
+      target_respects_x_sup.of_super StM_sub_sup
     have target_respects_S_M :
         SMT.RenamingContext.RespectsTypeContextOnFV Θ StM.types S_enc :=
-      target_respects_S_sup.of_super Γ_sub
+      target_respects_S_sup.of_super StM_sub_sup
     obtain ⟨denX_target, hdenX_target, hdenX_target_type⟩ :=
       SMT.RenamingContext.denote_exists_of_typing_fv
         typ_x_M target_respects_x_M hcov_x_target
     obtain ⟨denA_target, hdenA_target, hdenA_target_type⟩ :=
       SMT.RenamingContext.denote_exists_of_typing_fv
         typ_S_M target_respects_S_M hcov_S_target
-    have StS_sub_sup : StS.types ⊆ Γ_sup :=
-      AList.subset_trans types_sub_M Γ_sub
-    have Stx_sub_sup : Stx.types ⊆ Γ_sup :=
-      AList.subset_trans types_sub_S StS_sub_sup
-    have X_rel_target := x_guard Γ_sup Stx_sub_sup Δ_alt
+    have children_scope : ScopedContextExtends St.types
+        (Dltx ++ DltS) Γ_sup := Γ_sub.left_of_append
+    have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
+      children_scope.left_of_append
+    have S_scope : ScopedContextExtends Stx.types DltS Γ_sup :=
+      ScopedContextExtends.right_of_generated x_ctx children_scope
+    have mem_scope : ScopedContextExtends StS.types DltM Γ_sup :=
+      ScopedContextExtends.right_of_generated children_ctx Γ_sub
+    have X_rel_target := x_guard Γ_sup x_scope Δ_alt
       (fun v hv => Δ_fv_alt v (fv_x_sub hv)) Θ
       (related_alt.mono_fv fv_x_sub) wf_alt
       (respects_B.mono_fv fv_x_sub) target_respects_x_sup
       specs_x X_alt hX_alt den_x_alt
       hcov_x_target denX_target hdenX_target hdenX_target_type
-    have A_rel_target := S_guard Γ_sup StS_sub_sup Δ_alt
+    have A_rel_target := S_guard Γ_sup S_scope Δ_alt
       (fun v hv => Δ_fv_alt v (fv_S_sub hv)) Θ
       (related_alt.mono_fv fv_S_sub) wf_alt
       (respects_B.mono_fv fv_S_sub) target_respects_S_sup
@@ -476,7 +490,7 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
       (⟨Aenc, sS, hAenc⟩ : SMT.Dom)
       hden_x_final hden_S rfl rfl
       X_rel.toRDomCast A_rel.toRDomCast
-    have hmem_iff := mem_guard Γ_sup Γ_sub Θ
+    have hmem_iff := mem_guard Γ_sup mem_scope Θ
       hcov_x_target hcov_S_target
       target_respects_x_sup target_respects_S_sup
       X_alt A_alt hX_alt hA_alt denX_target denA_target
