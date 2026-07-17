@@ -115,7 +115,8 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard⟩⟩,
+  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard,
+      x_sc_typing⟩⟩,
       bv_x_used, _⟩, bv_x_not_used, _⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
       _path_x, typ_x_enc, _shape_x, x_preserves,
@@ -199,7 +200,8 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mintro ∀StS
   mpure pre
   dsimp at pre
-  obtain ⟨⟨S_post, ⟨DltS, S_decl_eq, S_ctx, S_sc_total, S_guard⟩⟩,
+  obtain ⟨⟨S_post, ⟨DltS, S_decl_eq, S_ctx, S_sc_total, S_guard,
+      S_sc_typing⟩⟩,
       bv_S_used, _⟩ := pre
   obtain ⟨used_sub_S, types_sub_S, keys_sub_S, S_used,
       _path_S, typ_S_enc, _shape_S, S_preserves,
@@ -252,7 +254,7 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
     typ_mem, fv_x_mem, fv_S_mem, mem_preserves,
-    DltM, mem_decl_eq, mem_ctx, mem_sem⟩ := pre
+    DltM, mem_decl_eq, mem_ctx, mem_sem, mem_sc_typing⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
   mpure_intro
@@ -260,7 +262,7 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
       StS.types (Dltx ++ DltS) :=
     ContextGeneratedByDeclarations.append x_ctx S_ctx
   refine ⟨(Dltx ++ DltS) ++ DltM, ?_,
-    ContextGeneratedByDeclarations.append children_ctx mem_ctx, ?_, ?_⟩
+    ContextGeneratedByDeclarations.append children_ctx mem_ctx, ?_, ?_, ?_⟩
   · rw [mem_decl_eq, S_decl_eq]
     simp only [List.append_assoc]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
@@ -508,3 +510,51 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
     subst Ms
     exact RDomCastSupported.bool_of_true_iff
       (hsource_alt_true.trans hmem_iff.symm)
+  · constructor
+    · intro Γ_sup Γ_sub result_bv_fresh
+      have mem_scope : ScopedContextExtends StS.types DltM Γ_sup :=
+        ScopedContextExtends.right_of_generated children_ctx Γ_sub
+      exact mem_sc_typing.1 Γ_sup mem_scope result_bv_fresh
+    · intro Γ_sup Γ_sub specs_bv_fresh
+      have children_scope : ScopedContextExtends St.types
+          (Dltx ++ DltS) Γ_sup := Γ_sub.left_of_append
+      have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
+        children_scope.left_of_append
+      have S_scope : ScopedContextExtends Stx.types DltS Γ_sup :=
+        ScopedContextExtends.right_of_generated x_ctx children_scope
+      have mem_scope : ScopedContextExtends StS.types DltM Γ_sup :=
+        ScopedContextExtends.right_of_generated children_ctx Γ_sub
+      have x_specs_bv_fresh :
+          ∀ b ∈ specBodies Dltx, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
+        intro b hb
+        exact specs_bv_fresh b (by
+          rw [specBodies_append, List.mem_append]
+          exact Or.inl (by
+            rw [specBodies_append, List.mem_append]
+            exact Or.inl hb))
+      have S_specs_bv_fresh :
+          ∀ b ∈ specBodies DltS, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
+        intro b hb
+        exact specs_bv_fresh b (by
+          rw [specBodies_append, List.mem_append]
+          exact Or.inl (by
+            rw [specBodies_append, List.mem_append]
+            exact Or.inr hb))
+      have mem_specs_bv_fresh :
+          ∀ b ∈ specBodies DltM, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
+        intro b hb
+        exact specs_bv_fresh b (by
+          rw [specBodies_append, List.mem_append]
+          exact Or.inr hb)
+      have x_specs :=
+        x_sc_typing.2 Γ_sup x_scope x_specs_bv_fresh
+      have S_specs :=
+        S_sc_typing.2 Γ_sup S_scope S_specs_bv_fresh
+      have mem_specs :=
+        mem_sc_typing.2 Γ_sup mem_scope mem_specs_bv_fresh
+      intro body hbody
+      rw [specBodies_append, List.mem_append] at hbody
+      rcases hbody with hchildren | hmem
+      · rw [specBodies_append, List.mem_append] at hchildren
+        exact hchildren.elim (x_specs body) (S_specs body)
+      · exact mem_specs body hmem

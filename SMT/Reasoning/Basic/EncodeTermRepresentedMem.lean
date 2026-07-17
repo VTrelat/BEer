@@ -522,7 +522,8 @@ abbrev CastMembershipRepSpec.{u} (τ : BType)
           E'.declarations = decl ++ Dlt ∧
           ContextGeneratedByDeclarations Λ Γ' Dlt ∧
           CastMembershipRepSemantics.{u} τ x S t σx σS Λ Γ'
-            used E'.usedVars Dlt⌝⦄
+            used E'.usedVars Dlt ∧
+          ScopedGeneratedTyping Λ Dlt t SMTType.bool⌝⦄
 
 theorem castMembership_direct_rep_contract.{u}
     (τ : BType) (x S : SMT.Term) :
@@ -540,7 +541,7 @@ theorem castMembership_direct_rep_contract.{u}
   mpure_intro
   refine ⟨List.Subset.refl _, (fun _ h => h), St_sub, trivial,
     SMT.Typing.app _ _ _ _ _ typ_S typ_x, ?_, ?_, ?_, [], by simp,
-    ContextGeneratedByDeclarations.refl _, ?_⟩
+    ContextGeneratedByDeclarations.refl _, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inr hv
@@ -648,6 +649,10 @@ theorem castMembership_direct_rep_contract.{u}
         Option.some.inj (hdenExpected.symm.trans hdenMg)
       rw [← congrArg (fun d : SMT.Dom => d.fst) hden_eq]
       exact hiffg
+  · exact ScopedGeneratedTyping.of_operational
+      (ContextGeneratedByDeclarations.refl St.types)
+      (SMT.Typing.app _ _ _ _ _ typ_S typ_x)
+      (by simp [specBodies])
 
 set_option maxHeartbeats 3000000 in
 theorem castMembership_setPred_cast_rep_contract.{u}
@@ -677,18 +682,20 @@ theorem castMembership_setPred_cast_rep_contract.{u}
   subst σ
   change t = spec ∧ˢ .app S (.var helper) at t_eq
   subst t
+  have helper_ctx_gen : ContextGeneratedByDeclarations Λ St'.types
+      (helperSpecChunk helper τ.toSMTType spec) := by
+    rw [helper_ctx_eq]
+    exact ContextGeneratedByDeclarations.insert_helper
+      Λ helper τ.toSMTType spec helper_fresh
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
-    helperSpecChunk helper τ.toSMTType spec, decl_eq, ?_, ?_⟩
+    helperSpecChunk helper τ.toSMTType spec, decl_eq, helper_ctx_gen, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
   · intro v hv
     simp only [SMT.fv, List.mem_append, List.mem_singleton]
     exact Or.inr (Or.inl hv)
-  · rw [helper_ctx_eq]
-    exact ContextGeneratedByDeclarations.insert_helper
-      Λ helper τ.toSMTType spec helper_fresh
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -1011,6 +1018,11 @@ theorem castMembership_setPred_cast_rep_contract.{u}
         overloadBinOp_𝔹, overloadBinOp, hfalse] using happ_true
     · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
         overloadBinOp_𝔹, overloadBinOp, htrue] using happ_true
+  · apply ScopedGeneratedTyping.of_operational helper_ctx_gen typ_t
+    intro b hb
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
+    subst b
+    exact (SMT.Typing.andE typ_t).2.1
 
 set_option maxHeartbeats 4000000 in
 theorem castMembership_option_rep_contract.{u}
@@ -1041,19 +1053,21 @@ theorem castMembership_option_rep_contract.{u}
   change t = spec ∧ˢ
     ((.app S (.fst (.var helper))) =ˢ (.some (.snd (.var helper)))) at t_eq
   subst t
+  have helper_ctx_gen : ContextGeneratedByDeclarations Λ St'.types
+      (helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec) := by
+    rw [helper_ctx_eq]
+    exact ContextGeneratedByDeclarations.insert_helper Λ helper
+      (.pair a.toSMTType b.toSMTType) spec helper_fresh
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec,
-    decl_eq, ?_, ?_⟩
+    decl_eq, helper_ctx_gen, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
   · intro v hv
     simp only [SMT.fv, List.mem_append, List.mem_singleton]
     exact Or.inr (Or.inl (Or.inl hv))
-  · rw [helper_ctx_eq]
-    exact ContextGeneratedByDeclarations.insert_helper Λ helper
-      (.pair a.toSMTType b.toSMTType) spec helper_fresh
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -1523,6 +1537,11 @@ theorem castMembership_option_rep_contract.{u}
         overloadBinOp_𝔹, overloadBinOp, hfalse] using hiff_eq_g
     · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
         overloadBinOp_𝔹, overloadBinOp, htrue] using hiff_eq_g
+  · apply ScopedGeneratedTyping.of_operational helper_ctx_gen typ_t
+    intro body hbody
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    exact (SMT.Typing.andE typ_t).2.1
 
 /-- Every supported target representation admits an FV-faithful path to its
 canonical representation. -/
@@ -1798,7 +1817,7 @@ theorem encodeTerm_rep_spec.mem_case.{u}
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
     typ_mem, _fv_x_mem, _fv_S_mem, mem_preserves,
-    Dlt, decl_eq, _mem_ctx, mem_sem⟩ := pre
+    Dlt, decl_eq, _mem_ctx, mem_sem, _mem_sc_typing⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
   mpure_intro

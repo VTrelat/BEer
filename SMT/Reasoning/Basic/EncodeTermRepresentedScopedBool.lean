@@ -150,7 +150,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard⟩⟩ := pre
+  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard,
+    x_sc_typing⟩⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
     path_x, typ_x_enc, _shape_x, x_preserves,
     Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
@@ -220,7 +221,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mintro ∀Sty
   mpure pre
   dsimp at pre
-  obtain ⟨y_post, ⟨Dlty, y_decl_eq, y_ctx, y_sc_total, y_guard⟩⟩ := pre
+  obtain ⟨y_post, ⟨Dlty, y_decl_eq, y_ctx, y_sc_total, y_guard,
+    y_sc_typing⟩⟩ := pre
   obtain ⟨used_sub_y, types_sub_y, keys_sub_y, y_used,
     path_y, typ_y_enc, _shape_y, y_preserves,
     Δy, hcov_y, Δy_ext, _related_y, Δy_none, _respects_y,
@@ -236,7 +238,7 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mspec Std.Do.Spec.pure
   mpure_intro
   refine ⟨Dltx ++ Dlty, ?_,
-    ContextGeneratedByDeclarations.append x_ctx y_ctx, ?_, ?_⟩
+    ContextGeneratedByDeclarations.append x_ctx y_ctx, ?_, ?_, ?_⟩
   · rw [y_decl_eq, List.append_assoc]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -397,6 +399,53 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
     refine ⟨?_, .bool⟩
     simpa only [proof_irrel_heq] using
       op.rdomCast_eval X_rel_target.toRDomCast Y_rel_target.toRDomCast
+  · constructor
+    · intro Γ_sup Γ_sub result_bv_fresh
+      have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
+        Γ_sub.left_of_append
+      have y_scope : ScopedContextExtends Stx.types Dlty Γ_sup :=
+        ScopedContextExtends.right_of_generated x_ctx Γ_sub
+      have x_bv_fresh : ∀ v ∈ SMT.bv x_enc, v ∉ Γ_sup := by
+        intro v hv
+        apply result_bv_fresh v
+        cases op
+        simp only [EncodeTermRepresentedBool.CheckedOp.smtTerm, SMT.bv,
+          List.mem_append]
+        exact Or.inl hv
+      have y_bv_fresh : ∀ v ∈ SMT.bv y_enc, v ∉ Γ_sup := by
+        intro v hv
+        apply result_bv_fresh v
+        cases op
+        simp only [EncodeTermRepresentedBool.CheckedOp.smtTerm, SMT.bv,
+          List.mem_append]
+        exact Or.inr hv
+      exact op.smt_typing
+        (x_sc_typing.1 Γ_sup x_scope x_bv_fresh)
+        (y_sc_typing.1 Γ_sup y_scope y_bv_fresh)
+    · intro Γ_sup Γ_sub specs_bv_fresh
+      have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
+        Γ_sub.left_of_append
+      have y_scope : ScopedContextExtends Stx.types Dlty Γ_sup :=
+        ScopedContextExtends.right_of_generated x_ctx Γ_sub
+      have x_specs_bv_fresh :
+          ∀ b ∈ specBodies Dltx, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
+        intro b hb
+        exact specs_bv_fresh b (by
+          rw [specBodies_append, List.mem_append]
+          exact Or.inl hb)
+      have y_specs_bv_fresh :
+          ∀ b ∈ specBodies Dlty, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
+        intro b hb
+        exact specs_bv_fresh b (by
+          rw [specBodies_append, List.mem_append]
+          exact Or.inr hb)
+      have specs_x_sup :=
+        x_sc_typing.2 Γ_sup x_scope x_specs_bv_fresh
+      have specs_y_sup :=
+        y_sc_typing.2 Γ_sup y_scope y_specs_bv_fresh
+      intro b hb
+      rw [specBodies_append, List.mem_append] at hb
+      exact hb.elim (specs_x_sup b) (specs_y_sup b)
 
 theorem smt_denote_not_inv.{u}
     {x : SMT.Term} {Θ : SMT.RenamingContext.Context.{u}}
@@ -493,7 +542,8 @@ theorem encodeTerm_rep_scoped.not_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard⟩⟩ := pre
+  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard,
+    x_sc_typing⟩⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
     path_x, typ_x_enc, _shape_x, x_preserves,
     Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
@@ -507,7 +557,7 @@ theorem encodeTerm_rep_scoped.not_case.{u}
   subst σx
   mspec Std.Do.Spec.pure
   mpure_intro
-  refine ⟨Dltx, x_decl_eq, x_ctx, ?_, ?_⟩
+  refine ⟨Dltx, x_decl_eq, x_ctx, ?_, ?_, ?_⟩
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
     obtain ⟨X_alt, hX_alt, den_x_alt, T_alt_eq⟩ :=
@@ -567,3 +617,11 @@ theorem encodeTerm_rep_scoped.not_case.{u}
     refine ⟨?_, .bool⟩
     simpa only [proof_irrel_heq] using
       rdomCast_not X_rel_target.toRDomCast
+  · constructor
+    · intro Γ_sup Γ_sub result_bv_fresh
+      have typ_x_sup := x_sc_typing.1 Γ_sup Γ_sub (by
+        intro v hv
+        apply result_bv_fresh v
+        simpa [SMT.bv] using hv)
+      exact SMT.Typing.not Γ_sup x_enc typ_x_sup
+    · exact x_sc_typing.2

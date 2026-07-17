@@ -161,6 +161,39 @@ theorem ScopedContextExtends.right_of_generated
     · exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl heD₁)))
   · exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inr heD₂)))
 
+/-- Syntactic information needed when an encoder result and its generated
+helper specifications are moved from the operational context into a local
+binder scope.  The explicit bound-variable freshness premises are essential:
+SMT typing weakening is false when a newly added context entry captures a
+bound name. -/
+abbrev ScopedGeneratedTyping
+    (Λ : SMT.TypeContext) (Dlt : SMT.Chunk)
+    (t : SMT.Term) (σ : SMTType) : Prop :=
+  (∀ (Γsup : SMT.TypeContext), ScopedContextExtends Λ Dlt Γsup →
+    (∀ v ∈ SMT.bv t, v ∉ Γsup) →
+    Γsup ⊢ˢ t : σ) ∧
+  (∀ (Γsup : SMT.TypeContext), ScopedContextExtends Λ Dlt Γsup →
+    (∀ b ∈ specBodies Dlt, ∀ v ∈ SMT.bv b, v ∉ Γsup) →
+    ∀ b ∈ specBodies Dlt, Γsup ⊢ˢ b : SMTType.bool)
+
+/-- Lift operational typing into any declaration-generated scope. -/
+theorem ScopedGeneratedTyping.of_operational
+    {Λ Γop : SMT.TypeContext} {Dlt : SMT.Chunk}
+    {t : SMT.Term} {σ : SMTType}
+    (hgen : ContextGeneratedByDeclarations Λ Γop Dlt)
+    (ht : Γop ⊢ˢ t : σ)
+    (hspec : ∀ b ∈ specBodies Dlt,
+      Γop ⊢ˢ b : SMTType.bool) :
+    ScopedGeneratedTyping Λ Dlt t σ := by
+  constructor
+  · intro Γsup hscope ht_bv
+    have hop_sub : Γop ⊆ Γsup := fun e he => hscope (hgen he)
+    exact SMT.Typing.weakening hop_sub ht ht_bv
+  · intro Γsup hscope hspec_bv b hb
+    have hop_sub : Γop ⊆ Γsup := fun e he => hscope (hgen he)
+    exact SMT.Typing.weakening hop_sub (hspec b hb)
+      (hspec_bv b hb)
+
 /-- Every generated Boolean helper specification is covered, well typed under
 the supplied valuation, and evaluates to true. -/
 abbrev SpecBodiesTrue.{u}
@@ -298,7 +331,8 @@ abbrev EncodeTermRepScopedPost.{u}
     E'.declarations = decl ++ Dlt ∧
     ContextGeneratedByDeclarations Λ Γ' Dlt ∧
     EncodeTermRepScopedTotal.{u} t E α Λ t' σ Γ' E'.usedVars Dlt ∧
-    EncodeTermRepGuardedSound.{u} t E α t' σ Λ Dlt
+    EncodeTermRepGuardedSound.{u} t E α t' σ Λ Dlt ∧
+    ScopedGeneratedTyping Λ Dlt t' σ
 
 /-- Representation-aware postcondition for one successful `encodeTerm` run. -/
 abbrev EncodeTermRepPost.{u}
