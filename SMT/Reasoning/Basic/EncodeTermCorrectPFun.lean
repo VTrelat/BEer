@@ -744,7 +744,7 @@ The pfun lambda `λ R. (∀ x y. R(⟨x,y⟩) ⇒ A_enc(x) ∧ B_enc(y)) ∧ (�
 denotes under any renaming context that covers fv(A_enc) and fv(B_enc), and its retract equals
 `𝒫(X × Y) ∩ {f | f.IsPFunc X Y}` where X = retract(αx.set, Aenc), Y = retract(βx.set, Benc).
 -/
-private theorem pfun_lambda_denotation.{u}
+theorem pfun_lambda_denotation.{u}
     {αx βx : BType}
     {A_enc B_enc : SMT.Term}
     {R x y y' : SMT.𝒱}
