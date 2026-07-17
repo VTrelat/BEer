@@ -247,6 +247,7 @@ def castInterAux (S T : Term) {α β : SMTType} : α ~> β → Encoder (Term × 
     declareConst S! (.fun (.pair α' β') .bool)
     addSpec S! S!_spec
     let x ← freshVar (.pair α' β') "inter!"
+    eraseFromContext x
     return (.lambda [x] [.pair α' β'] (.and (.app (.var S!) (.var x)) (.app T (.var x))), .fun (.pair α' β') .bool)
   | @castPath.fun _ _ α' β' hβ c_α c_β => do
     let ⟨S!, S!_spec⟩ ← loosenAux_prf "inter!" (castPath.fun hβ c_α c_β) S

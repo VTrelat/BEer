@@ -1499,8 +1499,14 @@ theorem castInter_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {
       mintro ∀St₂
       mpure pre2
       obtain ⟨_, _, _, St₂_used_eq, _⟩ := pre2
+      mspec SMT.eraseFromContext_spec
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨_, _, StE_used_eq⟩ := preE
       mspec Std.Do.Spec.pure
       mpure_intro
+      rw [StE_used_eq]
       refine ⟨?_, ?_⟩
       · intro v hv
         simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append, List.mem_cons,
@@ -2215,13 +2221,22 @@ theorem castInterAux_decls_bv {α β : SMTType} (c : α ~> β) (S T : SMT.Term) 
     mintro ∀St₂
     mpure pre2
     obtain ⟨St₂_used_eq, St₂_decl⟩ := pre2
+    rename_i x
+    mspec SMT.eraseFromContext_used_decls (v := x)
+      (used := St₂.env.usedVars) (decl := St₂.env.declarations)
+    mrename_i pre3
+    mintro ∀St₃
+    mpure pre3
+    obtain ⟨St₃_used_eq, St₃_decl⟩ := pre3
     mspec Std.Do.Spec.pure
     mpure_intro
-    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂.env.usedVars := fun {w} h => by
-      rw [St₂_used_eq, hs_used, hd_used]; exact List.mem_cons_of_mem _ h
+    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₃.env.usedVars := fun {w} h => by
+      rw [St₃_used_eq, St₂_used_eq, hs_used, hd_used]
+      exact List.mem_cons_of_mem _ h
     refine ⟨[.declare_const S! (.fun (.pair α' β') .bool),
       .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_, ?_, fun v hv => lift (S!_used_sub hv)⟩
-    · rw [St₂_decl, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+    · rw [St₃_decl, St₂_decl, hs_decl, hd_decl, S!_decl,
+        List.concat_eq_append, List.concat_eq_append,
         List.append_assoc, List.cons_append, List.nil_append]
     · exact DeltaBvOk.append (DeltaBvOk.declare_const (lift S!_used))
         (DeltaBvOk.define_fun_spec (fun w hw => lift (S!_bv w hw)))
@@ -5267,22 +5282,30 @@ theorem castInter_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
       have havsub₁s : avoid ⊆ St₁s.env.usedVars := fun w h => by
         rw [hs_used, hd_used]; exact S!_used_sub (havsub h)
       mspec SMT.freshVar_spec
-      mrename_i pre2
-      mintro ∀St₂
-      mpure pre2
-      obtain ⟨_, _, _, St₂_used_eq, x_notMem⟩ := pre2
-      mspec Std.Do.Spec.pure
-      mpure_intro
-      refine ⟨?_, ?_⟩
-      · intro v hv
-        simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append, List.mem_cons,
-          List.not_mem_nil, false_or, or_false] at hv
-        rcases hv with rfl | hvT
-        · exact fun h => x_notMem (havsub₁s h)
-        · exact hbvT' v hvT
-      · intro v hv
-        rw [St₂_used_eq, hs_used, hd_used]
-        exact List.mem_cons_of_mem _ (S!_used_sub hv)
+      case post.success x =>
+        mrename_i pre2
+        mintro ∀St₂
+        mpure pre2
+        obtain ⟨_, _, _, St₂_used_eq, x_notMem⟩ := pre2
+        mspec SMT.eraseFromContext_spec (v := x)
+          (Γ := St₂.types) (n := St₂.env.freshvarsc)
+          (used := St₂.env.usedVars)
+        mrename_i pre3
+        mintro ∀St₃
+        mpure pre3
+        obtain ⟨_, _, St₃_used_eq⟩ := pre3
+        mspec Std.Do.Spec.pure
+        mpure_intro
+        refine ⟨?_, ?_⟩
+        · intro v hv
+          simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append, List.mem_cons,
+            List.not_mem_nil, false_or, or_false] at hv
+          rcases hv with rfl | hvT
+          · exact fun h => x_notMem (havsub₁s h)
+          · exact hbvT' v hvT
+        · intro v hv
+          rw [St₃_used_eq, St₂_used_eq, hs_used, hd_used]
+          exact List.mem_cons_of_mem _ (S!_used_sub hv)
     | @«fun» α β α' β' hβ c_α c_β =>
       mintro pre ∀St
       mpure pre
@@ -6233,14 +6256,24 @@ theorem castInterAux_decls_bv_notMem {α β : SMTType} (c : α ~> β) (S T : SMT
     mintro ∀St₂
     mpure pre2
     obtain ⟨St₂_used_eq, St₂_decl⟩ := pre2
+    rename_i x
+    mspec SMT.eraseFromContext_used_decls (v := x)
+      (used := St₂.env.usedVars) (decl := St₂.env.declarations)
+    mrename_i pre3
+    mintro ∀St₃
+    mpure pre3
+    obtain ⟨St₃_used_eq, St₃_decl⟩ := pre3
     mspec Std.Do.Spec.pure
     mpure_intro
     refine ⟨[.declare_const S! (.fun (.pair α' β') .bool),
       .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_,
       DeltaBvNotMem.append (DeltaBvNotMem.declare_const S!_notMem)
         (DeltaBvNotMem.define_fun_spec S!_bv),
-      fun v hv => by rw [St₂_used_eq, hs_used, hd_used]; exact List.mem_cons_of_mem _ (S!_used_sub hv)⟩
-    rw [St₂_decl, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+      fun v hv => by
+        rw [St₃_used_eq, St₂_used_eq, hs_used, hd_used]
+        exact List.mem_cons_of_mem _ (S!_used_sub hv)⟩
+    rw [St₃_decl, St₂_decl, hs_decl, hd_decl, S!_decl,
+      List.concat_eq_append, List.concat_eq_append,
       List.append_assoc, List.cons_append, List.nil_append]
   | @«fun» α β α' β' hβ c_α c_β =>
     mintro pre ∀St
