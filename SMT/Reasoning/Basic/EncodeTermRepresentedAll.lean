@@ -2,6 +2,7 @@ import SMT.Reasoning.Basic.EncodeTermRepresentedUnion
 import SMT.Reasoning.Basic.EncodeTermRepresentedMem
 import SMT.Reasoning.Basic.CastMembershipExact
 import SMT.Reasoning.Basic.AbstractSubstDenote
+import SMT.Reasoning.Basic.EncodeTermRepresentedBinders
 import SMT.Reasoning.Representation
 
 open Std.Do B SMT ZFSet
@@ -44,50 +45,6 @@ theorem BinderCastAdmissible.of_eq_canonical.{u}
   subst sigma
   rw [castPath.eq_reflexive hcast.toCastPath]
   exact BinderCastAdmissible.reflexive tau hD
-
-open Classical B in
-/-- Decompose a supported relation between source and SMT tuples into the
-pointwise relation needed by the body induction hypothesis.  This is the
-static binder-update form, where both sides are obtained by projecting one
-whole tuple. -/
-theorem RValuationCastSupportedOnFV.updates_of_reduce_toProdl.{u}
-    {Ξ : B.RenamingContext.Context.{u}}
-    {Θ : SMT.RenamingContext.Context.{u}}
-    {vs : List B.𝒱} (vs_nodup : vs.Nodup)
-    {αs : List BType} (αs_nemp : αs ≠ [])
-    {σs : List SMTType}
-    (vs_αs_len : vs.length = αs.length)
-    (αs_σs_len : αs.length = σs.length)
-    {X Y : ZFSet.{u}}
-    (hX : X ∈ ⟦αs.reduce (· ×ᴮ ·) αs_nemp⟧ᶻ)
-    (hY : Y ∈ ⟦σs.toProdl⟧ᶻ)
-    (hrel : RDomCastSupported
-      (⟨X, αs.reduce (· ×ᴮ ·) αs_nemp, hX⟩ : B.Dom)
-      (⟨Y, σs.toProdl, hY⟩ : SMT.Dom))
-    {t : B.Term}
-    (ambient : ∀ v ∈ B.fv t, v ∉ vs →
-      match Ξ v, Θ v with
-      | some d, some d' => RDomCastSupported d d'
-      | _, _ => False) :
-    let bs : Fin vs.length → B.Dom.{u} := fun i =>
-      let j : Fin αs.length := Fin.cast vs_αs_len i
-      ⟨X.get αs.length j, αs[j],
-        BType.mem_get_of_mem_reduce_toZFSet αs_nemp hX⟩
-    let ss : Fin vs.length → SMT.Dom.{u} := fun i =>
-      let j : Fin σs.length := Fin.cast (vs_αs_len.trans αs_σs_len) i
-      ⟨Y.get σs.length j, σs[j],
-        SMTType.mem_get_of_mem_toProdl
-          (fun hs => αs_nemp (List.length_eq_zero_iff.mp
-            (αs_σs_len.trans (by simp [hs])))) hY⟩
-    RValuationCastSupportedOnFV
-      (Function.updates Ξ vs (List.ofFn fun i => some (bs i)))
-      (Function.updates Θ vs (List.ofFn fun i => some (ss i))) t := by
-  dsimp only
-  apply RValuationCastSupportedOnFV.updates vs_nodup
-  · exact ambient
-  · intro i
-    simpa using RDomCastSupported.get_of_reduce_toProdl
-      αs_nemp αs_σs_len hX hY hrel (Fin.cast vs_αs_len i)
 
 open Classical B in
 /-- Dynamic form of `updates_of_reduce_toProdl`: the target components are an
