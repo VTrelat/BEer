@@ -99,3 +99,55 @@ theorem collect_ite_truth_of_represented_subst.{u}
     hcov_Dapp hcov_sub hden_D hden_sub hden_body hD_type hD_true
   rw [hbody_eq]
   exact htruth_sub
+
+/-- Collection-body truth from source-level agreement.  This is the form
+consumed by the operational `collect` proof after its body IH supplies the
+bound-variable denotations and the stable-body free-variable bound. -/
+theorem collect_ite_truth_of_represented_source_fv.{u}
+    {Dapp Penc body : SMT.Term}
+    (xs : List SMT.𝒱) (ts : List SMT.Term)
+    {Delta ThetaBase ThetaBody : SMT.RenamingContext.Context.{u}}
+    (Ds : List SMT.Dom.{u}) {source : B.Term}
+    (hbody_def : body = Dapp.ite (SMT.substList xs ts Penc) (.bool false))
+    (hcov_body : SMT.RenamingContext.CoversFV Delta body)
+    (hcov_Dapp : SMT.RenamingContext.CoversFV Delta Dapp)
+    (hlen_xt : xs.length = ts.length) (hlen_xd : xs.length = Ds.length)
+    (hnodup : xs.Nodup)
+    (hxs_not_bv : ∀ x ∈ xs, x ∉ SMT.bv Penc)
+    (hts_bv_nil : ∀ t ∈ ts, SMT.bv t = [])
+    (hts_fv_not_bv : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ SMT.bv Penc)
+    (hts_not_none : ∀ t ∈ ts, t ≠ SMT.Term.none)
+    (hts_fv_disj_xs : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ xs)
+    (hts_den : ∀ (i : ℕ) (_hi_x : i < xs.length) (hi_t : i < ts.length)
+      (hi_d : i < Ds.length),
+      ∃ (ht_cov : SMT.RenamingContext.CoversFV Delta ts[i]),
+        ⟦ts[i].abstract Delta ht_cov⟧ˢ = some Ds[i])
+    (hcov_sub : SMT.RenamingContext.CoversFV Delta
+      (SMT.substList xs ts Penc))
+    (hcov_upd : SMT.RenamingContext.CoversFV
+      (Function.updates Delta xs (Ds.map Option.some)) Penc)
+    (hcov_body_P : SMT.RenamingContext.CoversFV ThetaBody Penc)
+    (hvalues : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_d : i < Ds.length),
+      ThetaBody xs[i] = some Ds[i])
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars source)
+    (hctx_source : ∀ v ∈ B.Term.vars source, v ∉ xs →
+      Delta v = ThetaBase v)
+    (hbody_ext : SMT.RenamingContext.Extends ThetaBody ThetaBase)
+    {P : ZFSet.{u}} {hP : P ∈ ⟦BType.bool⟧ᶻ}
+    {dP : SMT.Dom.{u}}
+    (hden_P : ⟦Penc.abstract ThetaBody hcov_body_P⟧ˢ = some dP)
+    (hrel_P : RDomCastSupported
+      (⟨P, BType.bool, hP⟩ : B.Dom) dP)
+    {dD dBody : SMT.Dom.{u}}
+    (hden_D : ⟦Dapp.abstract Delta hcov_Dapp⟧ˢ = some dD)
+    (hden_body : ⟦body.abstract Delta hcov_body⟧ˢ = some dBody)
+    (hD_type : dD.snd.fst = SMTType.bool)
+    (hD_true : dD.fst = ZFSet.zftrue) :
+    dBody.fst = ZFSet.zftrue ↔ P = ZFSet.zftrue := by
+  exact collect_ite_truth_of_represented_subst
+    xs ts Ds hbody_def hcov_body hcov_Dapp hlen_xt hlen_xd hnodup
+    hxs_not_bv hts_bv_nil hts_fv_not_bv hts_not_none hts_fv_disj_xs
+    hts_den hcov_sub hcov_upd hcov_body_P
+    (SMT.RenamingContext.agreesOnFV_updates_of_source_fv
+      hlen_xd hnodup hcov_upd hvalues hPenc_fv hctx_source hbody_ext)
+    hden_P hrel_P hden_D hden_body hD_type hD_true

@@ -167,6 +167,58 @@ theorem agreesOnFV_substList_update_of_source_fv.{u}
     exact hctx_source v (hbody_fv hv) hvxs
   · exact hbody_ext
 
+/-- A substitution update agrees with a body context at every bound variable
+when that context already holds the corresponding substituted denotation. -/
+theorem updates_eq_of_bound_denotations.{u}
+    {Delta Theta : Context.{u}} {xs : List SMT.𝒱} {Ds : List SMT.Dom.{u}}
+    (hlen : xs.length = Ds.length) (hnodup : xs.Nodup)
+    (hvalues : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_d : i < Ds.length),
+      Theta xs[i] = some Ds[i])
+    (v : SMT.𝒱) (hv : v ∈ xs) :
+    Function.updates Delta xs (Ds.map Option.some) v = Theta v := by
+  rw [Function.updates_eq_if (by simp [hlen]) hnodup, dif_pos hv]
+  have hi_x : xs.idxOf v < xs.length := List.idxOf_lt_length_of_mem hv
+  have hi_d : xs.idxOf v < Ds.length := by
+    rw [← hlen]
+    exact hi_x
+  rw [List.getElem_map]
+  calc
+    some Ds[xs.idxOf v] = Theta xs[xs.idxOf v] :=
+      (hvalues (xs.idxOf v) hi_x hi_d).symm
+    _ = Theta v := by rw [List.getElem_idxOf hi_x]
+
+/-- The substitution context agrees with the body-totality context on a
+stable encoded body.  At binder variables this uses the chosen denotations;
+away from binders it uses source-level agreement and extension. -/
+theorem agreesOnFV_updates_of_source_fv.{u}
+    {Delta ThetaBase ThetaBody : Context.{u}}
+    {xs : List SMT.𝒱} {Ds : List SMT.Dom.{u}} {body : SMT.Term}
+    {source : B.Term}
+    (hlen : xs.length = Ds.length) (hnodup : xs.Nodup)
+    (hcov : CoversFV (Function.updates Delta xs (Ds.map Option.some)) body)
+    (hvalues : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_d : i < Ds.length),
+      ThetaBody xs[i] = some Ds[i])
+    (hbody_fv : SMT.fv body ⊆ B.Term.vars source)
+    (hctx_source : ∀ v ∈ B.Term.vars source, v ∉ xs →
+      Delta v = ThetaBase v)
+    (hbody_ext : Extends ThetaBody ThetaBase) :
+    AgreesOnFV (Function.updates Delta xs (Ds.map Option.some))
+      ThetaBody body := by
+  intro v hv
+  by_cases hvxs : v ∈ xs
+  · exact updates_eq_of_bound_denotations hlen hnodup hvalues v hvxs
+  · rw [Function.updates_of_not_mem _ xs _ v hvxs]
+    have hbase : Delta v = ThetaBase v :=
+      hctx_source v (hbody_fv hv) hvxs
+    cases hDelta : Delta v with
+    | none =>
+        have hcontr := hcov v hv
+        rw [Function.updates_of_not_mem _ xs _ v hvxs, hDelta] at hcontr
+        simp at hcontr
+    | some d =>
+        have hThetaBase : ThetaBase v = some d := hbase.symm.trans hDelta
+        exact (hbody_ext hThetaBase).symm
+
 end SMT.RenamingContext
 
 /-- A successful binder-body stability check turns the structural declaration
