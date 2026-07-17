@@ -1114,3 +1114,139 @@ theorem represented_collect_pointwise_body_bridge.{u}
       XiP_fv']
     exact den_P
   exact ⟨Pval, hPval, den_P_go, htruth⟩
+
+open Classical in
+/-- Assemble the representation-aware collection body bridge into the
+retraction equation for the set-valued lambda emitted by the encoder.
+
+The operational `collect` proof has to establish coverage, typing, and
+totality for a concrete encoder trace.  Once it has done so, this lemma is
+the whole semantic core: source collection denotation supplies the separation
+equation and predicate totality, while
+`represented_collect_pointwise_body_bridge` supplies the only genuinely
+representation-sensitive step.  Keeping the composition here lets both the
+main run and the alternative-valuation totality proof share exactly the same
+argument. -/
+theorem represented_collect_set_retract.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom))
+    {Denc Penc ite_body : SMT.Term} {z : SMT.𝒱}
+    {ThetaD : SMT.RenamingContext.Context.{u}} {DencVal : SMT.Dom.{u}}
+    (ite_body_def : ite_body = ((@ˢDenc) (.var z)).ite
+      (SMT.substList vs (toDestPair vs (.var z)) Penc) (.bool false))
+    (z_not_fv_D : z ∉ SMT.fv Denc)
+    (hcov_lambda : SMT.RenamingContext.CoversFV ThetaD
+      ((λˢ [z]) [tau.toSMTType] ite_body))
+    {lamVal : SMT.Dom.{u}}
+    (hlamVal : ⟦((λˢ [z]) [tau.toSMTType] ite_body).abstract ThetaD
+      hcov_lambda⟧ˢ = some lamVal)
+    (hlamVal_func : ⟦tau.toSMTType⟧ᶻ.IsFunc 𝔹 lamVal.fst)
+    (hcov_D_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W)) Denc)
+    (den_D_upd : ∀ W : SMT.Dom,
+      ⟦Denc.abstract (Function.update ThetaD z (some W))
+        (hcov_D_upd W)⟧ˢ = some DencVal)
+    (hDenc_type : DencVal.snd.fst = tau.toSMTType.fun SMTType.bool)
+    (hDenc_func : ⟦tau.toSMTType⟧ᶻ.IsFunc 𝔹 DencVal.fst)
+    (D_rel : RDomCastSupported
+      (⟨Dval, BType.set tau, hDval⟩ : B.Dom) DencVal)
+    (hcov_ite_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W)) ite_body)
+    (hbody_total : ∀ W : SMT.Dom, W.snd.fst = tau.toSMTType →
+      ⟦ite_body.abstract (Function.update ThetaD z (some W))
+        (hcov_ite_upd W)⟧ˢ.isSome = true)
+    (hbody_ty : ∀ W : SMT.Dom, W.snd.fst = tau.toSMTType →
+      ∀ Db : SMT.Dom,
+        ⟦ite_body.abstract (Function.update ThetaD z (some W))
+          (hcov_ite_upd W)⟧ˢ = some Db →
+        Db.snd.fst = SMTType.bool)
+    (hcov_sub_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W))
+          (SMT.substList vs (toDestPair vs (.var z)) Penc))
+    (fv_substList_disj_vs : ∀ v ∈
+      SMT.fv (SMT.substList vs (toDestPair vs (.var z)) Penc),
+      v ≠ z → v ∉ vs)
+    (hgo_cov : ∀ x ∈ SMT.fv ite_body, x ∉ [z] → (ThetaD x).isSome = true)
+    (hcov_P_upd : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+      SMT.RenamingContext.CoversFV
+        (Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some)) Penc)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc) (hz_not_vs : z ∉ vs)
+    (Penc_fv : SMT.fv Penc ⊆ B.Term.vars P)
+    (z_not_vars_P : z ∉ B.Term.vars P)
+    {Ebody : B.Env} {LambdaP GammaP : SMT.TypeContext}
+    {sigmaP : SMTType} {usedP : List SMT.𝒱}
+    (typ_P : Ebody.context ⊢ᴮ P : BType.bool)
+    (P_total : EncodeTermRepTotal.{u}
+      P Ebody BType.bool LambdaP Penc sigmaP GammaP usedP)
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs →
+      match Xi v, ThetaD v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False)
+    (wf_bound : ∀ (x : ZFSet.{u}) (hx : x ∈ ⟦tau⟧ᶻ)
+      (_hx_D : x ∈ Dval),
+      B.RenWF Ebody.context
+        (Function.updates Xi vs (List.ofFn fun i => some
+          (⟨x.get vs.length i, tau.get vs.length i,
+            get_mem_type_of_isTuple
+              (hasArity_of_mem_toZFSet tau_hasArity hx)
+              tau_hasArity hx⟩ : B.Dom))))
+    (bound_none : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+      ∀ v ∉ usedP,
+        Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some) v = none)
+    (bound_respects : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+      B.RenamingContext.RespectsTypeContextOnFV
+        (Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some)) LambdaP P)
+    (bound_dom : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+      ∀ v,
+        Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some) v ≠ none → v ∈ LambdaP) :
+    retract (BType.set tau) lamVal.fst = T := by
+  have hDenc_retract : retract (BType.set tau) DencVal.fst = Dval := by
+    have hcanonical :
+        (⟨Dval, BType.set tau, hDval⟩ : B.Dom) ≘ᶻ DencVal :=
+      (RDomCast.iff_RDom_of_type_eq (α := BType.set tau)
+        (by simpa using hDenc_type)).mp D_rel.toRDomCast
+    rw [RDom] at hcanonical
+    exact hcanonical.2
+  refine retract_lamVal_eq_collect
+    (D := D) (D_enc := Denc) (P_enc := Penc) (z := z)
+    (ite_body := ite_body) (Δ_ctx := ThetaD) (lamVal := lamVal)
+    (denD_val := DencVal) (𝒟_val := Dval) (P := P) (T_val := T)
+    vs_nemp vs_nodup tau_hasArity ite_body_def z_not_fv_D
+    hcov_lambda hlamVal hlamVal_func hcov_D_upd den_D_upd
+    hDenc_type hDenc_func hDval hDenc_retract hcov_ite_upd
+    hbody_total hbody_ty hcov_sub_upd fv_substList_disj_vs hgo_cov
+    Xi_fv ?_ ?_ ?_
+  · exact B.denote_collect_eq_sep Xi_fv tau_hasArity den_D den_collect
+  · exact B.denote_collect_predicate_total Xi_fv tau_hasArity
+      den_D den_collect
+  · apply collect_hbridge_of_pointwise_bool
+      (D := D) (P := P) (tau := tau) (Dval := Dval)
+      Xi_fv tau_hasArity hcov_ite_upd
+    exact represented_collect_pointwise_body_bridge
+      (D := D) (P := P) (tau := tau) (Denc := Denc) (Penc := Penc)
+      (ite_body := ite_body) (z := z) (ThetaD := ThetaD)
+      (DencVal := DencVal) (Ebody := Ebody) (LambdaP := LambdaP)
+      (GammaP := GammaP) (sigmaP := sigmaP) (usedP := usedP)
+      vs_nemp vs_nodup Xi_fv tau_hasArity den_D den_collect
+      hcov_D_upd den_D_upd hDenc_type hDenc_func D_rel ite_body_def
+      hcov_ite_upd hcov_sub_upd hcov_P_upd hvs_not_bv hz_not_bv hz_not_vs
+      Penc_fv z_not_vars_P typ_P P_total ambient wf_bound bound_none
+      bound_respects bound_dom
