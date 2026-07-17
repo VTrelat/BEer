@@ -124,6 +124,18 @@ def SMT.declareConstWithSpec (x! : 𝒱) (τ : SMTType)
   declareConst x! τ
   addSpec x! x!_spec
 
+/-- Reject a binder body that hoisted helper declarations depending on its
+bound variables.  Such helpers must be re-scoped before the binder can be
+sound; `collect` and `lambda` currently keep their historical output shape,
+so they accept only helper-free body encodings. -/
+def SMT.ensureDeclarationsUnchanged (before : Nat)
+    (location : String) : Encoder Unit := do
+  let st ← get
+  if st.env.declarations.length = before then
+    pure ()
+  else
+    throw s!"{location}: body generated unscoped helper declarations"
+
 def SMT.addAssert' (t : Term) : Encoder Unit := do
   let ass := (←get).env.asserts
   modify λ e => { e with env := { e.env with asserts := go t ass}}

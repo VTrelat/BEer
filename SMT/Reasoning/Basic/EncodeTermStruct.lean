@@ -7940,6 +7940,7 @@ theorem encodeTerm_combined
           rw [St₂_types, St₂_used_eq]
           exact encodeTerm_state.keys_foldl_insert_subset_of_fst_mem _ D_keys_sub
             (fun p hp => vs_sub_St₁_used p.1 (List.of_mem_zip hp).1)
+        mspec Std.Do.Spec.get_StateT
         mspec P_ih (E := E') (Λ := St₂.types) (n := St₂.env.freshvarsc)
           (used := St₂.env.usedVars) (α := .bool) (decl := decl ++ ΔD) typP vars_used_P_St₂
           Λ_inv_P hP_bv_nodup
@@ -7954,6 +7955,12 @@ theorem encodeTerm_combined
         · -- `encodeTerm P` returned a boolean
           rename_i heqP
           obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. ▸ heqP
+          mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+          mrename_i pre
+          mintro ∀St₃'
+          mpure pre
+          obtain ⟨St₃'_eq, _P_decl_len⟩ := pre
+          subst St₃'
           mspec (Std.Do.Triple.and (SMT.freshVarList αs')
             (SMT.freshVarList_spec αs' (Γ := St₃.types) (n := St₃.env.freshvarsc)
               (used := St₃.env.usedVars))
@@ -7996,175 +8003,133 @@ theorem encodeTerm_combined
               exact List.mem_append_left _ (List.mem_reverse.mpr
                 (List.mem_fst_of_mem_zip hp))
           rw [αs'_toProdl_eq]
-          mspec (Std.Do.Triple.and
-            (castApp (D_enc, α'.fun β'.option) ((List.map SMT.Term.var xs).toPairl, α'))
-            (castApp_state D_enc ((List.map SMT.Term.var xs).toPairl) (α'.fun β'.option)
-              α' (Λ := St₄.types) (n := St₄.env.freshvarsc)
-              (used := St₄.env.usedVars) (X := B.Term.vars (B.Term.collect vs D P)))
-            (castApp_decl_domEq D_enc ((List.map SMT.Term.var xs).toPairl) α' β'
-              (Λ := St₄.types) (n := St₄.env.freshvarsc)
-              (used := St₄.env.usedVars) (decl := decl ++ ΔD ++ ΔP)))
-          case pre =>
-            mpure_intro
-            refine ⟨⟨rfl, rfl, St₄_keys_sub, rfl, ?_, ?_⟩,
-              rfl, rfl, St₄_keys_sub, rfl, St₄_decl⟩
-            · intro v hv
-              rcases List.mem_union_iff.mp (D_state_fv_sub hv) with hk | hb
-              · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (AList.mem_of_subset
-                  St₁_sub_St₄ (AList.mem_keys.mpr hk))))
-              · exact List.mem_union_iff.mpr (Or.inr (hvars_D_sub hb))
-            · intro v hv
-              exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mp (xs_sub_St₄_types v
-                (encodeTerm_state.fv_toPairl_map_var_subset xs v hv))))
-          case post.success =>
-            rename_i out_ca
-            obtain ⟨Dxs, σDxs⟩ := out_ca
-            mrename_i pre
-            mintro ∀St₅
-            mpure pre
-            obtain ⟨⟨ca_le, ca_Λ_sub, ca_used_sub, ca_keys_sub, ca_fv_sub₀,
-              ca_preserves⟩, Δca, ca_decl_eq, ca_specb, ca_fv_decl_sub⟩ := pre
-            mspec Std.Do.Spec.pure
-            mpure_intro
-            have St₀_sub_St₅ : St₀.types ⊆ St₅.types :=
-              AList.subset_trans (AList.subset_trans D_Λ_sub St₁_sub_St₄) ca_Λ_sub
-            have St₁_used_sub_St₃ : St₁.env.usedVars ⊆ St₃.env.usedVars := by
-              rw [← St₂_used_eq]; exact P_used_sub
-            have used_sub_St₃ : used ⊆ St₃.env.usedVars :=
-              fun v hv => St₁_used_sub_St₃ (D_used_sub hv)
-            have used_sub_St₅ : used ⊆ St₅.env.usedVars :=
-              fun v hv => ca_used_sub (St₃_sub_St₄_used (used_sub_St₃ hv))
-            have St₃_keys_sub_St₅ : AList.keys St₃.types ⊆ AList.keys St₅.types := by
-              intro v hv
-              exact AList.mem_keys.mp (AList.mem_of_subset
-                (AList.subset_trans St₃_sub_St₄_types ca_Λ_sub) (AList.mem_keys.mpr hv))
-            have xs_not_used_orig : ∀ x ∈ xs, x ∉ used := by
-              intro x hx hx_used
-              exact xs_not_used x hx (used_sub_St₃ hx_used)
-            have hdv : declVars (ΔD ++ ΔP ++ Δca)
-                = declVars ΔD ++ declVars ΔP ++ declVars Δca := by
-              rw [declVars_append, declVars_append]
-            have Dxs_fv : ∀ w ∈ SMT.fv Dxs, w ∉ xs →
-                w ∈ B.Term.vars (B.Term.collect vs D P) ∪ declVars (ΔD ++ ΔP ++ Δca) := by
-              intro w hw hw_xs
-              rw [hdv]
-              rcases List.mem_union_iff.mp (ca_fv_decl_sub hw) with h | h
-              · rcases List.mem_union_iff.mp h with hD | hpairl
-                · rcases List.mem_union_iff.mp (D_fv_sub hD) with hbd | hdd
-                  · exact List.mem_union_iff.mpr (.inl (hvars_D_sub hbd))
-                  · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
-                      (List.mem_append_left _ hdd)))
-                · exact absurd (encodeTerm_state.fv_toPairl_map_var_subset xs w hpairl) hw_xs
-              · exact List.mem_union_iff.mpr (.inr (List.mem_append_right _ h))
-            refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, ΔD ++ ΔP ++ Δca,
-              by rw [ca_decl_eq]; simp only [List.append_assoc], ?_, ?_⟩
-            · exact used_sub_St₅
-            · exact St₀_sub_St₅
-            · exact ca_keys_sub
-            · intro v hv
-              rw [B.fv, List.mem_append] at hv
-              rcases hv with hv | hv
-              · exact ca_used_sub (St₃_sub_St₄_used (St₁_used_sub_St₃ (D_cov v hv)))
-              · exact ca_used_sub (St₃_sub_St₄_used (P_cov v (List.mem_removeAll_iff.mp hv).1))
-            · intro v hv
-              simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, noneCast,
-                List.not_mem_nil, or_false] at hv
-              obtain ⟨hv_body, hv_not_xs⟩ := hv
-              rcases hv_body with hv_subst | hv_dxs
-              · rcases SMT_mem_fv_substList hv_subst with hvP | ⟨t, ht, hvt⟩
-                · rcases List.mem_union_iff.mp (P_state_fv_sub hvP) with hk | hb
-                  · exact List.mem_union_iff.mpr (.inl (St₃_keys_sub_St₅ hk))
-                  · exact List.mem_union_iff.mpr (.inr (hvars_P_sub hb))
-                · rw [List.concat_eq_append] at ht
-                  rcases List.mem_append.mp ht with ht_xs | ht_eq
-                  · rw [List.mem_map] at ht_xs
-                    obtain ⟨x, hx, rfl⟩ := ht_xs
-                    simp only [SMT.fv, List.mem_singleton] at hvt
-                    exact absurd (hvt ▸ hx) hv_not_xs
-                  · rw [List.mem_singleton] at ht_eq
-                    subst ht_eq
-                    exact ca_fv_sub₀ hvt
-              · exact ca_fv_sub₀ hv_dxs
-            · intro v v_used v_notMem_St₀ v_notMem_vars
-              obtain ⟨v_notMem_vars_D, v_notMem_vars_P, hv_not_vs⟩ :=
-                B.Term.notMem_vars_collect.mp v_notMem_vars
-              have v_notMem_St₁ := D_preserves v v_used v_notMem_St₀ v_notMem_vars_D
-              have v_notMem_St₂ : v ∉ St₂.types := by
-                rw [St₂_types]
-                intro h
-                refine v_notMem_St₁ (AList.mem_of_mem_foldl_insert' h ?_)
-                intro hmem
-                rw [List.mem_map] at hmem
-                obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmem
-                exact hv_not_vs (List.of_mem_zip hab).1
-              have v_St₂_used : v ∈ St₂.env.usedVars := by
-                rw [St₂_used_eq]; exact D_used_sub v_used
-              have v_notMem_St₃ : v ∉ St₃.types :=
-                P_preserves v v_St₂_used v_notMem_St₂ v_notMem_vars_P
-              have v_notMem_St₄ : v ∉ St₄.types := by
-                rw [St₄_types]
-                intro h
-                refine v_notMem_St₃ (AList.mem_of_mem_foldl_insert' h ?_)
-                intro hmem
-                rw [List.mem_map] at hmem
-                obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmem
-                exact xs_not_used_orig a (List.of_mem_zip hab).1 v_used
-              exact ca_preserves v (St₃_sub_St₄_used (used_sub_St₃ v_used)) v_notMem_St₄
-            · intro b hb
-              rw [specBodies_append, List.mem_append] at hb
-              rcases hb with hb | hb
-              · rw [specBodies_append, List.mem_append] at hb
-                rcases hb with hb | hb
-                · exact specBody_mono hvars_D_sub
-                    (by rw [declVars_append, declVars_append]
-                        exact List.Subset.trans (List.subset_append_left ..)
-                          (List.subset_append_left ..))
-                    (D_specb b hb)
-                · exact specBody_mono hvars_P_sub
-                    (by rw [declVars_append, declVars_append]
-                        exact List.Subset.trans (List.subset_append_right ..)
-                          (List.subset_append_left ..))
-                    (P_specb b hb)
-              · intro w hw
-                have hw' := ca_specb b hb hw
-                rw [declVars_append, declVars_append]
-                rcases List.mem_union_iff.mp hw' with hD | hdca
-                · rcases List.mem_union_iff.mp (D_fv_sub hD) with hbd | hdd
-                  · exact List.mem_union_iff.mpr (.inl (hvars_D_sub hbd))
-                  · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
-                      (List.mem_append_left _ hdd)))
-                · exact List.mem_union_iff.mpr (.inr (List.mem_append_right _ hdca))
-            · intro v hv
-              simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, noneCast,
-                List.not_mem_nil, or_false] at hv
-              obtain ⟨hv_body, hv_not_xs⟩ := hv
-              rcases hv_body with hv_subst | hv_dxs
-              · rcases SMT_mem_fv_substList hv_subst with hvP | ⟨t, ht, hvt⟩
-                · by_cases hvs : v ∈ vs
-                  · have hex : ∃ t ∈ (List.map SMT.Term.var xs).concat Dxs, v ∈ SMT.fv t := by
-                      by_contra hcon
-                      push_neg at hcon
-                      refine SMT_not_mem_fv_substList_of_mem_vars ?_ hvs hcon hv_subst
-                      have hvs_pos : 0 < vs.length := List.length_pos_iff.mpr vs_nemp
-                      rw [List.concat_eq_append, List.length_append, List.length_map,
-                        List.length_singleton, xs_len, αs'_len_eq]
-                      omega
-                    obtain ⟨t, ht, hvt⟩ := hex
-                    rw [List.concat_eq_append] at ht
-                    rcases List.mem_append.mp ht with ht_xs | ht_dxs
-                    · rw [List.mem_map] at ht_xs
-                      obtain ⟨x, hx, rfl⟩ := ht_xs
-                      simp only [SMT.fv, List.mem_singleton] at hvt
-                      exact absurd (hvt ▸ hx) hv_not_xs
-                    · rw [List.mem_singleton] at ht_dxs
-                      subst ht_dxs
-                      exact Dxs_fv v hvt hv_not_xs
-                  · rcases List.mem_union_iff.mp (P_fv_sub hvP) with hfv | hdvP
-                    · exact List.mem_union_iff.mpr (.inl (hvars_P_sub hfv))
-                    · rw [declVars_append, declVars_append]
-                      exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
-                        (List.mem_append_right _ hdvP)))
-                · rw [List.concat_eq_append] at ht
+          mspec Std.Do.Spec.pure
+          mpure_intro
+          set Dxs : SMT.Term :=
+            .the (.app D_enc ((List.map SMT.Term.var xs).toPairl)) with Dxs_def
+          have St₀_sub_St₄ : St₀.types ⊆ St₄.types :=
+            AList.subset_trans D_Λ_sub St₁_sub_St₄
+          have St₁_used_sub_St₃ : St₁.env.usedVars ⊆ St₃.env.usedVars := by
+            rw [← St₂_used_eq]
+            exact P_used_sub
+          have used_sub_St₃ : used ⊆ St₃.env.usedVars :=
+            fun v hv => St₁_used_sub_St₃ (D_used_sub hv)
+          have used_sub_St₄ : used ⊆ St₄.env.usedVars :=
+            fun v hv => St₃_sub_St₄_used (used_sub_St₃ hv)
+          have xs_not_used_orig : ∀ x ∈ xs, x ∉ used := by
+            intro x hx hx_used
+            exact xs_not_used x hx (used_sub_St₃ hx_used)
+          have Dxs_state_fv :
+              SMT.fv Dxs ⊆
+                AList.keys St₄.types ∪ B.Term.vars (B.Term.collect vs D P) := by
+            intro w hw
+            rw [Dxs_def] at hw
+            simp only [SMT.fv, List.mem_append] at hw
+            rcases hw with hD | hpairl
+            · rcases List.mem_union_iff.mp (D_state_fv_sub hD) with hk | hb
+              · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mp
+                  (AList.mem_of_subset St₁_sub_St₄ (AList.mem_keys.mpr hk))))
+              · exact List.mem_union_iff.mpr (.inr (hvars_D_sub hb))
+            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mp
+                (xs_sub_St₄_types w
+                  (encodeTerm_state.fv_toPairl_map_var_subset xs w hpairl))))
+          have Dxs_fv : ∀ w ∈ SMT.fv Dxs, w ∉ xs →
+              w ∈ B.Term.vars (B.Term.collect vs D P) ∪
+                declVars (ΔD ++ ΔP) := by
+            intro w hw hw_xs
+            rw [Dxs_def] at hw
+            simp only [SMT.fv, List.mem_append] at hw
+            rcases hw with hD | hpairl
+            · rcases List.mem_union_iff.mp (D_fv_sub hD) with hbd | hdd
+              · exact List.mem_union_iff.mpr (.inl (hvars_D_sub hbd))
+              · rw [declVars_append]
+                exact List.mem_union_iff.mpr (.inr (List.mem_append_left _ hdd))
+            · exact absurd
+                (encodeTerm_state.fv_toPairl_map_var_subset xs w hpairl) hw_xs
+          refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, ΔD ++ ΔP,
+            by simpa [List.append_assoc] using St₄_decl, ?_, ?_⟩
+          · exact used_sub_St₄
+          · exact St₀_sub_St₄
+          · exact St₄_keys_sub
+          · intro v hv
+            rw [B.fv, List.mem_append] at hv
+            rcases hv with hv | hv
+            · exact St₃_sub_St₄_used (St₁_used_sub_St₃ (D_cov v hv))
+            · exact St₃_sub_St₄_used
+                (P_cov v (List.mem_removeAll_iff.mp hv).1)
+          · intro v hv
+            simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, noneCast,
+              List.not_mem_nil, or_false] at hv
+            obtain ⟨hv_body, hv_not_xs⟩ := hv
+            rcases hv_body with hv_subst | hv_dxs
+            · rcases SMT_mem_fv_substList hv_subst with hvP | ⟨t, ht, hvt⟩
+              · rcases List.mem_union_iff.mp (P_state_fv_sub hvP) with hk | hb
+                · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mp
+                    (AList.mem_of_subset St₃_sub_St₄_types
+                      (AList.mem_keys.mpr hk))))
+                · exact List.mem_union_iff.mpr (.inr (hvars_P_sub hb))
+              · rw [List.concat_eq_append] at ht
+                rcases List.mem_append.mp ht with ht_xs | ht_eq
+                · rw [List.mem_map] at ht_xs
+                  obtain ⟨x, hx, rfl⟩ := ht_xs
+                  simp only [SMT.fv, List.mem_singleton] at hvt
+                  exact absurd (hvt ▸ hx) hv_not_xs
+                · rw [List.mem_singleton] at ht_eq
+                  subst ht_eq
+                  exact Dxs_state_fv hvt
+            · exact Dxs_state_fv hv_dxs
+          · intro v v_used v_notMem_St₀ v_notMem_vars
+            obtain ⟨v_notMem_vars_D, v_notMem_vars_P, hv_not_vs⟩ :=
+              B.Term.notMem_vars_collect.mp v_notMem_vars
+            have v_notMem_St₁ :=
+              D_preserves v v_used v_notMem_St₀ v_notMem_vars_D
+            have v_notMem_St₂ : v ∉ St₂.types := by
+              rw [St₂_types]
+              intro h
+              refine v_notMem_St₁ (AList.mem_of_mem_foldl_insert' h ?_)
+              intro hmem
+              rw [List.mem_map] at hmem
+              obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmem
+              exact hv_not_vs (List.of_mem_zip hab).1
+            have v_St₂_used : v ∈ St₂.env.usedVars := by
+              rw [St₂_used_eq]
+              exact D_used_sub v_used
+            have v_notMem_St₃ : v ∉ St₃.types :=
+              P_preserves v v_St₂_used v_notMem_St₂ v_notMem_vars_P
+            rw [St₄_types]
+            intro h
+            refine v_notMem_St₃ (AList.mem_of_mem_foldl_insert' h ?_)
+            intro hmem
+            rw [List.mem_map] at hmem
+            obtain ⟨⟨a, b⟩, hab, rfl⟩ := hmem
+            exact xs_not_used_orig a (List.of_mem_zip hab).1 v_used
+          · intro b hb
+            rw [specBodies_append, List.mem_append] at hb
+            rcases hb with hb | hb
+            · exact specBody_mono hvars_D_sub
+                (declVars_append .. ▸ List.subset_append_left ..) (D_specb b hb)
+            · exact specBody_mono hvars_P_sub
+                (declVars_append .. ▸ List.subset_append_right ..) (P_specb b hb)
+          · intro v hv
+            simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, noneCast,
+              List.not_mem_nil, or_false] at hv
+            obtain ⟨hv_body, hv_not_xs⟩ := hv
+            rcases hv_body with hv_subst | hv_dxs
+            · rcases SMT_mem_fv_substList hv_subst with hvP | ⟨t, ht, hvt⟩
+              · by_cases hvs : v ∈ vs
+                · have hex :
+                      ∃ t ∈ (List.map SMT.Term.var xs).concat Dxs,
+                        v ∈ SMT.fv t := by
+                    by_contra hcon
+                    push_neg at hcon
+                    refine SMT_not_mem_fv_substList_of_mem_vars ?_ hvs hcon hv_subst
+                    have hvs_pos : 0 < vs.length :=
+                      List.length_pos_iff.mpr vs_nemp
+                    rw [List.concat_eq_append, List.length_append, List.length_map,
+                      List.length_singleton, xs_len, αs'_len_eq]
+                    omega
+                  obtain ⟨t, ht, hvt⟩ := hex
+                  rw [List.concat_eq_append] at ht
                   rcases List.mem_append.mp ht with ht_xs | ht_dxs
                   · rw [List.mem_map] at ht_xs
                     obtain ⟨x, hx, rfl⟩ := ht_xs
@@ -8173,7 +8138,21 @@ theorem encodeTerm_combined
                   · rw [List.mem_singleton] at ht_dxs
                     subst ht_dxs
                     exact Dxs_fv v hvt hv_not_xs
-              · exact Dxs_fv v hv_dxs hv_not_xs
+                · rcases List.mem_union_iff.mp (P_fv_sub hvP) with hfv | hdvP
+                  · exact List.mem_union_iff.mpr (.inl (hvars_P_sub hfv))
+                  · rw [declVars_append]
+                    exact List.mem_union_iff.mpr
+                      (.inr (List.mem_append_right _ hdvP))
+              · rw [List.concat_eq_append] at ht
+                rcases List.mem_append.mp ht with ht_xs | ht_dxs
+                · rw [List.mem_map] at ht_xs
+                  obtain ⟨x, hx, rfl⟩ := ht_xs
+                  simp only [SMT.fv, List.mem_singleton] at hvt
+                  exact absurd (hvt ▸ hx) hv_not_xs
+                · rw [List.mem_singleton] at ht_dxs
+                  subst ht_dxs
+                  exact Dxs_fv v hvt hv_not_xs
+            · exact Dxs_fv v hv_dxs hv_not_xs
         · exact wp_bind_throw _ _ _ _
       · -- arity mismatch: throw
         mvcgen
@@ -8257,6 +8236,7 @@ theorem encodeTerm_combined
       have St₂_keys_sub : AList.keys St₂.types ⊆ St₂.env.usedVars := by
         rw [St₂_types, St₂_used]
         exact encodeTerm_state.keys_foldl_insert_subset_foldl_cons _ D_keys_sub
+      mspec Std.Do.Spec.get_StateT
       mspec P_ih (E := E') (Λ := St₂.types) (n := St₂.env.freshvarsc)
         (used := St₂.env.usedVars) (α := .bool) (decl := decl ++ ΔD) typP vars_used_P_St₂
         Λ_inv_P hP_bv_nodup
@@ -8271,6 +8251,12 @@ theorem encodeTerm_combined
       · -- `encodeTerm P` returned a boolean
         rename_i heqP
         obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. ▸ heqP
+        mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+        mrename_i pre
+        mintro ∀St₃'
+        mpure pre
+        obtain ⟨St₃'_eq, _P_decl_len⟩ := pre
+        subst St₃'
         mspec (Std.Do.Triple.and (SMT.freshVar τ')
           (SMT.freshVar_spec (Γ := St₃.types) (τ := τ') (n := St₃.env.freshvarsc)
             (used := St₃.env.usedVars))
@@ -9360,6 +9346,7 @@ theorem encodeTerm_combined
       have St₂_keys_sub : AList.keys St₂.types ⊆ St₂.env.usedVars := by
         rw [St₂_types, St₂_used]
         exact encodeTerm_state.keys_foldl_insert_subset_foldl_cons _ D_keys_sub
+      mspec Std.Do.Spec.get_StateT
       mspec P_ih (E := E') (Λ := St₂.types) (n := St₂.env.freshvarsc)
         (used := St₂.env.usedVars) (α := β) (decl := decl ++ ΔD) typP vars_used_P_St₂
         Λ_inv_P hP_bv_nodup
@@ -9370,6 +9357,12 @@ theorem encodeTerm_combined
       mpure pre
       obtain ⟨⟨P_used_sub, P_Λ_sub, P_keys_sub, P_cov, P_state_fv_sub, P_preserves⟩,
         ΔP, P_decl_eq, P_specb, P_fv_sub⟩ := pre
+      mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+      mrename_i pre
+      mintro ∀St₃'
+      mpure pre
+      obtain ⟨St₃'_eq, _P_decl_len⟩ := pre
+      subst St₃'
       mspec (Std.Do.Triple.and (SMT.freshVar (.pair τ' σP))
         (SMT.freshVar_spec (Γ := St₃.types) (τ := .pair τ' σP) (n := St₃.env.freshvarsc)
           (used := St₃.env.usedVars))

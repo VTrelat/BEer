@@ -3535,6 +3535,7 @@ theorem encodeTerm_bv_used
         mintro ∀St₂
         mpure pre2
         obtain ⟨⟨_, _, St₂_used⟩, St₂_decl⟩ := pre2
+        mspec Std.Do.Spec.get_StateT
         mspec P_ih (E := E) (used := St₂.env.usedVars) (decl := St₂.env.declarations)
         rename_i out_P
         mrename_i preP
@@ -3544,6 +3545,12 @@ theorem encodeTerm_bv_used
         split
         · -- P : .bool
           rename_i heqP
+          mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+          mrename_i preU
+          mintro ∀St₃'
+          mpure preU
+          obtain ⟨St₃'_eq, _P_decl_len⟩ := preU
+          subst St₃'
           mspec (Std.Do.Triple.and _
             (SMT.freshVarList_spec αs')
             (SMT.freshVarList_decls αs' (decl := St₃.env.declarations)))
@@ -3562,42 +3569,47 @@ theorem encodeTerm_bv_used
               rw [bv_toPairl_nil (fun t ht => by
                 rw [List.mem_map] at ht; obtain ⟨z, _, rfl⟩ := ht; simp [SMT.bv])] at hv
               exact absurd hv List.not_mem_nil
-          mspec (Std.Do.Triple.and _
-            (castApp_bv D_enc ((xs.map SMT.Term.var).toPairl) (α'.fun β'.option)
-              αs'.toProdl hbvD_lifted hbvXs_lifted)
-            (castApp_decls_bv D_enc ((xs.map SMT.Term.var).toPairl) (α'.fun β'.option)
-              αs'.toProdl (decl := St₄.env.declarations) hbvD_lifted hbvXs_lifted))
-          mrename_i pre5
-          mintro ∀St₅
-          mpure pre5
-          obtain ⟨⟨Dxs_bv, Dxs_used_sub⟩, Δca, hcadecl, hcaok, _⟩ := pre5
           mspec Std.Do.Spec.pure
           mpure_intro
-          have lift3 : ∀ {w}, w ∈ St₃.env.usedVars → w ∈ St₅.env.usedVars := fun {w} h =>
-            Dxs_used_sub (by rw [St₄_used]; exact List.mem_append_right _ h)
-          have liftXs : ∀ {w}, w ∈ xs → w ∈ St₅.env.usedVars := fun {w} h =>
-            Dxs_used_sub (by rw [St₄_used]; exact List.mem_append_left _ (List.mem_reverse.mpr h))
-          refine ⟨?_, fun v hv => lift3 (St₁_to_St₃ (D_used_sub hv)), ΔD ++ ΔP ++ Δca, ?_, ?_⟩
+          set Dxs : SMT.Term :=
+            .the (.app D_enc ((xs.map SMT.Term.var).toPairl)) with Dxs_def
+          have Dxs_bv : ∀ v ∈ SMT.bv Dxs, v ∈ St₄.env.usedVars := by
+            intro v hv
+            rw [Dxs_def] at hv
+            simp only [noneCast, SMT.bv, List.append_nil, List.mem_append] at hv
+            rcases hv with hD | hxs
+            · exact hbvD_lifted v hD
+            · exact hbvXs_lifted v hxs
+          have lift3 : ∀ {w}, w ∈ St₃.env.usedVars → w ∈ St₄.env.usedVars :=
+            fun {w} h => by
+              rw [St₄_used]
+              exact List.mem_append_right _ h
+          have liftXs : ∀ {w}, w ∈ xs → w ∈ St₄.env.usedVars :=
+            fun {w} h => by
+              rw [St₄_used]
+              exact List.mem_append_left _ (List.mem_reverse.mpr h)
+          refine ⟨?_, fun v hv => lift3 (St₁_to_St₃ (D_used_sub hv)),
+            ΔD ++ ΔP, ?_, ?_⟩
           · intro v hv
-            simp only [noneCast, SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-              List.not_mem_nil, false_or, or_false] at hv
+            simp only [noneCast, SMT.bv, List.nil_append, List.append_nil,
+              List.mem_append, List.not_mem_nil, false_or, or_false] at hv
             rcases hv with hvxs | hvP | hvDxs
             · exact liftXs hvxs
-            · refine bv_substList_subset_of (U := St₅.env.usedVars) ?_ ?_ v hvP
+            · refine bv_substList_subset_of (U := St₄.env.usedVars) ?_ ?_ v hvP
               · exact fun w hw => lift3 (P_bv_used w hw)
               · intro t ht w hw
-                simp only [List.concat_eq_append, List.mem_append, List.mem_singleton] at ht
+                simp only [List.concat_eq_append, List.mem_append,
+                  List.mem_singleton] at ht
                 rcases ht with hxs | rfl
                 · rw [List.mem_map] at hxs
                   obtain ⟨z, _, rfl⟩ := hxs
                   simp only [SMT.bv, List.not_mem_nil] at hw
                 · exact Dxs_bv w hw
             · exact Dxs_bv v hvDxs
-          · -- declarations: St₅ = St₄ ++ Δca = St₃ ++ Δca = (St₂ ++ ΔP) ++ Δca = decl ++ ΔD ++ ΔP ++ Δca
-            rw [hcadecl, St₄_decl, hPdecl, St₂_decl, hDdecl]; simp only [List.append_assoc]
-          · -- DeltaBvOk (ΔD ++ ΔP ++ Δca) St₅.usedVars
-            refine DeltaBvOk.append (DeltaBvOk.append (hDok.mono (fun w hw => lift3 (St₁_to_St₃ hw)))
-              (hPok.mono (fun w hw => lift3 hw))) hcaok
+          · rw [St₄_decl, hPdecl, St₂_decl, hDdecl, List.append_assoc]
+          · exact DeltaBvOk.append
+              (hDok.mono (fun w hw => lift3 (St₁_to_St₃ hw)))
+              (hPok.mono (fun w hw => lift3 hw))
         · first
           | exact wp_bind_throw _ _ _ _
           | (mvcgen)
@@ -3613,6 +3625,7 @@ theorem encodeTerm_bv_used
       mintro ∀St₂
       mpure pre2
       obtain ⟨⟨_, _, St₂_used⟩, St₂_decl⟩ := pre2
+      mspec Std.Do.Spec.get_StateT
       mspec P_ih (E := E) (used := St₂.env.usedVars) (decl := St₂.env.declarations)
       rename_i out_P
       mrename_i preP
@@ -3621,6 +3634,12 @@ theorem encodeTerm_bv_used
       obtain ⟨P_bv_used, P_used_sub, ΔP, hPdecl, hPok⟩ := preP
       split
       · rename_i heqP
+        mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+        mrename_i preU
+        mintro ∀St₃'
+        mpure preU
+        obtain ⟨St₃'_eq, _P_decl_len⟩ := preU
+        subst St₃'
         mspec (Std.Do.Triple.and _ SMT.freshVar_spec (SMT.freshVar_decls (decl := St₃.env.declarations)))
         case post.success z =>
           mrename_i prez
@@ -3680,6 +3699,7 @@ theorem encodeTerm_bv_used
       mintro ∀St₂
       mpure pre2
       obtain ⟨⟨_, _, St₂_used⟩, St₂_decl⟩ := pre2
+      mspec Std.Do.Spec.get_StateT
       mspec P_ih (E := E) (used := St₂.env.usedVars) (decl := St₂.env.declarations)
       rename_i out_P
       obtain ⟨P_enc, σP⟩ := out_P
@@ -3687,6 +3707,12 @@ theorem encodeTerm_bv_used
       mintro ∀St₃
       mpure preP
       obtain ⟨P_bv_used, P_used_sub, ΔP, hPdecl, hPok⟩ := preP
+      mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+      mrename_i preU
+      mintro ∀St₃'
+      mpure preU
+      obtain ⟨St₃'_eq, _P_decl_len⟩ := preU
+      subst St₃'
       mspec (Std.Do.Triple.and _ SMT.freshVar_spec (SMT.freshVar_decls (decl := St₃.env.declarations)))
       case post.success xy =>
         mrename_i prexy
@@ -7357,6 +7383,7 @@ theorem encodeTerm_bv_notMem_used
         mintro ∀St₂
         mpure pre2
         obtain ⟨⟨_, _, St₂_used⟩, St₂_decl⟩ := pre2
+        mspec Std.Do.Spec.get_StateT
         mspec P_ih (E := E) (used := St₂.env.usedVars) (decl := St₂.env.declarations)
         rename_i out_P
         mrename_i preP
@@ -7365,6 +7392,12 @@ theorem encodeTerm_bv_notMem_used
         obtain ⟨P_bv, P_used_sub, ΔP, hPdecl, hPok⟩ := preP
         split
         · rename_i heqP
+          mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+          mrename_i preU
+          mintro ∀St₃'
+          mpure preU
+          obtain ⟨St₃'_eq, _P_decl_len⟩ := preU
+          subst St₃'
           mspec (Std.Do.Triple.and _
             (SMT.freshVarList_spec αs')
             (SMT.freshVarList_decls αs' (decl := St₃.env.declarations)))
@@ -7387,39 +7420,43 @@ theorem encodeTerm_bv_notMem_used
               rw [bv_toPairl_nil (fun t ht => by
                 rw [List.mem_map] at ht; obtain ⟨z, _, rfl⟩ := ht; simp [SMT.bv])] at hv
               exact absurd hv List.not_mem_nil
-          mspec (Std.Do.Triple.and _
-            (castApp_bv_notMem D_enc ((xs.map SMT.Term.var).toPairl) (α'.fun β'.option)
-              αs'.toProdl used_to_St₄ hbvD_lifted hbvXs_lifted)
-            (castApp_decls_bv_notMem D_enc ((xs.map SMT.Term.var).toPairl) (α'.fun β'.option)
-              αs'.toProdl (decl := St₄.env.declarations) used_to_St₄ hbvD_lifted hbvXs_lifted))
-          mrename_i pre5
-          mintro ∀St₅
-          mpure pre5
-          obtain ⟨⟨Dxs_bv, Dxs_used_sub⟩, Δca, hcadecl, hcaok, _⟩ := pre5
           mspec Std.Do.Spec.pure
           mpure_intro
-          have lift3 : ∀ {w}, w ∈ St₃.env.usedVars → w ∈ St₅.env.usedVars := fun {w} h =>
-            Dxs_used_sub (by rw [St₄_used]; exact List.mem_append_right _ h)
-          have liftXs : ∀ {w}, w ∈ xs → w ∈ St₅.env.usedVars := fun {w} h =>
-            Dxs_used_sub (by rw [St₄_used]; exact List.mem_append_left _ (List.mem_reverse.mpr h))
-          refine ⟨?_, fun v hv => lift3 (St₁_to_St₃ (D_used_sub hv)), ΔD ++ ΔP ++ Δca, ?_, ?_⟩
+          set Dxs : SMT.Term :=
+            .the (.app D_enc ((xs.map SMT.Term.var).toPairl)) with Dxs_def
+          have Dxs_bv :
+              ∀ v ∈ SMT.bv Dxs, v ∉ St₀.env.usedVars := by
+            intro v hv
+            rw [Dxs_def] at hv
+            simp only [noneCast, SMT.bv, List.append_nil, List.mem_append] at hv
+            rcases hv with hD | hxs
+            · exact hbvD_lifted v hD
+            · exact hbvXs_lifted v hxs
+          have lift3 : ∀ {w}, w ∈ St₃.env.usedVars → w ∈ St₄.env.usedVars :=
+            fun {w} h => by
+              rw [St₄_used]
+              exact List.mem_append_right _ h
+          refine ⟨?_, fun v hv => lift3 (St₁_to_St₃ (D_used_sub hv)),
+            ΔD ++ ΔP, ?_, ?_⟩
           · intro v hv
-            simp only [noneCast, SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-              List.not_mem_nil, false_or, or_false] at hv
+            simp only [noneCast, SMT.bv, List.nil_append, List.append_nil,
+              List.mem_append, List.not_mem_nil, false_or, or_false] at hv
             rcases hv with hvxs | hvP | hvDxs
-            · intro h; exact xs_notMem v hvxs (used_to_St₃ h)
+            · intro h
+              exact xs_notMem v hvxs (used_to_St₃ h)
             · refine bv_substList_notMem_of (a := St₀.env.usedVars) ?_ ?_ v hvP
               · exact fun w hw h => P_bv w hw (used_to_St₂ h)
               · intro t ht w hw
-                simp only [List.concat_eq_append, List.mem_append, List.mem_singleton] at ht
+                simp only [List.concat_eq_append, List.mem_append,
+                  List.mem_singleton] at ht
                 rcases ht with hxs | rfl
                 · rw [List.mem_map] at hxs
                   obtain ⟨z, _, rfl⟩ := hxs
                   simp only [SMT.bv, List.not_mem_nil] at hw
                 · exact Dxs_bv w hw
             · exact Dxs_bv v hvDxs
-          · rw [hcadecl, St₄_decl, hPdecl, St₂_decl, hDdecl]; simp only [List.append_assoc]
-          · exact DeltaBvNotMem.append (DeltaBvNotMem.append hDok (hPok.mono used_to_St₂)) hcaok
+          · rw [St₄_decl, hPdecl, St₂_decl, hDdecl, List.append_assoc]
+          · exact DeltaBvNotMem.append hDok (hPok.mono used_to_St₂)
         · first
           | exact wp_bind_throw _ _ _ _
           | (mvcgen)
@@ -7435,6 +7472,7 @@ theorem encodeTerm_bv_notMem_used
       mintro ∀St₂
       mpure pre2
       obtain ⟨⟨_, _, St₂_used⟩, St₂_decl⟩ := pre2
+      mspec Std.Do.Spec.get_StateT
       mspec P_ih (E := E) (used := St₂.env.usedVars) (decl := St₂.env.declarations)
       rename_i out_P
       mrename_i preP
@@ -7443,6 +7481,12 @@ theorem encodeTerm_bv_notMem_used
       obtain ⟨P_bv, P_used_sub, ΔP, hPdecl, hPok⟩ := preP
       split
       · rename_i heqP
+        mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+        mrename_i preU
+        mintro ∀St₃'
+        mpure preU
+        obtain ⟨St₃'_eq, _P_decl_len⟩ := preU
+        subst St₃'
         mspec (Std.Do.Triple.and _ SMT.freshVar_spec (SMT.freshVar_decls (decl := St₃.env.declarations)))
         case post.success z =>
           mrename_i prez
@@ -7503,6 +7547,7 @@ theorem encodeTerm_bv_notMem_used
       mintro ∀St₂
       mpure pre2
       obtain ⟨⟨_, _, St₂_used⟩, St₂_decl⟩ := pre2
+      mspec Std.Do.Spec.get_StateT
       mspec P_ih (E := E) (used := St₂.env.usedVars) (decl := St₂.env.declarations)
       rename_i out_P
       obtain ⟨P_enc, σP⟩ := out_P
@@ -7510,6 +7555,12 @@ theorem encodeTerm_bv_notMem_used
       mintro ∀St₃
       mpure preP
       obtain ⟨P_bv, P_used_sub, ΔP, hPdecl, hPok⟩ := preP
+      mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+      mrename_i preU
+      mintro ∀St₃'
+      mpure preU
+      obtain ⟨St₃'_eq, _P_decl_len⟩ := preU
+      subst St₃'
       mspec (Std.Do.Triple.and _ SMT.freshVar_spec (SMT.freshVar_decls (decl := St₃.env.declarations)))
       case post.success xy =>
         mrename_i prexy

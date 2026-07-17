@@ -493,6 +493,7 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
         · apply foldl_insert_mem
           exact (AList.mem_insert _).mpr (Or.inl rfl)
         · exact ih τs'' _ v (Nat.le_of_succ_le_succ hlen) hv'
+  mspec Std.Do.Spec.get_StateT
   mspec (Std.Do.Triple.and _
    (P_ih (E := E') (Λ := St₂.types) (α := .bool) typP
     («Δ» := Δ_ext) Δ_fv_P
@@ -587,6 +588,12 @@ theorem encodeTerm_spec.collect_case.{u} (fv_sub_typings : B.FvSubTypings) (vs :
     fv_sub_typings typP typ_P_enc v
       (SMT.RenamingContext.ExtendsOnSourceFV.dom_sub_B_fv Δ_P_src_ext v hv)
   simp only [BType.toSMTType] at *
+  mspec (SMT.ensureDeclarationsUnchanged_spec (St := St₃))
+  mrename_i preU
+  mintro ∀St₃'
+  mpure preU
+  obtain ⟨St₃'_eq, _P_decl_len⟩ := preU
+  subst St₃'
   mspec freshVar_spec
   rename_i z
   mrename_i pre

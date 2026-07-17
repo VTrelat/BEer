@@ -852,6 +852,26 @@ theorem SMT.declareConst_addSpec_spec
     (as := St.env.asserts) (n := St.env.freshvarsc)
     (Γ := St.types) (used := St.env.usedVars)
 
+/-- A successful declaration-stability check leaves the encoder state unchanged
+and records the checked declaration length. -/
+@[spec]
+theorem SMT.ensureDeclarationsUnchanged_spec
+    {before : ℕ} {location : String} {St : EncoderState} :
+  ⦃ fun S => ⌜S = St⌝ ⦄
+  SMT.ensureDeclarationsUnchanged before location
+  ⦃ ⇓? () S =>
+      ⌜S = St ∧ St.env.declarations.length = before⌝ ⦄ := by
+  unfold SMT.ensureDeclarationsUnchanged
+  mstart
+  mintro pre ∀S
+  mpure pre
+  subst S
+  mspec Std.Do.Spec.get_StateT
+  split
+  · rename_i hlen
+    mspec Std.Do.Spec.pure
+  · mspec Std.Do.Spec.throw_StateT
+
 @[spec]
 theorem SMT.Term.getType_spec {Γ : TypeContext} {t : Term} {α : SMTType} (typ_t : Γ ⊢ˢ t : α):
   ⦃ λ ⟨_, Γ'⟩ ↦ ⌜Γ' = Γ⌝ ⦄

@@ -241,16 +241,22 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         throw s!"encodeTerm:collect: Expected {vs.length - 1} types, got {αs.length}"
       for ⟨v, ξ⟩ in vs.zip (αs.concat β) do
         modify λ e => { e with types := e.types.insert v ξ }
+      let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
+      ensureDeclarationsUnchanged decls_snap.length "encodeTerm:collect"
       let xs ← freshVarList αs
-      let ⟨Dxs, _⟩ ← castApp (D', α.fun β.option) (xs.map .var |>.toPairl, αs.toProdl)
+      -- The successful arity check above gives `αs.toProdl = α`; applying the
+      -- option-function directly avoids a redundant global cast helper.
+      let Dxs := .the (.app D' (xs.map .var |>.toPairl))
       let P' := substList vs ((xs.map .var).concat Dxs) P'
       return (.lambda xs αs (.ite P' (.some Dxs) (none$ β)), αs.toProdl.fun β.option)
     | .fun τ .bool => do
       -- `D` is a set
       let τs := τ.fromProdl <| vs.length - 1
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
+      let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
+      ensureDeclarationsUnchanged decls_snap.length "encodeTerm:collect"
       let z ← freshVar τ
       let P' := substList vs (toDestPair vs (.var z)) P'
       SMT.eraseFromContext z
@@ -270,7 +276,9 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       -- `D` is a set of tuples with arity `vs.length`
       let τs := τ.fromProdl <| vs.length - 1
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
+      let decls_snap := (← get).env.declarations
       let ⟨P', γ⟩ ← encodeTerm P E
+      ensureDeclarationsUnchanged decls_snap.length "encodeTerm:lambda"
       -- Single bound variable `xy : τ × γ` representing the input-output pair
       let xy ← freshVar (.pair τ γ)
       -- Destructure `xy.fst` (type `τ`) into the individual vs components
