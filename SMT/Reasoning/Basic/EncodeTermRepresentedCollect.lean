@@ -1009,6 +1009,74 @@ theorem represented_option_collect_components.{u}
   · simpa [x_fin, ss, Di, proof_irrel_heq] using hrel
 
 open Classical in
+/-- Package the represented components of the option-valued collection tuple
+as the bound valuation relation required to run the encoded predicate. -/
+theorem represented_option_collect_bound_context.{u}
+    {vs : List B.𝒱} (prefix_nemp : vs.dropLast ≠ [])
+    (vs_nodup : vs.Nodup)
+    {alpha beta : BType} {a b : ZFSet.{u}}
+    (ha : a ∈ ⟦alpha⟧ᶻ) (hb : b ∈ ⟦beta⟧ᶻ)
+    (hvs : 2 ≤ vs.length)
+    (hprod_arity : (alpha ×ᴮ beta).hasArity vs.length)
+    {z : SMT.𝒱} {Theta : SMT.RenamingContext.Context.{u}}
+    {Wa : SMT.Dom.{u}}
+    (hcov_z : SMT.RenamingContext.CoversFV Theta (.var z))
+    (hden_z : ⟦(SMT.Term.var z).abstract Theta hcov_z⟧ˢ = some Wa)
+    (hWa_type : Wa.snd.fst = alpha.toSMTType)
+    (hWa_mem : Wa.fst ∈ ⟦alpha.toSMTType⟧ᶻ)
+    (hWa_retract : retract alpha Wa.fst = a)
+    {Dapp : SMT.Term}
+    (hpayload : ∃ hcov_payload : SMT.RenamingContext.CoversFV Theta
+        (SMT.Term.the Dapp),
+      ∃ Dpayload : SMT.Dom.{u},
+        ⟦(SMT.Term.the Dapp).abstract Theta hcov_payload⟧ˢ = some Dpayload ∧
+        RDomCastSupported (⟨b, beta, hb⟩ : B.Dom) Dpayload)
+    {Xi : B.RenamingContext.Context.{u}} {P : B.Term}
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs →
+      match Xi v, Theta v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False) :
+    let terms : List SMT.Term :=
+      toDestPair vs.dropLast (.var z) [(.the Dapp)] (.var z)
+    let x_fin : Fin vs.length → B.Dom.{u} := fun i =>
+      ⟨(a.pair b).get vs.length i,
+        (alpha ×ᴮ beta).get vs.length i,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet hprod_arity
+            (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩))
+          hprod_arity (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩
+    ∃ ss : Fin vs.length → SMT.Dom.{u},
+      (∀ i,
+        ∃ hcov : SMT.RenamingContext.CoversFV Theta
+            (terms[i.val]'(by
+              rw [toDestPair_length_gen vs.dropLast (.var z) (.var z)
+                [(.the Dapp)] prefix_nemp]
+              rw [List.length_dropLast]
+              simp only [List.length_singleton]
+              omega)),
+          ⟦(terms[i.val]'(by
+              rw [toDestPair_length_gen vs.dropLast (.var z) (.var z)
+                [(.the Dapp)] prefix_nemp]
+              rw [List.length_dropLast]
+              simp only [List.length_singleton]
+              omega)).abstract Theta hcov⟧ˢ = some (ss i) ∧
+          RDomCastSupported (x_fin i) (ss i)) ∧
+      RValuationCastSupportedOnFV
+        (Function.updates Xi vs
+          (List.ofFn fun i => some (x_fin i)))
+        (Function.updates Theta vs
+          (List.ofFn fun i => some (ss i))) P := by
+  dsimp only
+  obtain ⟨ss, hcomponents⟩ :=
+    represented_option_collect_components prefix_nemp ha hb hvs hprod_arity
+      hcov_z hden_z hWa_type hWa_mem hWa_retract hpayload
+  refine ⟨ss, hcomponents, ?_⟩
+  apply RValuationCastSupportedOnFV.updates vs_nodup _ ss ambient
+  intro i
+  obtain ⟨hcov, hden, hrel⟩ := hcomponents i
+  exact hrel
+
+open Classical in
 /-- Install the canonical projections of a collection element as a
 representation-aware binder valuation.  Outside the binder names the
 ambient valuation is unchanged; at the binder names each projection is
