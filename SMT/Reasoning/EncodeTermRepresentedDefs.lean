@@ -209,6 +209,46 @@ theorem DeclarationContextTrace.entries_subset
       | pop n => exact ih h
       | check_sat => exact ih h
 
+/-- Every typed declaration recorded by an exact trace is present in the
+trace's final context. -/
+theorem DeclarationContextTrace.declEntries_subset
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma) :
+    declEntries Dlt ⊆ Gamma.entries := by
+  induction Dlt generalizing Lambda with
+  | nil => simp [declEntries]
+  | cons i D ih =>
+      cases i with
+      | declare_const v tau =>
+          obtain ⟨hv, htail⟩ := h
+          intro e he
+          simp only [declEntries, List.filterMap_cons,
+            List.mem_cons] at he
+          rcases he with rfl | he
+          · exact htail.entries_subset <| by
+              rw [AList.entries_insert_of_notMem hv]
+              exact List.mem_cons_self
+          · exact ih htail he
+      | define_fun v tau sigma body =>
+          simpa [declEntries] using ih h
+      | define_const v tau body =>
+          simpa [declEntries] using ih h
+      | assert body => simpa [declEntries] using ih h
+      | push n => simpa [declEntries] using ih h
+      | pop n => simpa [declEntries] using ih h
+      | check_sat => simpa [declEntries] using ih h
+
+/-- The final context of an exact declaration trace contains both its input
+context and every typed declaration in the trace. -/
+theorem DeclarationContextTrace.scoped_entries
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma) :
+    Lambda.entries ++ declEntries Dlt ⊆ Gamma.entries := by
+  intro e he
+  rcases List.mem_append.mp he with hbase | hdecl
+  · exact h.entries_subset hbase
+  · exact h.declEntries_subset hdecl
+
 /-- Declaration traces are insensitive to the order of unrelated bindings in
 their input context.  The resulting context has the same bindings, possibly
 in a correspondingly different association-list order. -/
@@ -336,6 +376,12 @@ context and all typed helper declarations that the encoder later re-scopes. -/
 abbrev ScopedContextExtends
     (Λ : SMT.TypeContext) (Dlt : SMT.Chunk) (Γ : SMT.TypeContext) : Prop :=
   Λ.entries ++ declEntries Dlt ⊆ Γ.entries
+
+theorem DeclarationContextTrace.scoped_extends
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma) :
+    ScopedContextExtends Lambda Dlt Gamma :=
+  h.scoped_entries
 
 theorem ContextGeneratedByDeclarations.refl
     (Λ : SMT.TypeContext) :
