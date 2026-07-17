@@ -253,6 +253,24 @@ theorem B.Dom.canonicalSMT_type.{u} (d : B.Dom.{u}) :
   rcases d with ⟨X, α, hX⟩
   rfl
 
+open Classical in
+/-- Canonical representation commutes with binary source pairing.  This is
+the value-level form of the product canonical isomorphism used when an
+option-valued function is related to its graph. -/
+theorem B.Dom.canonicalSMT_pair_value.{u}
+    {alpha beta : BType} {a b : ZFSet.{u}}
+    (ha : a ∈ ⟦alpha⟧ᶻ) (hb : b ∈ ⟦beta⟧ᶻ) :
+    (B.Dom.canonicalSMT
+      (⟨a.pair b, alpha ×ᴮ beta,
+        ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩⟩ : B.Dom)).fst =
+      (B.Dom.canonicalSMT (⟨a, alpha, ha⟩ : B.Dom)).fst.pair
+        (B.Dom.canonicalSMT (⟨b, beta, hb⟩ : B.Dom)).fst := by
+  simpa [B.Dom.canonicalSMT, BType.canonicalIsoSMTType] using
+    (ZFSet.fapply_fprod
+      (hf := (BType.canonicalIsoSMTType alpha).2.1)
+      (hg := (BType.canonicalIsoSMTType beta).2.1)
+      (a := a) (b := b) ha hb)
+
 /-- Direct canonical representatives satisfy the legacy agreement relation. -/
 theorem B.Dom.rdom_canonicalSMT.{u} (d : B.Dom.{u}) :
     RDom d d.canonicalSMT := by

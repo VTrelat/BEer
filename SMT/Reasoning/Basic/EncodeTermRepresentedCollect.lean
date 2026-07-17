@@ -1536,6 +1536,90 @@ theorem single_lambda_fapply_eq_body.{u}
     rw [Subtype.ext_iff] at h_fapply
     exact h_fapply
 
+open Classical in
+/-- A one-binder option-valued lambda represents a source relation when, at
+canonical inputs, its body produces the canonical `some` payload exactly at
+the relation's graph pairs.  This packages the lambda semantics and the
+option graph bridge, leaving a function-valued `collect` proof to establish
+only the concrete guarded-body pointwise condition. -/
+theorem represented_option_lambda_of_pointwise.{u}
+    {alpha beta : BType} {T : ZFSet.{u}}
+    {hT : T ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    {Theta : SMT.RenamingContext.Context.{u}} {z : SMT.𝒱}
+    {body : SMT.Term} {lamVal : SMT.Dom.{u}}
+    (hcov_lambda : SMT.RenamingContext.CoversFV Theta
+      ((λˢ [z]) [alpha.toSMTType] body))
+    (hden_lambda : ⟦((λˢ [z]) [alpha.toSMTType] body).abstract
+      Theta hcov_lambda⟧ˢ = some lamVal)
+    (hlam_type : lamVal.snd.fst = alpha.toSMTType.fun
+      (SMTType.option beta.toSMTType))
+    (hpointwise : ∀ (a b : ZFSet.{u}) (ha : a ∈ ⟦alpha⟧ᶻ)
+      (hb : b ∈ ⟦beta⟧ᶻ),
+      let Wa : SMT.Dom.{u} := B.Dom.canonicalSMT
+        (⟨a, alpha, ha⟩ : B.Dom)
+      let Wb : SMT.Dom.{u} := B.Dom.canonicalSMT
+        (⟨b, beta, hb⟩ : B.Dom)
+      ∃ (hcov_body : SMT.RenamingContext.CoversFV
+          (Function.update Theta z (some Wa)) body)
+        (bodyVal : SMT.Dom.{u}),
+        ⟦body.abstract (Function.update Theta z (some Wa)) hcov_body⟧ˢ =
+          some bodyVal ∧
+        (bodyVal.fst = (ZFSet.Option.some
+          (S := ⟦beta.toSMTType⟧ᶻ) ⟨Wb.fst, Wb.snd.snd⟩).val ↔
+          a.pair b ∈ T)) :
+    RDomCastSupported
+      (⟨T, BType.set (alpha ×ᴮ beta), hT⟩ : B.Dom) lamVal := by
+  rcases lamVal with ⟨F, sigma, hF⟩
+  dsimp at hlam_type hden_lambda ⊢
+  subst sigma
+  have hlam_mem : F ∈ ⟦alpha.toSMTType.fun
+      (SMTType.option beta.toSMTType)⟧ᶻ := hF
+  have hlam_func : ⟦alpha.toSMTType⟧ᶻ.IsFunc
+      ⟦SMTType.option beta.toSMTType⟧ᶻ F := by
+    rw [SMTType.toZFSet] at hlam_mem
+    exact ZFSet.mem_funs.mp hlam_mem
+  apply RDomCastSupported.optionFunction_of_graph_truth
+    (hS := hT) (hF := hlam_mem)
+  intro x hx
+  rw [BType.toZFSet, ZFSet.mem_prod] at hx
+  obtain ⟨a, ha, b, hb, hxab⟩ := hx
+  subst x
+  let Wa : SMT.Dom := B.Dom.canonicalSMT (⟨a, alpha, ha⟩ : B.Dom)
+  let Wb : SMT.Dom := B.Dom.canonicalSMT (⟨b, beta, hb⟩ : B.Dom)
+  have hWa_type : Wa.snd.fst = alpha.toSMTType :=
+    B.Dom.canonicalSMT_type _
+  have hWa_mem : Wa.fst ∈ ⟦alpha.toSMTType⟧ᶻ := by
+    rw [← hWa_type]
+    exact Wa.snd.snd
+  have hWb_mem : Wb.fst ∈ ⟦beta.toSMTType⟧ᶻ := by
+    have hWb_type : Wb.snd.fst = beta.toSMTType :=
+      B.Dom.canonicalSMT_type _
+    rw [← hWb_type]
+    exact Wb.snd.snd
+  obtain ⟨hcov_body, bodyVal, hden_body, hbody_iff⟩ :=
+    hpointwise a b ha hb
+  have hcanon_pair : (B.Dom.canonicalSMT
+      (⟨a.pair b, alpha ×ᴮ beta,
+        ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩⟩ : B.Dom)).fst =
+      Wa.fst.pair Wb.fst := by
+    simpa [Wa, Wb] using B.Dom.canonicalSMT_pair_value ha hb
+  have happly := single_lambda_fapply_eq_body hcov_lambda hden_lambda
+    hlam_func hWa_type hWa_mem hcov_body hden_body
+  have hgraph := optionGraph_apply_eq_zftrue_iff alpha.toSMTType
+    beta.toSMTType hlam_mem hWa_mem hWb_mem
+  calc
+    _ ↔ (ZFSet.fapply F (ZFSet.is_func_is_pfunc hlam_func)
+      ⟨Wa.fst, by
+        rw [ZFSet.is_func_dom_eq hlam_func]
+        exact hWa_mem⟩).val = (ZFSet.Option.some
+          (S := ⟦beta.toSMTType⟧ᶻ) ⟨Wb.fst, hWb_mem⟩).val := by
+      simpa [Wa, Wb, hcanon_pair] using hgraph
+    _ ↔ bodyVal.fst = (ZFSet.Option.some
+      (S := ⟦beta.toSMTType⟧ᶻ) ⟨Wb.fst, hWb_mem⟩).val := by
+      rw [happly]
+    _ ↔ a.pair b ∈ T := by
+      simpa [Wb] using hbody_iff
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
