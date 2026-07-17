@@ -129,14 +129,19 @@ theorem castEq_left_rep_semantics.{u}
             (hphiY : RenamingContext.CoversFV
               (Function.update Theta helper (some Y)) spec),
             (⟦spec.abstract (Function.update Theta helper (some Y))
-              hphiY⟧ˢ).isSome = true))
+              hphiY⟧ˢ).isSome = true ∧
+            ∀ {PhiY : SMT.Dom},
+              ⟦spec.abstract (Function.update Theta helper (some Y))
+                hphiY⟧ˢ = some PhiY →
+              PhiY.fst = zftrue →
+              denA.fst.pair Y.fst ∈ (castZF_of_path c).1))
     {Theta : SMT.RenamingContext.Context.{u}}
     (hcovA : RenamingContext.CoversFV Theta A)
     (hcovB : RenamingContext.CoversFV Theta B)
     (Theta_none : ∀ v ∉ used0, Theta v = none)
     (respectsA : SMT.RenamingContext.RespectsTypeContextOnFV Theta Lambda A)
     (respectsB : SMT.RenamingContext.RespectsTypeContextOnFV Theta Lambda B)
-    (Theta_dom : ∀ v, Theta v ≠ none → v ∈ Lambda)
+    (Theta_dom : ∀ v, Theta v ≠ none → v ∈ Gamma)
     {X Y P : ZFSet.{u}}
     {hX : X ∈ ⟦alpha⟧ᶻ} {hY : Y ∈ ⟦alpha⟧ᶻ}
     {hP : P ∈ ⟦BType.bool⟧ᶻ}
@@ -157,6 +162,8 @@ theorem castEq_left_rep_semantics.{u}
       SMT.RenamingContext.RespectsTypeContextOnFV Theta' Gamma
         (((.var helper) =ˢ B) ∧ˢ spec) ∧
       (∀ v, Theta' v ≠ none → v ∈ Gamma) ∧
+      SpecBodiesTrue Theta' Gamma
+        (helperSpecChunk helper sigmaB spec) ∧
       ⟦((((.var helper) =ˢ B) ∧ˢ spec).abstract Theta' hcov)⟧ˢ =
         some denEq ∧
       denEq.snd.fst = SMTType.bool ∧
@@ -317,13 +324,20 @@ theorem castEq_left_rep_semantics.{u}
     by_cases hvh : v = helper
     · subst v
       exact AList.lookup_isSome.mp (by rw [helper_lookup]; rfl)
-    · exact AList.mem_of_subset Lambda_sub (Theta_dom v (by
-        simpa [Theta', Function.update_of_ne hvh] using hv))
+    · exact Theta_dom v (by
+        simpa [Theta', Function.update_of_ne hvh] using hv)
+  have specs_true : SpecBodiesTrue Theta' Gamma
+      (helperSpecChunk helper sigmaB spec) := by
+    intro body hbody
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    exact ⟨hcovSpec, Phi, respectsSpec, hdenSpec, Phity, PhiTrue⟩
   rcases denOut with ⟨Q, tauQ, hQ⟩
   dsimp at hdenOutTy
   subst tauQ
   refine ⟨Theta', hcovOut, (⟨Q, SMTType.bool, hQ⟩ : SMT.Dom),
-    Theta'_ext, Theta'_none, respectsOut, Theta'_dom, hdenOut, rfl, ?_⟩
+    Theta'_ext, Theta'_none, respectsOut, Theta'_dom, specs_true,
+    hdenOut, rfl, ?_⟩
   exact RDomCastSupported.bool_of_true_iff (hPiff.trans hOutTrue.symm)
 
 abbrev CastEqRepSpec.{u} (alpha : BType)
@@ -408,7 +422,7 @@ theorem castEq_supported_rep_contract.{u}
   · rw [dif_neg heq]
     by_cases hab : sigmaA ⊑ sigmaB
     · rw [dif_pos hab]
-      mspec loosenAux_prf_spec_univ (Λ := St0.types)
+      mspec loosenAux_prf_exact_univ (Λ := St0.types)
         (n := St0.env.freshvarsc) (used := St0.env.usedVars)
         typA bvA_used hab.toCastPath
       next out =>
@@ -451,15 +465,21 @@ theorem castEq_supported_rep_contract.{u}
         intro Theta hcovA hcovB Theta_none respectsA respectsB Theta_dom
           X Y P hX hY hP denA denB hdenA hdenB hdenAty hdenBty
           relA relB hPiff
-        exact castEq_left_rep_semantics typA typB Lambda_sub1
+        obtain ⟨Theta', hcov, denEq, Theta'_ext, Theta'_none,
+            respectsOut, Theta'_dom, _specsTrue, hdenEq,
+            hdenEqTy, eqRel⟩ :=
+          castEq_left_rep_semantics typA typB Lambda_sub1
           helper_fresh (SMT.Typing.varE typ_helper)
           helper_not_used helper_used1 used_sub1 spec_fv hab.toCastPath
-          exactness hcovA hcovB Theta_none respectsA respectsB Theta_dom
+          exactness hcovA hcovB Theta_none respectsA respectsB
+          (fun v hv => AList.mem_of_subset Lambda_sub1 (Theta_dom v hv))
           hdenA hdenB hdenAty hdenBty relA relB hPiff
+        exact ⟨Theta', hcov, denEq, Theta'_ext, Theta'_none,
+          respectsOut, Theta'_dom, hdenEq, hdenEqTy, eqRel⟩
     · rw [dif_neg hab]
       by_cases hba : sigmaB ⊑ sigmaA
       · rw [dif_pos hba]
-        mspec loosenAux_prf_spec_univ (Λ := St0.types)
+        mspec loosenAux_prf_exact_univ (Λ := St0.types)
           (n := St0.env.freshvarsc) (used := St0.env.usedVars)
           typB bvB_used hba.toCastPath
         next out =>
@@ -505,15 +525,589 @@ theorem castEq_supported_rep_contract.{u}
           have hPiff' : P = ZFSet.zftrue ↔ Y = X := by
             rw [hPiff]
             exact eq_comm
-          exact castEq_left_rep_semantics typB typA Lambda_sub1
+          obtain ⟨Theta', hcov, denEq, Theta'_ext, Theta'_none,
+              respectsOut, Theta'_dom, _specsTrue, hdenEq,
+              hdenEqTy, eqRel⟩ :=
+            castEq_left_rep_semantics typB typA Lambda_sub1
             helper_fresh (SMT.Typing.varE typ_helper)
             helper_not_used helper_used1 used_sub1 spec_fv hba.toCastPath
-            exactness hcovB hcovA Theta_none respectsB respectsA Theta_dom
+            exactness hcovB hcovA Theta_none respectsB respectsA
+            (fun v hv => AList.mem_of_subset Lambda_sub1 (Theta_dom v hv))
             hdenB hdenA hdenBty hdenAty relB relA hPiff'
+          exact ⟨Theta', hcov, denEq, Theta'_ext, Theta'_none,
+            respectsOut, Theta'_dom, hdenEq, hdenEqTy, eqRel⟩
       · rw [dif_neg hba]
         mvcgen
 
-private theorem denote_eq_inv_rep.{u}
+/-! ## Declaration-aware equality contract -/
+
+/-- Exactness of a completed equality cast under an arbitrary valuation of
+the generated helpers.  A true helper specification must characterize the
+actual cast value; mere totality of the specification is not enough once the
+declaration is moved under a quantifier. -/
+abbrev CastEqRepGuardedSemantics.{u}
+    (alpha : BType) (A B t : SMT.Term) (sigmaA sigmaB : SMTType)
+    (Lambda : SMT.TypeContext) (Dlt : SMT.Chunk) : Prop :=
+  ∀ (GammaSup : SMT.TypeContext),
+    ScopedContextExtends Lambda Dlt GammaSup →
+    ∀ (Theta : SMT.RenamingContext.Context.{u})
+      (hcovA : RenamingContext.CoversFV Theta A)
+      (hcovB : RenamingContext.CoversFV Theta B),
+      SMT.RenamingContext.RespectsTypeContextOnFV Theta GammaSup A →
+      SMT.RenamingContext.RespectsTypeContextOnFV Theta GammaSup B →
+      ∀ (X Y P : ZFSet.{u})
+        (hX : X ∈ ⟦alpha⟧ᶻ) (hY : Y ∈ ⟦alpha⟧ᶻ)
+        (hP : P ∈ ⟦BType.bool⟧ᶻ)
+        (denA denB : SMT.Dom.{u}),
+        ⟦A.abstract Theta hcovA⟧ˢ = some denA →
+        ⟦B.abstract Theta hcovB⟧ˢ = some denB →
+        denA.snd.fst = sigmaA → denB.snd.fst = sigmaB →
+        RDomCastSupported (⟨X, alpha, hX⟩ : _root_.B.Dom) denA →
+        RDomCastSupported (⟨Y, alpha, hY⟩ : _root_.B.Dom) denB →
+        (P = ZFSet.zftrue ↔ X = Y) →
+        ∀ (hcov_t : RenamingContext.CoversFV Theta t)
+          (denEq : SMT.Dom.{u}),
+          SMT.RenamingContext.RespectsTypeContextOnFV Theta GammaSup t →
+          SpecBodiesTrue Theta GammaSup Dlt →
+          ⟦t.abstract Theta hcov_t⟧ˢ = some denEq →
+          denEq.snd.fst = SMTType.bool →
+          RDomCastSupported (⟨P, BType.bool, hP⟩ : _root_.B.Dom) denEq
+
+/-- Semantic contract of one completed `castEq` run.  The first clause builds
+a satisfying helper assignment and the second validates every assignment that
+satisfies the generated specifications. -/
+abbrev CastEqRepSemantics.{u}
+    (alpha : BType) (A B t : SMT.Term) (sigmaA sigmaB : SMTType)
+    (Lambda Gamma : SMT.TypeContext) (used0 used1 : List SMT.𝒱)
+    (Dlt : SMT.Chunk) : Prop :=
+  ∀ (GammaSup : SMT.TypeContext), Gamma ⊆ GammaSup →
+    ∀ (Theta : SMT.RenamingContext.Context.{u})
+      (hcovA : RenamingContext.CoversFV Theta A)
+      (hcovB : RenamingContext.CoversFV Theta B),
+      (∀ v ∉ used0, Theta v = none) →
+      SMT.RenamingContext.RespectsTypeContextOnFV Theta GammaSup A →
+      SMT.RenamingContext.RespectsTypeContextOnFV Theta GammaSup B →
+      (∀ v, Theta v ≠ none → v ∈ GammaSup) →
+      ∀ (X Y P : ZFSet.{u})
+        (hX : X ∈ ⟦alpha⟧ᶻ) (hY : Y ∈ ⟦alpha⟧ᶻ)
+        (hP : P ∈ ⟦BType.bool⟧ᶻ)
+        (denA denB : SMT.Dom.{u}),
+        ⟦A.abstract Theta hcovA⟧ˢ = some denA →
+        ⟦B.abstract Theta hcovB⟧ˢ = some denB →
+        denA.snd.fst = sigmaA → denB.snd.fst = sigmaB →
+        RDomCastSupported (⟨X, alpha, hX⟩ : _root_.B.Dom) denA →
+        RDomCastSupported (⟨Y, alpha, hY⟩ : _root_.B.Dom) denB →
+        (P = ZFSet.zftrue ↔ X = Y) →
+        (∃ (Theta' : SMT.RenamingContext.Context.{u})
+          (hcov_t : RenamingContext.CoversFV Theta' t)
+          (denEq : SMT.Dom.{u}),
+          RenamingContext.Extends Theta' Theta ∧
+          (∀ v ∉ used1, Theta' v = none) ∧
+          SMT.RenamingContext.RespectsTypeContextOnFV Theta' GammaSup t ∧
+          (∀ v, Theta' v ≠ none → v ∈ GammaSup) ∧
+          SpecBodiesTrue Theta' GammaSup Dlt ∧
+          ⟦t.abstract Theta' hcov_t⟧ˢ = some denEq ∧
+          denEq.snd.fst = SMTType.bool ∧
+          RDomCastSupported (⟨P, BType.bool, hP⟩ : _root_.B.Dom) denEq) ∧
+        CastEqRepGuardedSemantics.{u}
+          alpha A B t sigmaA sigmaB Lambda Dlt
+
+/-- Operational and declaration-aware semantic contract selected from the two
+supported target representations compared by equality. -/
+abbrev CastEqRepScopedSpec.{u} (alpha : BType)
+    (A B : SMT.Term) (sigmaA sigmaB : SMTType) : Prop :=
+  ∀ {Lambda : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱}
+    {decl : SMT.Chunk},
+    Lambda ⊢ˢ A : sigmaA →
+    Lambda ⊢ˢ B : sigmaB →
+    (∀ v ∈ SMT.bv A, v ∈ used) →
+    (∀ v ∈ SMT.bv B, v ∈ used) →
+    ⦃fun ⟨E, Lambda'⟩ =>
+      ⌜Lambda' = Lambda ∧ E.freshvarsc = n ∧
+        Lambda.keys ⊆ E.usedVars ∧ E.usedVars = used ∧
+        E.declarations = decl⌝⦄
+    castEq ⟨A, sigmaA⟩ ⟨B, sigmaB⟩
+    ⦃⇓? ⟨t, sigma⟩ ⟨E', Gamma'⟩ =>
+      ⌜used ⊆ E'.usedVars ∧
+        Lambda ⊆ Gamma' ∧
+        Gamma'.keys ⊆ E'.usedVars ∧
+        sigma = SMTType.bool ∧
+        Gamma' ⊢ˢ t : SMTType.bool ∧
+        SMT.fv A ⊆ SMT.fv t ∧
+        SMT.fv B ⊆ SMT.fv t ∧
+        (∀ v ∈ used, v ∉ Lambda → v ∉ Gamma') ∧
+        ∃ Dlt : SMT.Chunk,
+          E'.declarations = decl ++ Dlt ∧
+          ContextGeneratedByDeclarations Lambda Gamma' Dlt ∧
+          DeclarationContextTrace Lambda Dlt Gamma' ∧
+          (∀ v ∈ declVars Dlt, v ∉ used) ∧
+          CastEqRepSemantics.{u} alpha A B t sigmaA sigmaB
+            Lambda Gamma' used E'.usedVars Dlt ∧
+          (∀ b ∈ specBodies Dlt, Gamma' ⊢ˢ b : SMTType.bool) ∧
+          ScopedGeneratedTyping Lambda Dlt t SMTType.bool⌝⦄
+
+set_option maxHeartbeats 3000000 in
+theorem castEq_left_rep_guarded_semantics.{u}
+    {alpha : BType} {A B spec : SMT.Term} {sigmaA sigmaB : SMTType}
+    {Lambda GammaSup : SMT.TypeContext} {helper : SMT.𝒱}
+    (scope : ScopedContextExtends Lambda
+      (helperSpecChunk helper sigmaB spec) GammaSup)
+    (c : sigmaA ~> sigmaB)
+    (exactness :
+      ∀ (Theta : SMT.RenamingContext.Context.{u})
+        (hA : RenamingContext.CoversFV Theta A)
+        (_respects : SMT.RenamingContext.RespectsTypeContextOnFV
+          Theta Lambda A)
+        (pf : ∀ (x_ : SMT.𝒱) (X_ : SMT.Dom),
+          ∀ v ∈ SMT.fv (SMT.Term.var x_),
+            (Function.update Theta x_ (some X_) v).isSome = true),
+      ∀ (denA : SMT.Dom), ⟦A.abstract Theta hA⟧ˢ = some denA →
+        ∃ (Phi H : SMT.Dom)
+          (_ : ⟦(SMT.Term.var helper).abstract
+            (Function.update Theta helper (some H)) (pf helper H)⟧ˢ = some H)
+          (hphi : RenamingContext.CoversFV
+            (Function.update Theta helper (some H)) spec)
+          (_ : ⟦spec.abstract (Function.update Theta helper (some H))
+            hphi⟧ˢ = some Phi),
+          H.snd.fst = sigmaB ∧
+          Phi.snd.fst = SMTType.bool ∧
+          (Phi.fst = zftrue ∧
+            denA.fst.pair H.fst ∈ (castZF_of_path c).1) ∧
+          (∀ (Y : SMT.Dom) (_ : Y.snd.fst = sigmaB)
+            (hphiY : RenamingContext.CoversFV
+              (Function.update Theta helper (some Y)) spec),
+            (⟦spec.abstract (Function.update Theta helper (some Y))
+              hphiY⟧ˢ).isSome = true ∧
+            ∀ {PhiY : SMT.Dom},
+              ⟦spec.abstract (Function.update Theta helper (some Y))
+                hphiY⟧ˢ = some PhiY →
+              PhiY.fst = zftrue →
+              denA.fst.pair Y.fst ∈ (castZF_of_path c).1))
+    {Theta : SMT.RenamingContext.Context.{u}}
+    (hcovA : RenamingContext.CoversFV Theta A)
+    (hcovB : RenamingContext.CoversFV Theta B)
+    (respectsA : SMT.RenamingContext.RespectsTypeContextOnFV
+      Theta GammaSup A)
+    (_respectsB : SMT.RenamingContext.RespectsTypeContextOnFV
+      Theta GammaSup B)
+    {X Y P : ZFSet.{u}}
+    {hX : X ∈ ⟦alpha⟧ᶻ} {hY : Y ∈ ⟦alpha⟧ᶻ}
+    {hP : P ∈ ⟦BType.bool⟧ᶻ}
+    {denA denB : SMT.Dom.{u}}
+    (hdenA : ⟦A.abstract Theta hcovA⟧ˢ = some denA)
+    (hdenB : ⟦B.abstract Theta hcovB⟧ˢ = some denB)
+    (hdenAty : denA.snd.fst = sigmaA)
+    (hdenBty : denB.snd.fst = sigmaB)
+    (relA : RDomCastSupported (⟨X, alpha, hX⟩ : _root_.B.Dom) denA)
+    (relB : RDomCastSupported (⟨Y, alpha, hY⟩ : _root_.B.Dom) denB)
+    (hPiff : P = ZFSet.zftrue ↔ X = Y)
+    (hcovOut : RenamingContext.CoversFV Theta
+      (((.var helper) =ˢ B) ∧ˢ spec))
+    (denOut : SMT.Dom.{u})
+    (respectsOut : SMT.RenamingContext.RespectsTypeContextOnFV
+      Theta GammaSup (((.var helper) =ˢ B) ∧ˢ spec))
+    (specsTrue : SpecBodiesTrue Theta GammaSup
+      (helperSpecChunk helper sigmaB spec))
+    (hdenOut : ⟦((((.var helper) =ˢ B) ∧ˢ spec).abstract
+      Theta hcovOut)⟧ˢ = some denOut)
+    (_hdenOutTy : denOut.snd.fst = SMTType.bool) :
+    RDomCastSupported (⟨P, BType.bool, hP⟩ : _root_.B.Dom) denOut := by
+  have respectsA_base :
+      SMT.RenamingContext.RespectsTypeContextOnFV Theta Lambda A :=
+    respectsA.of_super scope.base
+  let pf : ∀ (x_ : SMT.𝒱) (H : SMT.Dom),
+      ∀ v ∈ SMT.fv (SMT.Term.var x_),
+        (Function.update Theta x_ (some H) v).isSome = true := by
+    intro x_ H v hv
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    simp
+  obtain ⟨_PhiW, _HW, _hdenVarW, _hcovSpecW, _hdenSpecW,
+      _HWty, _PhiWty, _castW, guard⟩ :=
+    exactness Theta hcovA respectsA_base pf denA hdenA
+  obtain ⟨eqVal, heqVal, hdenEq,
+      specVal, hspecVal, hdenSpec, denOutEq⟩ :=
+    EncodeTermRepresentedBool.CheckedOp.smt_denote_inv
+      .and hcovOut hdenOut
+  have hspecTrue := specsTrue spec (by simp)
+  obtain ⟨hcovSpec, denSpec, _respectsSpec, hdenSpec',
+      _hdenSpecTy, hdenSpecTrue⟩ := hspecTrue
+  have denSpecEq :
+      (⟨specVal, SMTType.bool, hspecVal⟩ : SMT.Dom) = denSpec := by
+    have hcovEq : hcovSpec = (fun v hv => hcovOut v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv)) := Subsingleton.elim _ _
+    subst hcovSpec
+    rw [hdenSpec] at hdenSpec'
+    exact Option.some.inj hdenSpec'
+  have specValTrue : specVal = ZFSet.zftrue := by
+    rw [← denSpecEq] at hdenSpecTrue
+    exact hdenSpecTrue
+  have helperSome : (Theta helper).isSome = true := by
+    apply hcovOut helper
+    rw [SMT.fv, List.mem_append]
+    exact Or.inl (by
+      rw [SMT.fv, List.mem_append]
+      exact Or.inl (by simp [SMT.fv]))
+  obtain ⟨helperVal, hhelperVal⟩ := Option.isSome_iff_exists.mp helperSome
+  have helperFV : helper ∈
+      SMT.fv (((.var helper) =ˢ B) ∧ˢ spec) := by
+    rw [SMT.fv, List.mem_append]
+    exact Or.inl (by
+      rw [SMT.fv, List.mem_append]
+      exact Or.inl (by simp [SMT.fv]))
+  have helperTy : helperVal.snd.fst = sigmaB := by
+    have helperLookup : GammaSup.lookup helper = some sigmaB :=
+      scope.lookup_of_declared (by simp [declEntries_helperSpecChunk])
+    obtain ⟨d, hd, hdty⟩ := respectsOut helperFV helperLookup
+    rw [hhelperVal] at hd
+    injection hd with hdeq
+    subst d
+    exact hdty
+  have updateEq : Function.update Theta helper (some helperVal) = Theta := by
+    rw [← hhelperVal]
+    exact Function.update_eq_self helper Theta
+  have hcovSpecUpdate : RenamingContext.CoversFV
+      (Function.update Theta helper (some helperVal)) spec := by
+    rw [updateEq]
+    exact fun v hv => hcovOut v (by
+      rw [SMT.fv, List.mem_append]
+      exact Or.inr hv)
+  obtain ⟨_specSome, guardTrue⟩ :=
+    guard helperVal helperTy hcovSpecUpdate
+  have hdenSpecUpdate :
+      ⟦spec.abstract (Function.update Theta helper (some helperVal))
+        hcovSpecUpdate⟧ˢ =
+        some (⟨specVal, SMTType.bool, hspecVal⟩ : SMT.Dom) := by
+    simpa only [updateEq, proof_irrel_heq] using hdenSpec
+  have castPair := guardTrue hdenSpecUpdate specValTrue
+  rcases denA with ⟨Aval, sigmaA0, hAval⟩
+  dsimp at hdenAty
+  subst sigmaA0
+  rcases denB with ⟨Bval, sigmaB0, hBval⟩
+  dsimp at hdenBty
+  subst sigmaB0
+  have hcast : castZF_apply c Aval = helperVal.fst :=
+    castZF_apply_eq_of_pair c hAval castPair
+  have hcastEq : helperVal.fst = Bval ↔ X = Y := by
+    rw [← hcast]
+    exact RDomCastSupported.cast_eq_iff relA relB c
+  have hcovVar : RenamingContext.CoversFV Theta (.var helper) := by
+    intro v hv
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    exact helperSome
+  have hdenVar : ⟦(SMT.Term.var helper).abstract Theta hcovVar⟧ˢ =
+      some helperVal := by
+    rw [SMT.Term.abstract]
+    simp only [SMT.denote]
+    congr 1
+    exact Option.get_of_eq_some _ hhelperVal
+  have hdenB' : ⟦B.abstract Theta (fun v hv => hcovOut v (by
+      rw [SMT.fv, List.mem_append]
+      exact Or.inl (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv)))⟧ˢ =
+      some (⟨Bval, sigmaB, hBval⟩ : SMT.Dom) := by
+    simpa only [proof_irrel_heq] using hdenB
+  have hdenVar' : ⟦(SMT.Term.var helper).abstract Theta
+      (fun v hv => hcovOut v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl (by
+          rw [SMT.fv, List.mem_append]
+          exact Or.inl hv)))⟧ˢ = some helperVal := by
+    simpa only [proof_irrel_heq] using hdenVar
+  have eqValTrue : eqVal = ZFSet.zftrue ↔ X = Y := by
+    have hdenEqRaw := hdenEq
+    rw [SMT.Term.abstract] at hdenEqRaw
+    exact (denote_eq_fst_eq_zftrue_iff hdenVar' hdenB' helperTy
+      hdenEqRaw).trans hcastEq
+  subst denOut
+  subst specVal
+  have outTrue :
+      (EncodeTermRepresentedBool.CheckedOp.eval .and eqVal ZFSet.zftrue) =
+        ZFSet.zftrue ↔ X = Y := by
+    rcases ZFSet.ZFBool.mem_𝔹_iff eqVal |>.mp heqVal with hfalse | htrue
+    · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
+        overloadBinOp_𝔹, overloadBinOp, hfalse] using eqValTrue
+    · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
+        overloadBinOp_𝔹, overloadBinOp, htrue] using eqValTrue
+  exact RDomCastSupported.bool_of_true_iff (hPiff.trans outTrue.symm)
+
+theorem castEq_direct_rep_scoped_contract.{u}
+    (alpha : BType) (A B : SMT.Term) (sigma : SMTType) :
+    CastEqRepScopedSpec.{u} alpha A B sigma sigma := by
+  unfold CastEqRepScopedSpec
+  intro Lambda n used decl typA typB bvA_used bvB_used
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, rfl, rfl⟩ := pre
+  simp only [castEq]
+  rw [dif_pos True.intro]
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  refine ⟨List.Subset.refl _, (fun _ h => h), St_keys, True.intro,
+    SMT.Typing.eq _ _ _ sigma typA typB, ?_, ?_, (fun _ _ h => h),
+    [], by simp, ContextGeneratedByDeclarations.refl St.types,
+    DeclarationContextTrace.nil St.types, (by simp [declVars]), ?_,
+    (by simp [specBodies]), ?_⟩
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inl hv
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inr hv
+  · intro GammaSup GammaSub Theta hcovA hcovB Theta_none
+      respectsA respectsB Theta_dom X Y P hX hY hP denA denB
+      hdenA hdenB hdenAty hdenBty relA relB hPiff
+    constructor
+    · obtain ⟨hcovEq, denEq, respectsEq, hdenEq, hdenEqTy, eqRel⟩ :=
+        castEq_direct_rep_semantics hcovA hcovB respectsA respectsB
+          hdenA hdenB hdenAty hdenBty relA relB hPiff
+      exact ⟨Theta, hcovEq, denEq, RenamingContext.extends_refl Theta,
+        Theta_none, respectsEq, Theta_dom,
+        by simp [SpecBodiesTrue, specBodies], hdenEq, hdenEqTy, eqRel⟩
+    · intro GammaSupG _scope ThetaG hcovAG hcovBG
+        respectsAG respectsBG XG YG PG hXG hYG hPG denAG denBG
+        hdenAG hdenBG hdenAGTy hdenBGTy relAG relBG hPGiff
+        hcovEqG denEqG _respectsEqG _specsG hdenEqG _hdenEqGTy
+      obtain ⟨hcovExpected, denExpected, _respectsExpected,
+          hdenExpected, _hdenExpectedTy, expectedRel⟩ :=
+        castEq_direct_rep_semantics hcovAG hcovBG respectsAG respectsBG
+          hdenAG hdenBG hdenAGTy hdenBGTy relAG relBG hPGiff
+      have hcovEq : hcovExpected = hcovEqG := Subsingleton.elim _ _
+      subst hcovExpected
+      have hdenEq : denExpected = denEqG :=
+        Option.some.inj (hdenExpected.symm.trans hdenEqG)
+      subst denEqG
+      exact expectedRel
+  · exact ScopedGeneratedTyping.of_operational
+      (ContextGeneratedByDeclarations.refl St.types)
+      (SMT.Typing.eq _ _ _ sigma typA typB)
+      (by simp [specBodies])
+
+set_option maxHeartbeats 4000000 in
+theorem castEq_left_rep_scoped_contract.{u}
+    (alpha : BType) (A B : SMT.Term) (sigmaA sigmaB : SMTType)
+    (hne : sigmaA ≠ sigmaB) (hle : sigmaA ⊑ sigmaB)
+    (hfaith : castPath.FVFaithful hle.toCastPath) :
+    CastEqRepScopedSpec.{u} alpha A B sigmaA sigmaB := by
+  unfold CastEqRepScopedSpec
+  intro Lambda n used decl typA typB bvA_used bvB_used
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, St_used_eq, St_decl_eq⟩ := pre
+  simp only [castEq]
+  rw [dif_neg hne, dif_pos hle]
+  mspec (Std.Do.Triple.and _
+    (Std.Do.Triple.and _
+      (Std.Do.Triple.and _
+        (loosenAux_prf_exact_univ
+          (Λ := St.types) (n := St.env.freshvarsc)
+          (used := St.env.usedVars) typA
+          (fun v hv => St_used_eq ▸ bvA_used v hv) hle.toCastPath)
+        (loosenAux_prf_fv_of_faithful hfaith
+          (used := St.env.usedVars) (n := St.env.freshvarsc)
+          (x := A) (by
+            intro v hv
+            exact St_keys (SMT.Typing.mem_context_of_mem_fv typA hv))))
+      (loosenAux_prf_decls hle.toCastPath (decl := decl)))
+    (loosenAux_prf_types_eq hle.toCastPath))
+  next out =>
+  obtain ⟨helper, spec⟩ := out
+  mrename_i pre
+  mintro ∀St1
+  mpure pre
+  obtain ⟨⟨⟨⟨_hn1, St1_types_sub, helper_fresh, helper_not_used,
+      used_sub1, keys_sub1, preserves1, _typ_helper_insert,
+      _typ_spec_insert, typ_helper, typ_spec, spec_fv, exactness⟩,
+      _helper_not_used_fv, source_fv_spec, _used_sub_fv⟩,
+      St1_decl_eq⟩, ⟨St1_types_exact, _⟩⟩ := pre
+  mspec SMT.declareConst_addSpec_spec (x! := helper)
+    (x!_spec := spec) (τ := sigmaB)
+    (decl := St1.env.declarations) (as := St1.env.asserts)
+    (n := St1.env.freshvarsc) (Γ := St1.types)
+    (used := St1.env.usedVars)
+  mrename_i pre
+  mintro ∀St2
+  mpure pre
+  obtain ⟨St2_decl_eq, _, _St2_fvc, St2_used, St2_types⟩ := pre
+  mspec Std.Do.Spec.pure
+  have Lambda_sub1 : St.types ⊆ St1.types := fun v hv =>
+    St1_types_sub
+      (SMT.TypeContext.entries_subset_insert_of_notMem helper_fresh hv)
+  have typB1 : St1.types ⊢ˢ B : sigmaB :=
+    SMT.Typing.weakening Lambda_sub1 typB
+      (fun v hv => preserves1 v (St_used_eq ▸ bvB_used v hv)
+        (SMT.Typing.bv_notMem_context typB v hv))
+  have typOut : St1.types ⊢ˢ
+      (((.var helper) =ˢ B) ∧ˢ spec) : SMTType.bool :=
+    SMT.Typing.and _ _ _
+      (SMT.Typing.eq _ _ _ sigmaB typ_helper typB1) typ_spec
+  have helper_lookup : St1.types.lookup helper = some sigmaB :=
+    SMT.Typing.varE typ_helper
+  have helper_used1 : helper ∈ St1.env.usedVars :=
+    keys_sub1 (AList.lookup_isSome.mp
+      (Option.isSome_of_eq_some helper_lookup))
+  have helper_ctx_gen : ContextGeneratedByDeclarations St.types St1.types
+      (helperSpecChunk helper sigmaB spec) := by
+    rw [St1_types_exact]
+    exact ContextGeneratedByDeclarations.insert_helper
+      St.types helper sigmaB spec helper_fresh
+  have helper_ctx_trace : DeclarationContextTrace St.types
+      (helperSpecChunk helper sigmaB spec) St1.types := by
+    rw [St1_types_exact]
+    exact DeclarationContextTrace.helperSpecChunk
+      St.types helper sigmaB spec helper_fresh
+  have used_sub_out : used ⊆ St1.env.usedVars := by
+    simpa [St_used_eq] using used_sub1
+  have preserves_out : ∀ v ∈ used, v ∉ St.types → v ∉ St1.types := by
+    simpa [St_used_eq] using preserves1
+  have helper_not_used_out : helper ∉ used := by
+    simpa [St_used_eq] using helper_not_used
+  mpure_intro
+  rw [St2_used, St2_types]
+  refine ⟨used_sub_out, Lambda_sub1, keys_sub1, True.intro, typOut,
+    ?_, ?_, preserves_out, helperSpecChunk helper sigmaB spec, ?_,
+    helper_ctx_gen, helper_ctx_trace, ?_, ?_, ?_, ?_⟩
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inr (source_fv_spec hv)
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inl (by
+      rw [SMT.fv, List.mem_append]
+      exact Or.inr hv)
+  · rw [St2_decl_eq, St1_decl_eq]
+    simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+  · intro v hv
+    simp only [declVars_helperSpecChunk, List.mem_singleton] at hv
+    subst v
+    exact helper_not_used_out
+  · intro GammaSup GammaSub Theta hcovA hcovB Theta_none
+      respectsA respectsB Theta_dom X Y P hX hY hP denA denB
+      hdenA hdenB hdenAty hdenBty relA relB hPiff
+    have Lambda_sub_sup : St.types ⊆ GammaSup :=
+      AList.subset_trans Lambda_sub1 GammaSub
+    have respectsA_base :
+        SMT.RenamingContext.RespectsTypeContextOnFV Theta St.types A :=
+      respectsA.of_super Lambda_sub_sup
+    have respectsB_base :
+        SMT.RenamingContext.RespectsTypeContextOnFV Theta St.types B :=
+      respectsB.of_super Lambda_sub_sup
+    have helper_lookup_sup : GammaSup.lookup helper = some sigmaB :=
+      AList.lookup_of_subset GammaSub helper_lookup
+    constructor
+    · exact castEq_left_rep_semantics typA typB Lambda_sub_sup
+        helper_fresh helper_lookup_sup
+        helper_not_used_out helper_used1
+        used_sub_out spec_fv hle.toCastPath exactness
+        hcovA hcovB Theta_none respectsA_base respectsB_base Theta_dom
+        hdenA hdenB hdenAty hdenBty relA relB hPiff
+    · intro GammaSupG scopeG ThetaG hcovAG hcovBG
+        respectsAG respectsBG XG YG PG hXG hYG hPG denAG denBG
+        hdenAG hdenBG hdenAGTy hdenBGTy relAG relBG hPGiff
+        hcovOutG denOutG respectsOutG specsTrueG hdenOutG hdenOutGTy
+      exact castEq_left_rep_guarded_semantics scopeG hle.toCastPath
+        exactness hcovAG hcovBG respectsAG respectsBG
+        hdenAG hdenBG hdenAGTy hdenBGTy relAG relBG hPGiff
+        hcovOutG denOutG respectsOutG specsTrueG hdenOutG hdenOutGTy
+  · intro body hbody
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    exact typ_spec
+  · exact ScopedGeneratedTyping.of_operational helper_ctx_gen typOut
+      (by
+        intro body hbody
+        simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+        subst body
+        exact typ_spec)
+
+set_option maxHeartbeats 3000000 in
+theorem castEq_right_rep_scoped_contract.{u}
+    (alpha : BType) (A B : SMT.Term) (sigmaA sigmaB : SMTType)
+    (hne : sigmaA ≠ sigmaB) (hnotle : ¬ sigmaA ⊑ sigmaB)
+    (hle : sigmaB ⊑ sigmaA)
+    (hfaith : castPath.FVFaithful hle.toCastPath) :
+    CastEqRepScopedSpec.{u} alpha A B sigmaA sigmaB := by
+  unfold CastEqRepScopedSpec
+  intro Lambda n used decl typA typB bvA_used bvB_used
+  have castEq_swap :
+      castEq (A, sigmaA) (B, sigmaB) =
+        castEq (B, sigmaB) (A, sigmaA) := by
+    simp [castEq, hne, Ne.symm hne, hnotle, hle]
+  mstart
+  mintro pre ∀St
+  mpure pre
+  rw [castEq_swap]
+  mspec castEq_left_rep_scoped_contract alpha B A sigmaB sigmaA
+    (Ne.symm hne) hle hfaith typB typA bvB_used bvA_used
+  rename_i out
+  obtain ⟨t, sigma⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨used_sub, types_sub, keys_sub, sigma_eq, typ_t,
+      fv_B_t, fv_A_t, preserves, Dlt, decl_eq, ctx_gen, ctx_trace,
+      decl_fresh, sem_swap, specs_typ, scoped_typ⟩ := post
+  mpure_intro
+  refine ⟨used_sub, types_sub, keys_sub, sigma_eq, typ_t,
+    fv_A_t, fv_B_t, preserves, Dlt, decl_eq, ctx_gen, ctx_trace,
+    decl_fresh, ?_, specs_typ, scoped_typ⟩
+  intro GammaSup GammaSub Theta hcovA hcovB Theta_none
+    respectsA respectsB Theta_dom X Y P hX hY hP denA denB
+    hdenA hdenB hdenAty hdenBty relA relB hPiff
+  have hPiffSwap : P = ZFSet.zftrue ↔ Y = X := by
+    rw [hPiff]
+    exact eq_comm
+  obtain ⟨good, guardSwap⟩ := sem_swap GammaSup GammaSub Theta
+    hcovB hcovA Theta_none respectsB respectsA Theta_dom
+    Y X P hY hX hP denB denA hdenB hdenA hdenBty hdenAty
+    relB relA hPiffSwap
+  constructor
+  · exact good
+  · intro GammaSupG scopeG ThetaG hcovAG hcovBG
+      respectsAG respectsBG XG YG PG hXG hYG hPG denAG denBG
+      hdenAG hdenBG hdenAGTy hdenBGTy relAG relBG hPGiff
+      hcovOutG denOutG respectsOutG specsTrueG hdenOutG hdenOutGTy
+    have hPGiffSwap : PG = ZFSet.zftrue ↔ YG = XG := by
+      rw [hPGiff]
+      exact eq_comm
+    exact guardSwap GammaSupG scopeG ThetaG hcovBG hcovAG
+      respectsBG respectsAG YG XG PG hYG hXG hPG denBG denAG
+      hdenBG hdenAG hdenBGTy hdenAGTy relBG relAG hPGiffSwap
+      hcovOutG denOutG respectsOutG specsTrueG hdenOutG hdenOutGTy
+
+set_option maxHeartbeats 3000000 in
+theorem castEq_supported_rep_scoped_contract.{u}
+    (alpha : BType) (A B : SMT.Term) (sigmaA sigmaB : SMTType)
+    (_supportedA : BType.SupportedSMT alpha sigmaA)
+    (_supportedB : BType.SupportedSMT alpha sigmaB) :
+    CastEqRepScopedSpec.{u} alpha A B sigmaA sigmaB := by
+  unfold CastEqRepScopedSpec
+  intro Lambda n used decl typA typB bvA_used bvB_used
+  by_cases heq : sigmaA = sigmaB
+  · subst sigmaB
+    exact castEq_direct_rep_scoped_contract alpha A B sigmaA
+      typA typB bvA_used bvB_used
+  · by_cases hab : sigmaA ⊑ sigmaB
+    · exact castEq_left_rep_scoped_contract alpha A B sigmaA sigmaB
+        heq hab (castPath.fvFaithful hab.toCastPath)
+        typA typB bvA_used bvB_used
+    · by_cases hba : sigmaB ⊑ sigmaA
+      · exact castEq_right_rep_scoped_contract alpha A B sigmaA sigmaB
+          heq hab hba (castPath.fvFaithful hba.toCastPath)
+          typA typB bvA_used bvB_used
+      · simp only [castEq]
+        rw [dif_neg heq, dif_neg hab, dif_neg hba]
+        mstart
+        mintro pre ∀St
+        mpure pre
+        mspec Std.Do.Spec.throw_StateT
+
+theorem denote_eq_inv_rep.{u}
     {A B : _root_.B.Term} {alpha : BType} {Gamma : _root_.B.TypeContext}
     (typA : Gamma ⊢ᴮ A : alpha) (typB : Gamma ⊢ᴮ B : alpha)
     {Xi : _root_.B.RenamingContext.Context}
