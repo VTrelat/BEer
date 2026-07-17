@@ -121,6 +121,126 @@ theorem RValuationCastSupportedOnFV.updates_of_fold_reduce_toProdl.{u}
     simpa [jα, jσ] using hcomp
 
 open Classical B in
+/-- Obtain one well-typed body denotation from a successful source universal
+denotation.  A nonempty domain supplies an actual quantified tuple; for the
+empty domain the body is semantically irrelevant, so well-definedness and
+typing supply a default tuple witness.  This is the witness used for the one
+operational body-encoding run; quantified correctness later ranges over every
+assignment through the scoped induction hypothesis. -/
+theorem all_body_denotation_witness.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {αs : List BType} {τ : BType}
+    (τ_hasArity : τ.hasArity vs.length)
+    {Ectx : B.TypeContext} {D P : B.Term}
+    (typ_D : Ectx ⊢ᴮ D : BType.set τ)
+    (typ_P : (vs.zipToAList αs ∪ Ectx) ⊢ᴮ P : BType.bool)
+    (wd_P : B.Term.WellDefined.{u} P)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Δ_fv_all : ∀ v ∈ B.fv (B.Term.all vs D P), (Xi v).isSome = true)
+    (wf : B.RenWF Ectx Xi)
+    (P_renwf : ∀ (f : Fin vs.length → B.Dom.{u}),
+      (∀ i, (f i).snd.fst = τ.get vs.length i) →
+      B.RenWF (vs.zipToAList αs ∪ Ectx)
+        (Function.updates Xi vs (List.ofFn fun i => some (f i))))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.bool⟧ᶻ}
+    (hden_all : ⟦(B.Term.all vs D P).abstract Xi Δ_fv_all⟧ᴮ =
+      some ⟨T, ⟨BType.bool, hT⟩⟩) :
+    ∃ (f : Fin vs.length → B.Dom.{u}),
+      (∀ i, (f i).snd.fst = τ.get vs.length i ∧
+        (f i).fst ∈ ⟦τ.get vs.length i⟧ᶻ) ∧
+      ∃ (Pval : ZFSet.{u}) (hPval : Pval ∈ ⟦BType.bool⟧ᶻ),
+        ⟦(B.Term.abstract.go P vs Xi
+          (fun v hv hvs => Δ_fv_all v
+            (B.fv.mem_all (.inr ⟨hv, hvs⟩)))).uncurry f⟧ᴮ =
+          some ⟨Pval, ⟨BType.bool, hPval⟩⟩ := by
+  have hinv := hden_all
+  simp only [B.Term.abstract] at hinv
+  unfold B.denote at hinv
+  simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at hinv
+  obtain ⟨⟨Dval, Dty, hDval⟩, hden_D_raw, rest⟩ := hinv
+  have Δ_fv_D : ∀ v ∈ B.fv D, (Xi v).isSome = true :=
+    fun v hv => Δ_fv_all v (B.fv.mem_all (.inl hv))
+  have hden_D : ⟦D.abstract Xi Δ_fv_D⟧ᴮ =
+      some ⟨Dval, ⟨Dty, hDval⟩⟩ := by
+    convert hden_D_raw using 2
+  have hDty : Dty = BType.set τ := by
+    exact (denote_welltyped_eq
+      (t := D.abstract Xi Δ_fv_D)
+      ⟨_, WFTC.of_abstract, BType.set τ,
+        by convert Typing.of_abstract Δ_fv_D typ_D⟩
+      hden_D).symm
+  subst Dty
+  simp only at rest
+  rw [dif_pos τ_hasArity] at rest
+  split_ifs at rest with hden_P htyp_P_det hD_empty
+  · let f : Fin vs.length → B.Dom.{u} := fun i =>
+      ⟨(τ.get vs.length i).defaultZFSet,
+        ⟨τ.get vs.length i, BType.mem_toZFSet_of_defaultZFSet⟩⟩
+    have hf : ∀ i, (f i).snd.fst = τ.get vs.length i ∧
+        (f i).fst ∈ ⟦τ.get vs.length i⟧ᶻ :=
+      fun i => ⟨rfl, (f i).snd.snd⟩
+    let Δext := Function.updates Xi vs
+      (List.ofFn fun i => some (f i))
+    have Δ_fv_P : ∀ v ∈ B.fv P, (Δext v).isSome = true := by
+      intro v hv
+      show (Function.updates Xi vs _ v).isSome = true
+      rw [Function.updates_eq_if (by rw [List.length_ofFn]) vs_nodup]
+      split_ifs with hvs
+      · simp [List.getElem_ofFn]
+      · exact Δ_fv_all v (B.fv.mem_all (.inr ⟨hv, hvs⟩))
+    have hwf_P := P_renwf f (fun i => (hf i).1)
+    obtain ⟨Pval, hPval, hPden⟩ := B.denote_exists_of_typing typ_P
+      Δext Δ_fv_P (@WFTC.wf _ WFTC.of_abstract)
+      (wd_P.toPHOAS Δext Δ_fv_P)
+    refine ⟨f, hf, Pval, hPval, ?_⟩
+    rw [denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp f Δ_fv_P]
+    exact hPden
+  · have hD_nonempty : Dval.Nonempty :=
+      Dval.eq_empty_or_nonempty.resolve_left hD_empty
+    obtain ⟨x, hx⟩ := hD_nonempty
+    have hD_sub : Dval ⊆ ⟦τ⟧ᶻ := by
+      rwa [BType.toZFSet, ZFSet.mem_powerset] at hDval
+    have hx_ty : x ∈ ⟦τ⟧ᶻ := hD_sub hx
+    have hx_arity : x.hasArity vs.length :=
+      hasArity_of_mem_toZFSet τ_hasArity hx_ty
+    let f : Fin vs.length → B.Dom.{u} := fun i =>
+      ⟨x.get vs.length i, τ.get vs.length i,
+        get_mem_type_of_isTuple hx_arity τ_hasArity hx_ty⟩
+    have hf : ∀ i, (f i).snd.fst = τ.get vs.length i ∧
+        (f i).fst ∈ ⟦τ.get vs.length i⟧ᶻ :=
+      fun i => ⟨rfl, (f i).snd.snd⟩
+    have htuple : ZFSet.ofFinDom f = x :=
+      ZFSet.ofFinDom_get (List.length_pos_iff.mpr vs_nemp)
+        (fun _ => get_mem_type_of_isTuple hx_arity τ_hasArity hx_ty)
+        hx_arity τ_hasArity
+    have hP_some := hden_P hf (htuple ▸ hx)
+    obtain ⟨⟨Pval, Pty, hPval⟩, hPden⟩ :=
+      Option.isSome_iff_exists.mp hP_some
+    let Δext := Function.updates Xi vs
+      (List.ofFn fun i => some (f i))
+    have Δ_fv_P : ∀ v ∈ B.fv P, (Δext v).isSome = true := by
+      intro v hv
+      show (Function.updates Xi vs _ v).isSome = true
+      rw [Function.updates_eq_if (by rw [List.length_ofFn]) vs_nodup]
+      split_ifs with hvs
+      · simp [List.getElem_ofFn]
+      · exact Δ_fv_all v (B.fv.mem_all (.inr ⟨hv, hvs⟩))
+    have hPden_abs : ⟦P.abstract Δext Δ_fv_P⟧ᴮ =
+        some ⟨Pval, ⟨Pty, hPval⟩⟩ := by
+      rw [← denote_term_abstract_go_eq_term_abstract
+        vs_nodup vs_nemp f Δ_fv_P]
+      convert hPden using 2
+    have hwf_P := P_renwf f (fun i => (hf i).1)
+    have hPty : Pty = BType.bool := by
+      exact (denote_welltyped_eq
+        (t := P.abstract Δext Δ_fv_P)
+        ⟨_, WFTC.of_abstract, BType.bool,
+          by convert Typing.of_abstract Δ_fv_P typ_P⟩
+        hPden_abs).symm
+    subst Pty
+    exact ⟨f, hf, Pval, hPval, hPden⟩
+
+open Classical B in
 set_option maxHeartbeats 8000000 in
 /-- Semantic Gate C, nonempty-domain branch.  The actual SMT binder may use a
 less general type `τs.toProdl`; admissibility supplies a preimage for every
