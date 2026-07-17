@@ -522,8 +522,10 @@ abbrev CastMembershipRepSpec.{u} (τ : BType)
           E'.declarations = decl ++ Dlt ∧
           ContextGeneratedByDeclarations Λ Γ' Dlt ∧
           DeclarationContextTrace Λ Dlt Γ' ∧
+          (∀ v ∈ declVars Dlt, v ∉ used) ∧
           CastMembershipRepSemantics.{u} τ x S t σx σS Λ Γ'
             used E'.usedVars Dlt ∧
+          (∀ b ∈ specBodies Dlt, Γ' ⊢ˢ b : SMTType.bool) ∧
           ScopedGeneratedTyping Λ Dlt t SMTType.bool⌝⦄
 
 theorem castMembership_direct_rep_contract.{u}
@@ -543,7 +545,7 @@ theorem castMembership_direct_rep_contract.{u}
   refine ⟨List.Subset.refl _, (fun _ h => h), St_sub, trivial,
     SMT.Typing.app _ _ _ _ _ typ_S typ_x, ?_, ?_, ?_, [], by simp,
     ContextGeneratedByDeclarations.refl _, DeclarationContextTrace.nil _,
-    ?_, ?_⟩
+    (by simp [declVars]), ?_, (by simp [specBodies]), ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inr hv
@@ -697,13 +699,17 @@ theorem castMembership_setPred_cast_rep_contract.{u}
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper τ.toSMTType spec, decl_eq, helper_ctx_gen,
-    helper_ctx_trace, ?_, ?_⟩
+    helper_ctx_trace, ?_, ?_, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
   · intro v hv
     simp only [SMT.fv, List.mem_append, List.mem_singleton]
     exact Or.inr (Or.inl hv)
+  · intro v hv
+    simp only [declVars_helperSpecChunk, List.mem_singleton] at hv
+    subst v
+    exact helper_not_used
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -1026,6 +1032,10 @@ theorem castMembership_setPred_cast_rep_contract.{u}
         overloadBinOp_𝔹, overloadBinOp, hfalse] using happ_true
     · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
         overloadBinOp_𝔹, overloadBinOp, htrue] using happ_true
+  · intro body hbody
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    exact (SMT.Typing.andE typ_t).2.1
   · apply ScopedGeneratedTyping.of_operational helper_ctx_gen typ_t
     intro b hb
     simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
@@ -1075,13 +1085,17 @@ theorem castMembership_option_rep_contract.{u}
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec,
-    decl_eq, helper_ctx_gen, helper_ctx_trace, ?_, ?_⟩
+    decl_eq, helper_ctx_gen, helper_ctx_trace, ?_, ?_, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
   · intro v hv
     simp only [SMT.fv, List.mem_append, List.mem_singleton]
     exact Or.inr (Or.inl (Or.inl hv))
+  · intro v hv
+    simp only [declVars_helperSpecChunk, List.mem_singleton] at hv
+    subst v
+    exact helper_not_used
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -1551,6 +1565,10 @@ theorem castMembership_option_rep_contract.{u}
         overloadBinOp_𝔹, overloadBinOp, hfalse] using hiff_eq_g
     · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
         overloadBinOp_𝔹, overloadBinOp, htrue] using hiff_eq_g
+  · intro body hbody
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    exact (SMT.Typing.andE typ_t).2.1
   · apply ScopedGeneratedTyping.of_operational helper_ctx_gen typ_t
     intro body hbody
     simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
@@ -1831,7 +1849,8 @@ theorem encodeTerm_rep_spec.mem_case.{u}
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
     typ_mem, _fv_x_mem, _fv_S_mem, mem_preserves,
-    Dlt, decl_eq, _mem_ctx, _mem_trace, mem_sem, _mem_sc_typing⟩ := pre
+    Dlt, decl_eq, _mem_ctx, _mem_trace, _mem_decl_fresh, mem_sem,
+    _mem_specs_typing, _mem_sc_typing⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
   mpure_intro

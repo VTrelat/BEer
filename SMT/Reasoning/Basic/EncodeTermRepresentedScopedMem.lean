@@ -116,8 +116,14 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mpure pre
   dsimp at pre
   obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_trace, x_sc_total, x_guard,
-      x_sc_typing⟩⟩,
-      bv_x_used, _⟩, bv_x_not_used, _⟩ := pre
+      x_specs_op, x_sc_typing⟩⟩,
+      bv_x_used, _x_used_sub_struct, Dltx_struct,
+        x_decl_struct, x_delta_ok⟩,
+      bv_x_not_used, _⟩ := pre
+  have Dltx_eq : Dltx = Dltx_struct := by
+    rw [x_decl_eq, St_decl_eq] at x_decl_struct
+    exact (List.append_right_inj decl).mp x_decl_struct
+  subst Dltx_struct
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
       _path_x, typ_x_enc, _shape_x, x_preserves,
       Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
@@ -135,7 +141,8 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
 
   mspec (Std.Do.Triple.and _
     (Std.Do.Triple.and _
-      (S_ih E typ_S
+      (Std.Do.Triple.and _
+        (S_ih E typ_S
         (fun v hv => Δ_fv v (fv_S_sub hv)) related_S
         Δx_none Δx_dom den_S
         (fun v hv => used_sub_x (vars_used v (by
@@ -162,8 +169,8 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
         hS_bv_nodup respects_S
         (fun v hv => AList.mem_of_subset types_sub_x
           (fv_in_Λ v (fv_S_sub hv))) wf
-        (n := Stx.env.freshvarsc))
-      (S_scoped E typ_S
+          (n := Stx.env.freshvarsc))
+        (S_scoped E typ_S
         (fun v hv => Δ_fv v (fv_S_sub hv)) related_S
         Δx_none Δx_dom den_S
         (fun v hv => used_sub_x (vars_used v (by
@@ -190,8 +197,10 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
         hS_bv_nodup respects_S
         (fun v hv => AList.mem_of_subset types_sub_x
           (fv_in_Λ v (fv_S_sub hv))) wf
-        (n := Stx.env.freshvarsc) (decl := decl ++ Dltx)))
-    (encodeTerm_bv_used E (t := S) (used := Stx.env.usedVars)
+          (n := Stx.env.freshvarsc) (decl := decl ++ Dltx)))
+      (encodeTerm_bv_used E (t := S) (used := Stx.env.usedVars)
+        (n := Stx.env.freshvarsc) (decl := Stx.env.declarations)))
+    (encodeTerm_bv_notMem_used E (t := S) (used := Stx.env.usedVars)
       (n := Stx.env.freshvarsc) (decl := Stx.env.declarations)))
   clear S_ih S_scoped
   rename_i out_S
@@ -200,9 +209,20 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mintro ∀StS
   mpure pre
   dsimp at pre
-  obtain ⟨⟨S_post, ⟨DltS, S_decl_eq, S_ctx, S_trace, S_sc_total, S_guard,
-      S_sc_typing⟩⟩,
-      bv_S_used, _⟩ := pre
+  obtain ⟨⟨⟨S_post, ⟨DltS, S_decl_eq, S_ctx, S_trace, S_sc_total, S_guard,
+      S_specs_op, S_sc_typing⟩⟩,
+      bv_S_used, _S_used_sub_struct, DltS_struct,
+        S_decl_struct, S_delta_ok⟩,
+      _bv_S_not_used, _S_used_sub_notmem, DltS_notmem,
+        S_decl_notmem, S_delta_not_used⟩ := pre
+  have DltS_eq : DltS = DltS_struct := by
+    rw [S_decl_eq, x_decl_eq] at S_decl_struct
+    exact (List.append_right_inj (decl ++ Dltx)).mp S_decl_struct
+  subst DltS_struct
+  have DltS_notmem_eq : DltS = DltS_notmem := by
+    rw [S_decl_eq, x_decl_eq] at S_decl_notmem
+    exact (List.append_right_inj (decl ++ Dltx)).mp S_decl_notmem
+  subst DltS_notmem
   obtain ⟨used_sub_S, types_sub_S, keys_sub_S, S_used,
       _path_S, typ_S_enc, _shape_S, S_preserves,
       ΔS, hcov_S, ΔS_ext, _related_S, ΔS_none, _respects_S,
@@ -254,7 +274,8 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
     typ_mem, fv_x_mem, fv_S_mem, mem_preserves,
-    DltM, mem_decl_eq, mem_ctx, mem_trace, mem_sem, mem_sc_typing⟩ := pre
+    DltM, mem_decl_eq, mem_ctx, mem_trace, mem_decl_fresh, mem_sem,
+    mem_specs_op, mem_sc_typing⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
   mpure_intro
@@ -265,7 +286,7 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
     ContextGeneratedByDeclarations.append children_ctx mem_ctx,
     DeclarationContextTrace.append
       (DeclarationContextTrace.append x_trace S_trace) mem_trace,
-    ?_, ?_, ?_⟩
+    ?_, ?_, ?_, ?_⟩
   · rw [mem_decl_eq, S_decl_eq]
     simp only [List.append_assoc]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
@@ -513,6 +534,22 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
     subst Ms
     exact RDomCastSupported.bool_of_true_iff
       (hsource_alt_true.trans hmem_iff.symm)
+  · intro body hbody
+    rw [specBodies_append, List.mem_append] at hbody
+    rcases hbody with hchildren | hmem
+    · rw [specBodies_append, List.mem_append] at hchildren
+      rcases hchildren with hxbody | hSbody
+      · have typ_at_S : StS.types ⊢ˢ body : SMTType.bool :=
+          typing_weakening_generated types_sub_S S_ctx
+            S_delta_not_used.1 (x_specs_op body hxbody)
+            (fun v hv => x_delta_ok.2 body hxbody v hv)
+        exact typing_weakening_generated types_sub_M mem_ctx
+          mem_decl_fresh typ_at_S
+          (fun v hv => used_sub_S (x_delta_ok.2 body hxbody v hv))
+      · exact typing_weakening_generated types_sub_M mem_ctx
+          mem_decl_fresh (S_specs_op body hSbody)
+          (fun v hv => S_delta_ok.2 body hSbody v hv)
+    · exact mem_specs_op body hmem
   · constructor
     · intro Γ_sup Γ_sub result_bv_fresh
       have mem_scope : ScopedContextExtends StS.types DltM Γ_sup :=

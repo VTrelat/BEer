@@ -81,6 +81,34 @@ def declEntries (Dlt : SMT.Chunk) :
     (v : SMT.𝒱) (τ : SMTType) (spec : SMT.Term) :
     declEntries (helperSpecChunk v τ spec) = [⟨v, τ⟩] := rfl
 
+theorem mem_declVars_of_mem_declEntries
+    {Dlt : SMT.Chunk} {v : SMT.𝒱} {τ : SMTType}
+    (h : (⟨v, τ⟩ : Sigma fun _ : SMT.𝒱 => SMTType) ∈ declEntries Dlt) :
+    v ∈ declVars Dlt := by
+  induction Dlt with
+  | nil => simp [declEntries] at h
+  | cons i D ih =>
+      cases i with
+      | declare_const w σ =>
+          simp only [declEntries, List.filterMap_cons, List.mem_cons] at h
+          simp only [declVars, List.filterMap_cons, List.mem_cons]
+          rcases h with h | h
+          · cases h
+            exact Or.inl rfl
+          · exact Or.inr (ih h)
+      | define_fun w σ ρ t =>
+          simpa [declVars] using ih (by simpa [declEntries] using h)
+      | define_const w σ t =>
+          simpa [declVars] using ih (by simpa [declEntries] using h)
+      | assert t =>
+          simpa [declVars] using ih (by simpa [declEntries] using h)
+      | push n =>
+          simpa [declVars] using ih (by simpa [declEntries] using h)
+      | pop n =>
+          simpa [declVars] using ih (by simpa [declEntries] using h)
+      | check_sat =>
+          simpa [declVars] using ih (by simpa [declEntries] using h)
+
 /-- Every entry in the operational result context is either an entry of the
 input context or the typed declaration of a generated helper. -/
 abbrev ContextGeneratedByDeclarations
@@ -245,6 +273,31 @@ theorem ScopedGeneratedTyping.of_operational
     exact SMT.Typing.weakening hop_sub (hspec b hb)
       (hspec_bv b hb)
 
+/-- Weaken a typed term across one declaration-generated encoder step.  Bound
+variables already belong to the old used-name set, while every newly declared
+name is fresh from that set, so no binder can be captured. -/
+theorem typing_weakening_generated
+    {Γ Γ' : SMT.TypeContext} {Dlt : SMT.Chunk}
+    {used : List SMT.𝒱} {t : SMT.Term} {σ : SMTType}
+    (hsub : Γ ⊆ Γ')
+    (hgen : ContextGeneratedByDeclarations Γ Γ' Dlt)
+    (hdecl : ∀ v ∈ declVars Dlt, v ∉ used)
+    (ht : Γ ⊢ˢ t : σ)
+    (hbv : ∀ v ∈ SMT.bv t, v ∈ used) :
+    Γ' ⊢ˢ t : σ := by
+  apply SMT.Typing.weakening hsub ht
+  intro v hv hvΓ'
+  have hvused := hbv v hv
+  obtain ⟨τv, hlookup⟩ := Option.isSome_iff_exists.mp
+    (AList.lookup_isSome.mpr hvΓ')
+  have hentry : (⟨v, τv⟩ : Sigma fun _ : SMT.𝒱 => SMTType) ∈
+      Γ'.entries := AList.mem_lookup_iff.mp hlookup
+  rcases List.mem_append.mp (hgen hentry) with hbase | hnew
+  · have hvΓ : v ∈ Γ :=
+      AList.mem_keys.mpr (List.mem_map.mpr ⟨⟨v, τv⟩, hbase, rfl⟩)
+    exact SMT.Typing.bv_notMem_context ht v hv hvΓ
+  · exact hdecl v (mem_declVars_of_mem_declEntries hnew) hvused
+
 /-- Every generated Boolean helper specification is covered, well typed under
 the supplied valuation, and evaluates to true. -/
 abbrev SpecBodiesTrue.{u}
@@ -384,6 +437,7 @@ abbrev EncodeTermRepScopedPost.{u}
     DeclarationContextTrace Λ Dlt Γ' ∧
     EncodeTermRepScopedTotal.{u} t E α Λ t' σ Γ' E'.usedVars Dlt ∧
     EncodeTermRepGuardedSound.{u} t E α t' σ Λ Dlt ∧
+    (∀ b ∈ specBodies Dlt, Γ' ⊢ˢ b : SMTType.bool) ∧
     ScopedGeneratedTyping Λ Dlt t' σ
 
 /-- Representation-aware postcondition for one successful `encodeTerm` run. -/
