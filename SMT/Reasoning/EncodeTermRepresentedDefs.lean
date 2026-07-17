@@ -79,6 +79,65 @@ def declBinders (Dlt : SMT.Chunk) : List (SMT.𝒱 × SMTType) :=
     | .declare_const v τ => some (v, τ)
     | _ => none
 
+theorem mem_declVars_of_mem_declBinders
+    {Dlt : SMT.Chunk} {v : SMT.𝒱} {tau : SMTType}
+    (h : (v, tau) ∈ declBinders Dlt) : v ∈ declVars Dlt := by
+  induction Dlt with
+  | nil => simp [declBinders] at h
+  | cons i D ih =>
+      cases i with
+      | declare_const w sigma =>
+          simp only [declBinders, List.filterMap_cons, List.mem_cons] at h
+          simp only [declVars, List.filterMap_cons, List.mem_cons]
+          rcases h with h | h
+          · cases h
+            exact .inl rfl
+          · exact .inr (ih h)
+      | define_fun w sigma rho t =>
+          simpa [declVars] using ih (by simpa [declBinders] using h)
+      | define_const w sigma t =>
+          simpa [declVars] using ih (by simpa [declBinders] using h)
+      | assert t => simpa [declVars] using ih (by simpa [declBinders] using h)
+      | push n => simpa [declVars] using ih (by simpa [declBinders] using h)
+      | pop n => simpa [declVars] using ih (by simpa [declBinders] using h)
+      | check_sat => simpa [declVars] using ih (by simpa [declBinders] using h)
+
+theorem mem_declEntries_of_mem_declBinders
+    {Dlt : SMT.Chunk} {v : SMT.𝒱} {tau : SMTType}
+    (h : (v, tau) ∈ declBinders Dlt) :
+    (⟨v, tau⟩ : Sigma fun _ : SMT.𝒱 => SMTType) ∈ declEntries Dlt := by
+  induction Dlt with
+  | nil => simp [declBinders] at h
+  | cons i D ih =>
+      cases i with
+      | declare_const w sigma =>
+          simp only [declBinders, declEntries, List.filterMap_cons,
+            List.mem_cons] at h ⊢
+          exact h.elim (fun heq => Or.inl (by cases heq; rfl))
+            (Or.inr ∘ ih)
+      | define_fun w sigma rho t =>
+          simpa [declEntries] using ih (by simpa [declBinders] using h)
+      | define_const w sigma t =>
+          simpa [declEntries] using ih (by simpa [declBinders] using h)
+      | assert t =>
+          simpa [declEntries] using ih (by simpa [declBinders] using h)
+      | push n =>
+          simpa [declEntries] using ih (by simpa [declBinders] using h)
+      | pop n =>
+          simpa [declEntries] using ih (by simpa [declBinders] using h)
+      | check_sat =>
+          simpa [declEntries] using ih (by simpa [declBinders] using h)
+
+@[simp] theorem declBinders_map_fst (Dlt : SMT.Chunk) :
+    (declBinders Dlt).map Prod.fst = declVars Dlt := by
+  induction Dlt with
+  | nil => rfl
+  | cons i D ih =>
+      cases i <;>
+        simp only [declBinders, declVars, List.filterMap_cons,
+          List.map_cons] <;>
+        simpa [declBinders, declVars] using ih
+
 @[simp] theorem declBinders_nil : declBinders [] = [] := rfl
 
 @[simp] theorem declBinders_append (D₁ D₂ : SMT.Chunk) :
@@ -132,6 +191,20 @@ input context or the typed declaration of a generated helper. -/
 abbrev ContextGeneratedByDeclarations
     (Λ Γ : SMT.TypeContext) (Dlt : SMT.Chunk) : Prop :=
   Γ.entries ⊆ Λ.entries ++ declEntries Dlt
+
+theorem ContextGeneratedByDeclarations.mem_classify
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : ContextGeneratedByDeclarations Lambda Gamma Dlt)
+    {v : SMT.𝒱} (hv : v ∈ Gamma) :
+    v ∈ Lambda ∨ v ∈ declVars Dlt := by
+  obtain ⟨tau, hlookup⟩ := Option.isSome_iff_exists.mp
+    (AList.lookup_isSome.mpr hv)
+  have hentry : (⟨v, tau⟩ : Sigma fun _ : SMT.𝒱 => SMTType) ∈
+      Gamma.entries := AList.mem_lookup_iff.mp hlookup
+  rcases List.mem_append.mp (h hentry) with hbase | hdecl
+  · exact .inl <| AList.mem_keys.mpr <|
+      List.mem_map.mpr ⟨⟨v, tau⟩, hbase, rfl⟩
+  · exact .inr (mem_declVars_of_mem_declEntries hdecl)
 
 /-- Exact context evolution induced by the declaration delta.  A
 `declare_const` inserts one genuinely fresh typed name; every other
@@ -208,6 +281,57 @@ theorem DeclarationContextTrace.entries_subset
       | push n => exact ih h
       | pop n => exact ih h
       | check_sat => exact ih h
+
+/-- Every declaration name in an exact trace is fresh from the trace's input
+context. -/
+theorem DeclarationContextTrace.declVars_fresh_base
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma) :
+    ∀ v ∈ declVars Dlt, v ∉ Lambda := by
+  induction Dlt generalizing Lambda with
+  | nil => simp [declVars]
+  | cons i D ih =>
+      cases i with
+      | declare_const w tau =>
+          obtain ⟨hw, htail⟩ := h
+          intro v hv
+          simp only [declVars, List.filterMap_cons, List.mem_cons] at hv
+          rcases hv with rfl | hv
+          · exact hw
+          · have hnot_insert := ih htail v hv
+            exact fun hv_base => hnot_insert (by
+              exact (AList.mem_insert _).mpr (.inr hv_base))
+      | define_fun w tau sigma body =>
+          simpa [declVars] using ih h
+      | define_const w tau body =>
+          simpa [declVars] using ih h
+      | assert body => simpa [declVars] using ih h
+      | push n => simpa [declVars] using ih h
+      | pop n => simpa [declVars] using ih h
+      | check_sat => simpa [declVars] using ih h
+
+/-- Exact declaration traces introduce pairwise distinct helper names. -/
+theorem DeclarationContextTrace.declVars_nodup
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma) :
+    (declVars Dlt).Nodup := by
+  induction Dlt generalizing Lambda with
+  | nil => simp [declVars]
+  | cons i D ih =>
+      cases i with
+      | declare_const v tau =>
+          obtain ⟨hv, htail⟩ := h
+          simp only [declVars, List.filterMap_cons, List.nodup_cons]
+          refine ⟨?_, ih htail⟩
+          intro htail_mem
+          exact (htail.declVars_fresh_base v htail_mem) <|
+            (AList.mem_insert _).mpr (.inl rfl)
+      | define_fun v tau sigma body => simpa [declVars] using ih h
+      | define_const v tau body => simpa [declVars] using ih h
+      | assert body => simpa [declVars] using ih h
+      | push n => simpa [declVars] using ih h
+      | pop n => simpa [declVars] using ih h
+      | check_sat => simpa [declVars] using ih h
 
 /-- Every typed declaration recorded by an exact trace is present in the
 trace's final context. -/
@@ -547,6 +671,27 @@ theorem SpecBodiesTrue.right_of_append.{u}
     SpecBodiesTrue Θ Γ D₂ := by
   intro b hb
   exact h b (by rw [specBodies_append, List.mem_append]; exact Or.inr hb)
+
+/-- Helper specifications remain true when the new valuation agrees with the
+old valuation on every free variable of every specification body. -/
+theorem SpecBodiesTrue.of_agreesOnFV.{u}
+    {Θ Θ' : SMT.RenamingContext.Context.{u}}
+    {Γ : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : SpecBodiesTrue Θ Γ Dlt)
+    (hagrees : ∀ b ∈ specBodies Dlt,
+      SMT.RenamingContext.AgreesOnFV Θ' Θ b) :
+    SpecBodiesTrue Θ' Γ Dlt := by
+  intro b hb
+  obtain ⟨hcov, db, hresp, hden, htype, htrue⟩ := h b hb
+  have hagree := hagrees b hb
+  have hcov' : SMT.RenamingContext.CoversFV Θ' b :=
+    SMT.RenamingContext.coversFV_of_agreesOnFV_symm hagree hcov
+  have hden' := SMT.RenamingContext.denote_congr_of_agreesOnFV
+    (t := b) (h1 := hcov') (h2 := hcov) hagree
+  refine ⟨hcov', db, ?_, hden'.trans hden, htype, htrue⟩
+  intro v τ hv hlookup
+  obtain ⟨d, hd, hdtype⟩ := hresp hv hlookup
+  exact ⟨d, (hagree hv).trans hd, hdtype⟩
 
 theorem SpecBodiesTrue.of_extends.{u}
     {Θ Θ' : SMT.RenamingContext.Context.{u}}

@@ -934,7 +934,7 @@ private theorem bv_subst_subset {x : SMT.𝒱} {t e : SMT.Term}
     exact ⟨w, hw_mem, rfl⟩
   | as a _ ih => simp only [SMT.subst, SMT.bv] at hv ⊢; exact ih hv
 
-private theorem fv_subst_of_ne {v x : SMT.𝒱} {t e : SMT.Term}
+theorem fv_subst_of_ne {v x : SMT.𝒱} {t e : SMT.Term}
     (hv : v ∈ SMT.fv e) (hvx : v ≠ x) : v ∈ SMT.fv (SMT.subst x t e) := by
   induction e using SMT.Term.rec' with
   | var w =>
@@ -986,7 +986,7 @@ private theorem fv_subst_of_ne {v x : SMT.𝒱} {t e : SMT.Term}
     exact ⟨SMT.subst x t w, ⟨w, hw_mem, rfl⟩, rfl⟩
   | as a _ ih => simp only [SMT.subst, SMT.fv] at hv ⊢; exact ih hv
 
-private theorem fv_mem_fv_substList {v : SMT.𝒱} {xs : List SMT.𝒱} {ts : List SMT.Term} {e : SMT.Term}
+theorem fv_mem_fv_substList {v : SMT.𝒱} {xs : List SMT.𝒱} {ts : List SMT.Term} {e : SMT.Term}
     (hv : v ∈ SMT.fv e) (hvxs : v ∉ xs) (hts_fv_disj : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ xs)
     (hts_bv : ∀ t ∈ ts, SMT.bv t = []) :
     v ∈ SMT.fv (SMT.substList xs ts e) := by
