@@ -1143,6 +1143,175 @@ theorem denote_guarded_option_some_of.{u}
   exact hden_some_the
 
 open Classical in
+/-- A successful option-valued PHOAS term can always be eliminated to a
+typed payload value.  This target-only form is used by the reverse direction
+of the guarded option-body characterization. -/
+theorem denote_the_of_option_value.{u}
+    {d : SMT.PHOAS.Term SMT.Dom.{u}} {Dd : SMT.Dom.{u}} {beta : SMTType}
+    (hden_d : ⟦d⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta) :
+    ∃ Dthe : SMT.Dom.{u},
+      ⟦SMT.PHOAS.Term.the d⟧ˢ = some Dthe ∧
+      Dthe.snd.fst = beta := by
+  rcases Dd with ⟨Dval, Dsigma, hDmem⟩
+  dsimp at hD_type hden_d
+  subst Dsigma
+  let Dthe : SMT.Dom := ⟨(ZFSet.Option.the SMTType.toZFSet_nonempty
+    ⟨Dval, hDmem⟩).val, beta, SetLike.coe_mem _⟩
+  refine ⟨Dthe, ?_, rfl⟩
+  rw [SMT.denote, hden_d]
+  rfl
+
+private theorem collect_denote_and_both_zftrue
+    {p q : SMT.PHOAS.Term SMT.Dom} {Dp Dq : SMT.Dom}
+    (hp : ⟦p⟧ˢ = some Dp) (hpTy : Dp.2.1 = .bool)
+    (hq : ⟦q⟧ˢ = some Dq) (hqTy : Dq.2.1 = .bool)
+    {Dand : SMT.Dom}
+    (hand : ⟦p ∧ˢ' q⟧ˢ = some Dand) (handTrue : Dand.1 = zftrue) :
+    Dp.1 = zftrue ∧ Dq.1 = zftrue := by
+  have hDp_mem_𝔹 : Dp.fst ∈ 𝔹 := by
+    have h := Dp.snd.snd
+    rwa [hpTy] at h
+  have hDq_mem_𝔹 : Dq.fst ∈ 𝔹 := by
+    have h := Dq.snd.snd
+    rwa [hqTy] at h
+  constructor
+  · rcases ZFSet.ZFBool.mem_𝔹_iff _ |>.mp hDp_mem_𝔹 with hDp_false | hDp_true
+    · exfalso
+      have hfalse := denote_and_eq_zffalse_of_some_zffalse_left
+        hp hpTy hDp_false hq hqTy
+      rw [hfalse] at hand
+      have heq := Option.some_injective _ hand
+      rw [← congrArg (·.fst) heq] at handTrue
+      exact ZFSet.zftrue_ne_zffalse handTrue.symm
+    · exact hDp_true
+  · rcases ZFSet.ZFBool.mem_𝔹_iff _ |>.mp hDq_mem_𝔹 with hDq_false | hDq_true
+    · exfalso
+      have hfalse := denote_and_eq_zffalse_of_some_zffalse_right
+        hp hpTy hq hqTy hDq_false
+      rw [hfalse] at hand
+      have heq := Option.some_injective _ hand
+      rw [← congrArg (·.fst) heq] at handTrue
+      exact ZFSet.zftrue_ne_zffalse handTrue.symm
+    · exact hDq_true
+
+open Classical in
+/-- If the guarded option payload has produced `some W`, then both parts of
+its guard succeeded: the domain application was that same `some W`, and the
+substituted Boolean predicate was true. -/
+theorem denote_guarded_option_some_elim.{u}
+    {d p : SMT.PHOAS.Term SMT.Dom.{u}}
+    {Dd Dp Dbody W : SMT.Dom.{u}} {beta : SMTType}
+    (hden_d : ⟦d⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta)
+    (hden_p : ⟦p⟧ˢ = some Dp)
+    (hP_type : Dp.snd.fst = SMTType.bool)
+    (hW_type : W.snd.fst = beta)
+    (hden_body : ⟦SMT.PHOAS.Term.ite
+      (SMT.PHOAS.Term.and
+        (SMT.PHOAS.Term.eq d (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))) p)
+      (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))
+      (SMT.PHOAS.Term.none beta)⟧ˢ = some Dbody)
+    (hbody_value : Dbody.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val) :
+    Dd.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val ∧
+      Dp.fst = ZFSet.zftrue := by
+  obtain ⟨Dthe, hden_the, hDthe_type⟩ :=
+    denote_the_of_option_value hden_d hD_type
+  let Dsome : SMT.Dom := ⟨(ZFSet.Option.some
+    (S := ⟦beta⟧ᶻ) ⟨Dthe.fst, by rw [← hDthe_type]; exact Dthe.snd.snd⟩).val,
+    SMTType.option beta, SetLike.coe_mem _⟩
+  have hDsome_type : Dsome.snd.fst = SMTType.option beta := rfl
+  have hden_some : ⟦SMT.PHOAS.Term.some
+      (SMT.PHOAS.Term.the d)⟧ˢ = some Dsome := by
+    rcases Dthe with ⟨T, tau, hT⟩
+    dsimp at hDthe_type hden_the ⊢
+    subst tau
+    rw [SMT.denote, hden_the]
+    rfl
+  obtain ⟨Deq, hden_eq, hDeq_type⟩ :=
+    denote_eq_some_of_some hden_d hden_some
+      (hD_type.trans hDsome_type.symm)
+  obtain ⟨Dguard, hden_guard, hguard_type⟩ :=
+    denote_and_some_bool_of_some_bool hden_eq hDeq_type hden_p hP_type
+  rcases Dguard with ⟨G, Gtype, hGmem⟩
+  dsimp at hguard_type hden_guard
+  subst Gtype
+  rcases ZFSet.ZFBool.mem_𝔹_iff G |>.mp hGmem with hGfalse | hGtrue
+  · let Dnone : SMT.Dom := ⟨(ZFSet.Option.none (S := ⟦beta⟧ᶻ)).val,
+      SMTType.option beta, SetLike.coe_mem _⟩
+    have hden_none : ⟦SMT.PHOAS.Term.ite
+        (SMT.PHOAS.Term.and
+          (SMT.PHOAS.Term.eq d (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))) p)
+        (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))
+        (SMT.PHOAS.Term.none beta)⟧ˢ = some Dnone := by
+      rw [SMT.denote, hden_guard]
+      change (if ZFSet.ZFBool.toBool ⟨G, hGmem⟩ then
+        ⟦SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d)⟧ˢ else
+        ⟦SMT.PHOAS.Term.none beta⟧ˢ) = some Dnone
+      have htoBool : ZFSet.ZFBool.toBool ⟨G, hGmem⟩ = false := by
+        have hG : (⟨G, hGmem⟩ : ZFSet.ZFBool) = ⊥ := by
+          apply Subtype.ext
+          exact hGfalse
+        rw [hG]
+        exact ZFSet.ZFBool.toBool_false
+      rw [htoBool, if_neg (by decide), SMT.denote]
+      rfl
+    have hbody_none : Dbody = Dnone :=
+      Option.some.inj (hden_body.symm.trans hden_none)
+    have hnone_some : ZFSet.Option.none (S := ⟦beta⟧ᶻ) =
+        ZFSet.Option.some ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩ := by
+      apply Subtype.ext
+      change Dnone.fst = (ZFSet.Option.some
+        (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val
+      rw [← hbody_none, hbody_value]
+    exact False.elim ((ZFSet.Option.some_ne_none _) hnone_some.symm)
+  · have hden_body_some : ⟦SMT.PHOAS.Term.ite
+        (SMT.PHOAS.Term.and
+          (SMT.PHOAS.Term.eq d (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))) p)
+        (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))
+        (SMT.PHOAS.Term.none beta)⟧ˢ = some Dsome := by
+      rw [SMT.denote, hden_guard]
+      change (if ZFSet.ZFBool.toBool ⟨G, hGmem⟩ then
+        ⟦SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d)⟧ˢ else
+        ⟦SMT.PHOAS.Term.none beta⟧ˢ) = some Dsome
+      have htoBool : ZFSet.ZFBool.toBool ⟨G, hGmem⟩ = true := by
+        have hG : (⟨G, hGmem⟩ : ZFSet.ZFBool) = ⊤ := by
+          apply Subtype.ext
+          exact hGtrue
+        rw [hG]
+        exact ZFSet.ZFBool.toBool_true
+      rw [htoBool, if_pos rfl]
+      exact hden_some
+    have hbody_some : Dbody = Dsome :=
+      Option.some.inj (hden_body.symm.trans hden_body_some)
+    have hDthe_value : Dthe.fst = W.fst := by
+      have hsome_eq : ZFSet.Option.some
+          (S := ⟦beta⟧ᶻ) ⟨Dthe.fst, by rw [← hDthe_type]; exact Dthe.snd.snd⟩ =
+          ZFSet.Option.some ⟨W.fst,
+            by rw [← hW_type]; exact W.snd.snd⟩ := by
+        apply Subtype.ext
+        change Dsome.fst = (ZFSet.Option.some
+          (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val
+        rw [← hbody_some, hbody_value]
+      have hpayload_eq := ZFSet.Option.some.injEq.mp hsome_eq
+      exact congrArg Subtype.val hpayload_eq
+    obtain ⟨hEq_true, hP_true⟩ := collect_denote_and_both_zftrue
+      hden_eq hDeq_type hden_p hP_type hden_guard hGtrue
+    have hDd_eq_some : Dd.fst = Dsome.fst :=
+      denote_eq_true_implies_fst_eq hden_d hden_some
+        (hD_type.trans hDsome_type.symm) hden_eq hEq_true
+    constructor
+    · rw [hDd_eq_some]
+      dsimp [Dsome]
+      apply congrArg (fun x : {x // x ∈ ⟦beta⟧ᶻ} =>
+        (ZFSet.Option.some x).val)
+      apply Subtype.ext
+      exact hDthe_value
+    · exact hP_true
+
+open Classical in
 /-- A one-binder SMT lambda evaluates at a typed argument to the denotation
 of its body.  This is phrased with an arbitrary functional codomain so it can
 be reused by both Boolean and option-valued binder encodings. -/
