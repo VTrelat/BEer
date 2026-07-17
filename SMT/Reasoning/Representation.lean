@@ -588,6 +588,24 @@ theorem RDomCastSupported.supported.{u}
     (h : RDomCastSupported d d') :
     BType.SupportedSMT d.snd.fst d'.snd.fst := h.2
 
+/-- An option-valued function can represent only a source relation over a
+binary product, and its argument and payload types are the canonical images
+of the source endpoints.  This exposes the structural information carried by
+the supported-representation grammar to encoder case proofs. -/
+theorem RDomCastSupported.optionFunctionE.{u}
+    {T F : ZFSet.{u}} {tau : BType} {alpha beta : SMTType}
+    {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    {hF : F ∈ ⟦SMTType.fun alpha (SMTType.option beta)⟧ᶻ}
+    (h : RDomCastSupported
+      (⟨T, BType.set tau, hT⟩ : B.Dom)
+      (⟨F, SMTType.fun alpha (SMTType.option beta), hF⟩ : SMT.Dom)) :
+    ∃ a b, tau = a ×ᴮ b ∧ alpha = a.toSMTType ∧ beta = b.toSMTType := by
+  rcases BType.SupportedSMT.setE h.supported with hpred | ⟨a, b, htau, htype⟩
+  · cases hpred
+  · injection htype with halpha hbeta
+    injection hbeta with hbeta
+    exact ⟨a, b, htau, halpha, hbeta⟩
+
 /-- Core representation agreement at a supported target shape carries the
 binder-admissibility component required by the strengthened theorem. -/
 theorem RDomCast.toRDomCastAdmissible_of_supported.{u}
