@@ -149,6 +149,68 @@ theorem toDestPair_concat
       simp only [toDestPair]
       exact ih (SMT.Term.fst d) (SMT.Term.fst d) (SMT.Term.snd d :: acc)
 
+/-- The option-collection substitution tuple has the same length as its
+source binder list: dropLast supplies the input prefix and the domain payload
+supplies the final component. -/
+theorem toDestPair_optionTuple_length
+    {vs : List SMT.𝒱} {z : SMT.𝒱} {Dapp : SMT.Term}
+    (prefix_nemp : vs.dropLast ≠ []) :
+    ((toDestPair vs.dropLast (.var z)).concat (.the Dapp)).length =
+      vs.length := by
+  have hprefix_pos : 0 < vs.dropLast.length :=
+    List.length_pos_iff.mpr prefix_nemp
+  rw [List.length_concat,
+    toDestPair_length_gen vs.dropLast (.var z) (.var z) [] prefix_nemp,
+    List.length_dropLast]
+  simp only [List.length_nil, Nat.add_zero]
+  rw [List.length_dropLast] at hprefix_pos
+  omega
+
+/-- Every component of the option-collection substitution tuple has empty
+bound-variable list when the domain application does. -/
+theorem toDestPair_optionTuple_bv_nil
+    {vs : List SMT.𝒱} {z : SMT.𝒱} {Dapp : SMT.Term}
+    (hDapp_bv : SMT.bv Dapp = []) :
+    ∀ t ∈ (toDestPair vs.dropLast (.var z)).concat (.the Dapp),
+      SMT.bv t = [] := by
+  intro t ht
+  rw [List.concat_eq_append] at ht
+  rcases List.mem_append.mp ht with hprefix | hlast
+  · exact toDestPair_bv_nil t hprefix
+  · rw [List.mem_singleton] at hlast
+    subst t
+    simp [SMT.bv, hDapp_bv]
+
+/-- No component of the option-collection substitution tuple is syntactically
+none; the final projection is an elimination expression rather than the
+option literal. -/
+theorem toDestPair_optionTuple_ne_none
+    {vs : List SMT.𝒱} {z : SMT.𝒱} {Dapp : SMT.Term} :
+    ∀ t ∈ (toDestPair vs.dropLast (.var z)).concat (.the Dapp),
+      t ≠ SMT.Term.none := by
+  intro t ht
+  rw [List.concat_eq_append] at ht
+  rcases List.mem_append.mp ht with hprefix | hlast
+  · exact toDestPair_ne_none t hprefix
+  · rw [List.mem_singleton] at hlast
+    subst t
+    simp
+
+/-- The only free variables introduced by the option-collection substitution
+tuple are the fresh input binder and the domain application. -/
+theorem toDestPair_optionTuple_fv_subset
+    {vs : List SMT.𝒱} {z : SMT.𝒱} {Dapp t : SMT.Term} {w : SMT.𝒱}
+    (ht : t ∈ (toDestPair vs.dropLast (.var z)).concat (.the Dapp))
+    (hw : w ∈ SMT.fv t) :
+    w = z ∨ w ∈ SMT.fv Dapp := by
+  rw [List.concat_eq_append] at ht
+  rcases List.mem_append.mp ht with hprefix | hlast
+  · exact Or.inl (SMT_fv_toDestPair_subset hprefix hw)
+  · rw [List.mem_singleton] at hlast
+    subst t
+    right
+    simpa [SMT.fv] using hw
+
 theorem fromProdl_zero_eq (σ : SMTType) : σ.fromProdl 0 = [σ] := by
   cases σ <;> simp [SMT.SMTType.fromProdl]
 
