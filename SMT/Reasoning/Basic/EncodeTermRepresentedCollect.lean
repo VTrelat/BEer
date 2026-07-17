@@ -689,6 +689,24 @@ theorem toDestPair_denote_represented_components.{u}
         tau_hasArity hWx_mem]
     _ = x.get vs.length ⟨i, hi_vs⟩ := by rw [hWx_retract]
 
+/-- An arity-two-or-more source product has a left component whose tuple
+arity matches the `dropLast` input prefix used by the function-valued
+collection encoder. -/
+theorem BType.prod_left_hasArity_dropLast
+    {vs : List B.𝒱} {alpha beta : BType}
+    (hvs : 2 ≤ vs.length)
+    (harity : (alpha ×ᴮ beta).hasArity vs.length) :
+    alpha.hasArity vs.dropLast.length := by
+  have hlen : vs.length = (vs.length - 2) + 2 := by omega
+  have hleft : alpha.hasArity ((vs.length - 2) + 1) := by
+    rw [hlen] at harity
+    simpa [BType.hasArity] using harity
+  have hlength : vs.dropLast.length = (vs.length - 2) + 1 := by
+    rw [List.length_dropLast]
+    omega
+  rw [hlength]
+  exact hleft
+
 open Classical in
 /-- Install the canonical projections of a collection element as a
 representation-aware binder valuation.  Outside the binder names the
