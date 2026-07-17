@@ -689,6 +689,63 @@ theorem toDestPair_denote_represented_components.{u}
         tau_hasArity hWx_mem]
     _ = x.get vs.length ⟨i, hi_vs⟩ := by rw [hWx_retract]
 
+/-- Tuple projections retain their componentwise representation property when
+the projection carries an accumulator of already-denoting terms.  The
+function-valued collection encoder uses the accumulator for the payload
+extracted from its option-valued domain application. -/
+theorem toDestPair_denote_represented_components_acc.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ [])
+    {tau : BType} (tau_hasArity : tau.hasArity vs.length)
+    {x : ZFSet.{u}} (hx_mem : x ∈ ⟦tau⟧ᶻ)
+    {seed : SMT.Term} {Delta : SMT.RenamingContext.Context.{u}}
+    {Wx : SMT.Dom.{u}}
+    (hcov_seed : SMT.RenamingContext.CoversFV Delta seed)
+    (hden_seed : ⟦seed.abstract Delta hcov_seed⟧ˢ = some Wx)
+    (hWx_type : Wx.snd.fst = tau.toSMTType)
+    (hWx_mem : Wx.fst ∈ ⟦tau.toSMTType⟧ᶻ)
+    (hWx_retract : retract tau Wx.fst = x)
+    {acc : List SMT.Term} {Ds_acc : List SMT.Dom.{u}}
+    (hacc_len : acc.length = Ds_acc.length)
+    (hacc_den : ∀ (j : ℕ) (hj : j < acc.length),
+      ∃ (hcov : SMT.RenamingContext.CoversFV Delta (acc[j]'hj)),
+        ⟦(acc[j]'hj).abstract Delta hcov⟧ˢ =
+          some (Ds_acc[j]'(hacc_len ▸ hj))) :
+    ∀ (i : ℕ) (hi_vs : i < vs.length)
+      (hi_pair : i < (toDestPair vs seed acc seed).length),
+      ∃ (hcov : SMT.RenamingContext.CoversFV Delta
+          ((toDestPair vs seed acc seed)[i]'hi_pair))
+        (Di : SMT.Dom.{u}),
+        ⟦((toDestPair vs seed acc seed)[i]'hi_pair).abstract Delta hcov⟧ˢ =
+          some Di ∧
+        RDomCastSupported
+          (⟨x.get vs.length ⟨i, hi_vs⟩,
+            tau.get vs.length ⟨i, hi_vs⟩,
+            get_mem_type_of_isTuple
+              (hasArity_of_mem_toZFSet tau_hasArity hx_mem)
+              tau_hasArity hx_mem⟩ : B.Dom)
+          Di := by
+  intro i hi_vs hi_pair
+  obtain ⟨hcov_i, Di, hden_i, hfst_i, htype_i⟩ :=
+    toDestPair_denote_gen tau vs seed Wx Delta acc Ds_acc vs_nemp
+      hcov_seed hden_seed hWx_type hWx_mem tau_hasArity hacc_len
+      (fun j hj => by
+        obtain ⟨hcov, hden⟩ := hacc_den j hj
+        exact ⟨hcov, Option.isSome_iff_exists.mpr ⟨_, hden⟩⟩)
+      i hi_vs hi_pair
+  refine ⟨hcov_i, Di, hden_i, ?_⟩
+  apply RDom.toRDomCastSupported
+  rw [RDom]
+  refine ⟨htype_i, ?_⟩
+  calc
+    retract (tau.get vs.length ⟨i, hi_vs⟩) Di.fst =
+        retract (tau.get vs.length ⟨i, hi_vs⟩)
+          (Wx.fst.get vs.length ⟨i, hi_vs⟩) := by rw [hfst_i]
+    _ = (retract tau Wx.fst).get vs.length ⟨i, hi_vs⟩ := by
+      rw [retract_get_comm
+        (hasArity_of_mem_toSMTZFSet tau_hasArity hWx_mem)
+        tau_hasArity hWx_mem]
+    _ = x.get vs.length ⟨i, hi_vs⟩ := by rw [hWx_retract]
+
 /-- An arity-two-or-more source product has a left component whose tuple
 arity matches the `dropLast` input prefix used by the function-valued
 collection encoder. -/
