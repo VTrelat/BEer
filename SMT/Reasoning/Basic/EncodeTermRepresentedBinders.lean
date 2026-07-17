@@ -281,3 +281,49 @@ theorem RDomCastSupported.of_canonical_set_retract.{u}
   apply RDom.toRDomCastSupported
   rw [RDom]
   exact ⟨htype, hretract⟩
+
+/-- Run a Boolean body totality theorem at a binder-specific base valuation.
+The result extends that base valuation, so any explicitly installed bound
+values survive into the valuation used to denote the encoded body. -/
+theorem EncodeTermRepTotal.bound_body.{u}
+    {P : B.Term} {E : B.Env} {Lambda Gamma : SMT.TypeContext}
+    {Penc : SMT.Term} {sigma : SMTType} {used : List SMT.𝒱}
+    (P_total : EncodeTermRepTotal.{u}
+      P E BType.bool Lambda Penc sigma Gamma used)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv P, (Xi v).isSome = true)
+    {ThetaBase : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastSupportedOnFV Xi ThetaBase P)
+    (wf : B.RenWF E.context Xi)
+    (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
+    (source_respects : B.RenamingContext.RespectsTypeContextOnFV
+      ThetaBase Lambda P)
+    (ThetaBase_dom : ∀ v, ThetaBase v ≠ none → v ∈ Lambda)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦BType.bool⟧ᶻ}
+    (den_P : ⟦P.abstract Xi Xi_fv⟧ᴮ =
+      some (⟨Pval, BType.bool, hPval⟩ : B.Dom))
+    {xs : List SMT.𝒱} {Ds : List SMT.Dom.{u}}
+    (bound_values : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_d : i < Ds.length),
+      ThetaBase xs[i] = some Ds[i]) :
+    ∃ (ThetaBody : SMT.RenamingContext.Context.{u})
+      (hcov : SMT.RenamingContext.CoversFV ThetaBody Penc)
+      (dP : SMT.Dom.{u}),
+      SMT.RenamingContext.Extends ThetaBody ThetaBase ∧
+      (∀ (i : ℕ) (hi_x : i < xs.length) (hi_d : i < Ds.length),
+        ThetaBody xs[i] = some Ds[i]) ∧
+      RValuationCastSupportedOnFV Xi ThetaBody P ∧
+      (∀ v ∉ used, ThetaBody v = none) ∧
+      B.RenamingContext.RespectsTypeContextOnFV ThetaBody Gamma P ∧
+      SMT.RenamingContext.RespectsTypeContextOnFV ThetaBody Gamma Penc ∧
+      (∀ v, ThetaBody v ≠ none → v ∈ Gamma) ∧
+      ⟦Penc.abstract ThetaBody hcov⟧ˢ = some dP ∧
+      dP.snd.fst = sigma ∧
+      RDomCastSupported (⟨Pval, BType.bool, hPval⟩ : B.Dom) dP := by
+  obtain ⟨ThetaBody, hcov, dP, hbody_ext, hbody_rel, hbody_none,
+    hsource, htarget, hbody_dom, hden, htype, hrel⟩ :=
+    P_total Xi Xi_fv ThetaBase related wf ThetaBase_none source_respects
+      ThetaBase_dom Pval hPval den_P
+  refine ⟨ThetaBody, hcov, dP, hbody_ext, ?_, hbody_rel, hbody_none,
+    hsource, htarget, hbody_dom, hden, htype, hrel⟩
+  intro i hi_x hi_d
+  exact hbody_ext (bound_values i hi_x hi_d)

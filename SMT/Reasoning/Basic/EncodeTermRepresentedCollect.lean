@@ -151,3 +151,25 @@ theorem collect_ite_truth_of_represented_source_fv.{u}
     (SMT.RenamingContext.agreesOnFV_updates_of_source_fv
       hlen_xd hnodup hcov_upd hvalues hPenc_fv hctx_source hbody_ext)
     hden_P hrel_P hden_D hden_body hD_type hD_true
+
+/-- A fixed Boolean B denotation is equivalent to the extensional truth
+form required by the collection retraction lemma.  The latter quantifies over
+all dependent-pair presentations of the same `Option B.Dom`; injectivity of
+`some` identifies their underlying values. -/
+theorem B.denote_bool_true_iff_forall.{u}
+    {e : Option B.Dom.{u}} {P : ZFSet.{u}}
+    {hP : P ∈ ⟦BType.bool⟧ᶻ}
+    (hden : e = some (⟨P, BType.bool, hP⟩ : B.Dom)) :
+    P = ZFSet.zftrue ↔
+      ∀ (Px : ZFSet.{u}) (P_ty : BType) (hPx : Px ∈ ⟦P_ty⟧ᶻ),
+        e = some (⟨Px, P_ty, hPx⟩ : B.Dom) → Px = ZFSet.zftrue := by
+  constructor
+  · intro htrue Px P_ty hPx hden'
+    have heq : (⟨P, BType.bool, hP⟩ : B.Dom) =
+        ⟨Px, P_ty, hPx⟩ :=
+      Option.some.inj (hden.symm.trans hden')
+    have hvalue : P = Px := congrArg PSigma.fst heq
+    rw [← hvalue]
+    exact htrue
+  · intro h
+    exact h P BType.bool hP hden
