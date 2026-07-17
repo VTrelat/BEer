@@ -1162,6 +1162,49 @@ theorem denote_the_of_option_value.{u}
   rw [SMT.denote, hden_d]
   rfl
 
+open Classical in
+/-- When an option-valued PHOAS term is known to be a particular `some W`,
+eliminating it returns that same payload. -/
+theorem denote_the_of_option_some_value.{u}
+    {d : SMT.PHOAS.Term SMT.Dom.{u}} {Dd W : SMT.Dom.{u}} {beta : SMTType}
+    (hden_d : ⟦d⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta)
+    (hW_type : W.snd.fst = beta)
+    (hD_value : Dd.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val) :
+    ∃ Dthe : SMT.Dom.{u},
+      ⟦SMT.PHOAS.Term.the d⟧ˢ = some Dthe ∧
+      Dthe.snd.fst = beta ∧ Dthe.fst = W.fst := by
+  rcases Dd with ⟨Dval, Dsigma, hDmem⟩
+  dsimp at hD_type hD_value hden_d
+  subst Dsigma
+  let Wpayload : {x // x ∈ ⟦beta⟧ᶻ} :=
+    ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩
+  let Wsome : ZFSet.Option ⟦beta⟧ᶻ := ZFSet.Option.some Wpayload
+  have hDval : Dval = Wsome.val := by
+    simpa [Wsome, Wpayload] using hD_value
+  let Dopt : ZFSet.Option ⟦beta⟧ᶻ := ⟨Dval, hDmem⟩
+  have hDopt : Dopt = Wsome := by
+    apply Subtype.ext
+    exact hDval
+  have hthe : ZFSet.Option.the SMTType.toZFSet_nonempty Wsome = Wpayload := by
+    unfold Wsome
+    unfold ZFSet.Option.the
+    rw [dif_neg (ZFSet.Option.some_ne_none Wpayload)]
+    have hspec := Classical.choose_spec
+      (Or.resolve_left
+        (ZFSet.Option.casesOn (ZFSet.Option.some Wpayload))
+        (ZFSet.Option.some_ne_none Wpayload))
+    rw [ZFSet.Option.some.injEq] at hspec
+    exact hspec.symm
+  let Dthe : SMT.Dom := ⟨(ZFSet.Option.the SMTType.toZFSet_nonempty Dopt).val,
+    beta, SetLike.coe_mem _⟩
+  refine ⟨Dthe, ?_, rfl, ?_⟩
+  · rw [SMT.denote, hden_d]
+    rfl
+  · dsimp [Dthe]
+    rw [hDopt, hthe]
+
 private theorem collect_denote_and_both_zftrue
     {p q : SMT.PHOAS.Term SMT.Dom} {Dp Dq : SMT.Dom}
     (hp : ⟦p⟧ˢ = some Dp) (hpTy : Dp.2.1 = .bool)
@@ -1310,6 +1353,50 @@ theorem denote_guarded_option_some_elim.{u}
       apply Subtype.ext
       exact hDthe_value
     · exact hP_true
+
+open Classical in
+/-- Package the two directions of the guarded option-body semantics against
+an arbitrary domain/predicate membership decomposition.  Collection-specific
+proofs supply the decomposition from the source separation equation. -/
+theorem denote_guarded_option_some_iff.{u}
+    {d p : SMT.PHOAS.Term SMT.Dom.{u}}
+    {Dd Dp Dbody W : SMT.Dom.{u}} {beta : SMTType}
+    {domain_ok predicate_ok member : Prop}
+    (hden_d : ⟦d⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta)
+    (hden_p : ⟦p⟧ˢ = some Dp)
+    (hP_type : Dp.snd.fst = SMTType.bool)
+    (hW_type : W.snd.fst = beta)
+    (hden_body : ⟦SMT.PHOAS.Term.ite
+      (SMT.PHOAS.Term.and
+        (SMT.PHOAS.Term.eq d (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))) p)
+      (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))
+      (SMT.PHOAS.Term.none beta)⟧ˢ = some Dbody)
+    (hdomain : Dd.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val ↔
+        domain_ok)
+    (hpredicate : Dp.fst = ZFSet.zftrue ↔ predicate_ok)
+    (hmembership : member ↔ domain_ok ∧ predicate_ok) :
+    Dbody.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val ↔
+      member := by
+  constructor
+  · intro hbody
+    obtain ⟨hD, hP⟩ := denote_guarded_option_some_elim
+      hden_d hD_type hden_p hP_type hW_type hden_body hbody
+    exact hmembership.mpr ⟨hdomain.mp hD, hpredicate.mp hP⟩
+  · intro hmember
+    obtain ⟨hD, hP⟩ := hmembership.mp hmember
+    obtain ⟨Dthe, hden_the, hDthe_type, hDthe_value⟩ :=
+      denote_the_of_option_some_value hden_d hD_type hW_type
+        (hdomain.mpr hD)
+    obtain ⟨Dsome, hden_some, _hDsome_type, hDsome_value⟩ :=
+      denote_guarded_option_some_of hden_d hD_type hW_type
+        (hdomain.mpr hD) hden_the hDthe_type hDthe_value
+        hden_p hP_type (hpredicate.mpr hP)
+    have hbody_eq : Dbody = Dsome :=
+      Option.some.inj (hden_body.symm.trans hden_some)
+    rw [hbody_eq, hDsome_value]
 
 open Classical in
 /-- A one-binder SMT lambda evaluates at a typed argument to the denotation
