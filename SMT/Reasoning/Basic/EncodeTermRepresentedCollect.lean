@@ -12,6 +12,76 @@ here isolate this last semantic step from the operational proof that constructs
 the represented contexts.
 -/
 
+/- Unfold a successful source collection denotation into the separation
+equation used by the SMT-lambda retraction proof.  Keeping this source-only
+fact independent of the target representation lets the main and alternative
+valuation arguments share it. -/
+open Classical in
+theorem B.denote_collect_eq_sep.{u}
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom)) :
+    ZFSet.sep (fun x =>
+      if hx : x.hasArity vs.length ∧ tau.hasArity vs.length ∧ x ∈ ⟦tau⟧ᶻ then
+        match ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+          (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry
+          (fun i => ⟨x.get vs.length i, ⟨tau.get vs.length i,
+            get_mem_type_of_isTuple hx.1 hx.2.1 hx.2.2⟩⟩)⟧ᴮ with
+        | some ⟨Pz, _⟩ => Pz = ZFSet.zftrue
+        | none => False
+      else False) Dval = T := by
+  have h_inv := den_collect
+  simp only [B.Term.abstract] at h_inv
+  unfold B.denote at h_inv
+  simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h_inv
+  obtain ⟨D_dom, hden_d, rest⟩ := h_inv
+  have hconv_d : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some D_dom := by
+    convert hden_d using 2
+  have hD_dom_eq : D_dom =
+      (⟨Dval, BType.set tau, hDval⟩ : B.Dom) := by
+    rw [hconv_d] at den_D
+    exact Option.some.inj den_D
+  subst D_dom
+  simp only at rest
+  split at rest
+  · simp only [Option.bind_eq_some_iff] at rest
+    obtain ⟨_, denP_eq, rest2⟩ := rest
+    split_ifs at rest2 with h_den_P_cond h_typP_det_cond
+    · simp only [Option.pure_def, Option.some.injEq, PSigma.mk.injEq] at rest2
+      rw [← rest2.1]
+      congr 1
+      funext x
+      simp
+      constructor
+      · rintro ⟨hx, match_eq⟩
+        exact ⟨hx, by
+          split at match_eq
+          · rename_i h
+            erw [h]
+            exact match_eq
+          · nomatch match_eq⟩
+      · rintro ⟨hx, match_eq⟩
+        exact ⟨hx, by
+          split at match_eq
+          · rename_i h
+            erw [h]
+            exact match_eq
+          · nomatch match_eq⟩
+  · rename_i h_neg
+    exact absurd
+      ⟨BType.hasArity_of_foldl_defaultZFSet tau_hasArity, tau_hasArity⟩
+      h_neg
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
