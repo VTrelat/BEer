@@ -853,6 +853,56 @@ abbrev EncodeTermRepPost.{u}
       RDomCastSupported (⟨T, α, hT⟩ : B.Dom) denT' ∧
       EncodeTermRepTotal.{u} t E α Λ t' σ Γ' E'.usedVars
 
+/-- The semantic portion of `EncodeTermRepPost`.  Binder cases prove this
+directly while the structural `encodeTerm_state` specification supplies the
+state monotonicity and freshness conjuncts independently. -/
+abbrev EncodeTermRepSemanticPost.{u}
+    (t : B.Term) (α : BType) (Λ : SMT.TypeContext)
+    («Δ» : B.RenamingContext.Context)
+    (Δ₀ : SMT.RenamingContext.Context.{u})
+    (T : ZFSet.{u}) (hT : T ∈ ⟦α⟧ᶻ)
+    (E : B.Env) (t' : SMT.Term) (σ : SMTType)
+    (E' : SMT.Env) (Γ' : SMT.TypeContext) : Prop :=
+  Nonempty (σ ~> α.toSMTType) ∧
+  (Γ' ⊢ˢ t' : σ) ∧
+  EncodeTermResultShape t t' σ ∧
+  ∃ (Δ' : SMT.RenamingContext.Context.{u})
+    (Δ'_covers : RenamingContext.CoversFV Δ' t'),
+    RenamingContext.Extends Δ' Δ₀ ∧
+    RValuationCastSupportedOnFV «Δ» Δ' t ∧
+    (∀ v ∉ E'.usedVars, Δ' v = none) ∧
+    B.RenamingContext.RespectsTypeContextOnFV Δ' Γ' t ∧
+    SMT.RenamingContext.RespectsTypeContextOnFV Δ' Γ' t' ∧
+    (∀ v, Δ' v ≠ none → v ∈ Γ') ∧
+    ∃ denT' : SMT.Dom.{u},
+      ⟦t'.abstract Δ' Δ'_covers⟧ˢ = some denT' ∧
+      denT'.snd.fst = σ ∧
+      RDomCastSupported (⟨T, α, hT⟩ : B.Dom) denT' ∧
+      EncodeTermRepTotal.{u} t E α Λ t' σ Γ' E'.usedVars
+
+/-- Reassemble the full representation-aware postcondition from its semantic
+part and the encoder's representation-independent state invariant. -/
+theorem encodeTermRepPost_of_state_and_semantic.{u}
+    {t : B.Term} {α : BType} {Λ : SMT.TypeContext}
+    {«Δ» : B.RenamingContext.Context}
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    {used : List SMT.𝒱} {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    {E : B.Env} {t' : SMT.Term} {σ : SMTType}
+    {E' : SMT.Env} {Γ' : SMT.TypeContext}
+    (hstate :
+      used ⊆ E'.usedVars ∧
+      Λ ⊆ Γ' ∧
+      Γ'.keys ⊆ E'.usedVars ∧
+      B.CoversUsedVars E'.usedVars t ∧
+      (∀ v ∈ used, v ∉ Λ → v ∉ B.Term.vars t → v ∉ Γ'))
+    (hsemantic : EncodeTermRepSemanticPost t α Λ «Δ» Δ₀ T hT
+      E t' σ E' Γ') :
+    EncodeTermRepPost t α Λ «Δ» Δ₀ used T hT E t' σ E' Γ' := by
+  obtain ⟨hused, hcontext, hkeys, hcovers, hpreserves⟩ := hstate
+  obtain ⟨hpath, htyping, hshape, hden⟩ := hsemantic
+  exact ⟨hused, hcontext, hkeys, hcovers, hpath, htyping, hshape,
+    hpreserves, hden⟩
+
 /-- Induction-hypothesis shape shared by the representation-aware constructor
 proofs. -/
 abbrev EncodeTermRepIH.{u} (t : B.Term) : Prop :=
