@@ -1475,6 +1475,63 @@ theorem denote_guarded_option_term_some_iff.{u}
     hW_type hden_body' hdomain hpredicate hmembership
 
 open Classical in
+/-- The concrete guarded option body denotes the canonical payload exactly
+when the corresponding source tuple belongs to a collected relation.  This
+joins the source separation equation to the domain and predicate facts that
+the function-valued encoder establishes pointwise. -/
+theorem represented_option_collect_guarded_body_iff.{u}
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom))
+    {x : ZFSet.{u}} (hx_arity : x.hasArity vs.length)
+    (hx_type : x ∈ ⟦tau⟧ᶻ)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦BType.bool⟧ᶻ}
+    (den_P : ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+      (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry
+        (fun i => ⟨x.get vs.length i, ⟨tau.get vs.length i,
+          get_mem_type_of_isTuple hx_arity tau_hasArity hx_type⟩⟩)⟧ᴮ =
+      some (⟨Pval, BType.bool, hPval⟩ : B.Dom))
+    {Dapp Psub : SMT.Term}
+    {Theta : SMT.RenamingContext.Context.{u}}
+    {Dd Dp Dbody W : SMT.Dom.{u}} {beta : SMTType}
+    (hcov_Dapp : SMT.RenamingContext.CoversFV Theta Dapp)
+    (hden_Dapp : ⟦Dapp.abstract Theta hcov_Dapp⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta)
+    (hcov_Psub : SMT.RenamingContext.CoversFV Theta Psub)
+    (hden_Psub : ⟦Psub.abstract Theta hcov_Psub⟧ˢ = some Dp)
+    (hP_type : Dp.snd.fst = SMTType.bool)
+    (hW_type : W.snd.fst = beta)
+    (hcov_body : SMT.RenamingContext.CoversFV Theta
+      (SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq Dapp (SMT.Term.some (SMT.Term.the Dapp))) Psub)
+        (SMT.Term.some (SMT.Term.the Dapp)) (none$ beta)))
+    (hden_body : ⟦(SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq Dapp (SMT.Term.some (SMT.Term.the Dapp))) Psub)
+        (SMT.Term.some (SMT.Term.the Dapp)) (none$ beta)).abstract Theta hcov_body⟧ˢ =
+        some Dbody)
+    (hdomain : Dd.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val ↔
+        x ∈ Dval)
+    (hpredicate : Dp.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue) :
+    Dbody.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val ↔
+      x ∈ T := by
+  apply denote_guarded_option_term_some_iff
+    (domain_ok := x ∈ Dval) (predicate_ok := Pval = ZFSet.zftrue)
+    (member := x ∈ T) hcov_Dapp hden_Dapp hD_type hcov_Psub hden_Psub
+    hP_type hW_type hcov_body hden_body hdomain hpredicate
+  exact B.denote_collect_member_iff Xi_fv tau_hasArity den_D den_collect
+    hx_arity hx_type den_P
+
+open Classical in
 /-- A one-binder SMT lambda evaluates at a typed argument to the denotation
 of its body.  This is phrased with an arbitrary functional codomain so it can
 be reused by both Boolean and option-valued binder encodings. -/
