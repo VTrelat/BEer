@@ -408,6 +408,80 @@ theorem represented_toDestPair_bound_context.{u}
             Classical.choose_spec (Classical.choose_spec (hcomponent i))
           simpa [ss] using hrel))
 
+/-- Applying a canonical characteristic-predicate representative at the
+canonical image of a source element in its represented set evaluates to
+`true`.  This is the domain side of the `collect` body bridge. -/
+theorem represented_set_app_true_of_mem_canonical.{u}
+    {tau : BType} {S : ZFSet.{u}} {hS : S ∈ ⟦BType.set tau⟧ᶻ}
+    {Denc : SMT.Term} {z : SMT.𝒱}
+    {Delta : SMT.RenamingContext.Context.{u}} {Dval : SMT.Dom.{u}}
+    (hcov_D_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update Delta z (some W)) Denc)
+    (den_D_upd : ∀ W : SMT.Dom,
+      ⟦Denc.abstract (Function.update Delta z (some W))
+        (hcov_D_upd W)⟧ˢ = some Dval)
+    (hD_type : Dval.snd.fst = tau.toSMTType.fun SMTType.bool)
+    (hD_func : ⟦tau.toSMTType⟧ᶻ.IsFunc 𝔹 Dval.fst)
+    (D_rel : RDomCastSupported
+      (⟨S, BType.set tau, hS⟩ : B.Dom) Dval)
+    {x : ZFSet.{u}} (hx : x ∈ S) :
+    let Wx : SMT.Dom :=
+      ⟨(ZFSet.fapply (BType.canonicalIsoSMTType tau).1
+        (ZFSet.is_func_is_pfunc (BType.canonicalIsoSMTType tau).2.1)
+        ⟨x, by
+          have hS_sub : S ⊆ ⟦tau⟧ᶻ := by
+            rwa [BType.toZFSet, ZFSet.mem_powerset] at hS
+          exact (by
+            rw [ZFSet.is_func_dom_eq
+              (BType.canonicalIsoSMTType tau).2.1]
+            exact hS_sub hx)⟩).1,
+        tau.toSMTType, ZFSet.fapply_mem_range _ _⟩
+    ∃ (hcov : SMT.RenamingContext.CoversFV
+        (Function.update Delta z (some Wx)) ((@ˢDenc) (.var z)))
+      (Dapp : SMT.Dom.{u}),
+      ⟦((@ˢDenc) (.var z)).abstract
+        (Function.update Delta z (some Wx)) hcov⟧ˢ = some Dapp ∧
+      Dapp.snd.fst = SMTType.bool ∧ Dapp.fst = ZFSet.zftrue := by
+  rcases Dval with ⟨F, sigma, hF⟩
+  dsimp at hD_type
+  subst sigma
+  let Dval : SMT.Dom := ⟨F, tau.toSMTType.fun SMTType.bool, hF⟩
+  have hD_type : Dval.snd.fst = tau.toSMTType.fun SMTType.bool := rfl
+  have hD_func' : ⟦tau.toSMTType⟧ᶻ.IsFunc 𝔹 Dval.fst := by
+    simpa [Dval] using hD_func
+  have D_rel' : RDomCastSupported
+      (⟨S, BType.set tau, hS⟩ : B.Dom) Dval := by
+    simpa [Dval] using D_rel
+  dsimp
+  have hS_sub : S ⊆ ⟦tau⟧ᶻ := by
+    rwa [BType.toZFSet, ZFSet.mem_powerset] at hS
+  have hx_tau : x ∈ ⟦tau⟧ᶻ := hS_sub hx
+  let Wx : SMT.Dom :=
+    ⟨(ZFSet.fapply (BType.canonicalIsoSMTType tau).1
+      (ZFSet.is_func_is_pfunc (BType.canonicalIsoSMTType tau).2.1)
+      ⟨x, by
+        rwa [ZFSet.is_func_dom_eq
+          (BType.canonicalIsoSMTType tau).2.1]⟩).1,
+      tau.toSMTType, ZFSet.fapply_mem_range _ _⟩
+  have hWx_type : Wx.snd.fst = tau.toSMTType := rfl
+  have hWx_mem : Wx.fst ∈ ⟦tau.toSMTType⟧ᶻ := Wx.snd.snd
+  obtain ⟨hcov_app, Dapp, hDapp_type, hDapp_value, hden_app⟩ :=
+    funDenoteAppAt (Δctx := Delta) (t := Denc) (x := z)
+      (α := tau.toSMTType) (β := SMTType.bool) (Y := Dval)
+      hcov_D_upd den_D_upd hD_type hD_func' Wx hWx_type hWx_mem
+  refine ⟨hcov_app, Dapp, hden_app, hDapp_type, ?_⟩
+  rw [hDapp_value]
+  have D_canonical : (⟨S, BType.set tau, hS⟩ : B.Dom) ≘ᶻ Dval :=
+    (RDomCast.iff_RDom_of_type_eq (α := BType.set tau) rfl).mp
+      D_rel'.toRDomCast
+  rw [RDom] at D_canonical
+  have hx_retract : x ∈ retract (BType.set tau) Dval.fst := by
+    rw [D_canonical.2]
+    exact hx
+  rw [retract, ZFSet.mem_sep, dif_pos hx_tau, dif_pos hD_func'] at hx_retract
+  simpa [Wx] using hx_retract.2
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
