@@ -1,6 +1,7 @@
 import Mathlib.Data.List.OfFn
 import SMT.Reasoning.Basic.EncodeTermRepresentedBinders
 import SMT.Reasoning.Basic.CollectCaseHelpers
+import SMT.Reasoning.Basic.EncodeTermRepresentedMem
 
 open B SMT ZFSet
 
@@ -12,6 +13,126 @@ encoded domain predicate selects the substituted predicate body.  The lemmas
 here isolate this last semantic step from the operational proof that constructs
 the represented contexts.
 -/
+
+/-- Restricting a relation with separation preserves its partial-function
+property.  This is the source-side invariant needed by the option-function
+collection arm: filtering a represented partial function cannot introduce a
+second result for an existing input. -/
+theorem ZFSet.IsPFunc.sep {f A B : ZFSet} (hfun : f.IsPFunc A B)
+    (p : ZFSet → Prop) :
+    (f.sep p).IsPFunc A B := by
+  constructor
+  · intro x hx
+    exact hfun.1 (ZFSet.sep_subset_self hx)
+  · intro x y hxy z hxz
+    exact hfun.2 x y (ZFSet.mem_sep.mp hxy).1 z
+      (ZFSet.mem_sep.mp hxz).1
+
+/- An option-function representative can only represent a source partial
+function.  Its graph retracts to the source relation, and equal `some`
+outputs at a canonical input force equal source codomain values. -/
+open Classical in
+theorem RDomCastSupported.optionFunction_isPFunc_of_source.{u}
+    {alpha beta : BType} {S F : ZFSet.{u}}
+    {hS : S ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    {hF : F ∈ ⟦SMTType.fun alpha.toSMTType
+      (SMTType.option beta.toSMTType)⟧ᶻ}
+    (rel : RDomCastSupported
+      (⟨S, BType.set (alpha ×ᴮ beta), hS⟩ : B.Dom)
+      (⟨F, SMTType.fun alpha.toSMTType
+        (SMTType.option beta.toSMTType), hF⟩ : SMT.Dom)) :
+    S.IsPFunc ⟦alpha⟧ᶻ ⟦beta⟧ᶻ := by
+  constructor
+  · rw [BType.toZFSet, ZFSet.mem_powerset] at hS
+    exact hS
+  · intro x y hxy z hxz
+    have hxy_prod : x.pair y ∈ ⟦alpha⟧ᶻ.prod ⟦beta⟧ᶻ := by
+      rw [BType.toZFSet, ZFSet.mem_powerset] at hS
+      exact hS hxy
+    have hxz_prod : x.pair z ∈ ⟦alpha⟧ᶻ.prod ⟦beta⟧ᶻ := by
+      rw [BType.toZFSet, ZFSet.mem_powerset] at hS
+      exact hS hxz
+    obtain ⟨hx, hy⟩ := ZFSet.pair_mem_prod.mp hxy_prod
+    obtain ⟨_, hz⟩ := ZFSet.pair_mem_prod.mp hxz_prod
+    let X : SMT.Dom.{u} :=
+      B.Dom.canonicalSMT (⟨x, alpha, hx⟩ : B.Dom)
+    let Y : SMT.Dom.{u} :=
+      B.Dom.canonicalSMT (⟨y, beta, hy⟩ : B.Dom)
+    let Z : SMT.Dom.{u} :=
+      B.Dom.canonicalSMT (⟨z, beta, hz⟩ : B.Dom)
+    have hX : X.fst ∈ ⟦alpha.toSMTType⟧ᶻ := by
+      dsimp [X]
+      exact (B.Dom.canonicalSMT (⟨x, alpha, hx⟩ : B.Dom)).snd.snd
+    have hY : Y.fst ∈ ⟦beta.toSMTType⟧ᶻ := by
+      dsimp [Y]
+      exact (B.Dom.canonicalSMT (⟨y, beta, hy⟩ : B.Dom)).snd.snd
+    have hZ : Z.fst ∈ ⟦beta.toSMTType⟧ᶻ := by
+      dsimp [Z]
+      exact (B.Dom.canonicalSMT (⟨z, beta, hz⟩ : B.Dom)).snd.snd
+    have hXret : retract alpha X.fst = x := by
+      have hcanonical := B.Dom.rdom_canonicalSMT
+        (⟨x, alpha, hx⟩ : B.Dom)
+      rw [RDom] at hcanonical
+      simpa [X] using hcanonical.2
+    have hYret : retract beta Y.fst = y := by
+      have hcanonical := B.Dom.rdom_canonicalSMT
+        (⟨y, beta, hy⟩ : B.Dom)
+      rw [RDom] at hcanonical
+      simpa [Y] using hcanonical.2
+    have hZret : retract beta Z.fst = z := by
+      have hcanonical := B.Dom.rdom_canonicalSMT
+        (⟨z, beta, hz⟩ : B.Dom)
+      rw [RDom] at hcanonical
+      simpa [Z] using hcanonical.2
+    have hgraph_ret : retract (BType.set (alpha ×ᴮ beta))
+        (optionGraph alpha.toSMTType beta.toSMTType F) = S :=
+      RDomCast.optionFunction_graph_retract rel.toRDomCast
+    have hpair_ret_y : retract (alpha ×ᴮ beta) (X.fst.pair Y.fst) =
+        x.pair y := by
+      simp [retract, hXret, hYret]
+    have hpair_ret_z : retract (alpha ×ᴮ beta) (X.fst.pair Z.fst) =
+        x.pair z := by
+      simp [retract, hXret, hZret]
+    let Fapp := fapply F (is_func_is_pfunc (by
+      simpa [SMTType.toZFSet] using hF :
+        ⟦alpha.toSMTType⟧ᶻ.IsFunc
+          ⟦SMTType.option beta.toSMTType⟧ᶻ F))
+      ⟨X.fst, by
+        rw [is_func_dom_eq (by
+          simpa [SMTType.toZFSet] using hF :
+            ⟦alpha.toSMTType⟧ᶻ.IsFunc
+              ⟦SMTType.option beta.toSMTType⟧ᶻ F)]
+        exact hX⟩
+    let someY := ZFSet.Option.some
+      (S := ⟦beta.toSMTType⟧ᶻ) ⟨Y.fst, hY⟩
+    let someZ := ZFSet.Option.some
+      (S := ⟦beta.toSMTType⟧ᶻ) ⟨Z.fst, hZ⟩
+    have happY : zfEqIn ⟦SMTType.option beta.toSMTType⟧ᶻ
+        Fapp.val someY.val = ZFSet.zftrue := by
+      exact (RDomCast.optionFunction_eq_some_eq_zftrue_iff
+        (hX := ZFSet.pair_mem_prod.mpr ⟨hx, hy⟩)
+        (ha := hX) (hb := hY) (hF := hF)
+        hpair_ret_y hgraph_ret).mpr hxy
+    have happZ : zfEqIn ⟦SMTType.option beta.toSMTType⟧ᶻ
+        Fapp.val someZ.val = ZFSet.zftrue := by
+      exact (RDomCast.optionFunction_eq_some_eq_zftrue_iff
+        (hX := ZFSet.pair_mem_prod.mpr ⟨hx, hz⟩)
+        (ha := hX) (hb := hZ) (hF := hF)
+        hpair_ret_z hgraph_ret).mpr hxz
+    have hFappY : Fapp.val = someY.val :=
+      (zfEqIn_eq_zftrue_iff (ZFSet.fapply_mem_range _ _) someY.property).mp
+        happY
+    have hFappZ : Fapp.val = someZ.val :=
+      (zfEqIn_eq_zftrue_iff (ZFSet.fapply_mem_range _ _) someZ.property).mp
+        happZ
+    have hsome : someY = someZ :=
+      Subtype.ext (hFappY.symm.trans hFappZ)
+    rw [ZFSet.Option.some.injEq] at hsome
+    have hYZ : Y.fst = Z.fst := Subtype.ext_iff.mp hsome
+    calc
+      y = retract beta Y.fst := hYret.symm
+      _ = retract beta Z.fst := by rw [hYZ]
+      _ = z := hZret
 
 /- Unfold a successful source collection denotation into the separation
 equation used by the SMT-lambda retraction proof.  Keeping this source-only
@@ -82,6 +203,29 @@ theorem B.denote_collect_eq_sep.{u}
     exact absurd
       ⟨BType.hasArity_of_foldl_defaultZFSet tau_hasArity, tau_hasArity⟩
       h_neg
+
+/- A source collection is a subrelation of its domain.  In particular, when
+the domain is a partial function, the collection result remains a partial
+function.  This supplies the functionality certificate required when the
+encoder keeps that relation in its option-function representation. -/
+open Classical in
+theorem B.denote_collect_isPFunc_of_domain.{u}
+    {vs : List B.𝒱} {D P : B.Term} {alpha beta : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (tau_hasArity : (alpha ×ᴮ beta).hasArity vs.length)
+    {Dval : ZFSet.{u}}
+    {hDval : Dval ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set (alpha ×ᴮ beta), hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set (alpha ×ᴮ beta), hT⟩ : B.Dom))
+    (hfun : Dval.IsPFunc ⟦alpha⟧ᶻ ⟦beta⟧ᶻ) :
+    T.IsPFunc ⟦alpha⟧ᶻ ⟦beta⟧ᶻ := by
+  rw [← B.denote_collect_eq_sep Xi_fv tau_hasArity den_D den_collect]
+  exact hfun.sep _
 
 /- A successful source collection denotation also supplies the totality of
 its predicate at every tuple selected from its source domain.  This is the
