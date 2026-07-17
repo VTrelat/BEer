@@ -521,6 +521,7 @@ abbrev CastMembershipRepSpec.{u} (τ : BType)
         ∃ Dlt : SMT.Chunk,
           E'.declarations = decl ++ Dlt ∧
           ContextGeneratedByDeclarations Λ Γ' Dlt ∧
+          DeclarationContextTrace Λ Dlt Γ' ∧
           CastMembershipRepSemantics.{u} τ x S t σx σS Λ Γ'
             used E'.usedVars Dlt ∧
           ScopedGeneratedTyping Λ Dlt t SMTType.bool⌝⦄
@@ -541,7 +542,8 @@ theorem castMembership_direct_rep_contract.{u}
   mpure_intro
   refine ⟨List.Subset.refl _, (fun _ h => h), St_sub, trivial,
     SMT.Typing.app _ _ _ _ _ typ_S typ_x, ?_, ?_, ?_, [], by simp,
-    ContextGeneratedByDeclarations.refl _, ?_, ?_⟩
+    ContextGeneratedByDeclarations.refl _, DeclarationContextTrace.nil _,
+    ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inr hv
@@ -687,9 +689,15 @@ theorem castMembership_setPred_cast_rep_contract.{u}
     rw [helper_ctx_eq]
     exact ContextGeneratedByDeclarations.insert_helper
       Λ helper τ.toSMTType spec helper_fresh
+  have helper_ctx_trace : DeclarationContextTrace Λ
+      (helperSpecChunk helper τ.toSMTType spec) St'.types := by
+    rw [helper_ctx_eq]
+    exact DeclarationContextTrace.helperSpecChunk
+      Λ helper τ.toSMTType spec helper_fresh
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
-    helperSpecChunk helper τ.toSMTType spec, decl_eq, helper_ctx_gen, ?_, ?_⟩
+    helperSpecChunk helper τ.toSMTType spec, decl_eq, helper_ctx_gen,
+    helper_ctx_trace, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
@@ -1058,10 +1066,16 @@ theorem castMembership_option_rep_contract.{u}
     rw [helper_ctx_eq]
     exact ContextGeneratedByDeclarations.insert_helper Λ helper
       (.pair a.toSMTType b.toSMTType) spec helper_fresh
+  have helper_ctx_trace : DeclarationContextTrace Λ
+      (helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec)
+      St'.types := by
+    rw [helper_ctx_eq]
+    exact DeclarationContextTrace.helperSpecChunk Λ helper
+      (.pair a.toSMTType b.toSMTType) spec helper_fresh
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec,
-    decl_eq, helper_ctx_gen, ?_, ?_⟩
+    decl_eq, helper_ctx_gen, helper_ctx_trace, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
@@ -1817,7 +1831,7 @@ theorem encodeTerm_rep_spec.mem_case.{u}
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
     typ_mem, _fv_x_mem, _fv_S_mem, mem_preserves,
-    Dlt, decl_eq, _mem_ctx, mem_sem, _mem_sc_typing⟩ := pre
+    Dlt, decl_eq, _mem_ctx, _mem_trace, mem_sem, _mem_sc_typing⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
   mpure_intro

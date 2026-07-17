@@ -150,7 +150,7 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard,
+  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_trace, x_sc_total, x_guard,
     x_sc_typing⟩⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
     path_x, typ_x_enc, _shape_x, x_preserves,
@@ -221,7 +221,7 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mintro ∀Sty
   mpure pre
   dsimp at pre
-  obtain ⟨y_post, ⟨Dlty, y_decl_eq, y_ctx, y_sc_total, y_guard,
+  obtain ⟨y_post, ⟨Dlty, y_decl_eq, y_ctx, y_trace, y_sc_total, y_guard,
     y_sc_typing⟩⟩ := pre
   obtain ⟨used_sub_y, types_sub_y, keys_sub_y, y_used,
     path_y, typ_y_enc, _shape_y, y_preserves,
@@ -238,7 +238,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mspec Std.Do.Spec.pure
   mpure_intro
   refine ⟨Dltx ++ Dlty, ?_,
-    ContextGeneratedByDeclarations.append x_ctx y_ctx, ?_, ?_, ?_⟩
+    ContextGeneratedByDeclarations.append x_ctx y_ctx,
+    DeclarationContextTrace.append x_trace y_trace, ?_, ?_, ?_⟩
   · rw [y_decl_eq, List.append_assoc]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -542,7 +543,7 @@ theorem encodeTerm_rep_scoped.not_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard,
+  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_trace, x_sc_total, x_guard,
     x_sc_typing⟩⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
     path_x, typ_x_enc, _shape_x, x_preserves,
@@ -557,7 +558,7 @@ theorem encodeTerm_rep_scoped.not_case.{u}
   subst σx
   mspec Std.Do.Spec.pure
   mpure_intro
-  refine ⟨Dltx, x_decl_eq, x_ctx, ?_, ?_, ?_⟩
+  refine ⟨Dltx, x_decl_eq, x_ctx, x_trace, ?_, ?_, ?_⟩
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
     obtain ⟨X_alt, hX_alt, den_x_alt, T_alt_eq⟩ :=

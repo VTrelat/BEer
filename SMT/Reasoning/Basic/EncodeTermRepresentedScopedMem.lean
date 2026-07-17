@@ -115,7 +115,7 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_sc_total, x_guard,
+  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_trace, x_sc_total, x_guard,
       x_sc_typing⟩⟩,
       bv_x_used, _⟩, bv_x_not_used, _⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
@@ -200,7 +200,7 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mintro ∀StS
   mpure pre
   dsimp at pre
-  obtain ⟨⟨S_post, ⟨DltS, S_decl_eq, S_ctx, S_sc_total, S_guard,
+  obtain ⟨⟨S_post, ⟨DltS, S_decl_eq, S_ctx, S_trace, S_sc_total, S_guard,
       S_sc_typing⟩⟩,
       bv_S_used, _⟩ := pre
   obtain ⟨used_sub_S, types_sub_S, keys_sub_S, S_used,
@@ -254,7 +254,7 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
     typ_mem, fv_x_mem, fv_S_mem, mem_preserves,
-    DltM, mem_decl_eq, mem_ctx, mem_sem, mem_sc_typing⟩ := pre
+    DltM, mem_decl_eq, mem_ctx, mem_trace, mem_sem, mem_sc_typing⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
   mpure_intro
@@ -262,7 +262,10 @@ theorem encodeTerm_rep_scoped.mem_case.{u}
       StS.types (Dltx ++ DltS) :=
     ContextGeneratedByDeclarations.append x_ctx S_ctx
   refine ⟨(Dltx ++ DltS) ++ DltM, ?_,
-    ContextGeneratedByDeclarations.append children_ctx mem_ctx, ?_, ?_, ?_⟩
+    ContextGeneratedByDeclarations.append children_ctx mem_ctx,
+    DeclarationContextTrace.append
+      (DeclarationContextTrace.append x_trace S_trace) mem_trace,
+    ?_, ?_, ?_⟩
   · rw [mem_decl_eq, S_decl_eq]
     simp only [List.append_assoc]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt

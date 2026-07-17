@@ -87,6 +87,57 @@ abbrev ContextGeneratedByDeclarations
     (Λ Γ : SMT.TypeContext) (Dlt : SMT.Chunk) : Prop :=
   Γ.entries ⊆ Λ.entries ++ declEntries Dlt
 
+/-- Exact context evolution induced by the declaration delta.  A
+`declare_const` inserts one genuinely fresh typed name; every other
+instruction leaves the type context unchanged.  Unlike the footprint-only
+`ContextGeneratedByDeclarations`, this trace retains the freshness and order
+needed when declarations are converted into nested local binders. -/
+def DeclarationContextTrace :
+    SMT.TypeContext → SMT.Chunk → SMT.TypeContext → Prop
+  | Λ, [], Γ => Γ = Λ
+  | Λ, .declare_const v τ :: Dlt, Γ =>
+      v ∉ Λ ∧ DeclarationContextTrace (Λ.insert v τ) Dlt Γ
+  | Λ, .define_fun _ _ _ _ :: Dlt, Γ =>
+      DeclarationContextTrace Λ Dlt Γ
+  | Λ, .define_const _ _ _ :: Dlt, Γ =>
+      DeclarationContextTrace Λ Dlt Γ
+  | Λ, .assert _ :: Dlt, Γ => DeclarationContextTrace Λ Dlt Γ
+  | Λ, .push _ :: Dlt, Γ => DeclarationContextTrace Λ Dlt Γ
+  | Λ, .pop _ :: Dlt, Γ => DeclarationContextTrace Λ Dlt Γ
+  | Λ, .check_sat :: Dlt, Γ => DeclarationContextTrace Λ Dlt Γ
+
+@[simp] theorem DeclarationContextTrace.nil (Λ : SMT.TypeContext) :
+    DeclarationContextTrace Λ [] Λ := rfl
+
+theorem DeclarationContextTrace.helperSpecChunk
+    (Λ : SMT.TypeContext) (v : SMT.𝒱) (τ : SMTType)
+    (spec : SMT.Term) (hv : v ∉ Λ) :
+    DeclarationContextTrace Λ (helperSpecChunk v τ spec)
+      (Λ.insert v τ) := by
+  exact ⟨hv, rfl⟩
+
+theorem DeclarationContextTrace.append
+    {Λ Γ₁ Γ₂ : SMT.TypeContext} {D₁ D₂ : SMT.Chunk}
+    (h₁ : DeclarationContextTrace Λ D₁ Γ₁)
+    (h₂ : DeclarationContextTrace Γ₁ D₂ Γ₂) :
+    DeclarationContextTrace Λ (D₁ ++ D₂) Γ₂ := by
+  induction D₁ generalizing Λ with
+  | nil =>
+      change Γ₁ = Λ at h₁
+      subst Γ₁
+      exact h₂
+  | cons i D ih =>
+      cases i with
+      | declare_const v τ =>
+          obtain ⟨hv, htail⟩ := h₁
+          exact ⟨hv, ih htail⟩
+      | define_fun v τ σ t => exact ih h₁
+      | define_const v τ t => exact ih h₁
+      | assert t => exact ih h₁
+      | push n => exact ih h₁
+      | pop n => exact ih h₁
+      | check_sat => exact ih h₁
+
 /-- A context in which a generated term is evaluated contains both the input
 context and all typed helper declarations that the encoder later re-scopes. -/
 abbrev ScopedContextExtends
@@ -330,6 +381,7 @@ abbrev EncodeTermRepScopedPost.{u}
   ∃ Dlt : SMT.Chunk,
     E'.declarations = decl ++ Dlt ∧
     ContextGeneratedByDeclarations Λ Γ' Dlt ∧
+    DeclarationContextTrace Λ Dlt Γ' ∧
     EncodeTermRepScopedTotal.{u} t E α Λ t' σ Γ' E'.usedVars Dlt ∧
     EncodeTermRepGuardedSound.{u} t E α t' σ Λ Dlt ∧
     ScopedGeneratedTyping Λ Dlt t' σ
