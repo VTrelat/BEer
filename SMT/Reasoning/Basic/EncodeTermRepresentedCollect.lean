@@ -1164,14 +1164,11 @@ theorem represented_collect_set_retract.{u}
     (hcov_ite_upd : ∀ W : SMT.Dom,
       SMT.RenamingContext.CoversFV
         (Function.update ThetaD z (some W)) ite_body)
-    (hbody_total : ∀ W : SMT.Dom, W.snd.fst = tau.toSMTType →
-      ⟦ite_body.abstract (Function.update ThetaD z (some W))
-        (hcov_ite_upd W)⟧ˢ.isSome = true)
-    (hbody_ty : ∀ W : SMT.Dom, W.snd.fst = tau.toSMTType →
-      ∀ Db : SMT.Dom,
-        ⟦ite_body.abstract (Function.update ThetaD z (some W))
-          (hcov_ite_upd W)⟧ˢ = some Db →
-        Db.snd.fst = SMTType.bool)
+    {GammaBody : SMT.TypeContext}
+    (typ_ite : GammaBody.insert z tau.toSMTType ⊢ˢ ite_body : SMTType.bool)
+    (Theta_wt : ∀ v ∈ SMT.fv ite_body, ∀ d : SMT.Dom,
+      ThetaD v = some d → ∀ sigma, GammaBody.lookup v = some sigma →
+        d.snd.fst = sigma)
     (hcov_sub_upd : ∀ W : SMT.Dom,
       SMT.RenamingContext.CoversFV
         (Function.update ThetaD z (some W))
@@ -1225,6 +1222,9 @@ theorem represented_collect_set_retract.{u}
         (by simpa using hDenc_type)).mp D_rel.toRDomCast
     rw [RDom] at hcanonical
     exact hcanonical.2
+  obtain ⟨hbody_total, hbody_ty⟩ :=
+    SMT.RenamingContext.denote_update_total_and_type_of_typing
+      typ_ite Theta_wt hcov_ite_upd
   refine retract_lamVal_eq_collect
     (D := D) (D_enc := Denc) (P_enc := Penc) (z := z)
     (ite_body := ite_body) (Δ_ctx := ThetaD) (lamVal := lamVal)
@@ -1250,3 +1250,126 @@ theorem represented_collect_set_retract.{u}
       hcov_ite_upd hcov_sub_upd hcov_P_upd hvs_not_bv hz_not_bv hz_not_vs
       Penc_fv z_not_vars_P typ_P P_total ambient wf_bound bound_none
       bound_respects bound_dom
+
+open Classical in
+/-- Turn the collection retraction equation into the representation-aware
+denotation result required by an encoder run.
+
+The only additional work beyond `represented_collect_set_retract` is ordinary
+SMT totality for the emitted lambda.  Its typing gives both the denotation and
+the functionhood needed by retraction, so a caller only has to provide the
+trace-specific typing and free-variable compatibility facts once. -/
+theorem represented_collect_set_denote.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom))
+    {Denc Penc ite_body : SMT.Term} {z : SMT.𝒱}
+    {ThetaD : SMT.RenamingContext.Context.{u}} {DencVal : SMT.Dom.{u}}
+    (ite_body_def : ite_body = ((@ˢDenc) (.var z)).ite
+      (SMT.substList vs (toDestPair vs (.var z)) Penc) (.bool false))
+    (z_not_fv_D : z ∉ SMT.fv Denc)
+    (hcov_lambda : SMT.RenamingContext.CoversFV ThetaD
+      ((λˢ [z]) [tau.toSMTType] ite_body))
+    {GammaOut : SMT.TypeContext}
+    (typ_lambda : GammaOut ⊢ˢ ((λˢ [z]) [tau.toSMTType] ite_body) :
+      tau.toSMTType.fun SMTType.bool)
+    (respects_lambda : SMT.RenamingContext.RespectsTypeContextOnFV
+      ThetaD GammaOut ((λˢ [z]) [tau.toSMTType] ite_body))
+    (hcov_D_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W)) Denc)
+    (den_D_upd : ∀ W : SMT.Dom,
+      ⟦Denc.abstract (Function.update ThetaD z (some W))
+        (hcov_D_upd W)⟧ˢ = some DencVal)
+    (hDenc_type : DencVal.snd.fst = tau.toSMTType.fun SMTType.bool)
+    (hDenc_func : ⟦tau.toSMTType⟧ᶻ.IsFunc 𝔹 DencVal.fst)
+    (D_rel : RDomCastSupported
+      (⟨Dval, BType.set tau, hDval⟩ : B.Dom) DencVal)
+    (hcov_ite_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W)) ite_body)
+    {GammaBody : SMT.TypeContext}
+    (typ_ite : GammaBody.insert z tau.toSMTType ⊢ˢ ite_body : SMTType.bool)
+    (Theta_wt : ∀ v ∈ SMT.fv ite_body, ∀ d : SMT.Dom,
+      ThetaD v = some d → ∀ sigma, GammaBody.lookup v = some sigma →
+        d.snd.fst = sigma)
+    (hcov_sub_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W))
+          (SMT.substList vs (toDestPair vs (.var z)) Penc))
+    (fv_substList_disj_vs : ∀ v ∈
+      SMT.fv (SMT.substList vs (toDestPair vs (.var z)) Penc),
+      v ≠ z → v ∉ vs)
+    (hgo_cov : ∀ x ∈ SMT.fv ite_body, x ∉ [z] → (ThetaD x).isSome = true)
+    (hcov_P_upd : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+      SMT.RenamingContext.CoversFV
+        (Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some)) Penc)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc) (hz_not_vs : z ∉ vs)
+    (Penc_fv : SMT.fv Penc ⊆ B.Term.vars P)
+    (z_not_vars_P : z ∉ B.Term.vars P)
+    {Ebody : B.Env} {LambdaP GammaP : SMT.TypeContext}
+    {sigmaP : SMTType} {usedP : List SMT.𝒱}
+    (typ_P : Ebody.context ⊢ᴮ P : BType.bool)
+    (P_total : EncodeTermRepTotal.{u}
+      P Ebody BType.bool LambdaP Penc sigmaP GammaP usedP)
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs →
+      match Xi v, ThetaD v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False)
+    (wf_bound : ∀ (x : ZFSet.{u}) (hx : x ∈ ⟦tau⟧ᶻ)
+      (_hx_D : x ∈ Dval),
+      B.RenWF Ebody.context
+        (Function.updates Xi vs (List.ofFn fun i => some
+          (⟨x.get vs.length i, tau.get vs.length i,
+            get_mem_type_of_isTuple
+              (hasArity_of_mem_toZFSet tau_hasArity hx)
+              tau_hasArity hx⟩ : B.Dom))))
+    (bound_none : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+      ∀ v ∉ usedP,
+        Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some) v = none)
+    (bound_respects : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+      B.RenamingContext.RespectsTypeContextOnFV
+        (Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some)) LambdaP P)
+    (bound_dom : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+      ∀ v,
+        Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some) v ≠ none → v ∈ LambdaP) :
+    ∃ lamVal : SMT.Dom.{u},
+      ⟦((λˢ [z]) [tau.toSMTType] ite_body).abstract ThetaD
+        hcov_lambda⟧ˢ = some lamVal ∧
+      RDomCastSupported (⟨T, BType.set tau, hT⟩ : B.Dom) lamVal := by
+  obtain ⟨lamVal, hlamVal, hlamVal_type⟩ :=
+    SMT.RenamingContext.denote_exists_of_typing_fv typ_lambda
+      respects_lambda hcov_lambda
+  have hlamVal_func : ⟦tau.toSMTType⟧ᶻ.IsFunc 𝔹 lamVal.fst := by
+    have hmem : lamVal.fst ∈ ⟦tau.toSMTType⟧ᶻ.funs 𝔹 := by
+      simpa [hlamVal_type, SMTType.toZFSet] using lamVal.snd.snd
+    exact ZFSet.mem_funs.mp hmem
+  refine ⟨lamVal, hlamVal, ?_⟩
+  apply RDomCastSupported.of_canonical_set_retract
+  · simpa using hlamVal_type
+  · exact represented_collect_set_retract
+      (D := D) (P := P) (tau := tau) (Denc := Denc) (Penc := Penc)
+      (ite_body := ite_body) (z := z) (ThetaD := ThetaD)
+      (DencVal := DencVal) (lamVal := lamVal) (GammaBody := GammaBody)
+      (Ebody := Ebody) (LambdaP := LambdaP) (GammaP := GammaP)
+      (sigmaP := sigmaP) (usedP := usedP)
+      vs_nemp vs_nodup Xi_fv tau_hasArity den_D den_collect ite_body_def
+      z_not_fv_D hcov_lambda hlamVal hlamVal_func hcov_D_upd den_D_upd
+      hDenc_type hDenc_func D_rel hcov_ite_upd typ_ite Theta_wt
+      hcov_sub_upd fv_substList_disj_vs hgo_cov hcov_P_upd hvs_not_bv
+      hz_not_bv hz_not_vs Penc_fv z_not_vars_P typ_P P_total ambient
+      wf_bound bound_none bound_respects bound_dom
