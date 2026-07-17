@@ -162,6 +162,82 @@ theorem denote_eq_fst_eq_zftrue_iff.{u}
     exact congrArg (fun d : SMT.Dom => d.fst)
       (Option.some.inj htrue)
 
+/-- Two Boolean denotations agree representation-wise as soon as they have
+the same truth condition. -/
+theorem RDomCastSupported.bool_of_true_iff.{u}
+    {P Q : ZFSet.{u}} {hP : P ∈ ⟦BType.bool⟧ᶻ}
+    {hQ : Q ∈ ⟦SMTType.bool⟧ᶻ}
+    (hiff : P = ZFSet.zftrue ↔ Q = ZFSet.zftrue) :
+    RDomCastSupported
+      (⟨P, BType.bool, hP⟩ : B.Dom)
+      (⟨Q, SMTType.bool, hQ⟩ : SMT.Dom) := by
+  have hPQ : P = Q := by
+    rcases ZFSet.ZFBool.mem_𝔹_iff P |>.mp hP with hPf | hPt
+    · rcases ZFSet.ZFBool.mem_𝔹_iff Q |>.mp hQ with hQf | hQt
+      · exact hPf.trans hQf.symm
+      · exact False.elim (ZFSet.zftrue_ne_zffalse
+          ((hiff.mpr hQt).symm.trans hPf))
+    · rcases ZFSet.ZFBool.mem_𝔹_iff Q |>.mp hQ with hQf | hQt
+      · exact False.elim (ZFSet.zftrue_ne_zffalse
+          ((hiff.mp hPt).symm.trans hQf))
+      · exact hPt.trans hQt.symm
+  have hrel : RDomCast
+      (⟨P, BType.bool, hP⟩ : B.Dom)
+      (⟨Q, SMTType.bool, hQ⟩ : SMT.Dom) := by
+    apply RDom.toRDomCast
+    rw [RDom]
+    refine ⟨rfl, ?_⟩
+    dsimp [retract]
+    exact hPQ.symm
+  exact ⟨hrel.toRDomCastAdmissible_of_supported
+    BType.SupportedSMT.bool, BType.SupportedSMT.bool⟩
+
+/-- Inversion of source-level membership under its typing derivation. -/
+theorem B.denote_mem_inv.{u}
+    {E : B.Env} {x S : B.Term} {a : BType}
+    (typ_x : E.context ⊢ᴮ x : a)
+    (typ_S : E.context ⊢ᴮ S : BType.set a)
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ v ∈ B.fv (x ∈ᴮ S), («Δ» v).isSome = true)
+    (wf : B.RenWF E.context «Δ»)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.bool⟧ᶻ}
+    (hden : ⟦(x ∈ᴮ S).abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨T, BType.bool, hT⟩) :
+    ∃ (X : ZFSet.{u}) (hX : X ∈ ⟦a⟧ᶻ)
+      (A : ZFSet.{u}) (hA : A ∈ ⟦BType.set a⟧ᶻ),
+      ⟦x.abstract «Δ» (fun v hv => Δ_fv v (by
+        rw [B.fv, List.mem_append]; exact Or.inl hv))⟧ᴮ =
+          some ⟨X, a, hX⟩ ∧
+      ⟦S.abstract «Δ» (fun v hv => Δ_fv v (by
+        rw [B.fv, List.mem_append]; exact Or.inr hv))⟧ᴮ =
+          some ⟨A, BType.set a, hA⟩ ∧
+      T = X ∈ᶻ A := by
+  rw [B.Term.abstract, B.denote, Option.pure_def,
+    Option.bind_eq_bind, Option.bind_eq_some_iff] at hden
+  obtain ⟨⟨X, ax, hX⟩, hdenX, hrest⟩ := hden
+  have hax : ax = a := by
+    exact (denote_welltyped_eq
+      (t := x.abstract «Δ» (fun v hv => Δ_fv v (by
+        rw [B.fv, List.mem_append]; exact Or.inl hv)))
+      ⟨E.context.abstract («Δ» := «Δ»), WFTC.of_abstract, a,
+        Typing.of_abstract _ typ_x wf⟩ hdenX).symm
+  subst ax
+  rw [Option.bind_eq_some_iff] at hrest
+  obtain ⟨⟨A, sA, hA⟩, hdenA, hout⟩ := hrest
+  have hsA : sA = BType.set a := by
+    exact (denote_welltyped_eq
+      (t := S.abstract «Δ» (fun v hv => Δ_fv v (by
+        rw [B.fv, List.mem_append]; exact Or.inr hv)))
+      ⟨E.context.abstract («Δ» := «Δ»), WFTC.of_abstract,
+        BType.set a, Typing.of_abstract _ typ_S wf⟩ hdenA).symm
+  subst sA
+  simp only [dif_pos True.intro] at hout
+  refine ⟨X, hX, A, hA, ?_, ?_, ?_⟩
+  · simpa only [proof_irrel_heq] using hdenX
+  · simpa only [proof_irrel_heq] using hdenA
+  · exact (congrArg (fun d : B.Dom => d.fst)
+      (Option.some.inj hout)).symm
+
 /-- Membership through the option-function representation.  Equality with a
 `some` result is true exactly for pairs belonging to the represented source
 relation. -/
@@ -1331,3 +1407,403 @@ theorem castMembership_supported_rep_contract.{u}
       obtain ⟨sa, sb, rfl, ha, hb⟩ := hx.prodE
       exact castMembership_option_rep_contract a b sa sb x S
         ha.toCanonicalCastPath hb.toCanonicalCastPath
+
+set_option maxHeartbeats 5000000 in
+theorem encodeTerm_rep_spec.mem_case.{u}
+    (x S : B.Term)
+    (x_ih : EncodeTermRepIH.{u} x)
+    (S_ih : EncodeTermRepIH.{u} S)
+    (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (typ_t : E.context ⊢ᴮ x ∈ᴮ S : α)
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ v ∈ B.fv (x ∈ᴮ S), («Δ» v).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastSupportedOnFV «Δ» Δ₀ (x ∈ᴮ S))
+    {used : List SMT.𝒱}
+    (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
+    (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (den_t : ⟦(x ∈ᴮ S).abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨T, α, hT⟩)
+    (vars_used : ∀ v ∈ (x ∈ᴮ S).vars, v ∈ used)
+    (Λ_inv : ∀ v ∈ (x ∈ᴮ S).vars,
+      v ∈ Λ → v ∈ E.context)
+    (bv_nodup : (B.bv (x ∈ᴮ S)).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ (x ∈ᴮ S))
+    (fv_in_Λ : ∀ v ∈ B.fv (x ∈ᴮ S), v ∈ Λ)
+    (wf : B.RenWF E.context «Δ»)
+    {n : ℕ} :
+    ⦃fun ⟨E₀, Λ'⟩ ↦
+      ⌜Λ' = Λ ∧ E₀.freshvarsc = n ∧
+        Λ.keys ⊆ E₀.usedVars ∧ E₀.usedVars = used⌝⦄
+    encodeTerm (x ∈ᴮ S) E
+    ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepPost (x ∈ᴮ S) α Λ «Δ» Δ₀ used T hT
+        E t' σ E' Γ'⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
+  obtain ⟨rfl, a, typ_x, typ_S⟩ := B.Typing.memE typ_t
+  obtain ⟨X, hX, A, hA, den_x, den_S, T_eq⟩ :=
+    B.denote_mem_inv typ_x typ_S Δ_fv wf den_t
+  subst T
+  rw [encodeTerm]
+
+  have fv_x_sub : B.fv x ⊆ B.fv (x ∈ᴮ S) := by
+    intro v hv
+    rw [B.fv, List.mem_append]
+    exact Or.inl hv
+  have fv_S_sub : B.fv S ⊆ B.fv (x ∈ᴮ S) := by
+    intro v hv
+    rw [B.fv, List.mem_append]
+    exact Or.inr hv
+  have hx_bv_nodup : (B.bv x).Nodup := by
+    have h := bv_nodup
+    rw [B.bv, List.nodup_append] at h
+    exact h.1
+  have hS_bv_nodup : (B.bv S).Nodup := by
+    have h := bv_nodup
+    rw [B.bv, List.nodup_append] at h
+    exact h.2.1
+  have hxS_bv_disj : ∀ p ∈ B.bv x, ∀ q ∈ B.bv S, p ≠ q := by
+    have h := bv_nodup
+    rw [B.bv, List.nodup_append] at h
+    exact h.2.2
+
+  mspec (Std.Do.Triple.and _
+    (Std.Do.Triple.and _
+      (x_ih E typ_x
+        (fun v hv => Δ_fv v (fv_x_sub hv))
+        (related.mono_fv fv_x_sub)
+        Δ₀_none_out Δ₀_dom den_x
+        (fun v hv => vars_used v (by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+            List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact Or.inl h))
+        (fun v hv => Λ_inv v (by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+            List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact Or.inl h))
+        hx_bv_nodup (respects.mono_fv fv_x_sub)
+        (fun v hv => fv_in_Λ v (fv_x_sub hv)) wf
+        (n := St.env.freshvarsc))
+      (encodeTerm_bv_used E (t := x) (used := St.env.usedVars)
+        (n := St.env.freshvarsc) (decl := St.env.declarations)))
+    (encodeTerm_bv_notMem_used E (t := x) (used := St.env.usedVars)
+      (n := St.env.freshvarsc) (decl := St.env.declarations)))
+  clear x_ih
+  rename_i out_x
+  obtain ⟨x_enc, sx⟩ := out_x
+  mrename_i pre
+  mintro ∀Stx
+  mpure pre
+  dsimp at pre
+  obtain ⟨⟨⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
+      _path_x, typ_x_enc, _shape_x, x_preserves,
+      Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
+      target_respects_x, Δx_dom,
+      denX, hden_x, hdenX_type, X_rel, x_total⟩,
+      bv_x_used, _⟩,
+      bv_x_not_used, _⟩ := pre
+  rcases denX with ⟨Xenc, sxD, hXenc⟩
+  dsimp at hdenX_type
+  subst sxD
+
+  have related_S : RValuationCastSupportedOnFV «Δ» Δx S :=
+    (related.mono_fv fv_S_sub).of_extends Δx_ext
+  have respects_S : B.RenamingContext.RespectsTypeContextOnFV
+      Δx Stx.types S :=
+    respects.of_extends Δx_ext types_sub_x fv_S_sub fv_in_Λ
+
+  mspec (Std.Do.Triple.and _
+    (S_ih E typ_S
+      (fun v hv => Δ_fv v (fv_S_sub hv)) related_S
+      Δx_none Δx_dom den_S
+      (fun v hv => used_sub_x (vars_used v (by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+          List.mem_append] at hv ⊢
+        rcases hv with h | h <;> [left; right] <;> exact Or.inr h)))
+      (fun v hv hΓ => by
+        have hv_parent : v ∈ (x ∈ᴮ S).vars := by
+          simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+            List.mem_append] at hv ⊢
+          rcases hv with h | h <;> [left; right] <;> exact Or.inr h
+        by_cases hv_Λ : v ∈ St.types
+        · exact Λ_inv v hv_parent hv_Λ
+        · have hv_vars_x : v ∈ B.Term.vars x := by
+            by_contra hnot
+            exact absurd hΓ
+              (x_preserves v (vars_used v hv_parent) hv_Λ hnot)
+          rcases B.Term.mem_vars_iff.mp hv_vars_x with hx_fv | hx_bv
+          · exact B.Typing.typed_by_fv typ_x hx_fv
+          · rcases B.Term.mem_vars_iff.mp hv with hS_fv | hS_bv
+            · exact absurd (B.Typing.typed_by_fv typ_S hS_fv)
+                (B.Typing.bv_notMem_context typ_x v hx_bv)
+            · exact absurd rfl (hxS_bv_disj v hx_bv v hS_bv))
+      hS_bv_nodup respects_S
+      (fun v hv => AList.mem_of_subset types_sub_x
+        (fv_in_Λ v (fv_S_sub hv))) wf
+      (n := Stx.env.freshvarsc))
+    (encodeTerm_bv_used E (t := S) (used := Stx.env.usedVars)
+      (n := Stx.env.freshvarsc) (decl := Stx.env.declarations)))
+  clear S_ih
+  rename_i out_S
+  obtain ⟨S_enc, sS⟩ := out_S
+  mrename_i pre
+  mintro ∀StS
+  mpure pre
+  dsimp at pre
+  obtain ⟨⟨used_sub_S, types_sub_S, keys_sub_S, S_used,
+      _path_S, typ_S_enc, _shape_S, S_preserves,
+      ΔS, hcov_S, ΔS_ext, _related_S, ΔS_none, _respects_S,
+      target_respects_S, ΔS_dom,
+      denA, hden_S, hdenA_type, A_rel, S_total⟩,
+      bv_S_used, _⟩ := pre
+  rcases denA with ⟨Aenc, sSD, hAenc⟩
+  dsimp at hdenA_type
+  subst sSD
+
+  have bv_x_not_final : ∀ v ∈ SMT.bv x_enc, v ∉ StS.types :=
+    fun v hv => S_preserves v (bv_x_used v hv)
+      (SMT.Typing.bv_notMem_context typ_x_enc v hv)
+      (by
+        rw [B.Term.notMem_vars_iff]
+        refine ⟨?_, ?_⟩
+        · intro hfv
+          exact SMT.Typing.bv_notMem_context typ_x_enc v hv
+            (AList.mem_of_subset types_sub_x
+              (fv_in_Λ v (fv_S_sub hfv)))
+        · intro hbS
+          exact bv_x_not_used v hv
+            (St_used_eq ▸ vars_used v (by
+              apply B.Term.mem_vars_iff.mpr
+              right
+              rw [B.bv, List.mem_append]
+              exact Or.inr hbS)))
+  have typ_x_final : StS.types ⊢ˢ x_enc : sx :=
+    SMT.Typing.weakening types_sub_S typ_x_enc bv_x_not_final
+  have hcov_x_final : SMT.RenamingContext.CoversFV ΔS x_enc :=
+    SMT.RenamingContext.coversFV_of_extends_of_coversFV ΔS_ext hcov_x
+  have hden_x_final : ⟦x_enc.abstract ΔS hcov_x_final⟧ˢ =
+      some (⟨Xenc, sx, hXenc⟩ : SMT.Dom) := by
+    have hagree :=
+      SMT.RenamingContext.agreesOnFV_of_extends_of_coversFV ΔS_ext hcov_x
+    exact (SMT.RenamingContext.denote_congr_of_agreesOnFV
+      (t := x_enc) (h1 := hcov_x_final) (h2 := hcov_x) hagree).trans
+      hden_x
+  have target_respects_x_final :
+      SMT.RenamingContext.RespectsTypeContextOnFV ΔS StS.types x_enc :=
+    target_respects_x.of_extends ΔS_ext types_sub_S typ_x_enc
+
+  mspec castMembership_supported_rep_contract a x_enc S_enc sx sS
+    X_rel.supported A_rel.supported typ_x_final typ_S_enc
+    (fun v hv => used_sub_S (bv_x_used v hv)) bv_S_used
+  rename_i out_mem
+  obtain ⟨mem_enc, smem⟩ := out_mem
+  mrename_i pre
+  mintro ∀StM
+  mpure pre
+  obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
+    typ_mem, mem_preserves, Dlt, decl_eq, mem_sem⟩ := pre
+  change smem = SMTType.bool at smem_eq
+  subst smem
+  mpure_intro
+  have ΔS_ext₀ := SMT.RenamingContext.extends_trans ΔS_ext Δx_ext
+  have types_sub₀ : St.types ⊆ StM.types := fun _ h =>
+    types_sub_M (types_sub_S (types_sub_x h))
+  have target_respects_x_M :
+      SMT.RenamingContext.RespectsTypeContextOnFV ΔS StM.types x_enc :=
+    target_respects_x_final.of_extends
+      (SMT.RenamingContext.extends_refl ΔS) types_sub_M typ_x_final
+  have target_respects_S_M :
+      SMT.RenamingContext.RespectsTypeContextOnFV ΔS StM.types S_enc :=
+    target_respects_S.of_extends
+      (SMT.RenamingContext.extends_refl ΔS) types_sub_M typ_S_enc
+  have ΔS_dom_M : ∀ v, ΔS v ≠ none → v ∈ StM.types :=
+    fun v hv => AList.mem_of_subset types_sub_M (ΔS_dom v hv)
+  obtain ⟨good, guarded⟩ := mem_sem StM.types (fun _ h => h) ΔS
+    hcov_x_final hcov_S ΔS_none target_respects_x_M
+    target_respects_S_M ΔS_dom_M X A hX hA
+    (⟨Xenc, sx, hXenc⟩ : SMT.Dom)
+    (⟨Aenc, sS, hAenc⟩ : SMT.Dom)
+    hden_x_final hden_S rfl rfl X_rel.toRDomCast A_rel.toRDomCast
+  obtain ⟨ΔM, hcov_mem, denM, ΔM_ext, ΔM_none,
+    target_respects_mem, ΔM_dom, specs_M, hden_mem,
+    hdenM_type, hmem_iff⟩ := good
+  have hsource_true : (X ∈ᶻ A) = ZFSet.zftrue ↔ X ∈ A := by
+    by_cases hXA : X ∈ A
+    · simp [overloadUnaryOp, hXA]
+    · simpa [overloadUnaryOp, hXA] using
+        (Ne.symm ZFSet.zftrue_ne_zffalse)
+  have result_rel : RDomCastSupported
+      (⟨X ∈ᶻ A, BType.bool, overloadUnaryOp_mem⟩ : B.Dom)
+      denM := by
+    rcases denM with ⟨Mv, Ms, hMv⟩
+    dsimp at hdenM_type
+    subst Ms
+    exact RDomCastSupported.bool_of_true_iff
+      (hsource_true.trans hmem_iff.symm)
+  refine ⟨?_, ?_, keys_sub_M, ?_, ⟨castPath.reflexive .bool⟩,
+    typ_mem, trivial, ?_, ΔM, hcov_mem, ?_⟩
+  · intro v hv
+    exact used_sub_M (used_sub_S (used_sub_x (by
+      simpa [St_used_eq] using hv)))
+  · exact types_sub₀
+  · intro v hv
+    rw [B.fv, List.mem_append] at hv
+    exact hv.elim
+      (fun h => used_sub_M (used_sub_S (x_used v h)))
+      (fun h => used_sub_M (S_used v h))
+  · intro v hv hΛ hvars hΓ
+    rw [B.Term.notMem_vars_iff] at hvars
+    have hvars_x : v ∉ x.vars := by
+      rw [B.Term.notMem_vars_iff]
+      refine ⟨?_, ?_⟩
+      · exact fun h => hvars.1 (fv_x_sub h)
+      · intro h
+        exact hvars.2 (by rw [B.bv, List.mem_append]; exact Or.inl h)
+    have hvars_S : v ∉ S.vars := by
+      rw [B.Term.notMem_vars_iff]
+      refine ⟨?_, ?_⟩
+      · exact fun h => hvars.1 (fv_S_sub h)
+      · intro h
+        exact hvars.2 (by rw [B.bv, List.mem_append]; exact Or.inr h)
+    have hv_not_Stx : v ∉ Stx.types := by
+      intro hΓx
+      by_cases hv_St : v ∈ St.types
+      · exact hΛ hv_St
+      · exact x_preserves v (by simpa [St_used_eq] using hv)
+          hv_St hvars_x hΓx
+    have hv_not_StS : v ∉ StS.types :=
+      S_preserves v (used_sub_x (by simpa [St_used_eq] using hv))
+        hv_not_Stx hvars_S
+    exact mem_preserves v
+      (used_sub_S (used_sub_x (by simpa [St_used_eq] using hv)))
+      hv_not_StS hΓ
+  · refine ⟨SMT.RenamingContext.extends_trans ΔM_ext ΔS_ext₀,
+      related.of_extends
+        (SMT.RenamingContext.extends_trans ΔM_ext ΔS_ext₀),
+      ΔM_none, ?_, target_respects_mem, ΔM_dom,
+      denM, hden_mem, hdenM_type, result_rel, ?_⟩
+    · exact respects.of_extends
+        (SMT.RenamingContext.extends_trans ΔM_ext ΔS_ext₀)
+        types_sub₀ (fun _ h => h) fv_in_Λ
+    · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
+        Δ₀_alt_none respects_alt Δ₀_alt_dom
+        T_alt hT_alt den_t_alt
+      obtain ⟨X_alt, hX_alt, A_alt, hA_alt,
+          den_x_alt, den_S_alt, T_alt_eq⟩ :=
+        B.denote_mem_inv typ_x typ_S Δ_fv_alt wf_alt den_t_alt
+      subst T_alt
+      have Δ₀_alt_none_x : ∀ v ∉ Stx.env.usedVars,
+          Δ₀_alt v = none := by
+        intro v hv
+        by_contra hne
+        have hv_Λ := Δ₀_alt_dom v hne
+        have hv_used : v ∈ used := by
+          simpa [← St_used_eq] using St_sub hv_Λ
+        exact hv (used_sub_x hv_used)
+      obtain ⟨Δx_alt, hcov_x_alt, denX_alt, Δx_alt_ext,
+          _related_x_alt, Δx_alt_none, _respects_x_alt,
+          target_respects_x_alt, Δx_alt_dom,
+          hden_x_alt, hdenX_alt_type, X_alt_rel⟩ :=
+        x_total Δ_alt
+          (fun v hv => Δ_fv_alt v (fv_x_sub hv)) Δ₀_alt
+          (related_alt.mono_fv fv_x_sub) wf_alt Δ₀_alt_none_x
+          (respects_alt.mono_fv fv_x_sub) Δ₀_alt_dom
+          X_alt hX_alt den_x_alt
+      rcases denX_alt with ⟨Xenc_alt, sx_alt, hXenc_alt⟩
+      dsimp at hdenX_alt_type
+      subst sx_alt
+      have Δx_alt_none_S : ∀ v ∉ StS.env.usedVars,
+          Δx_alt v = none := by
+        intro v hv
+        apply Δx_alt_none v
+        intro hvx
+        exact hv (used_sub_S hvx)
+      have related_alt_S : RValuationCastSupportedOnFV Δ_alt Δx_alt S :=
+        (related_alt.mono_fv fv_S_sub).of_extends Δx_alt_ext
+      have respects_alt_S :
+          B.RenamingContext.RespectsTypeContextOnFV
+            Δx_alt Stx.types S :=
+        respects_alt.of_extends Δx_alt_ext types_sub_x
+          fv_S_sub fv_in_Λ
+      obtain ⟨ΔS_alt, hcov_S_alt, denA_alt, ΔS_alt_ext,
+          _related_S_alt, ΔS_alt_none, _respects_S_alt,
+          target_respects_S_alt, ΔS_alt_dom,
+          hden_S_alt, hdenA_alt_type, A_alt_rel⟩ :=
+        S_total Δ_alt
+          (fun v hv => Δ_fv_alt v (fv_S_sub hv)) Δx_alt
+          related_alt_S wf_alt Δx_alt_none_S respects_alt_S
+          Δx_alt_dom A_alt hA_alt den_S_alt
+      rcases denA_alt with ⟨Aenc_alt, sS_alt, hAenc_alt⟩
+      dsimp at hdenA_alt_type
+      subst sS_alt
+      have hcov_x_alt_final : SMT.RenamingContext.CoversFV ΔS_alt x_enc :=
+        SMT.RenamingContext.coversFV_of_extends_of_coversFV
+          ΔS_alt_ext hcov_x_alt
+      have hden_x_alt_final : ⟦x_enc.abstract ΔS_alt
+          hcov_x_alt_final⟧ˢ =
+          some (⟨Xenc_alt, sx, hXenc_alt⟩ : SMT.Dom) := by
+        have hagree :=
+          SMT.RenamingContext.agreesOnFV_of_extends_of_coversFV
+            ΔS_alt_ext hcov_x_alt
+        exact (SMT.RenamingContext.denote_congr_of_agreesOnFV
+          (t := x_enc) (h1 := hcov_x_alt_final)
+          (h2 := hcov_x_alt) hagree).trans hden_x_alt
+      have target_respects_x_alt_final :
+          SMT.RenamingContext.RespectsTypeContextOnFV
+            ΔS_alt StS.types x_enc :=
+        target_respects_x_alt.of_extends
+          ΔS_alt_ext types_sub_S typ_x_enc
+      have target_respects_x_alt_M :
+          SMT.RenamingContext.RespectsTypeContextOnFV
+            ΔS_alt StM.types x_enc :=
+        target_respects_x_alt_final.of_extends
+          (SMT.RenamingContext.extends_refl ΔS_alt)
+          types_sub_M typ_x_final
+      have target_respects_S_alt_M :
+          SMT.RenamingContext.RespectsTypeContextOnFV
+            ΔS_alt StM.types S_enc :=
+        target_respects_S_alt.of_extends
+          (SMT.RenamingContext.extends_refl ΔS_alt)
+          types_sub_M typ_S_enc
+      have ΔS_alt_dom_M : ∀ v, ΔS_alt v ≠ none → v ∈ StM.types :=
+        fun v hv => AList.mem_of_subset types_sub_M (ΔS_alt_dom v hv)
+      obtain ⟨good_alt, _guarded_alt⟩ := mem_sem StM.types
+        (fun _ h => h) ΔS_alt hcov_x_alt_final hcov_S_alt
+        ΔS_alt_none target_respects_x_alt_M target_respects_S_alt_M
+        ΔS_alt_dom_M X_alt A_alt hX_alt hA_alt
+        (⟨Xenc_alt, sx, hXenc_alt⟩ : SMT.Dom)
+        (⟨Aenc_alt, sS, hAenc_alt⟩ : SMT.Dom)
+        hden_x_alt_final hden_S_alt rfl rfl
+        X_alt_rel.toRDomCast A_alt_rel.toRDomCast
+      obtain ⟨ΔM_alt, hcov_M_alt, denM_alt, ΔM_alt_ext,
+          ΔM_alt_none, target_respects_M_alt, ΔM_alt_dom,
+          _specs_alt, hden_M_alt, hdenM_alt_type, hmem_alt_iff⟩ := good_alt
+      have hsource_alt_true :
+          (X_alt ∈ᶻ A_alt) = ZFSet.zftrue ↔ X_alt ∈ A_alt := by
+        by_cases hXA : X_alt ∈ A_alt
+        · simp [overloadUnaryOp, hXA]
+        · simpa [overloadUnaryOp, hXA] using
+            (Ne.symm ZFSet.zftrue_ne_zffalse)
+      have result_alt_rel : RDomCastSupported
+          (⟨X_alt ∈ᶻ A_alt, BType.bool,
+            overloadUnaryOp_mem⟩ : B.Dom) denM_alt := by
+        rcases denM_alt with ⟨Mv, Ms, hMv⟩
+        dsimp at hdenM_alt_type
+        subst Ms
+        exact RDomCastSupported.bool_of_true_iff
+          (hsource_alt_true.trans hmem_alt_iff.symm)
+      have ΔS_alt_ext₀ :=
+        SMT.RenamingContext.extends_trans ΔS_alt_ext Δx_alt_ext
+      have ΔM_alt_ext₀ :=
+        SMT.RenamingContext.extends_trans ΔM_alt_ext ΔS_alt_ext₀
+      refine ⟨ΔM_alt, hcov_M_alt, denM_alt, ΔM_alt_ext₀,
+        related_alt.of_extends ΔM_alt_ext₀, ΔM_alt_none, ?_,
+        target_respects_M_alt, ΔM_alt_dom, hden_M_alt,
+        hdenM_alt_type, result_alt_rel⟩
+      exact respects_alt.of_extends ΔM_alt_ext₀ types_sub₀
+        (fun _ h => h) fv_in_Λ
