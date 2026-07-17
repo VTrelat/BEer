@@ -1,6 +1,7 @@
 import SMT.Reasoning.EncodeTermRepresentedDefs
 import SMT.Reasoning.Basic.AbstractSubstDenote
 import SMT.Reasoning.Basic.EncodeTermStruct
+import SMT.Reasoning.Basic.DenotationTotality
 
 open Std.Do B SMT ZFSet
 
@@ -16,6 +17,42 @@ substitution-denotation theorem.
 -/
 
 namespace SMT.RenamingContext
+
+/-- A body typed after adding one binder denotes for every well-typed bound
+value, and every such denotation has the body's declared result type.
+
+Binder encoders repeatedly need these two facts for a context of the form
+`Function.update Θ z (some W)`.  The compatibility proof is entirely
+generic: `respects_update_of_wt` handles the newly bound value, while the
+caller supplies coverage for the unchanged free variables. -/
+theorem denote_update_total_and_type_of_typing.{u}
+    {Theta : Context.{u}} {Gamma : SMT.TypeContext}
+    {z : SMT.𝒱} {sigma : SMTType} {body : SMT.Term} {result : SMTType}
+    (typ_body : Gamma.insert z sigma ⊢ˢ body : result)
+    (Theta_wt : ∀ v (d : SMT.Dom.{u}), Theta v = some d →
+      ∀ tau, Gamma.lookup v = some tau → d.snd.fst = tau)
+    (base_fv : ∀ v ∈ SMT.fv body, v ≠ z → (Theta v).isSome = true)
+    (hcov : ∀ W : SMT.Dom.{u},
+      CoversFV (Function.update Theta z (some W)) body) :
+    (∀ W : SMT.Dom.{u}, W.snd.fst = sigma →
+      ⟦body.abstract (Function.update Theta z (some W))
+        (hcov W)⟧ˢ.isSome = true) ∧
+    (∀ W : SMT.Dom.{u}, W.snd.fst = sigma → ∀ d : SMT.Dom.{u},
+      ⟦body.abstract (Function.update Theta z (some W))
+        (hcov W)⟧ˢ = some d → d.snd.fst = result) := by
+  constructor
+  · intro W hW_type
+    have respects : RespectsTypeContextOnFV
+        (Function.update Theta z (some W)) (Gamma.insert z sigma) body :=
+      respects_update_of_wt hW_type Theta_wt base_fv
+    obtain ⟨d, hden, _⟩ := denote_exists_of_typing_fv typ_body respects
+      (hcov W)
+    exact Option.isSome_iff_exists.mpr ⟨d, hden⟩
+  · intro W hW_type d hden
+    have respects : RespectsTypeContextOnFV
+        (Function.update Theta z (some W)) (Gamma.insert z sigma) body :=
+      respects_update_of_wt hW_type Theta_wt base_fv
+    exact denote_type_of_typing_fv typ_body respects (hcov W) hden
 
 /-- A supported representative of a Boolean has exactly the source truth
 value.  Keeping this fact separate avoids repeatedly unpacking the canonical
