@@ -131,6 +131,64 @@ theorem B.denote_collect_predicate_total.{u}
       ⟨BType.hasArity_of_foldl_defaultZFSet tau_hasArity, tau_hasArity⟩
       h_neg
 
+/- Repackage the source predicate-totality condition as the Boolean
+denotation needed by the representation-aware body induction hypothesis. -/
+open Classical in
+theorem B.denote_collect_predicate_exists.{u}
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom))
+    {Ectx : B.TypeContext} (typ_P : Ectx ⊢ᴮ P : BType.bool) :
+    ∀ {x_fin : Fin vs.length → B.Dom.{u}},
+      (∀ i, (x_fin i).snd.fst = tau.get vs.length i ∧
+        (x_fin i).fst ∈ ⟦tau.get vs.length i⟧ᶻ) →
+      ZFSet.ofFinDom x_fin ∈ Dval →
+      B.RenWF Ectx (Function.updates Xi vs
+        (List.ofFn fun i => some (x_fin i))) →
+      ∃ (XiP_fv : ∀ v ∈ B.fv P,
+          (Function.updates Xi vs
+            (List.ofFn fun i => some (x_fin i)) v).isSome = true)
+        (Pval : ZFSet.{u}) (hPval : Pval ∈ ⟦BType.bool⟧ᶻ),
+        ⟦P.abstract (Function.updates Xi vs
+          (List.ofFn fun i => some (x_fin i))) XiP_fv⟧ᴮ =
+          some (⟨Pval, BType.bool, hPval⟩ : B.Dom) := by
+  intro x_fin hx_typ hx_mem wf_P
+  have XiP_fv : ∀ v ∈ B.fv P,
+      (Function.updates Xi vs (List.ofFn fun i => some (x_fin i)) v).isSome =
+        true := by
+    intro v hv
+    rw [Function.updates_eq_if (by simp) vs_nodup]
+    split_ifs with hvs
+    · simp
+    · exact Xi_fv v (B.fv.mem_collect (.inr ⟨hv, hvs⟩))
+  have hgo_some := B.denote_collect_predicate_total Xi_fv tau_hasArity
+    den_D den_collect hx_typ hx_mem
+  obtain ⟨⟨Pval, P_ty, hPval⟩, hgo⟩ :=
+    Option.isSome_iff_exists.mp hgo_some
+  have hden : ⟦P.abstract (Function.updates Xi vs
+      (List.ofFn fun i => some (x_fin i))) XiP_fv⟧ᴮ =
+      some (⟨Pval, P_ty, hPval⟩ : B.Dom) := by
+    rw [← denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp x_fin
+      XiP_fv]
+    exact hgo
+  have hP_ty : P_ty = BType.bool :=
+    (denote_welltyped_eq
+      (t := P.abstract (Function.updates Xi vs
+        (List.ofFn fun i => some (x_fin i))) XiP_fv)
+      ⟨_, WFTC.of_abstract, BType.bool,
+        by convert Typing.of_abstract XiP_fv typ_P⟩ hden).symm
+  subst P_ty
+  exact ⟨XiP_fv, Pval, hPval, hden⟩
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
