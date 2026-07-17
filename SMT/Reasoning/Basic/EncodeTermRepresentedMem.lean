@@ -145,6 +145,23 @@ theorem zfEqIn_eq_zftrue_iff.{u} {A X Y : ZFSet.{u}}
     exact ⟨fun h => (ZFSet.zftrue_ne_zffalse h.symm).elim,
       fun h => (hXY h).elim⟩
 
+/-- An SMT equality denotes `zftrue` exactly when its same-typed operands
+have equal underlying ZF values. -/
+theorem denote_eq_fst_eq_zftrue_iff.{u}
+    {t₁ t₂ : SMT.PHOAS.Term SMT.Dom.{u}}
+    {D₁ D₂ Deq : SMT.Dom.{u}}
+    (h₁ : ⟦t₁⟧ˢ = some D₁) (h₂ : ⟦t₂⟧ˢ = some D₂)
+    (hty : D₁.snd.fst = D₂.snd.fst)
+    (heq : ⟦t₁ =ˢ' t₂⟧ˢ = some Deq) :
+    Deq.fst = ZFSet.zftrue ↔ D₁.fst = D₂.fst := by
+  constructor
+  · exact denote_eq_true_implies_fst_eq h₁ h₂ hty heq
+  · intro hfst
+    have htrue := denote_eq_eq_zftrue_of_fst_eq h₁ h₂ hty hfst
+    rw [heq] at htrue
+    exact congrArg (fun d : SMT.Dom => d.fst)
+      (Option.some.inj htrue)
+
 /-- Membership through the option-function representation.  Equality with a
 `some` result is true exactly for pairs belonging to the represented source
 relation. -/
@@ -802,3 +819,515 @@ theorem castMembership_setPred_cast_rep_contract.{u}
         overloadBinOp_𝔹, overloadBinOp, hfalse] using happ_true
     · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
         overloadBinOp_𝔹, overloadBinOp, htrue] using happ_true
+
+set_option maxHeartbeats 4000000 in
+theorem castMembership_option_rep_contract.{u}
+    (a b : BType) (sa sb : SMTType) (x S : SMT.Term)
+    (ca : sa ~> a.toSMTType) (cb : sb ~> b.toSMTType) :
+    CastMembershipRepSpec.{u} (a ×ᴮ b) x S (.pair sa sb)
+      (.fun a.toSMTType (.option b.toSMTType)) := by
+  unfold CastMembershipRepSpec
+  intro Λ n used decl typ_x typ_S bv_x_used bv_S_used
+  have ha_le : sa ⊑ a.toSMTType := castable?_of_castPath ca
+  have hb_le : sb ⊑ b.toSMTType := castable?_of_castPath cb
+  mstart
+  mintro pre ∀St
+  mpure pre
+  mspec castMembership_option_exact_spec typ_x typ_S ha_le hb_le
+    bv_x_used bv_S_used
+  rename_i out
+  obtain ⟨t, σ⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨_fvc, types_sub, keys_sub, used_sub, σ_eq, typ_t,
+    _fv_t, preserves, _total,
+    helper, spec, decl_eq, t_eq, helper_fresh, helper_not_used,
+    helper_lookup, spec_fv, exactness⟩ := post
+  change σ = SMTType.bool at σ_eq
+  subst σ
+  change t = spec ∧ˢ
+    ((.app S (.fst (.var helper))) =ˢ (.some (.snd (.var helper)))) at t_eq
+  subst t
+  mpure_intro
+  refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, preserves,
+    helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec,
+    decl_eq, ?_⟩
+  intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
+    Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
+    Xrel Arel
+  rcases denX with ⟨X₀, σX, hX₀⟩
+  rcases denA with ⟨F, σA, hF⟩
+  dsimp at hdenX_ty hdenA_ty
+  subst σX
+  subst σA
+  have Λ_sub_sup : Λ ⊆ Γsup :=
+    AList.subset_trans types_sub Γsub
+  have respects_x_Λ :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ x :=
+    respects_x.of_super Λ_sub_sup
+  have hpf : ∀ (x_! : SMT.𝒱) (Y : SMT.Dom.{u}),
+      ∀ v ∈ SMT.fv (SMT.Term.var x_!),
+        (Function.update Θ x_! (some Y) v).isSome = true := by
+    intro x_! Y v hv
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    simp
+  obtain ⟨Φ, Y, hden_var, hcov_spec, hden_spec, hY_ty,
+      hΦ_ty, ⟨hΦ_true, hcast⟩, hguard⟩ :=
+    exactness Θ hcov_x respects_x_Λ hpf
+      (⟨X₀, .pair sa sb, hX₀⟩ : SMT.Dom) hdenX
+  let Θ' := Function.update Θ helper (some Y)
+  have helper_none : Θ helper = none :=
+    Θ_none helper helper_not_used
+  have Θ'_ext : SMT.RenamingContext.Extends Θ' Θ :=
+    SMT.RenamingContext.extends_update_of_none helper_none
+  have helper_mem_final : helper ∈ St'.types :=
+    AList.lookup_isSome.mp (by rw [helper_lookup]; rfl)
+  have helper_used_final : helper ∈ St'.env.usedVars :=
+    keys_sub helper_mem_final
+  have Θ'_none : ∀ v ∉ St'.env.usedVars, Θ' v = none := by
+    intro v hv
+    by_cases hvh : v = helper
+    · subst v
+      exact absurd helper_used_final hv
+    · simpa [Θ', Function.update_of_ne hvh] using
+        Θ_none v (fun hv_used => hv (used_sub hv_used))
+  have helper_lookup_sup : Γsup.lookup helper =
+      some (.pair a.toSMTType b.toSMTType) :=
+    AList.lookup_of_subset Γsub helper_lookup
+  have respects_spec :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup spec :=
+    SMT.RenamingContext.respects_update_helper spec_fv respects_x
+      helper_lookup_sup hY_ty
+  have respects_S' :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup S := by
+    intro v ξ hv hlookup
+    have hv_ne : v ≠ helper := by
+      intro heq
+      subst v
+      exact helper_fresh
+        (SMT.Typing.mem_context_of_mem_fv typ_S hv)
+    obtain ⟨d, hd, hdty⟩ := respects_S hv hlookup
+    exact ⟨d, by simpa [Θ', Function.update_of_ne hv_ne] using hd,
+      hdty⟩
+  have hcov_S' : SMT.RenamingContext.CoversFV Θ' S :=
+    SMT.RenamingContext.coversFV_of_extends_of_coversFV Θ'_ext hcov_S
+  have hdenA' : ⟦S.abstract Θ' hcov_S'⟧ˢ =
+      some (⟨F, .fun a.toSMTType (.option b.toSMTType), hF⟩ : SMT.Dom) := by
+    have hagree := SMT.RenamingContext.agreesOnFV_of_extends_of_coversFV
+      Θ'_ext hcov_S
+    exact (SMT.RenamingContext.denote_congr_of_agreesOnFV
+      (t := S) (h1 := hcov_S') (h2 := hcov_S) hagree).trans hdenA
+  have hcov_var : SMT.RenamingContext.CoversFV Θ' (.var helper) := by
+    intro v hv
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    simp [Θ']
+  have hden_var' : ⟦(SMT.Term.var helper).abstract Θ' hcov_var⟧ˢ =
+      some Y := by
+    simpa only [Θ', proof_irrel_heq] using hden_var
+  have respects_var :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup
+        (.var helper) := by
+    intro v ξ hv hlookup
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    rw [helper_lookup_sup] at hlookup
+    cases hlookup
+    exact ⟨Y, by simp [Θ'], hY_ty⟩
+  have hY_mem : Y.fst ∈
+      ⟦SMTType.pair a.toSMTType b.toSMTType⟧ᶻ := by
+    rw [← hY_ty]
+    exact Y.snd.snd
+  have hY_eta : Y.fst = Y.fst.π₁.pair Y.fst.π₂ :=
+    ZFSet.pair_eta hY_mem
+  have hY_parts : Y.fst.π₁ ∈ ⟦a.toSMTType⟧ᶻ ∧
+      Y.fst.π₂ ∈ ⟦b.toSMTType⟧ᶻ :=
+    ZFSet.pair_mem_prod.mp (hY_eta ▸ hY_mem)
+  let denFst : SMT.Dom.{u} :=
+    ⟨Y.fst.π₁, a.toSMTType, hY_parts.1⟩
+  let denSnd : SMT.Dom.{u} :=
+    ⟨Y.fst.π₂, b.toSMTType, hY_parts.2⟩
+  have hcov_fst : SMT.RenamingContext.CoversFV Θ'
+      (.fst (.var helper)) := by
+    intro v hv
+    exact hcov_var v (by simpa only [SMT.fv] using hv)
+  have hcov_snd : SMT.RenamingContext.CoversFV Θ'
+      (.snd (.var helper)) := by
+    intro v hv
+    exact hcov_var v (by simpa only [SMT.fv] using hv)
+  have hden_fst : ⟦(SMT.Term.fst (.var helper)).abstract
+      Θ' hcov_fst⟧ˢ = some denFst := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind]
+    rw [hden_var']
+    cases Y with
+    | mk Yv Yty =>
+      rcases Yty with ⟨Yσ, hYv⟩
+      dsimp at hY_ty
+      subst Yσ
+      rfl
+  have hden_snd : ⟦(SMT.Term.snd (.var helper)).abstract
+      Θ' hcov_snd⟧ˢ = some denSnd := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind]
+    rw [hden_var']
+    cases Y with
+    | mk Yv Yty =>
+      rcases Yty with ⟨Yσ, hYv⟩
+      dsimp at hY_ty
+      subst Yσ
+      rfl
+  have hF_func : ⟦a.toSMTType⟧ᶻ.IsFunc
+      ⟦SMTType.option b.toSMTType⟧ᶻ F := by
+    simpa [SMTType.toZFSet] using hF
+  have hYa_dom : Y.fst.π₁ ∈ F.Dom (is_rel_of_is_func hF_func) := by
+    rw [is_func_dom_eq hF_func]
+    exact hY_parts.1
+  let denApp : SMT.Dom.{u} :=
+    ⟨(fapply F (is_func_is_pfunc hF_func)
+        ⟨Y.fst.π₁, hYa_dom⟩).val,
+      .option b.toSMTType, ZFSet.fapply_mem_range _ _⟩
+  let someY := ZFSet.Option.some
+    (S := ⟦b.toSMTType⟧ᶻ) ⟨Y.fst.π₂, hY_parts.2⟩
+  let denSome : SMT.Dom.{u} :=
+    ⟨someY.val, .option b.toSMTType, someY.property⟩
+  have hcov_app : SMT.RenamingContext.CoversFV Θ'
+      (.app S (.fst (.var helper))) := by
+    intro v hv
+    rw [SMT.fv, List.mem_append] at hv
+    exact hv.elim (hcov_S' v) (hcov_fst v)
+  have hden_app : ⟦(SMT.Term.app S (.fst (.var helper))).abstract
+      Θ' hcov_app⟧ˢ = some denApp := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind, Option.bind_eq_some_iff]
+    refine ⟨⟨F, .fun a.toSMTType (.option b.toSMTType), hF⟩,
+      ?_, ?_⟩
+    · simpa only [proof_irrel_heq] using hdenA'
+    · rw [Option.bind_eq_some_iff]
+      refine ⟨denFst, ?_, ?_⟩
+      · simpa only [proof_irrel_heq] using hden_fst
+      · simp only [dif_pos True.intro, dif_pos (is_func_is_pfunc hF_func),
+          dif_pos hYa_dom, denFst, denApp]
+  have hcov_some : SMT.RenamingContext.CoversFV Θ'
+      (.some (.snd (.var helper))) := by
+    intro v hv
+    exact hcov_snd v (by simpa only [SMT.fv] using hv)
+  have hden_some : ⟦(SMT.Term.some (.snd (.var helper))).abstract
+      Θ' hcov_some⟧ˢ = some denSome := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind]
+    rw [hden_snd]
+    rfl
+  let eqTerm :=
+    (SMT.Term.app S (.fst (.var helper))) =ˢ
+      (SMT.Term.some (.snd (.var helper)))
+  have hcov_eq : SMT.RenamingContext.CoversFV Θ' eqTerm := by
+    intro v hv
+    simp only [eqTerm, SMT.fv, List.mem_append] at hv
+    rcases hv with (hS | hv) | hv
+    · exact hcov_S' v hS
+    · exact hcov_var v (by simpa only [SMT.fv] using hv)
+    · exact hcov_var v (by simpa only [SMT.fv] using hv)
+  have respects_eq :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup eqTerm := by
+    intro v ξ hv hlookup
+    simp only [eqTerm, SMT.fv, List.mem_append] at hv
+    rcases hv with (hS | hv) | hv
+    · exact respects_S' hS hlookup
+    · exact respects_var (by simpa only [SMT.fv] using hv) hlookup
+    · exact respects_var (by simpa only [SMT.fv] using hv) hlookup
+  obtain ⟨denEq, hden_eq_raw, hdenEq_ty⟩ :=
+    denote_eq_some_of_some hden_app hden_some rfl
+  have hden_eq : ⟦eqTerm.abstract Θ' hcov_eq⟧ˢ = some denEq := by
+    dsimp only [eqTerm]
+    rw [SMT.Term.abstract]
+    simpa only [proof_irrel_heq] using hden_eq_raw
+  have hsem : zfEqIn ⟦SMTType.option b.toSMTType⟧ᶻ
+      denApp.fst denSome.fst = ZFSet.zftrue ↔ X ∈ A := by
+    simpa only [denApp, denSome, someY, proof_irrel_heq] using
+      (RDomCast.optionFunction_cast_eq_some_eq_zftrue_iff
+        (hY := hY_mem) Xrel Arel
+          (.pair ha_le.toCastPath hb_le.toCastPath) hcast)
+  have hiff_eq : denEq.fst = ZFSet.zftrue ↔ X ∈ A :=
+    (denote_eq_fst_eq_zftrue_iff hden_app hden_some rfl
+      hden_eq_raw).trans
+      ((zfEqIn_eq_zftrue_iff denApp.snd.snd denSome.snd.snd).symm.trans
+        hsem)
+  have hcov_t : SMT.RenamingContext.CoversFV Θ'
+      (spec ∧ˢ eqTerm) := by
+    intro v hv
+    rw [SMT.fv, List.mem_append] at hv
+    exact hv.elim (hcov_spec v) (hcov_eq v)
+  have respects_t :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup
+        (spec ∧ˢ eqTerm) := by
+    intro v ξ hv hlookup
+    rw [SMT.fv, List.mem_append] at hv
+    exact hv.elim (fun h => respects_spec h hlookup)
+      (fun h => respects_eq h hlookup)
+  have hΦ_mem_bool : Φ.fst ∈ ⟦SMTType.bool⟧ᶻ := by
+    rw [← hΦ_ty]
+    exact Φ.snd.snd
+  have hEq_mem_bool : denEq.fst ∈ ⟦SMTType.bool⟧ᶻ := by
+    rw [← hdenEq_ty]
+    exact denEq.snd.snd
+  rcases Φ with ⟨Φv, ⟨Φσ, hΦv⟩⟩
+  dsimp at hΦ_ty
+  subst Φσ
+  change Φv = ZFSet.zftrue at hΦ_true
+  rcases denEq with ⟨Eqv, ⟨Eqσ, hEqv⟩⟩
+  dsimp at hdenEq_ty
+  subst Eqσ
+  let denM : SMT.Dom.{u} :=
+    ⟨Φv ⋀ᶻ Eqv, SMTType.bool,
+      EncodeTermRepresentedBool.CheckedOp.eval_mem .and
+        hΦ_mem_bool hEq_mem_bool⟩
+  have hdenM : ⟦(spec ∧ˢ eqTerm).abstract Θ' hcov_t⟧ˢ =
+      some denM := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind, Option.bind_eq_some_iff]
+    refine ⟨(⟨Φv, SMTType.bool, hΦv⟩ : SMT.Dom), hden_spec, ?_⟩
+    rw [Option.bind_eq_some_iff]
+    refine ⟨(⟨Eqv, SMTType.bool, hEqv⟩ : SMT.Dom), hden_eq, ?_⟩
+    rfl
+  have hiff : denM.fst = ZFSet.zftrue ↔ X ∈ A := by
+    have hdenM_eq : denM.fst = Eqv := by
+      dsimp [denM]
+      rw [hΦ_true]
+      rcases ZFSet.ZFBool.mem_𝔹_iff Eqv |>.mp hEqv with
+        hfalse | htrue
+      · rw [hfalse]
+        simp [overloadBinOp_𝔹, overloadBinOp]
+      · rw [htrue]
+        simp [overloadBinOp_𝔹, overloadBinOp]
+    rw [hdenM_eq]
+    exact hiff_eq
+  have specs_true : SpecBodiesTrue Θ' Γsup
+      (helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec) := by
+    intro body hbody
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    exact ⟨hcov_spec, (⟨Φv, SMTType.bool, hΦv⟩ : SMT.Dom),
+      respects_spec, hden_spec, rfl, hΦ_true⟩
+  have Θ'_dom : ∀ v, Θ' v ≠ none → v ∈ Γsup := by
+    intro v hv
+    by_cases hvh : v = helper
+    · subst v
+      exact AList.lookup_isSome.mp (by rw [helper_lookup_sup]; rfl)
+    · exact Θ_dom v (by simpa [Θ', Function.update_of_ne hvh] using hv)
+  constructor
+  · exact ⟨Θ', hcov_t, denM, Θ'_ext, Θ'_none, respects_t,
+      Θ'_dom, specs_true, hdenM, rfl, hiff⟩
+  · intro hcov_tg denMg respects_tg specs_tg hdenMg hdenMg_ty
+    obtain ⟨specVal, hspecVal, hden_spec_g,
+        eqVal, heqVal, hden_eq_g, denMg_eq⟩ :=
+      EncodeTermRepresentedBool.CheckedOp.smt_denote_inv
+        .and hcov_tg hdenMg
+    have hspec_true := specs_tg spec (by simp)
+    obtain ⟨hcov_spec_g, db, _resp_db, hden_db,
+      _db_ty, hdb_true⟩ := hspec_true
+    have hspecDom_eq :
+        (⟨specVal, SMTType.bool, hspecVal⟩ : SMT.Dom) = db := by
+      have hcov_eq' : hcov_spec_g =
+          (fun v hv => hcov_tg v (by
+            rw [SMT.fv, List.mem_append]
+            exact Or.inl hv)) := Subsingleton.elim _ _
+      subst hcov_spec_g
+      rw [hden_spec_g] at hden_db
+      exact Option.some.inj hden_db
+    have hspecVal_true : specVal = ZFSet.zftrue := by
+      rw [← hspecDom_eq] at hdb_true
+      exact hdb_true
+    have helper_some : (Θ helper).isSome = true := by
+      apply hcov_tg helper
+      simp [SMT.fv]
+    obtain ⟨Yg, hYg⟩ := Option.isSome_iff_exists.mp helper_some
+    have helper_fv_t : helper ∈ SMT.fv (spec ∧ˢ eqTerm) := by
+      simp [eqTerm, SMT.fv]
+    have hYg_ty : Yg.snd.fst =
+        SMTType.pair a.toSMTType b.toSMTType := by
+      obtain ⟨d, hd, hdty⟩ := respects_tg helper_fv_t
+        (AList.lookup_of_subset Γsub helper_lookup)
+      rw [hYg] at hd
+      injection hd with hdeq
+      subst d
+      exact hdty
+    have hupd : Function.update Θ helper (some Yg) = Θ := by
+      rw [← hYg]
+      exact Function.update_eq_self helper Θ
+    have hcov_spec_upd : SMT.RenamingContext.CoversFV
+        (Function.update Θ helper (some Yg)) spec := by
+      simpa only [hupd] using (fun v hv => hcov_tg v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl hv))
+    obtain ⟨_hsome, hcast_g⟩ := hguard Yg hYg_ty hcov_spec_upd
+    have hden_spec_upd : ⟦spec.abstract
+        (Function.update Θ helper (some Yg)) hcov_spec_upd⟧ˢ =
+        some (⟨specVal, SMTType.bool, hspecVal⟩ : SMT.Dom) := by
+      simpa only [hupd, proof_irrel_heq] using hden_spec_g
+    have hcast_g' := hcast_g hden_spec_upd hspecVal_true
+    have hYg_mem : Yg.fst ∈
+        ⟦SMTType.pair a.toSMTType b.toSMTType⟧ᶻ := by
+      rw [← hYg_ty]
+      exact Yg.snd.snd
+    have hYg_eta : Yg.fst = Yg.fst.π₁.pair Yg.fst.π₂ :=
+      ZFSet.pair_eta hYg_mem
+    have hYg_parts : Yg.fst.π₁ ∈ ⟦a.toSMTType⟧ᶻ ∧
+        Yg.fst.π₂ ∈ ⟦b.toSMTType⟧ᶻ :=
+      ZFSet.pair_mem_prod.mp (hYg_eta ▸ hYg_mem)
+    have hYga_dom : Yg.fst.π₁ ∈
+        F.Dom (is_rel_of_is_func hF_func) := by
+      rw [is_func_dom_eq hF_func]
+      exact hYg_parts.1
+    let denFstG : SMT.Dom.{u} :=
+      ⟨Yg.fst.π₁, a.toSMTType, hYg_parts.1⟩
+    let denSndG : SMT.Dom.{u} :=
+      ⟨Yg.fst.π₂, b.toSMTType, hYg_parts.2⟩
+    let denAppG : SMT.Dom.{u} :=
+      ⟨(fapply F (is_func_is_pfunc hF_func)
+          ⟨Yg.fst.π₁, hYga_dom⟩).val,
+        .option b.toSMTType, ZFSet.fapply_mem_range _ _⟩
+    let someYg := ZFSet.Option.some
+      (S := ⟦b.toSMTType⟧ᶻ) ⟨Yg.fst.π₂, hYg_parts.2⟩
+    let denSomeG : SMT.Dom.{u} :=
+      ⟨someYg.val, .option b.toSMTType, someYg.property⟩
+    have hcov_var_g : SMT.RenamingContext.CoversFV Θ (.var helper) := by
+      intro v hv
+      simp only [SMT.fv, List.mem_singleton] at hv
+      subst v
+      simp [hYg]
+    have hden_var_g : ⟦(SMT.Term.var helper).abstract Θ hcov_var_g⟧ˢ =
+        some Yg := by
+      rw [SMT.Term.abstract]
+      simp only [SMT.denote]
+      congr 1
+      exact Option.get_of_eq_some _ hYg
+    have hcov_fst_g : SMT.RenamingContext.CoversFV Θ
+        (.fst (.var helper)) := by
+      intro v hv
+      exact hcov_var_g v (by simpa only [SMT.fv] using hv)
+    have hcov_snd_g : SMT.RenamingContext.CoversFV Θ
+        (.snd (.var helper)) := by
+      intro v hv
+      exact hcov_var_g v (by simpa only [SMT.fv] using hv)
+    have hden_fst_g : ⟦(SMT.Term.fst (.var helper)).abstract
+        Θ hcov_fst_g⟧ˢ = some denFstG := by
+      rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+        Option.bind_eq_bind, hden_var_g]
+      cases Yg with
+      | mk Ygv Ygty =>
+        rcases Ygty with ⟨Ygσ, hYgv⟩
+        dsimp at hYg_ty
+        subst Ygσ
+        rfl
+    have hden_snd_g : ⟦(SMT.Term.snd (.var helper)).abstract
+        Θ hcov_snd_g⟧ˢ = some denSndG := by
+      rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+        Option.bind_eq_bind, hden_var_g]
+      cases Yg with
+      | mk Ygv Ygty =>
+        rcases Ygty with ⟨Ygσ, hYgv⟩
+        dsimp at hYg_ty
+        subst Ygσ
+        rfl
+    have hcov_app_g : SMT.RenamingContext.CoversFV Θ
+        (.app S (.fst (.var helper))) := by
+      intro v hv
+      exact hcov_tg v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr (by
+          rw [SMT.fv, List.mem_append]
+          exact Or.inl hv))
+    have hden_app_g : ⟦(SMT.Term.app S (.fst (.var helper))).abstract
+        Θ hcov_app_g⟧ˢ = some denAppG := by
+      rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+        Option.bind_eq_bind, Option.bind_eq_some_iff]
+      refine ⟨⟨F, .fun a.toSMTType (.option b.toSMTType), hF⟩,
+        ?_, ?_⟩
+      · simpa only [proof_irrel_heq] using hdenA
+      · rw [Option.bind_eq_some_iff]
+        refine ⟨denFstG, ?_, ?_⟩
+        · simpa only [proof_irrel_heq] using hden_fst_g
+        · simp only [dif_pos True.intro,
+            dif_pos (is_func_is_pfunc hF_func),
+            dif_pos hYga_dom, denFstG, denAppG]
+    have hcov_some_g : SMT.RenamingContext.CoversFV Θ
+        (.some (.snd (.var helper))) := by
+      intro v hv
+      exact hcov_snd_g v (by simpa only [SMT.fv] using hv)
+    have hden_some_g : ⟦(SMT.Term.some (.snd (.var helper))).abstract
+        Θ hcov_some_g⟧ˢ = some denSomeG := by
+      rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+        Option.bind_eq_bind, hden_snd_g]
+      rfl
+    have hcov_eq_g : SMT.RenamingContext.CoversFV Θ eqTerm := by
+      intro v hv
+      exact hcov_tg v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv)
+    have hden_eq_raw_g :
+        ⟦(SMT.Term.app S (.fst (.var helper))).abstract Θ hcov_app_g =ˢ'
+          (SMT.Term.some (.snd (.var helper))).abstract Θ hcov_some_g⟧ˢ =
+          some (⟨eqVal, SMTType.bool, heqVal⟩ : SMT.Dom) := by
+      rw [SMT.Term.abstract] at hden_eq_g
+      simpa only [proof_irrel_heq] using hden_eq_g
+    have hsem_g : zfEqIn ⟦SMTType.option b.toSMTType⟧ᶻ
+        denAppG.fst denSomeG.fst = ZFSet.zftrue ↔ X ∈ A := by
+      simpa only [denAppG, denSomeG, someYg, proof_irrel_heq] using
+        (RDomCast.optionFunction_cast_eq_some_eq_zftrue_iff
+          (hY := hYg_mem) Xrel Arel
+            (.pair ha_le.toCastPath hb_le.toCastPath) hcast_g')
+    have hiff_eq_g : eqVal = ZFSet.zftrue ↔ X ∈ A :=
+      (denote_eq_fst_eq_zftrue_iff hden_app_g hden_some_g rfl
+        hden_eq_raw_g).trans
+        ((zfEqIn_eq_zftrue_iff denAppG.snd.snd
+          denSomeG.snd.snd).symm.trans hsem_g)
+    subst denMg
+    subst specVal
+    rcases ZFSet.ZFBool.mem_𝔹_iff eqVal |>.mp heqVal with
+      hfalse | htrue
+    · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
+        overloadBinOp_𝔹, overloadBinOp, hfalse] using hiff_eq_g
+    · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
+        overloadBinOp_𝔹, overloadBinOp, htrue] using hiff_eq_g
+
+/-- Every supported target representation admits a cast to the canonical SMT
+representation consumed by the membership encoder. -/
+theorem BType.SupportedSMT.nonemptyCanonicalCastPath
+    {t : BType} {s : SMTType} (h : BType.SupportedSMT t s) :
+    Nonempty (s ~> t.toSMTType) := by
+  induction h with
+  | int => exact ⟨castPath.reflexive .int⟩
+  | bool => exact ⟨castPath.reflexive .bool⟩
+  | prod _ _ ih₁ ih₂ =>
+      exact ⟨.pair ih₁.some ih₂.some⟩
+  | setPred t => exact ⟨castPath.reflexive (.fun t.toSMTType .bool)⟩
+  | optionFun a b =>
+      exact ⟨.graph (castPath.reflexive a.toSMTType)
+        (castPath.reflexive b.toSMTType)⟩
+
+/-- A chosen canonical cast path for a supported representation. -/
+noncomputable def BType.SupportedSMT.toCanonicalCastPath
+    {t : BType} {s : SMTType} (h : BType.SupportedSMT t s) :
+    s ~> t.toSMTType := h.nonemptyCanonicalCastPath.some
+
+/-- Select the operational membership proof from the two supported set
+representations. -/
+theorem castMembership_supported_rep_contract.{u}
+    (t : BType) (x S : SMT.Term) (sx sS : SMTType)
+    (hx : BType.SupportedSMT t sx)
+    (hS : BType.SupportedSMT (BType.set t) sS) :
+    CastMembershipRepSpec.{u} t x S sx sS := by
+  cases hS with
+  | setPred t =>
+      by_cases heq : sx = t.toSMTType
+      · subst sx
+        exact castMembership_direct_rep_contract t x S
+      · exact castMembership_setPred_cast_rep_contract t sx x S
+          hx.toCanonicalCastPath heq
+  | optionFun a b =>
+      obtain ⟨sa, sb, rfl, ha, hb⟩ := hx.prodE
+      exact castMembership_option_rep_contract a b sa sb x S
+        ha.toCanonicalCastPath hb.toCanonicalCastPath
