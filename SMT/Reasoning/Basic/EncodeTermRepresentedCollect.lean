@@ -189,6 +189,92 @@ theorem B.denote_collect_predicate_exists.{u}
   subst P_ty
   exact ⟨XiP_fv, Pval, hPval, hden⟩
 
+/- The source collection semantics evaluates its predicate once at the
+canonical default tuple before it can construct the resulting separation.
+That evaluation is the seed needed to run the body induction hypothesis for
+the outer encoded lambda, even when the source domain is empty. -/
+open Classical in
+theorem B.denote_collect_default_predicate_exists.{u}
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom))
+    {Ectx : B.TypeContext} (typ_P : Ectx ⊢ᴮ P : BType.bool)
+    (wf_P : B.RenWF Ectx
+      (Function.updates Xi vs (List.ofFn fun i => some
+        (⟨tau.defaultZFSet.get vs.length i, tau.get vs.length i,
+          get_mem_type_of_isTuple
+            (BType.hasArity_of_foldl_defaultZFSet tau_hasArity)
+            tau_hasArity BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom)))) :
+    let x_fin : Fin vs.length → B.Dom.{u} := fun i =>
+      ⟨tau.defaultZFSet.get vs.length i, tau.get vs.length i,
+        get_mem_type_of_isTuple
+          (BType.hasArity_of_foldl_defaultZFSet tau_hasArity)
+          tau_hasArity BType.mem_toZFSet_of_defaultZFSet⟩
+    ∃ (XiP_fv : ∀ v ∈ B.fv P,
+        (Function.updates Xi vs
+          (List.ofFn fun i => some (x_fin i)) v).isSome = true)
+      (Pval : ZFSet.{u}) (hPval : Pval ∈ ⟦BType.bool⟧ᶻ),
+      ⟦P.abstract (Function.updates Xi vs
+        (List.ofFn fun i => some (x_fin i))) XiP_fv⟧ᴮ =
+        some (⟨Pval, BType.bool, hPval⟩ : B.Dom) := by
+  dsimp only
+  let x_fin : Fin vs.length → B.Dom := fun i =>
+    ⟨tau.defaultZFSet.get vs.length i, tau.get vs.length i,
+      get_mem_type_of_isTuple
+        (BType.hasArity_of_foldl_defaultZFSet tau_hasArity)
+        tau_hasArity BType.mem_toZFSet_of_defaultZFSet⟩
+  have XiP_fv : ∀ v ∈ B.fv P,
+      (Function.updates Xi vs (List.ofFn fun i => some (x_fin i)) v).isSome =
+        true := by
+    intro v hv
+    rw [Function.updates_eq_if (by simp) vs_nodup]
+    split_ifs with hvs
+    · simp
+    · exact Xi_fv v (B.fv.mem_collect (.inr ⟨hv, hvs⟩))
+  have h_inv := den_collect
+  simp only [B.Term.abstract] at h_inv
+  unfold B.denote at h_inv
+  simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h_inv
+  obtain ⟨D_dom, hden_d, rest⟩ := h_inv
+  have hconv_d : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some D_dom := by
+    convert hden_d using 2
+  have hD_dom_eq : D_dom =
+      (⟨Dval, BType.set tau, hDval⟩ : B.Dom) := by
+    rw [hconv_d] at den_D
+    exact Option.some.inj den_D
+  subst D_dom
+  simp only at rest
+  have hdefault_arity : tau.defaultZFSet.hasArity vs.length ∧
+      tau.hasArity vs.length :=
+    ⟨BType.hasArity_of_foldl_defaultZFSet tau_hasArity, tau_hasArity⟩
+  rw [dif_pos hdefault_arity, Option.bind_eq_some_iff] at rest
+  obtain ⟨⟨Pval, P_ty, hPval⟩, hgo, _⟩ := rest
+  have hden : ⟦P.abstract (Function.updates Xi vs
+      (List.ofFn fun i => some (x_fin i))) XiP_fv⟧ᴮ =
+      some (⟨Pval, P_ty, hPval⟩ : B.Dom) := by
+    rw [← denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp x_fin
+      XiP_fv]
+    exact hgo
+  have hP_ty : P_ty = BType.bool :=
+    (denote_welltyped_eq
+      (t := P.abstract (Function.updates Xi vs
+        (List.ofFn fun i => some (x_fin i))) XiP_fv)
+      ⟨_, WFTC.of_abstract, BType.bool,
+        by convert Typing.of_abstract XiP_fv typ_P⟩ hden).symm
+  subst P_ty
+  exact ⟨XiP_fv, Pval, hPval, hden⟩
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
