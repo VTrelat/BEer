@@ -142,6 +142,31 @@ theorem agreesOnFV_substList_update_of_extends.{u}
           exact (hbody_ext hbase_some).symm
     · exact (hvz (hts_fv_z t ht v hvt)).elim
 
+/-- Source-level agreement suffices for a stable encoded binder body: the
+encoder free-variable bound turns it into the encoded-body agreement needed
+by `agreesOnFV_substList_update_of_extends`. -/
+theorem agreesOnFV_substList_update_of_source_fv.{u}
+    {DeltaCtx ThetaBase ThetaBody : Context.{u}}
+    {z : SMT.𝒱} {W : SMT.Dom.{u}}
+    {xs : List SMT.𝒱} {ts : List SMT.Term} {body : SMT.Term}
+    {source : B.Term}
+    (hcov : CoversFV (Function.update DeltaCtx z (some W))
+      (SMT.substList xs ts body))
+    (hsubst_not_xs : ∀ v ∈ SMT.fv (SMT.substList xs ts body),
+      v ≠ z → v ∉ xs)
+    (hts_fv_z : ∀ t ∈ ts, ∀ v ∈ SMT.fv t, v = z)
+    (hbody_fv : SMT.fv body ⊆ B.Term.vars source)
+    (hctx_source : ∀ v ∈ B.Term.vars source, v ∉ xs →
+      DeltaCtx v = ThetaBase v)
+    (hbody_ext : Extends ThetaBody ThetaBase) :
+    AgreesOnFV (Function.update DeltaCtx z (some W))
+      (Function.update ThetaBody z (some W))
+      (SMT.substList xs ts body) := by
+  apply agreesOnFV_substList_update_of_extends hcov hsubst_not_xs hts_fv_z
+  · intro v hv hvxs
+    exact hctx_source v (hbody_fv hv) hvxs
+  · exact hbody_ext
+
 end SMT.RenamingContext
 
 /-- A successful binder-body stability check turns the structural declaration
@@ -191,3 +216,16 @@ theorem encodeTerm_no_new_declarations_fv
   · intro v hv
     simpa only [declVars, List.filterMap_nil, List.mem_union_iff,
       List.not_mem_nil, or_false] using term_fv hv
+
+/-- A lambda whose canonical set retraction is the source value is a supported
+representative of that set.  The `collect` and `lambda` cases use this after
+their semantic body bridges establish the retraction equation. -/
+theorem RDomCastSupported.of_canonical_set_retract.{u}
+    {tau : BType} {X : ZFSet.{u}} {hX : X ∈ ⟦BType.set tau⟧ᶻ}
+    {d : SMT.Dom.{u}}
+    (htype : d.snd.fst = (BType.set tau).toSMTType)
+    (hretract : retract (BType.set tau) d.fst = X) :
+    RDomCastSupported (⟨X, BType.set tau, hX⟩ : B.Dom) d := by
+  apply RDom.toRDomCastSupported
+  rw [RDom]
+  exact ⟨htype, hretract⟩
