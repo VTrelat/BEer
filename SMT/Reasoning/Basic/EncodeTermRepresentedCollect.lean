@@ -152,6 +152,70 @@ theorem collect_ite_truth_of_represented_source_fv.{u}
       hlen_xd hnodup hcov_upd hvalues hPenc_fv hctx_source hbody_ext)
     hden_P hrel_P hden_D hden_body hD_type hD_true
 
+/-- The operational form of the represented collection-body bridge.  It runs
+the predicate's representation-aware totality theorem at the supplied bound
+values, then applies the stable-free-variable substitution bridge.  In
+particular, no equality with `B.RenamingContext.toSMT` is required. -/
+theorem collect_ite_truth_of_total_body_source_fv.{u}
+    {Dapp Penc body : SMT.Term}
+    (xs : List SMT.𝒱) (ts : List SMT.Term)
+    {Delta ThetaBase : SMT.RenamingContext.Context.{u}}
+    (Ds : List SMT.Dom.{u})
+    (hbody_def : body = Dapp.ite (SMT.substList xs ts Penc) (.bool false))
+    (hcov_body : SMT.RenamingContext.CoversFV Delta body)
+    (hcov_Dapp : SMT.RenamingContext.CoversFV Delta Dapp)
+    (hlen_xt : xs.length = ts.length) (hlen_xd : xs.length = Ds.length)
+    (hnodup : xs.Nodup)
+    (hxs_not_bv : ∀ x ∈ xs, x ∉ SMT.bv Penc)
+    (hts_bv_nil : ∀ t ∈ ts, SMT.bv t = [])
+    (hts_fv_not_bv : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ SMT.bv Penc)
+    (hts_not_none : ∀ t ∈ ts, t ≠ SMT.Term.none)
+    (hts_fv_disj_xs : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ xs)
+    (hts_den : ∀ (i : ℕ) (_hi_x : i < xs.length) (hi_t : i < ts.length)
+      (hi_d : i < Ds.length),
+      ∃ (ht_cov : SMT.RenamingContext.CoversFV Delta ts[i]),
+        ⟦ts[i].abstract Delta ht_cov⟧ˢ = some Ds[i])
+    (hcov_sub : SMT.RenamingContext.CoversFV Delta
+      (SMT.substList xs ts Penc))
+    (hcov_upd : SMT.RenamingContext.CoversFV
+      (Function.updates Delta xs (Ds.map Option.some)) Penc)
+    {Pterm : B.Term} {E : B.Env} {Lambda Gamma : SMT.TypeContext}
+    {sigma : SMTType} {used : List SMT.𝒱}
+    (P_total : EncodeTermRepTotal.{u}
+      Pterm E BType.bool Lambda Penc sigma Gamma used)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv Pterm, (Xi v).isSome = true)
+    (related : RValuationCastSupportedOnFV Xi ThetaBase Pterm)
+    (wf : B.RenWF E.context Xi)
+    (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
+    (source_respects : B.RenamingContext.RespectsTypeContextOnFV
+      ThetaBase Lambda Pterm)
+    (ThetaBase_dom : ∀ v, ThetaBase v ≠ none → v ∈ Lambda)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦BType.bool⟧ᶻ}
+    (den_P : ⟦Pterm.abstract Xi Xi_fv⟧ᴮ =
+      some (⟨Pval, BType.bool, hPval⟩ : B.Dom))
+    (bound_values : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_d : i < Ds.length),
+      ThetaBase xs[i] = some Ds[i])
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars Pterm)
+    (hctx_source : ∀ v ∈ B.Term.vars Pterm, v ∉ xs →
+      Delta v = ThetaBase v)
+    {dD dBody : SMT.Dom.{u}}
+    (hden_D : ⟦Dapp.abstract Delta hcov_Dapp⟧ˢ = some dD)
+    (hden_body : ⟦body.abstract Delta hcov_body⟧ˢ = some dBody)
+    (hD_type : dD.snd.fst = SMTType.bool)
+    (hD_true : dD.fst = ZFSet.zftrue) :
+    dBody.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue := by
+  obtain ⟨ThetaBody, hcov_P, dP, hbody_ext, hvalues, hbody_rel,
+    _hbody_none, _source_respects, _target_respects, _hbody_dom,
+    hden_P, _hdP_type, hrel_P⟩ :=
+    EncodeTermRepTotal.bound_body P_total Xi_fv related wf ThetaBase_none
+      source_respects ThetaBase_dom den_P bound_values
+  exact collect_ite_truth_of_represented_source_fv
+    xs ts Ds hbody_def hcov_body hcov_Dapp hlen_xt hlen_xd hnodup
+    hxs_not_bv hts_bv_nil hts_fv_not_bv hts_not_none hts_fv_disj_xs
+    hts_den hcov_sub hcov_upd hcov_P hvalues hPenc_fv hctx_source
+    hbody_ext hden_P hrel_P hden_D hden_body hD_type hD_true
+
 /-- A fixed Boolean B denotation is equivalent to the extensional truth
 form required by the collection retraction lemma.  The latter quantifies over
 all dependent-pair presentations of the same `Option B.Dom`; injectivity of
