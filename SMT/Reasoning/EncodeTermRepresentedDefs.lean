@@ -184,6 +184,153 @@ theorem DeclarationContextTrace.append
       | pop n => exact ih h₁
       | check_sat => exact ih h₁
 
+/-- A declaration trace only adds fresh bindings; every binding present at
+the beginning is therefore still present at the end. -/
+theorem DeclarationContextTrace.entries_subset
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma) :
+    Lambda.entries ⊆ Gamma.entries := by
+  induction Dlt generalizing Lambda with
+  | nil =>
+      change Gamma = Lambda at h
+      subst Gamma
+      exact fun _ he => he
+  | cons i D ih =>
+      cases i with
+      | declare_const v tau =>
+          obtain ⟨hv, htail⟩ := h
+          exact List.Subset.trans
+            (SMT.TypeContext.entries_subset_insert_of_notMem hv)
+            (ih htail)
+      | define_fun v tau sigma body => exact ih h
+      | define_const v tau body => exact ih h
+      | assert body => exact ih h
+      | push n => exact ih h
+      | pop n => exact ih h
+      | check_sat => exact ih h
+
+/-- Declaration traces are insensitive to the order of unrelated bindings in
+their input context.  The resulting context has the same bindings, possibly
+in a correspondingly different association-list order. -/
+theorem DeclarationContextTrace.transport_perm
+    {Lambda Lambda' Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma)
+    (hperm : Lambda.entries.Perm Lambda'.entries) :
+    ∃ Gamma', DeclarationContextTrace Lambda' Dlt Gamma' ∧
+      Gamma.entries.Perm Gamma'.entries := by
+  induction Dlt generalizing Lambda Lambda' with
+  | nil =>
+      change Gamma = Lambda at h
+      subst Gamma
+      exact ⟨Lambda', rfl, hperm⟩
+  | cons i D ih =>
+      cases i with
+      | declare_const v tau =>
+          obtain ⟨hv, htail⟩ := h
+          have hv' : v ∉ Lambda' := by
+            intro hv'
+            exact hv ((AList.mem_of_perm hperm).mpr hv')
+          have hperm_insert :
+              (Lambda.insert v tau).entries.Perm
+                (Lambda'.insert v tau).entries := by
+            rw [AList.entries_insert_of_notMem hv,
+              AList.entries_insert_of_notMem hv']
+            exact hperm.cons (Sigma.mk v tau)
+          obtain ⟨Gamma', htrace', hfinal⟩ :=
+            ih htail hperm_insert
+          exact ⟨Gamma', ⟨hv', htrace'⟩, hfinal⟩
+      | define_fun v tau sigma body => exact ih h hperm
+      | define_const v tau body => exact ih h hperm
+      | assert body => exact ih h hperm
+      | push n => exact ih h hperm
+      | pop n => exact ih h hperm
+      | check_sat => exact ih h hperm
+
+/-- Inserting a binding whose key is absent from an update list commutes with
+that update up to association-list order. -/
+theorem SMT.TypeContext.update_insert_perm
+    (Gamma : SMT.TypeContext) (v : SMT.𝒱) (tau : SMTType)
+    (vs : List SMT.𝒱) (taus : List SMTType)
+    (hlen : vs.length = taus.length) (hv : v ∉ vs) :
+    ((Gamma.update vs taus hlen).insert v tau).entries.Perm
+      (SMT.TypeContext.update (Gamma.insert v tau) vs taus hlen).entries := by
+  induction vs, taus, hlen using List.reverse_induction₂ with
+  | nil_nil =>
+      simpa [SMT.TypeContext.update]
+  | cons_cons w vs sigma taus hlen ih =>
+      rw [List.concat_eq_append, List.mem_append,
+        List.mem_singleton, not_or] at hv
+      simp only [List.concat_eq_append]
+      rw [SMT.TypeContext.update_concat Gamma vs taus w sigma hlen,
+        SMT.TypeContext.update_concat (Gamma.insert v tau)
+          vs taus w sigma hlen]
+      exact (AList.insert_insert_of_ne
+        (Gamma.update vs taus hlen) (Ne.symm hv.2)).trans
+          (AList.perm_insert (ih hv.1))
+
+/-- SMT typing depends on the bindings of a type context, not on their storage
+order in the underlying association list. -/
+theorem SMT.Typing.permute_context
+    {Gamma Gamma' : SMT.TypeContext} {t : SMT.Term} {tau : SMTType}
+    (hperm : Gamma.entries.Perm Gamma'.entries)
+    (htyp : Gamma ⊢ˢ t : tau) :
+    Gamma' ⊢ˢ t : tau := by
+  refine SMT.Typing.weakening hperm.subset htyp ?_
+  intro v hv hvGamma'
+  exact (SMT.Typing.bv_notMem_context htyp v hv)
+    ((AList.mem_of_perm hperm).mpr hvGamma')
+
+/-- Fresh variables introduced after a declaration-producing computation may
+be moved before that computation.  The exact declaration trace is preserved,
+and the final context differs only by association-list order. -/
+theorem DeclarationContextTrace.update_fresh
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma)
+    (vs : List SMT.𝒱) (taus : List SMTType)
+    (hlen : vs.length = taus.length)
+    (hfresh : ∀ v ∈ vs, v ∉ Gamma) :
+    ∃ Gamma',
+      DeclarationContextTrace (Lambda.update vs taus hlen) Dlt Gamma' ∧
+      Gamma'.entries.Perm (Gamma.update vs taus hlen).entries := by
+  induction Dlt generalizing Lambda with
+  | nil =>
+      change Gamma = Lambda at h
+      subst Gamma
+      exact ⟨Lambda.update vs taus hlen, rfl, .refl _⟩
+  | cons i D ih =>
+      cases i with
+      | declare_const v tau =>
+          obtain ⟨hv, htail⟩ := h
+          have hvGamma : v ∈ Gamma := by
+            rw [AList.mem_keys]
+            exact List.mem_keys_of_mem <| htail.entries_subset <| by
+              rw [AList.entries_insert_of_notMem hv]
+              exact List.mem_cons_self
+          have hv_vs : v ∉ vs := by
+            intro hvs
+            exact (hfresh v hvs) hvGamma
+          have hv_update : v ∉ Lambda.update vs taus hlen := by
+            intro hmem
+            rw [SMT.TypeContext.mem_update_iff Lambda v vs taus hlen] at hmem
+            exact (not_or.mpr ⟨hv_vs, hv⟩) hmem
+          obtain ⟨GammaMid, htraceMid, hpermMid⟩ :=
+            ih htail
+          have hbasePerm :
+              ((Lambda.update vs taus hlen).insert v tau).entries.Perm
+                (SMT.TypeContext.update (Lambda.insert v tau)
+                  vs taus hlen).entries :=
+            SMT.TypeContext.update_insert_perm Lambda v tau vs taus hlen hv_vs
+          obtain ⟨Gamma', htrace', hperm'⟩ :=
+            htraceMid.transport_perm hbasePerm.symm
+          exact ⟨Gamma', ⟨hv_update, htrace'⟩,
+            hperm'.symm.trans hpermMid⟩
+      | define_fun v tau sigma body => exact ih h
+      | define_const v tau body => exact ih h
+      | assert body => exact ih h
+      | push n => exact ih h
+      | pop n => exact ih h
+      | check_sat => exact ih h
+
 /-- A context in which a generated term is evaluated contains both the input
 context and all typed helper declarations that the encoder later re-scopes. -/
 abbrev ScopedContextExtends
