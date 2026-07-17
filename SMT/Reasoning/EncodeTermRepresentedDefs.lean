@@ -71,6 +71,24 @@ def declEntries (Dlt : SMT.Chunk) :
     | .declare_const v τ => some ⟨v, τ⟩
     | _ => none
 
+/-- Pair-valued view of the declarations that become unary local binders in
+the `all` encoder.  This is definitionally the encoder's `ex_binders`
+filter-map. -/
+def declBinders (Dlt : SMT.Chunk) : List (SMT.𝒱 × SMTType) :=
+  Dlt.filterMap fun
+    | .declare_const v τ => some (v, τ)
+    | _ => none
+
+@[simp] theorem declBinders_nil : declBinders [] = [] := rfl
+
+@[simp] theorem declBinders_append (D₁ D₂ : SMT.Chunk) :
+    declBinders (D₁ ++ D₂) = declBinders D₁ ++ declBinders D₂ := by
+  simp [declBinders, List.filterMap_append]
+
+@[simp] theorem declBinders_helperSpecChunk
+    (v : SMT.𝒱) (τ : SMTType) (spec : SMT.Term) :
+    declBinders (helperSpecChunk v τ spec) = [(v, τ)] := rfl
+
 @[simp] theorem declEntries_nil : declEntries [] = [] := rfl
 
 @[simp] theorem declEntries_append (D₁ D₂ : SMT.Chunk) :

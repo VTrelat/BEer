@@ -661,6 +661,64 @@ private theorem singleton_update_eq_insert
     Fin.getElem_fin, Fin.val_eq_zero, List.getElem_cons_zero,
     Fin.foldl_zero]
 
+/-- Re-scope a declaration trace as the encoder's right-nested sequence of
+unary universal helper binders.  Freshness is recovered from the exact trace;
+bound-variable freshness follows from typing in the final operational
+context, which contains every declared helper. -/
+theorem foldr_decl_forall_typing
+    (Dlt : SMT.Chunk) (inner : SMT.Term)
+    {Gamma GammaOp : SMT.TypeContext}
+    (htrace : DeclarationContextTrace Gamma Dlt GammaOp)
+    (hinner : GammaOp ⊢ˢ inner : SMTType.bool) :
+    Gamma ⊢ˢ (declBinders Dlt).foldr
+      (fun p t => SMT.Term.forall [p.1] [p.2] t) inner :
+        SMTType.bool := by
+  induction Dlt generalizing Gamma with
+  | nil =>
+      change GammaOp = Gamma at htrace
+      subst GammaOp
+      exact hinner
+  | cons i D ih =>
+      cases i with
+      | declare_const v tau =>
+          obtain ⟨hv, htail⟩ := htrace
+          have htyp_tail := ih htail
+          simp only [declBinders, List.filterMap_cons, List.foldr_cons]
+          refine SMT.Typing.forall Gamma [v] [tau] _ ?_ ?_ (by simp) rfl ?_
+          · simpa using hv
+          · intro w hw hbv
+            simp only [List.mem_singleton] at hw
+            subst w
+            exact SMT.Typing.bv_notMem_context htyp_tail v hbv (by simp)
+          · rwa [singleton_update_eq_insert]
+      | define_fun v tau sigma body =>
+          simpa [declBinders] using ih htrace
+      | define_const v tau body =>
+          simpa [declBinders] using ih htrace
+      | assert body =>
+          simpa [declBinders] using ih htrace
+      | push n =>
+          simpa [declBinders] using ih htrace
+      | pop n =>
+          simpa [declBinders] using ih htrace
+      | check_sat =>
+          simpa [declBinders] using ih htrace
+
+/-- Type a right-associated chain of Boolean guard implications. -/
+theorem foldr_imp_typing
+    (guards : List SMT.Term) (base : SMT.Term)
+    {Gamma : SMT.TypeContext}
+    (hguards : ∀ g ∈ guards, Gamma ⊢ˢ g : SMTType.bool)
+    (hbase : Gamma ⊢ˢ base : SMTType.bool) :
+    Gamma ⊢ˢ guards.foldr SMT.Term.imp base : SMTType.bool := by
+  induction guards with
+  | nil => exact hbase
+  | cons g guards ih =>
+      simp only [List.foldr_cons]
+      exact SMT.Typing.imp Gamma g _
+        (hguards g (List.mem_cons_self ..))
+        (ih (fun h hh => hguards h (List.mem_cons_of_mem _ hh)))
+
 private theorem tail_coverage.{u}
     {Theta : SMT.RenamingContext.Context.{u}}
     {v : SMT.𝒱} {tau : SMTType} {tail : SMT.Term}
