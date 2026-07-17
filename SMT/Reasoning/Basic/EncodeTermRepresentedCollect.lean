@@ -276,6 +276,36 @@ theorem B.denote_collect_default_predicate_exists.{u}
   subst P_ty
   exact ⟨XiP_fv, Pval, hPval, hden⟩
 
+open Classical in
+/-- The default tuple used by source collection semantics can seed the body
+encoder under any ambient represented valuation.  Each bound source component
+is installed together with its canonical SMT representative, while every free
+variable outside the binder remains related through `ambient`. -/
+theorem RValuationCastSupportedOnFV.updates_of_collect_default.{u}
+    {vs : List B.𝒱} (vs_nodup : vs.Nodup)
+    {tau : BType} (tau_hasArity : tau.hasArity vs.length)
+    {Xi : B.RenamingContext.Context.{u}}
+    {Theta : SMT.RenamingContext.Context.{u}}
+    {P : B.Term}
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs →
+      match Xi v, Theta v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False) :
+    let bs : Fin vs.length → B.Dom.{u} := fun i =>
+      ⟨tau.defaultZFSet.get vs.length i, tau.get vs.length i,
+        get_mem_type_of_isTuple
+          (BType.hasArity_of_foldl_defaultZFSet tau_hasArity)
+          tau_hasArity BType.mem_toZFSet_of_defaultZFSet⟩
+    RValuationCastSupportedOnFV
+      (Function.updates Xi vs (List.ofFn fun i => some (bs i)))
+      (Function.updates Theta vs
+        (List.ofFn fun i => some (bs i).canonicalSMT)) P := by
+  dsimp only
+  apply RValuationCastSupportedOnFV.updates vs_nodup
+  · exact ambient
+  · intro i
+    exact B.Dom.rdomCastSupported_canonicalSMT _
+
 /-- The projections introduced by the set-valued collection encoder preserve
 the representation relation componentwise.  This packages the dependent
 tuple bookkeeping needed when the predicate totality theorem is run under a
@@ -687,6 +717,127 @@ theorem collect_ite_truth_of_total_body_source_fv.{u}
     hts_den hcov_sub hcov_upd hcov_P hvalues hPenc_fv hctx_source
     hbody_ext hden_P hrel_P hden_D hden_body hD_type hD_true
 
+/-- The fresh-variable form of the collection-body bridge.  The collection
+encoder creates `z` only after encoding the predicate, so predicate totality
+must run in the pre-`z` valuation.  Its result is then safely lifted across
+the fresh update before comparing the substituted body. -/
+theorem collect_ite_truth_of_total_body_source_fv_fresh.{u}
+    {Dapp Penc body : SMT.Term}
+    (xs : List SMT.𝒱) (ts : List SMT.Term)
+    {DeltaCtx ThetaBase : SMT.RenamingContext.Context.{u}}
+    {z : SMT.𝒱} {W : SMT.Dom.{u}}
+    (Ds : List SMT.Dom.{u})
+    (hbody_def : body = Dapp.ite (SMT.substList xs ts Penc) (.bool false))
+    (hcov_body : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W)) body)
+    (hcov_Dapp : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W)) Dapp)
+    (hlen_xt : xs.length = ts.length) (hlen_xd : xs.length = Ds.length)
+    (hnodup : xs.Nodup)
+    (hxs_not_bv : ∀ x ∈ xs, x ∉ SMT.bv Penc)
+    (hts_bv_nil : ∀ t ∈ ts, SMT.bv t = [])
+    (hts_fv_not_bv : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ SMT.bv Penc)
+    (hts_not_none : ∀ t ∈ ts, t ≠ SMT.Term.none)
+    (hts_fv_disj_xs : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ xs)
+    (hts_den : ∀ (i : ℕ) (_hi_x : i < xs.length) (hi_t : i < ts.length)
+      (hi_d : i < Ds.length),
+      ∃ (ht_cov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W)) ts[i]),
+        ⟦ts[i].abstract (Function.update DeltaCtx z (some W)) ht_cov⟧ˢ =
+          some Ds[i])
+    (hcov_sub : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W))
+        (SMT.substList xs ts Penc))
+    (hcov_upd : SMT.RenamingContext.CoversFV
+      (Function.updates (Function.update DeltaCtx z (some W)) xs
+        (Ds.map Option.some)) Penc)
+    {Pterm : B.Term} {E : B.Env} {Lambda Gamma : SMT.TypeContext}
+    {sigma : SMTType} {used : List SMT.𝒱}
+    (P_total : EncodeTermRepTotal.{u}
+      Pterm E BType.bool Lambda Penc sigma Gamma used)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv Pterm, (Xi v).isSome = true)
+    (related : RValuationCastSupportedOnFV Xi ThetaBase Pterm)
+    (wf : B.RenWF E.context Xi)
+    (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
+    (source_respects : B.RenamingContext.RespectsTypeContextOnFV
+      ThetaBase Lambda Pterm)
+    (ThetaBase_dom : ∀ v, ThetaBase v ≠ none → v ∈ Lambda)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦BType.bool⟧ᶻ}
+    (den_P : ⟦Pterm.abstract Xi Xi_fv⟧ᴮ =
+      some (⟨Pval, BType.bool, hPval⟩ : B.Dom))
+    (bound_values : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_d : i < Ds.length),
+      ThetaBase xs[i] = some Ds[i])
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars Pterm)
+    (z_not_xs : z ∉ xs)
+    (z_not_fv_Penc : z ∉ SMT.fv Penc)
+    (z_not_vars_source : z ∉ B.Term.vars Pterm)
+    (hctx_source : ∀ v ∈ B.Term.vars Pterm, v ∉ xs →
+      DeltaCtx v = ThetaBase v)
+    {dD dBody : SMT.Dom.{u}}
+    (hden_D : ⟦Dapp.abstract (Function.update DeltaCtx z (some W))
+      hcov_Dapp⟧ˢ = some dD)
+    (hden_body : ⟦body.abstract (Function.update DeltaCtx z (some W))
+      hcov_body⟧ˢ = some dBody)
+    (hD_type : dD.snd.fst = SMTType.bool)
+    (hD_true : dD.fst = ZFSet.zftrue) :
+    dBody.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue := by
+  obtain ⟨ThetaBody, hcov_P, dP, hbody_ext, hvalues, _hbody_rel,
+    _hbody_none, _source_respects, _target_respects, _hbody_dom,
+    hden_P, _hdP_type, hrel_P⟩ :=
+    EncodeTermRepTotal.bound_body P_total Xi_fv related wf ThetaBase_none
+      source_respects ThetaBase_dom den_P bound_values
+  have hcov_P_upd : SMT.RenamingContext.CoversFV
+      (Function.update ThetaBody z (some W)) Penc :=
+    SMT.RenamingContext.coversFV_update_of_notMem z_not_fv_Penc hcov_P
+  have hden_P_upd : ⟦Penc.abstract (Function.update ThetaBody z (some W))
+      hcov_P_upd⟧ˢ = some dP := by
+    calc
+      ⟦Penc.abstract (Function.update ThetaBody z (some W)) hcov_P_upd⟧ˢ =
+          ⟦Penc.abstract ThetaBody hcov_P⟧ˢ := by
+        symm
+        exact SMT.RenamingContext.denote_update_of_notMem (h := hcov_P)
+          z_not_fv_Penc
+      _ = some dP := hden_P
+  have hvalues_upd : ∀ (i : ℕ) (hi_x : i < xs.length)
+      (hi_d : i < Ds.length),
+      (Function.update ThetaBody z (some W)) xs[i] = some Ds[i] := by
+    intro i hi_x hi_d
+    have hxz : xs[i] ≠ z := by
+      intro h
+      apply z_not_xs
+      rw [← h]
+      exact List.getElem_mem hi_x
+    rw [Function.update_of_ne hxz]
+    exact hvalues i hi_x hi_d
+  have hbody_ext_upd : SMT.RenamingContext.Extends
+      (Function.update ThetaBody z (some W))
+      (Function.update ThetaBase z (some W)) := by
+    intro v d hv
+    by_cases hvz : v = z
+    · subst v
+      simpa using hv
+    · rw [Function.update_of_ne hvz]
+      apply hbody_ext
+      rw [Function.update_of_ne hvz] at hv
+      exact hv
+  have hctx_source_upd : ∀ v ∈ B.Term.vars Pterm, v ∉ xs →
+      (Function.update DeltaCtx z (some W)) v =
+        (Function.update ThetaBase z (some W)) v := by
+    intro v hv hvs
+    have hvz : v ≠ z := by
+      intro h
+      subst v
+      exact z_not_vars_source hv
+    rw [Function.update_of_ne hvz, Function.update_of_ne hvz]
+    exact hctx_source v hv hvs
+  exact collect_ite_truth_of_represented_source_fv
+    xs ts Ds hbody_def hcov_body hcov_Dapp hlen_xt hlen_xd hnodup
+    hxs_not_bv hts_bv_nil hts_fv_not_bv hts_not_none hts_fv_disj_xs
+    hts_den hcov_sub hcov_upd hcov_P_upd hvalues_upd hPenc_fv
+    hctx_source_upd hbody_ext_upd hden_P_upd hrel_P hden_D hden_body
+    hD_type hD_true
+
 /-- Specialize the represented collection-body bridge to the tuple projections
 emitted by the encoder.  This packages the routine length, freshness, and
 denotation facts for `toDestPair`, leaving callers with the semantic data for
@@ -695,27 +846,33 @@ theorem collect_ite_truth_of_total_body_toDestPair.{u}
     {Dapp Penc body : SMT.Term}
     {vs : List SMT.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
     {z : SMT.𝒱}
-    {Delta ThetaBase : SMT.RenamingContext.Context.{u}}
+    {DeltaCtx ThetaBase : SMT.RenamingContext.Context.{u}} {W : SMT.Dom.{u}}
     {ss : Fin vs.length → SMT.Dom.{u}}
     (hbody_def : body = Dapp.ite
       (SMT.substList vs (toDestPair vs (.var z)) Penc) (.bool false))
-    (hcov_body : SMT.RenamingContext.CoversFV Delta body)
-    (hcov_Dapp : SMT.RenamingContext.CoversFV Delta Dapp)
-    (hcov_sub : SMT.RenamingContext.CoversFV Delta
+    (hcov_body : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W)) body)
+    (hcov_Dapp : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W)) Dapp)
+    (hcov_sub : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W))
       (SMT.substList vs (toDestPair vs (.var z)) Penc))
     (hcov_upd : SMT.RenamingContext.CoversFV
-      (Function.updates Delta vs ((List.ofFn ss).map Option.some)) Penc)
+      (Function.updates (Function.update DeltaCtx z (some W)) vs
+        ((List.ofFn ss).map Option.some)) Penc)
     (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
     (hz_not_bv : z ∉ SMT.bv Penc)
     (hz_not_vs : z ∉ vs)
     (hcomponents : ∀ i : Fin vs.length,
-      ∃ hcov : SMT.RenamingContext.CoversFV Delta
+      ∃ hcov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W))
           ((toDestPair vs (.var z))[i.val]'(by
             rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
             exact i.isLt)),
         ⟦((toDestPair vs (.var z))[i.val]'(by
           rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
-          exact i.isLt)).abstract Delta hcov⟧ˢ = some (ss i))
+          exact i.isLt)).abstract (Function.update DeltaCtx z (some W))
+            hcov⟧ˢ = some (ss i))
     {Pterm : B.Term} {E : B.Env} {Lambda Gamma : SMT.TypeContext}
     {sigma : SMTType} {used : List SMT.𝒱}
     (P_total : EncodeTermRepTotal.{u}
@@ -735,11 +892,14 @@ theorem collect_ite_truth_of_total_body_toDestPair.{u}
       (_hi_d : i < (List.ofFn ss).length),
       ThetaBase vs[i] = some (ss ⟨i, hi_x⟩))
     (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars Pterm)
+    (z_not_vars_Pterm : z ∉ B.Term.vars Pterm)
     (hctx_source : ∀ v ∈ B.Term.vars Pterm, v ∉ vs →
-      Delta v = ThetaBase v)
+      DeltaCtx v = ThetaBase v)
     {dD dBody : SMT.Dom.{u}}
-    (hden_D : ⟦Dapp.abstract Delta hcov_Dapp⟧ˢ = some dD)
-    (hden_body : ⟦body.abstract Delta hcov_body⟧ˢ = some dBody)
+    (hden_D : ⟦Dapp.abstract (Function.update DeltaCtx z (some W))
+      hcov_Dapp⟧ˢ = some dD)
+    (hden_body : ⟦body.abstract (Function.update DeltaCtx z (some W))
+      hcov_body⟧ˢ = some dBody)
     (hD_type : dD.snd.fst = SMTType.bool)
     (hD_true : dD.fst = ZFSet.zftrue) :
     dBody.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue := by
@@ -766,18 +926,23 @@ theorem collect_ite_truth_of_total_body_toDestPair.{u}
   have hts_den : ∀ (i : ℕ) (_hi_x : i < vs.length)
       (hi_t : i < (toDestPair vs (.var z)).length)
       (hi_d : i < (List.ofFn ss).length),
-      ∃ (ht_cov : SMT.RenamingContext.CoversFV Delta
+      ∃ (ht_cov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W))
           (toDestPair vs (.var z))[i]),
-        ⟦(toDestPair vs (.var z))[i].abstract Delta ht_cov⟧ˢ =
-          some (List.ofFn ss)[i] := by
+        ⟦(toDestPair vs (.var z))[i].abstract
+          (Function.update DeltaCtx z (some W)) ht_cov⟧ˢ =
+            some (List.ofFn ss)[i] := by
     intro i hi_x _hi_t _hi_d
     let j : Fin vs.length := ⟨i, hi_x⟩
     obtain ⟨hcov, hden⟩ := hcomponents j
     refine ⟨hcov, ?_⟩
     simpa [j] using hden
-  exact collect_ite_truth_of_total_body_source_fv
+  have hz_not_fv_Penc : z ∉ SMT.fv Penc := by
+    intro hz
+    exact z_not_vars_Pterm (hPenc_fv hz)
+  exact collect_ite_truth_of_total_body_source_fv_fresh
     (xs := vs) (ts := toDestPair vs (.var z)) (Ds := List.ofFn ss)
-    (Delta := Delta) (ThetaBase := ThetaBase)
+    (DeltaCtx := DeltaCtx) (ThetaBase := ThetaBase) (z := z) (W := W)
     (Pterm := Pterm) (E := E) (Lambda := Lambda) (Gamma := Gamma)
     (sigma := sigma) (used := used) (P_total := P_total)
     (Xi := Xi) (Xi_fv := Xi_fv) (related := related) (wf := wf)
@@ -785,7 +950,9 @@ theorem collect_ite_truth_of_total_body_toDestPair.{u}
     (source_respects := source_respects) (ThetaBase_dom := ThetaBase_dom)
     (Pval := Pval) (hPval := hPval) (den_P := den_P)
     (bound_values := hbound_values) (hPenc_fv := hPenc_fv)
-    (hctx_source := hctx_source) (dD := dD) (dBody := dBody)
+    (z_not_xs := hz_not_vs) (z_not_fv_Penc := hz_not_fv_Penc)
+    (z_not_vars_source := z_not_vars_Pterm) (hctx_source := hctx_source)
+    (dD := dD) (dBody := dBody)
     (hden_D := hden_D) (hden_body := hden_body)
     (hD_type := hD_type) (hD_true := hD_true)
     (hbody_def := hbody_def) (hcov_body := hcov_body)
@@ -949,17 +1116,17 @@ theorem represented_collect_pointwise_body_bridge.{u}
             get_mem_type_of_isTuple
               (hasArity_of_mem_toZFSet tau_hasArity hx)
               tau_hasArity hx⟩ : B.Dom))))
-    (bound_none : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+    (bound_none : ∀ (ss : Fin vs.length → SMT.Dom),
       ∀ v ∉ usedP,
-        Function.updates (Function.update ThetaD z (some W)) vs
+        Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some) v = none)
-    (bound_respects : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+    (bound_respects : ∀ (ss : Fin vs.length → SMT.Dom),
       B.RenamingContext.RespectsTypeContextOnFV
-        (Function.updates (Function.update ThetaD z (some W)) vs
+        (Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some)) LambdaP P)
-    (bound_dom : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+    (bound_dom : ∀ (ss : Fin vs.length → SMT.Dom),
       ∀ v,
-        Function.updates (Function.update ThetaD z (some W)) vs
+        Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some) v ≠ none → v ∈ LambdaP) :
     ∀ (x : ZFSet.{u}) (hx_mem : x ∈ ⟦tau⟧ᶻ) (_hx_D : x ∈ Dval),
       let Wx : SMT.Dom :=
@@ -1021,27 +1188,16 @@ theorem represented_collect_pointwise_body_bridge.{u}
   obtain ⟨hcov_Dapp, Dapp, hden_Dapp, hDapp_type, hDapp_true⟩ :=
     represented_set_app_true_of_mem_canonical hcov_D_upd den_D_upd
       hDenc_type hDenc_func D_rel hx_D
-  have ambient_W : ∀ v ∈ B.fv P, v ∉ vs →
-      match Xi v, (Function.update ThetaD z (some Wx)) v with
-      | some d, some d' => RDomCastSupported d d'
-      | _, _ => False := by
-    intro v hv hvs
-    have hvz : v ≠ z := by
-      intro h
-      subst v
-      exact z_not_vars_P (B.Term.mem_vars_iff.mpr (.inl hv))
-    rw [Function.update_of_ne hvz]
-    exact ambient v hv hvs
   obtain ⟨ss, hcomponents, related_P⟩ :=
     represented_toDestPair_bound_context vs_nemp vs_nodup tau_hasArity
-      hx_mem hcov_z hden_z hWx_type hWx_mem hWx_retract ambient_W
+      hx_mem hcov_z hden_z hWx_type hWx_mem hWx_retract ambient
   have hss_map : (List.ofFn ss).map Option.some =
       List.ofFn (fun i => some (ss i)) := by
     rw [List.map_ofFn]
     rfl
   have related_P' : RValuationCastSupportedOnFV
       (Function.updates Xi vs (List.ofFn fun i => some (x_fin i)))
-      (Function.updates (Function.update ThetaD z (some Wx)) vs
+      (Function.updates ThetaD vs
         ((List.ofFn ss).map Option.some)) P := by
     rw [hss_map]
     exact related_P
@@ -1064,7 +1220,7 @@ theorem represented_collect_pointwise_body_bridge.{u}
       (wf_bound x hx_mem hx_D)
   have hbound_values : ∀ (i : ℕ) (hi_x : i < vs.length)
       (hi_d : i < (List.ofFn ss).length),
-      Function.updates (Function.update ThetaD z (some Wx)) vs
+      Function.updates ThetaD vs
         ((List.ofFn ss).map Option.some) vs[i] = some (ss ⟨i, hi_x⟩) := by
     intro i hi_x _hi_d
     rw [hss_map]
@@ -1072,20 +1228,15 @@ theorem represented_collect_pointwise_body_bridge.{u}
       dif_pos (List.getElem_mem hi_x)]
     simp [List.Nodup.idxOf_getElem vs_nodup]
   have hctx_source : ∀ v ∈ B.Term.vars P, v ∉ vs →
-      (Function.update ThetaD z (some Wx)) v =
-        Function.updates (Function.update ThetaD z (some Wx)) vs
+      ThetaD v = Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some) v := by
     intro v hv hvs
-    have hvz : v ≠ z := by
-      intro h
-      subst v
-      exact z_not_vars_P hv
     rw [hss_map]
     rw [Function.updates_of_not_mem _ vs _ v hvs]
   have htruth := collect_ite_truth_of_total_body_toDestPair
     (Pterm := P) (E := Ebody) (Lambda := LambdaP) (Gamma := GammaP)
     (sigma := sigmaP) (used := usedP)
-    vs_nemp vs_nodup (z := z) (ss := ss)
+    vs_nemp vs_nodup (z := z) (DeltaCtx := ThetaD) (W := Wx) (ss := ss)
     (hbody_def := ite_body_def)
     (hcov_body := hcov_ite_upd Wx)
     (hcov_Dapp := hcov_Dapp)
@@ -1099,11 +1250,12 @@ theorem represented_collect_pointwise_body_bridge.{u}
       exact ⟨hcov, hden⟩)
     (P_total := P_total) (Xi_fv := XiP_fv')
     (related := related_P') (wf := wf_bound x hx_mem hx_D)
-    (ThetaBase_none := bound_none Wx ss)
-    (source_respects := bound_respects Wx ss)
-    (ThetaBase_dom := bound_dom Wx ss)
+    (ThetaBase_none := bound_none ss)
+    (source_respects := bound_respects ss)
+    (ThetaBase_dom := bound_dom ss)
     (den_P := den_P) (bound_values := hbound_values)
-    (hPenc_fv := Penc_fv) (hctx_source := hctx_source)
+    (hPenc_fv := Penc_fv) (z_not_vars_Pterm := z_not_vars_P)
+    (hctx_source := hctx_source)
     (hden_D := hden_Dapp) (hden_body := hden_body)
     (hD_type := hDapp_type) (hD_true := hDapp_true)
   have den_P_go :
@@ -1202,17 +1354,17 @@ theorem represented_collect_set_retract.{u}
             get_mem_type_of_isTuple
               (hasArity_of_mem_toZFSet tau_hasArity hx)
               tau_hasArity hx⟩ : B.Dom))))
-    (bound_none : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+    (bound_none : ∀ (ss : Fin vs.length → SMT.Dom),
       ∀ v ∉ usedP,
-        Function.updates (Function.update ThetaD z (some W)) vs
+        Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some) v = none)
-    (bound_respects : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+    (bound_respects : ∀ (ss : Fin vs.length → SMT.Dom),
       B.RenamingContext.RespectsTypeContextOnFV
-        (Function.updates (Function.update ThetaD z (some W)) vs
+        (Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some)) LambdaP P)
-    (bound_dom : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+    (bound_dom : ∀ (ss : Fin vs.length → SMT.Dom),
       ∀ v,
-        Function.updates (Function.update ThetaD z (some W)) vs
+        Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some) v ≠ none → v ∈ LambdaP) :
     retract (BType.set tau) lamVal.fst = T := by
   have hDenc_retract : retract (BType.set tau) DencVal.fst = Dval := by
@@ -1335,17 +1487,17 @@ theorem represented_collect_set_denote.{u}
             get_mem_type_of_isTuple
               (hasArity_of_mem_toZFSet tau_hasArity hx)
               tau_hasArity hx⟩ : B.Dom))))
-    (bound_none : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+    (bound_none : ∀ (ss : Fin vs.length → SMT.Dom),
       ∀ v ∉ usedP,
-        Function.updates (Function.update ThetaD z (some W)) vs
+        Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some) v = none)
-    (bound_respects : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+    (bound_respects : ∀ (ss : Fin vs.length → SMT.Dom),
       B.RenamingContext.RespectsTypeContextOnFV
-        (Function.updates (Function.update ThetaD z (some W)) vs
+        (Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some)) LambdaP P)
-    (bound_dom : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+    (bound_dom : ∀ (ss : Fin vs.length → SMT.Dom),
       ∀ v,
-        Function.updates (Function.update ThetaD z (some W)) vs
+        Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some) v ≠ none → v ∈ LambdaP) :
     ∃ lamVal : SMT.Dom.{u},
       ⟦((λˢ [z]) [tau.toSMTType] ite_body).abstract ThetaD
