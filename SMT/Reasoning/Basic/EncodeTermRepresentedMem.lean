@@ -2,6 +2,7 @@ import SMT.Reasoning.Basic.EncodeTermRepresentedScopedBool
 import SMT.Reasoning.Basic.CastMembershipExact
 
 open Std.Do B SMT ZFSet Classical
+open SMT.SMTType
 
 /-! # Representation-aware membership
 
@@ -490,6 +491,8 @@ abbrev CastMembershipRepSpec.{u} (τ : BType)
         Γ'.keys ⊆ E'.usedVars ∧
         σ = SMTType.bool ∧
         Γ' ⊢ˢ t : SMTType.bool ∧
+        SMT.fv x ⊆ SMT.fv t ∧
+        SMT.fv S ⊆ SMT.fv t ∧
         (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ∧
         ∃ Dlt : SMT.Chunk,
           E'.declarations = decl ++ Dlt ∧
@@ -511,7 +514,13 @@ theorem castMembership_direct_rep_contract.{u}
   mspec Std.Do.Spec.pure
   mpure_intro
   refine ⟨List.Subset.refl _, (fun _ h => h), St_sub, trivial,
-    SMT.Typing.app _ _ _ _ _ typ_S typ_x, ?_, [], by simp, ?_⟩
+    SMT.Typing.app _ _ _ _ _ typ_S typ_x, ?_, ?_, ?_, [], by simp, ?_⟩
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inr hv
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inl hv
   · exact fun _ _ h => h
   · intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
       Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
@@ -573,16 +582,17 @@ theorem castMembership_direct_rep_contract.{u}
 set_option maxHeartbeats 3000000 in
 theorem castMembership_setPred_cast_rep_contract.{u}
     (τ : BType) (σx : SMTType) (x S : SMT.Term)
-    (c : σx ~> τ.toSMTType) (hne : σx ≠ τ.toSMTType) :
+    (hle : σx ⊑ τ.toSMTType)
+    (hfaith : castPath.FVFaithful hle.toCastPath)
+    (hne : σx ≠ τ.toSMTType) :
     CastMembershipRepSpec.{u} τ x S σx
       (SMTType.fun τ.toSMTType SMTType.bool) := by
   unfold CastMembershipRepSpec
   intro Λ n used decl typ_x typ_S bv_x_used bv_S_used
-  have hle : σx ⊑ τ.toSMTType := castable?_of_castPath c
   mstart
   mintro pre ∀St
   mpure pre
-  mspec castMembership_branch2_exact_spec typ_x typ_S hne hle
+  mspec castMembership_branch2_exact_spec typ_x typ_S hne hle hfaith
     bv_x_used bv_S_used
   rename_i out
   obtain ⟨t, σ⟩ := out
@@ -592,14 +602,20 @@ theorem castMembership_setPred_cast_rep_contract.{u}
   obtain ⟨_fvc, types_sub, keys_sub, used_sub, σ_eq, typ_t,
     _fv_t, preserves, _total,
     helper, spec, decl_eq, t_eq, helper_fresh, helper_not_used,
-    helper_lookup, spec_fv, exactness⟩ := post
+    helper_lookup, spec_fv, source_fv_spec, exactness⟩ := post
   change σ = SMTType.bool at σ_eq
   subst σ
   change t = spec ∧ˢ .app S (.var helper) at t_eq
   subst t
   mpure_intro
-  refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, preserves,
+  refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper τ.toSMTType spec, decl_eq, ?_⟩
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inl (source_fv_spec hv)
+  · intro v hv
+    simp only [SMT.fv, List.mem_append, List.mem_singleton]
+    exact Or.inr (Or.inl hv)
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -899,17 +915,17 @@ theorem castMembership_setPred_cast_rep_contract.{u}
 set_option maxHeartbeats 4000000 in
 theorem castMembership_option_rep_contract.{u}
     (a b : BType) (sa sb : SMTType) (x S : SMT.Term)
-    (ca : sa ~> a.toSMTType) (cb : sb ~> b.toSMTType) :
+    (ha_le : sa ⊑ a.toSMTType) (hb_le : sb ⊑ b.toSMTType)
+    (hfaith : castPath.FVFaithful
+      (.pair ha_le.toCastPath hb_le.toCastPath)) :
     CastMembershipRepSpec.{u} (a ×ᴮ b) x S (.pair sa sb)
       (.fun a.toSMTType (.option b.toSMTType)) := by
   unfold CastMembershipRepSpec
   intro Λ n used decl typ_x typ_S bv_x_used bv_S_used
-  have ha_le : sa ⊑ a.toSMTType := castable?_of_castPath ca
-  have hb_le : sb ⊑ b.toSMTType := castable?_of_castPath cb
   mstart
   mintro pre ∀St
   mpure pre
-  mspec castMembership_option_exact_spec typ_x typ_S ha_le hb_le
+  mspec castMembership_option_exact_spec typ_x typ_S ha_le hb_le hfaith
     bv_x_used bv_S_used
   rename_i out
   obtain ⟨t, σ⟩ := out
@@ -919,16 +935,22 @@ theorem castMembership_option_rep_contract.{u}
   obtain ⟨_fvc, types_sub, keys_sub, used_sub, σ_eq, typ_t,
     _fv_t, preserves, _total,
     helper, spec, decl_eq, t_eq, helper_fresh, helper_not_used,
-    helper_lookup, spec_fv, exactness⟩ := post
+    helper_lookup, spec_fv, source_fv_spec, exactness⟩ := post
   change σ = SMTType.bool at σ_eq
   subst σ
   change t = spec ∧ˢ
     ((.app S (.fst (.var helper))) =ˢ (.some (.snd (.var helper)))) at t_eq
   subst t
   mpure_intro
-  refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, preserves,
+  refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec,
     decl_eq, ?_⟩
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inl (source_fv_spec hv)
+  · intro v hv
+    simp only [SMT.fv, List.mem_append, List.mem_singleton]
+    exact Or.inr (Or.inl (Or.inl hv))
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -1369,25 +1391,49 @@ theorem castMembership_option_rep_contract.{u}
     · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
         overloadBinOp_𝔹, overloadBinOp, htrue] using hiff_eq_g
 
-/-- Every supported target representation admits a cast to the canonical SMT
-representation consumed by the membership encoder. -/
-theorem BType.SupportedSMT.nonemptyCanonicalCastPath
+/-- Every supported target representation admits an FV-faithful path to its
+canonical representation. -/
+theorem BType.SupportedSMT.nonemptyCanonicalCastPathFaithful
     {t : BType} {s : SMTType} (h : BType.SupportedSMT t s) :
-    Nonempty (s ~> t.toSMTType) := by
+    Nonempty {c : s ~> t.toSMTType // castPath.FVFaithful c} := by
   induction h with
-  | int => exact ⟨castPath.reflexive .int⟩
-  | bool => exact ⟨castPath.reflexive .bool⟩
+  | int =>
+      refine ⟨⟨castPath.reflexive .int, ?_⟩⟩
+      exact .refl (Or.inl rfl)
+  | bool =>
+      refine ⟨⟨castPath.reflexive .bool, ?_⟩⟩
+      exact .refl (Or.inr (Or.inl rfl))
   | prod _ _ ih₁ ih₂ =>
-      exact ⟨.pair ih₁.some ih₂.some⟩
-  | setPred t => exact ⟨castPath.reflexive (.fun t.toSMTType .bool)⟩
+      refine ⟨⟨.pair ih₁.some.val ih₂.some.val, ?_⟩⟩
+      exact .pair ih₁.some.property ih₂.some.property
+  | setPred t =>
+      refine ⟨⟨castPath.reflexive (.fun t.toSMTType .bool), ?_⟩⟩
+      exact B.BType.reflexiveCast_fvFaithful (.set t)
   | optionFun a b =>
-      exact ⟨.graph (castPath.reflexive a.toSMTType)
-        (castPath.reflexive b.toSMTType)⟩
+      refine ⟨⟨.graph (castPath.reflexive a.toSMTType)
+        (castPath.reflexive b.toSMTType), ?_⟩⟩
+      exact .graph (B.BType.reflexiveCast_fvFaithful a)
+        (B.BType.reflexiveCast_fvFaithful b)
 
 /-- A chosen canonical cast path for a supported representation. -/
 noncomputable def BType.SupportedSMT.toCanonicalCastPath
     {t : BType} {s : SMTType} (h : BType.SupportedSMT t s) :
-    s ~> t.toSMTType := h.nonemptyCanonicalCastPath.some
+    s ~> t.toSMTType := h.nonemptyCanonicalCastPathFaithful.some.val
+
+/-- The chosen canonical path is FV-faithful. -/
+theorem BType.SupportedSMT.toCanonicalCastPath_faithful
+    {t : BType} {s : SMTType} (h : BType.SupportedSMT t s) :
+    castPath.FVFaithful h.toCanonicalCastPath :=
+  h.nonemptyCanonicalCastPathFaithful.some.property
+
+/-- Path uniqueness transfers FV faithfulness to the operational path selected
+from any proof of castability. -/
+theorem BType.SupportedSMT.toCastPath_faithful
+    {t : BType} {s : SMTType} (h : BType.SupportedSMT t s)
+    (hle : s ⊑ t.toSMTType) :
+    castPath.FVFaithful hle.toCastPath := by
+  rw [castPath.eq_of_endpoints hle.toCastPath h.toCanonicalCastPath]
+  exact h.toCanonicalCastPath_faithful
 
 /-- Select the operational membership proof from the two supported set
 representations. -/
@@ -1396,17 +1442,29 @@ theorem castMembership_supported_rep_contract.{u}
     (hx : BType.SupportedSMT t sx)
     (hS : BType.SupportedSMT (BType.set t) sS) :
     CastMembershipRepSpec.{u} t x S sx sS := by
+  unfold CastMembershipRepSpec
+  intro Λ n used decl typ_x typ_S bv_x_used bv_S_used
   cases hS with
   | setPred t =>
       by_cases heq : sx = t.toSMTType
       · subst sx
-        exact castMembership_direct_rep_contract t x S
-      · exact castMembership_setPred_cast_rep_contract t sx x S
-          hx.toCanonicalCastPath heq
+        exact castMembership_direct_rep_contract.{u} t x S
+          typ_x typ_S bv_x_used bv_S_used
+      · let hle : sx ⊑ t.toSMTType :=
+          castable?_of_castPath hx.toCanonicalCastPath
+        exact castMembership_setPred_cast_rep_contract.{u} t sx x S hle
+          (hx.toCastPath_faithful hle) heq typ_x typ_S
+          bv_x_used bv_S_used
   | optionFun a b =>
       obtain ⟨sa, sb, rfl, ha, hb⟩ := hx.prodE
-      exact castMembership_option_rep_contract a b sa sb x S
-        ha.toCanonicalCastPath hb.toCanonicalCastPath
+      let ha_le : sa ⊑ a.toSMTType :=
+        castable?_of_castPath ha.toCanonicalCastPath
+      let hb_le : sb ⊑ b.toSMTType :=
+        castable?_of_castPath hb.toCanonicalCastPath
+      exact castMembership_option_rep_contract.{u} a b sa sb x S
+        ha_le hb_le (.pair (ha.toCastPath_faithful ha_le)
+          (hb.toCastPath_faithful hb_le)) typ_x typ_S
+          bv_x_used bv_S_used
 
 set_option maxHeartbeats 5000000 in
 theorem encodeTerm_rep_spec.mem_case.{u}
@@ -1606,7 +1664,8 @@ theorem encodeTerm_rep_spec.mem_case.{u}
   mintro ∀StM
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
-    typ_mem, mem_preserves, Dlt, decl_eq, mem_sem⟩ := pre
+    typ_mem, _fv_x_mem, _fv_S_mem, mem_preserves,
+    Dlt, decl_eq, mem_sem⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
   mpure_intro
