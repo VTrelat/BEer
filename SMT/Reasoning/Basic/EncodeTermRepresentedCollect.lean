@@ -2583,6 +2583,124 @@ theorem collect_subst_truth_of_total_body_source_fv_fresh.{u}
       hcov_upd hcov_P_upd hagrees hden_P_upd hrel_P
   exact ⟨dP, hden_sub, htruth_sub⟩
 
+/-- Specialize represented predicate substitution to the tuple emitted by the
+option-function collection arm.  The domain application contributes the final
+payload component, while the fresh tuple binder and domain application account
+for all of the tuple's free-variable and bound-variable obligations. -/
+theorem collect_subst_truth_of_total_body_optionTuple.{u}
+    {Penc Dapp : SMT.Term}
+    {vs : List SMT.𝒱} (prefix_nemp : vs.dropLast ≠ [])
+    (vs_nodup : vs.Nodup)
+    {z : SMT.𝒱}
+    {DeltaCtx ThetaBase : SMT.RenamingContext.Context.{u}} {W : SMT.Dom.{u}}
+    {ss : Fin vs.length → SMT.Dom.{u}}
+    (hDapp_bv : SMT.bv Dapp = [])
+    (hDapp_fv_not_bv : ∀ w ∈ SMT.fv Dapp, w ∉ SMT.bv Penc)
+    (hDapp_fv_disj_vs : ∀ w ∈ SMT.fv Dapp, w ∉ vs)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc)
+    (hz_not_vs : z ∉ vs)
+    (hcomponents : ∀ i : Fin vs.length,
+      ∃ hcov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W))
+          (((toDestPair vs.dropLast (.var z)).concat (.the Dapp))[i.val]'(by
+            rw [toDestPair_optionTuple_length prefix_nemp]
+            exact i.isLt)),
+        ⟦(((toDestPair vs.dropLast (.var z)).concat (.the Dapp))[i.val]'(by
+          rw [toDestPair_optionTuple_length prefix_nemp]
+          exact i.isLt)).abstract (Function.update DeltaCtx z (some W))
+            hcov⟧ˢ = some (ss i))
+    (hcov_sub : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W))
+      (SMT.substList vs
+        ((toDestPair vs.dropLast (.var z)).concat (.the Dapp)) Penc))
+    (hcov_upd : SMT.RenamingContext.CoversFV
+      (Function.updates (Function.update DeltaCtx z (some W)) vs
+        ((List.ofFn ss).map Option.some)) Penc)
+    {Pterm : B.Term} {E : B.Env} {Lambda Gamma : SMT.TypeContext}
+    {sigma : SMTType} {used : List SMT.𝒱}
+    (P_total : EncodeTermRepTotal.{u}
+      Pterm E BType.bool Lambda Penc sigma Gamma used)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv Pterm, (Xi v).isSome = true)
+    (related : RValuationCastSupportedOnFV Xi ThetaBase Pterm)
+    (wf : B.RenWF E.context Xi)
+    (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
+    (source_respects : B.RenamingContext.RespectsTypeContextOnFV
+      ThetaBase Lambda Pterm)
+    (ThetaBase_dom : ∀ v, ThetaBase v ≠ none → v ∈ Lambda)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦BType.bool⟧ᶻ}
+    (den_P : ⟦Pterm.abstract Xi Xi_fv⟧ᴮ =
+      some (⟨Pval, BType.bool, hPval⟩ : B.Dom))
+    (bound_values : ∀ (i : ℕ) (hi_x : i < vs.length)
+      (_hi_d : i < (List.ofFn ss).length),
+      ThetaBase vs[i] = some (ss ⟨i, hi_x⟩))
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars Pterm)
+    (z_not_fv_Penc : z ∉ SMT.fv Penc)
+    (z_not_vars_source : z ∉ B.Term.vars Pterm)
+    (hctx_source : ∀ v ∈ B.Term.vars Pterm, v ∉ vs →
+      DeltaCtx v = ThetaBase v) :
+    ∃ dP : SMT.Dom.{u},
+      ⟦(SMT.substList vs
+        ((toDestPair vs.dropLast (.var z)).concat (.the Dapp)) Penc).abstract
+        (Function.update DeltaCtx z (some W)) hcov_sub⟧ˢ = some dP ∧
+      (dP.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue) := by
+  let ts : List SMT.Term :=
+    (toDestPair vs.dropLast (.var z)).concat (.the Dapp)
+  have hlen_xt : vs.length = ts.length := by
+    dsimp [ts]
+    exact (toDestPair_optionTuple_length prefix_nemp).symm
+  have hlen_xd : vs.length = (List.ofFn ss).length := by
+    simp
+  have hts_bv_nil : ∀ t ∈ ts, SMT.bv t = [] := by
+    intro t ht
+    dsimp [ts] at ht
+    exact toDestPair_optionTuple_bv_nil hDapp_bv t ht
+  have hts_fv_not_bv : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ SMT.bv Penc := by
+    intro t ht w hw
+    dsimp [ts] at ht
+    rcases toDestPair_optionTuple_fv_subset ht hw with hwz | hwD
+    · subst w
+      exact hz_not_bv
+    · exact hDapp_fv_not_bv w hwD
+  have hts_not_none : ∀ t ∈ ts, t ≠ SMT.Term.none := by
+    intro t ht
+    dsimp [ts] at ht
+    exact toDestPair_optionTuple_ne_none t ht
+  have hts_fv_disj_xs : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ vs := by
+    intro t ht w hw
+    dsimp [ts] at ht
+    rcases toDestPair_optionTuple_fv_subset ht hw with hwz | hwD
+    · subst w
+      exact hz_not_vs
+    · exact hDapp_fv_disj_vs w hwD
+  have hts_den : ∀ (i : ℕ) (_hi_x : i < vs.length)
+      (hi_t : i < ts.length) (hi_d : i < (List.ofFn ss).length),
+      ∃ hcov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W)) ts[i],
+        ⟦ts[i].abstract (Function.update DeltaCtx z (some W)) hcov⟧ˢ =
+          some (List.ofFn ss)[i] := by
+    intro i hi_x _hi_t _hi_d
+    let j : Fin vs.length := ⟨i, hi_x⟩
+    obtain ⟨hcov, hden⟩ := hcomponents j
+    refine ⟨hcov, ?_⟩
+    simpa [ts, j] using hden
+  have hbound_values : ∀ (i : ℕ) (hi_x : i < vs.length)
+      (hi_d : i < (List.ofFn ss).length),
+      ThetaBase vs[i] = some (List.ofFn ss)[i] := by
+    intro i hi_x hi_d
+    simpa only [List.getElem_ofFn, Fin.getElem_fin] using
+      bound_values i hi_x hi_d
+  exact collect_subst_truth_of_total_body_source_fv_fresh
+    (Penc := Penc) vs ts (DeltaCtx := DeltaCtx) (ThetaBase := ThetaBase)
+    (z := z) (W := W) (Ds := List.ofFn ss) hlen_xt hlen_xd vs_nodup
+    hvs_not_bv hts_bv_nil hts_fv_not_bv hts_not_none hts_fv_disj_xs
+    hts_den hcov_sub hcov_upd (Pterm := Pterm) (E := E)
+    (Lambda := Lambda) (Gamma := Gamma) (sigma := sigma) (used := used)
+    P_total Xi_fv related wf ThetaBase_none source_respects ThetaBase_dom
+    den_P hbound_values hPenc_fv hz_not_vs z_not_fv_Penc z_not_vars_source
+    hctx_source
+
 /-- Specialize the represented collection-body bridge to the tuple projections
 emitted by the encoder.  This packages the routine length, freshness, and
 denotation facts for `toDestPair`, leaving callers with the semantic data for
