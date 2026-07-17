@@ -764,6 +764,250 @@ theorem BType.prod_left_hasArity_dropLast
   rw [hlength]
   exact hleft
 
+/-- A representative for the prefix projections of the left side of a
+product tuple also represents the corresponding prefix of the full product
+tuple.  The next theorem uses this to append the payload extracted from the
+option-valued domain application. -/
+theorem represented_option_prefix_as_pair_component
+    {vs : List B.𝒱} {alpha beta : BType}
+    {a b : ZFSet.{u}} (ha : a ∈ ⟦alpha⟧ᶻ) (hb : b ∈ ⟦beta⟧ᶻ)
+    (hvs : 2 ≤ vs.length)
+    (hprod_arity : (alpha ×ᴮ beta).hasArity vs.length)
+    (i : ℕ) (hi : i < vs.dropLast.length)
+    {Di : SMT.Dom.{u}}
+    (hrel : RDomCastSupported
+      (⟨a.get vs.dropLast.length ⟨i, hi⟩,
+        alpha.get vs.dropLast.length ⟨i, hi⟩,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet
+            (BType.prod_left_hasArity_dropLast hvs hprod_arity) ha)
+          (BType.prod_left_hasArity_dropLast hvs hprod_arity) ha⟩ : B.Dom)
+      Di) :
+    RDomCastSupported
+      (⟨(a.pair b).get vs.length ⟨i, by
+          rw [List.length_dropLast] at hi
+          omega⟩,
+        (alpha ×ᴮ beta).get vs.length ⟨i, by
+          rw [List.length_dropLast] at hi
+          omega⟩,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet hprod_arity
+            (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩))
+          hprod_arity (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩ : B.Dom)
+      Di := by
+  have hvalue := ZFSet_get_pair_before_last_dropLast (a := a) (b := b)
+    hvs hi
+  have htype := BType_get_pair_before_last_dropLast (alpha := alpha)
+    (beta := beta) hvs hi
+  have hsource :
+      (⟨(a.pair b).get vs.length ⟨i, by
+          rw [List.length_dropLast] at hi
+          omega⟩,
+        (alpha ×ᴮ beta).get vs.length ⟨i, by
+          rw [List.length_dropLast] at hi
+          omega⟩,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet hprod_arity
+            (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩))
+          hprod_arity (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩ : B.Dom) =
+      (⟨a.get vs.dropLast.length ⟨i, hi⟩,
+        alpha.get vs.dropLast.length ⟨i, hi⟩,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet
+            (BType.prod_left_hasArity_dropLast hvs hprod_arity) ha)
+          (BType.prod_left_hasArity_dropLast hvs hprod_arity) ha⟩ : B.Dom) := by
+    apply B.Dom.ext_type_value
+    · simpa only [proof_irrel_heq] using htype
+    · simpa only [proof_irrel_heq] using hvalue
+  rw [hsource]
+  exact hrel
+
+open Classical in
+/-- The tuple substituted into the predicate of an option-valued collection
+represents every source binder component.  Its prefix comes from the
+canonical input tuple and its final component is the payload of the domain
+application. -/
+theorem represented_option_collect_components.{u}
+    {vs : List B.𝒱} (prefix_nemp : vs.dropLast ≠ [])
+    {alpha beta : BType} {a b : ZFSet.{u}}
+    (ha : a ∈ ⟦alpha⟧ᶻ) (hb : b ∈ ⟦beta⟧ᶻ)
+    (hvs : 2 ≤ vs.length)
+    (hprod_arity : (alpha ×ᴮ beta).hasArity vs.length)
+    {z : SMT.𝒱} {Theta : SMT.RenamingContext.Context.{u}}
+    {Wa : SMT.Dom.{u}}
+    (hcov_z : SMT.RenamingContext.CoversFV Theta (.var z))
+    (hden_z : ⟦(SMT.Term.var z).abstract Theta hcov_z⟧ˢ = some Wa)
+    (hWa_type : Wa.snd.fst = alpha.toSMTType)
+    (hWa_mem : Wa.fst ∈ ⟦alpha.toSMTType⟧ᶻ)
+    (hWa_retract : retract alpha Wa.fst = a)
+    {Dapp : SMT.Term}
+    (hpayload : ∃ hcov_payload : SMT.RenamingContext.CoversFV Theta
+        (SMT.Term.the Dapp),
+      ∃ Dpayload : SMT.Dom.{u},
+        ⟦(SMT.Term.the Dapp).abstract Theta hcov_payload⟧ˢ = some Dpayload ∧
+        RDomCastSupported (⟨b, beta, hb⟩ : B.Dom) Dpayload) :
+    let terms : List SMT.Term :=
+      toDestPair vs.dropLast (.var z) [(.the Dapp)] (.var z)
+    let x_fin : Fin vs.length → B.Dom.{u} := fun i =>
+      ⟨(a.pair b).get vs.length i,
+        (alpha ×ᴮ beta).get vs.length i,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet hprod_arity
+            (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩))
+          hprod_arity (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩
+    ∃ ss : Fin vs.length → SMT.Dom.{u},
+      ∀ i,
+        ∃ hcov : SMT.RenamingContext.CoversFV Theta
+            (terms[i.val]'(by
+              rw [toDestPair_length_gen vs.dropLast (.var z) (.var z)
+                [(.the Dapp)] prefix_nemp]
+              rw [List.length_dropLast]
+              simp only [List.length_singleton]
+              omega)),
+          ⟦(terms[i.val]'(by
+              rw [toDestPair_length_gen vs.dropLast (.var z) (.var z)
+                [(.the Dapp)] prefix_nemp]
+              rw [List.length_dropLast]
+              simp only [List.length_singleton]
+              omega)).abstract Theta hcov⟧ˢ = some (ss i) ∧
+          RDomCastSupported (x_fin i) (ss i) := by
+  dsimp only
+  let terms : List SMT.Term :=
+    toDestPair vs.dropLast (.var z) [(.the Dapp)] (.var z)
+  let x_fin : Fin vs.length → B.Dom.{u} := fun i =>
+    ⟨(a.pair b).get vs.length i,
+      (alpha ×ᴮ beta).get vs.length i,
+      get_mem_type_of_isTuple
+        (hasArity_of_mem_toZFSet hprod_arity
+          (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩))
+        hprod_arity (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩
+  have hterms_len : terms.length = vs.length := by
+    dsimp [terms]
+    rw [toDestPair_length_gen vs.dropLast (.var z) (.var z)
+      [(.the Dapp)] prefix_nemp]
+    rw [List.length_dropLast]
+    simp only [List.length_singleton]
+    omega
+  obtain ⟨hcov_payload, Dpayload, hden_payload, hrel_payload⟩ := hpayload
+  have hprefix_arity : alpha.hasArity vs.dropLast.length :=
+    BType.prod_left_hasArity_dropLast hvs hprod_arity
+  have hcomponent : ∀ i : Fin vs.length,
+      ∃ hcov : SMT.RenamingContext.CoversFV Theta
+          (terms[i.val]'(by rw [hterms_len]; exact i.isLt)),
+        ∃ Di : SMT.Dom.{u},
+          ⟦(terms[i.val]'(by rw [hterms_len]; exact i.isLt)).abstract
+            Theta hcov⟧ˢ = some Di ∧
+          RDomCastSupported (x_fin i) Di := by
+    intro i
+    by_cases hi_prefix : i.val < vs.dropLast.length
+    · obtain ⟨hcov, Di, hden, hrel⟩ :=
+        toDestPair_denote_represented_components_acc prefix_nemp
+          hprefix_arity ha hcov_z hden_z hWa_type hWa_mem hWa_retract
+          (acc := [(.the Dapp)]) (Ds_acc := [Dpayload]) (by simp)
+          (by
+            intro j hj
+            have hj_zero : j = 0 := by
+              simp only [List.length_singleton] at hj
+              omega
+            subst j
+            refine ⟨?_, ?_⟩
+            · simpa only [List.getElem_cons_zero] using hcov_payload
+            · simpa only [List.getElem_cons_zero, proof_irrel_heq] using
+                hden_payload)
+          i.val hi_prefix (by rw [hterms_len]; exact i.isLt)
+      refine ⟨?_, Di, ?_, ?_⟩
+      · simpa [terms, proof_irrel_heq] using hcov
+      · simpa [terms, proof_irrel_heq] using hden
+      · simpa [x_fin] using
+          (represented_option_prefix_as_pair_component ha hb hvs hprod_arity
+            i.val hi_prefix hrel)
+    · have hprefix_len : vs.dropLast.length = vs.length - 1 :=
+        List.length_dropLast
+      have hi_value : i.val = vs.dropLast.length := by
+        have hi_ge : vs.dropLast.length ≤ i.val := Nat.le_of_not_gt hi_prefix
+        omega
+      have hprefix_pos : 0 < vs.dropLast.length := by
+        rw [List.length_dropLast]
+        omega
+      have hlen_last : vs.dropLast.length + 1 = vs.length := by
+        rw [List.length_dropLast]
+        omega
+      let ilast : Fin vs.length :=
+        Fin.cast hlen_last (Fin.last vs.dropLast.length)
+      have hi_eq : i = ilast := by
+        apply Fin.ext
+        simpa [ilast, Fin.val_last] using hi_value
+      subst i
+      have hindex_last : vs.dropLast.length < terms.length := by
+        rw [hterms_len]
+        rw [List.length_dropLast]
+        omega
+      have hterm_last :
+          terms[vs.dropLast.length]'hindex_last = SMT.Term.the Dapp := by
+        dsimp [terms]
+        simpa only [Nat.add_zero] using
+          (toDestPair_getElem_acc vs.dropLast (.var z) (.var z)
+            [(.the Dapp)] 0 (by simp) prefix_nemp hindex_last)
+      have hvalue_last :
+          (a.pair b).get vs.length ilast = b := by
+        change (a.pair b).get vs.length
+          (Fin.cast hlen_last (Fin.last vs.dropLast.length)) = b
+        calc
+          (a.pair b).get vs.length
+              (Fin.cast hlen_last (Fin.last vs.dropLast.length)) =
+              (a.pair b).get (vs.dropLast.length + 1)
+                (Fin.last vs.dropLast.length) :=
+            (ZFSet_get_cast hlen_last (Fin.last vs.dropLast.length)).symm
+          _ = b := ZFSet_get_pair_last hprefix_pos
+      have htype_last :
+          (alpha ×ᴮ beta).get vs.length ilast = beta := by
+        change (alpha ×ᴮ beta).get vs.length
+          (Fin.cast hlen_last (Fin.last vs.dropLast.length)) = beta
+        calc
+          (alpha ×ᴮ beta).get vs.length
+              (Fin.cast hlen_last (Fin.last vs.dropLast.length)) =
+              (alpha ×ᴮ beta).get (vs.dropLast.length + 1)
+                (Fin.last vs.dropLast.length) :=
+            (BType.get_cast hlen_last (Fin.last vs.dropLast.length)).symm
+          _ = beta := BType_get_pair_last hprefix_pos
+      have hsource_last : x_fin ilast = (⟨b, beta, hb⟩ : B.Dom) := by
+        dsimp [x_fin]
+        exact B.Dom.ext_type_value htype_last hvalue_last
+      let tlast : SMT.Term :=
+        terms[ilast.val]'(by rw [hterms_len]; exact ilast.isLt)
+      have htlast : tlast = SMT.Term.the Dapp := by
+        dsimp [tlast]
+        simpa only [ilast, Fin.val_cast, Fin.val_last, proof_irrel_heq] using
+          hterm_last
+      have hcov_last : SMT.RenamingContext.CoversFV Theta tlast := by
+        rw [htlast]
+        exact hcov_payload
+      have hden_payload' : ⟦tlast.abstract Theta
+          (by rw [htlast]; exact hcov_payload)⟧ˢ = some Dpayload := by
+        simpa only [htlast, proof_irrel_heq] using hden_payload
+      have hden_last : ⟦tlast.abstract Theta hcov_last⟧ˢ = some Dpayload := by
+        calc
+          ⟦tlast.abstract Theta hcov_last⟧ˢ =
+              ⟦tlast.abstract Theta (by rw [htlast]; exact hcov_payload)⟧ˢ :=
+            SMT.RenamingContext.denote_abstract_proof_irrel tlast Theta _ _
+          _ = some Dpayload := hden_payload'
+      refine ⟨?_, Dpayload, ?_, ?_⟩
+      · simpa only [tlast, proof_irrel_heq] using hcov_last
+      · simpa only [tlast, proof_irrel_heq] using hden_last
+      · rw [hsource_last]
+        exact hrel_payload
+  let ss : Fin vs.length → SMT.Dom.{u} := fun i =>
+    Classical.choose (Classical.choose_spec (hcomponent i))
+  refine ⟨ss, ?_⟩
+  intro i
+  let hcov := Classical.choose (hcomponent i)
+  let Di := Classical.choose (Classical.choose_spec (hcomponent i))
+  obtain ⟨hden, hrel⟩ :=
+    Classical.choose_spec (Classical.choose_spec (hcomponent i))
+  refine ⟨hcov, ?_, ?_⟩
+  · simpa [terms, ss, Di, hcov, proof_irrel_heq] using hden
+  · simpa [x_fin, ss, Di, proof_irrel_heq] using hrel
+
 open Classical in
 /-- Install the canonical projections of a collection element as a
 representation-aware binder valuation.  Outside the binder names the
