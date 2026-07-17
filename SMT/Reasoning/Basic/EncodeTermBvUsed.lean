@@ -3247,48 +3247,57 @@ theorem encodeTerm_bv_used
           · exact hsok.mono (fun w hw => lift hw)
     · rename_i α γ heq
       subst heq
+      mspec (loosenAux_prf_bv_declsEq _ S_bv_used)
+      mrename_i preL
+      mintro ∀StL
+      rename_i Sout
+      obtain ⟨Sg, Sg_spec⟩ := Sout
+      mpure preL
+      obtain ⟨Sg_used, Sg_bv, Sg_used_sub, Sg_decl⟩ := preL
+      mspec SMT.declareConst_addSpec_spec
+      mrename_i preD
+      mintro ∀StD
+      mpure preD
+      obtain ⟨Sg_helper_decl, _, _, Sg_helper_used, _⟩ := preD
       mspec Std.Do.Spec.get_StateT
       mspec SMT.freshVar_spec_decls
-      case post.success x =>
-        mrename_i prex
+      case post.success p =>
+        mrename_i prep
         mintro ∀St₁
-        mpure prex
-        obtain ⟨St₁_used_eq, St₁_decl⟩ := prex
+        mpure prep
+        obtain ⟨St₁_used_eq, St₁_decl⟩ := prep
         mspec SMT.freshVar_spec_decls
-        case post.success y =>
-          mrename_i prey
+        case post.success R =>
+          mrename_i preR
           mintro ∀St₂
-          mpure prey
-          obtain ⟨St₂_used_eq, St₂_decl⟩ := prey
-          mspec SMT.freshVar_spec_decls
-          case post.success f =>
-            mrename_i pref
-            mintro ∀St₃
-            mpure pref
-            obtain ⟨St₃_used_eq, St₃_decl⟩ := pref
-            simp [modify]
-            mspec Std.Do.Spec.modifyGet_StateT
-            mpure_intro
-            have lift : ∀ {w}, w ∈ σ_S.env.usedVars → w ∈ St₃.env.usedVars := fun {w} h => by
-              rw [St₃_used_eq, St₂_used_eq, St₁_used_eq]
-              exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ h))
-            refine ⟨?_, ?_, Δs, ?_, ?_⟩
-            · intro v hv
-              simp only [SMT.bv, List.append_nil, List.mem_append, List.mem_cons,
-                List.not_mem_nil, false_or, or_false] at hv
-              rw [St₃_used_eq, St₂_used_eq, St₁_used_eq]
-              rcases hv with rfl | (rfl | rfl) | hvS
-              · exact List.mem_cons_self
-              · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)
-              · exact List.mem_cons_of_mem _ List.mem_cons_self
-              · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
-                  (List.mem_cons_of_mem _ (S_bv_used v hvS)))
-            · intro v hv
-              rw [St₃_used_eq, St₂_used_eq, St₁_used_eq]
-              exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
-                (List.mem_cons_of_mem _ (S_used_sub hv)))
-            · rw [St₃_decl, St₂_decl, St₁_decl, hsdecl]
-            · exact hsok.mono (fun w hw => lift hw)
+          mpure preR
+          obtain ⟨St₂_used_eq, St₂_decl⟩ := preR
+          simp [modify]
+          mspec Std.Do.Spec.modifyGet_StateT
+          mpure_intro
+          have lift : ∀ {w}, w ∈ StL.env.usedVars → w ∈ St₂.env.usedVars :=
+            fun {w} h => by
+              rw [St₂_used_eq, St₁_used_eq, Sg_helper_used]
+              exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ h)
+          let Dg := _root_.helperSpecChunk Sg
+            (.fun (.pair α γ) .bool) Sg_spec
+          refine ⟨?_, ?_, Δs ++ Dg, ?_, ?_⟩
+          · intro v hv
+            simp only [SMT.bv, List.append_nil, List.mem_append,
+              List.mem_cons, List.not_mem_nil, false_or, or_false] at hv
+            rw [St₂_used_eq, St₁_used_eq]
+            rcases hv with rfl | rfl
+            · exact List.mem_cons_self
+            · exact List.mem_cons_of_mem _ List.mem_cons_self
+          · intro v hv
+            exact lift (Sg_used_sub (S_used_sub hv))
+          · rw [St₂_decl, St₁_decl, Sg_helper_decl, Sg_decl, hsdecl]
+            simp [Dg, _root_.helperSpecChunk, List.concat_eq_append,
+              List.append_assoc]
+          · exact DeltaBvOk.append
+              (hsok.mono (fun w hw => lift (Sg_used_sub hw)))
+              (DeltaBvOk.helperSpecChunk (lift Sg_used)
+                (fun w hw => lift (Sg_bv w hw)))
     · mvcgen
   | cprod A C A_ih C_ih =>
     mstart
@@ -7062,49 +7071,60 @@ theorem encodeTerm_bv_notMem_used
           · exact hsok
     · rename_i α γ heq
       subst heq
+      mspec (loosenAux_prf_bv_declsEq_notMem _ S_used_sub S_bv)
+      mrename_i preL
+      mintro ∀StL
+      rename_i Sout
+      obtain ⟨Sg, Sg_spec⟩ := Sout
+      mpure preL
+      obtain ⟨Sg_notMem, Sg_bv, Sg_used_sub, Sg_decl⟩ := preL
+      mspec SMT.declareConst_addSpec_spec
+      mrename_i preD
+      mintro ∀StD
+      mpure preD
+      obtain ⟨Sg_helper_decl, _, _, Sg_helper_used, _⟩ := preD
       mspec Std.Do.Spec.get_StateT
-      mspec (Std.Do.Triple.and _ SMT.freshVar_spec (SMT.freshVar_decls (decl := σ_S.env.declarations)))
-      case post.success x =>
-        mrename_i prex
+      mspec (Std.Do.Triple.and _ SMT.freshVar_spec
+        (SMT.freshVar_decls (decl := StD.env.declarations)))
+      case post.success p =>
+        mrename_i prep
         mintro ∀St₁
-        mpure prex
-        obtain ⟨⟨_, _, _, St₁_used_eq, x_notMem⟩, St₁_decl⟩ := prex
-        mspec (Std.Do.Triple.and _ SMT.freshVar_spec (SMT.freshVar_decls (decl := St₁.env.declarations)))
-        case post.success y =>
-          mrename_i prey
+        mpure prep
+        obtain ⟨⟨_, _, _, St₁_used_eq, p_notMem⟩, St₁_decl⟩ := prep
+        mspec (Std.Do.Triple.and _ SMT.freshVar_spec
+          (SMT.freshVar_decls (decl := St₁.env.declarations)))
+        case post.success R =>
+          mrename_i preR
           mintro ∀St₂
-          mpure prey
-          obtain ⟨⟨_, _, _, St₂_used_eq, y_notMem⟩, St₂_decl⟩ := prey
-          mspec (Std.Do.Triple.and _ SMT.freshVar_spec (SMT.freshVar_decls (decl := St₂.env.declarations)))
-          case post.success f =>
-            mrename_i pref
-            mintro ∀St₃
-            mpure pref
-            obtain ⟨⟨_, _, _, St₃_used_eq, f_notMem⟩, St₃_decl⟩ := pref
-            simp [modify]
-            mspec Std.Do.Spec.modifyGet_StateT
-            mpure_intro
-            refine ⟨?_, ?_, Δs, ?_, ?_⟩
-            · intro v hv
-              simp only [SMT.bv, List.append_nil, List.mem_append, List.mem_cons,
-                List.not_mem_nil, false_or, or_false] at hv
-              rcases hv with rfl | (rfl | rfl) | hvS
-              · intro h
-                refine f_notMem ?_
-                rw [St₂_used_eq, St₁_used_eq]
-                exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (S_used_sub h))
-              · exact fun h => x_notMem (S_used_sub h)
-              · intro h
-                refine y_notMem ?_
-                rw [St₁_used_eq]
-                exact List.mem_cons_of_mem _ (S_used_sub h)
-              · exact S_bv v hvS
-            · intro v hv
-              rw [St₃_used_eq, St₂_used_eq, St₁_used_eq]
-              exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
-                (List.mem_cons_of_mem _ (S_used_sub hv)))
-            · rw [St₃_decl, St₂_decl, St₁_decl, hsdecl]
-            · exact hsok
+          mpure preR
+          obtain ⟨⟨_, _, _, St₂_used_eq, R_notMem⟩, St₂_decl⟩ := preR
+          simp [modify]
+          mspec Std.Do.Spec.modifyGet_StateT
+          mpure_intro
+          let Dg := _root_.helperSpecChunk Sg
+            (.fun (.pair α γ) .bool) Sg_spec
+          refine ⟨?_, ?_, Δs ++ Dg, ?_, ?_⟩
+          · intro v hv
+            simp only [SMT.bv, List.append_nil, List.mem_append,
+              List.mem_cons, List.not_mem_nil, false_or, or_false] at hv
+            rcases hv with rfl | rfl
+            · intro h
+              apply R_notMem
+              rw [St₁_used_eq, Sg_helper_used]
+              exact List.mem_cons_of_mem _ (Sg_used_sub (S_used_sub h))
+            · intro h
+              apply p_notMem
+              rw [Sg_helper_used]
+              exact Sg_used_sub (S_used_sub h)
+          · intro v hv
+            rw [St₂_used_eq, St₁_used_eq, Sg_helper_used]
+            exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+              (Sg_used_sub (S_used_sub hv)))
+          · rw [St₂_decl, St₁_decl, Sg_helper_decl, Sg_decl, hsdecl]
+            simp [Dg, _root_.helperSpecChunk, List.concat_eq_append,
+              List.append_assoc]
+          · exact DeltaBvNotMem.append hsok
+              (DeltaBvNotMem.helperSpecChunk Sg_notMem Sg_bv)
     · mvcgen
   | cprod A C A_ih C_ih =>
     mstart

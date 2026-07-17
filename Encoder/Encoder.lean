@@ -196,15 +196,21 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
       return (.lambda [ℰ] [.fun α .bool] (.forall [x] [α] (.imp (.app (.var ℰ) (.var x)) (.app S' (.var x)))), .fun (.fun α .bool) .bool)
     | .fun α (.option β) => do -- `S` is a function
-      -- `𝒫(S) = { f : α +-> β | ∀ x y, f(x) = y ⇒ S(x) = y}`
+      -- Reify the option-function as its canonical relation graph before
+      -- forming the powerset. This is the same representation join used by
+      -- union/intersection and keeps the result at the canonical set type.
+      let ⟨Sg, Sg_spec⟩ ← loosenAux_prf "pow!"
+        (castPath.graph (castPath.reflexive α) (castPath.reflexive β)) S'
+      declareConstWithSpec Sg (.fun (.pair α β) .bool) Sg_spec
       let ctx := (←get).types
-      let x ← freshVar α
-      let y ← freshVar β
-      let f ← freshVar <| α.fun β.option
+      let p ← freshVar (.pair α β)
+      let R ← freshVar <| .fun (.pair α β) .bool
       modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
-      return (.lambda [f] [α.fun β.option] (.forall [x, y] [α, β] (.imp
-        (.eq (.app (.var f) (.var x)) (.var y))
-        (.eq (.app S' (.var x)) (.var y)))), .fun (α.fun β.option) .bool)
+      return (.lambda [R] [.fun (.pair α β) .bool]
+        (.forall [p] [.pair α β]
+          (.imp (.app (.var R) (.var p))
+            (.app (.var Sg) (.var p)))),
+        .fun (.fun (.pair α β) .bool) .bool)
     | _ => throw s!"encodeTerm:pow: Expected a set or a function, got {τS}"
   | .cprod A B, E => do
     let ⟨A', .fun α .bool⟩ ← encodeTerm A E | throw s!"encodeTerm:cprod: Expected a set, got {← encodeTerm A E}"
