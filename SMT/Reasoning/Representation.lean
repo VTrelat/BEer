@@ -614,6 +614,62 @@ theorem RDomCast.exists_cast.{u}
   obtain ⟨c, hc⟩ := h
   exact ⟨c, castZF_apply_mem c hY, hc⟩
 
+/-- Two representatives at the same SMT target type are equal exactly when
+the B values they represent are equal.  The reverse implication uses
+canonicalization to compare their cast images, then injectivity of the
+relational cast. -/
+theorem RDomCast.target_value_eq_iff.{u}
+    {X Y A' B' : ZFSet.{u}} {α : BType} {σ : SMTType}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦α⟧ᶻ}
+    {hA : A' ∈ ⟦σ⟧ᶻ} {hB : B' ∈ ⟦σ⟧ᶻ}
+    (relA : RDomCast (⟨X, α, hX⟩ : B.Dom)
+      (⟨A', σ, hA⟩ : SMT.Dom))
+    (relB : RDomCast (⟨Y, α, hY⟩ : B.Dom)
+      (⟨B', σ, hB⟩ : SMT.Dom)) :
+    A' = B' ↔ X = Y := by
+  obtain ⟨cA, hcA⟩ := relA
+  obtain ⟨cB, hcB⟩ := relB
+  have hc : cB = cA := castPath.eq_of_endpoints cB cA
+  subst cB
+  constructor
+  · intro h
+    subst B'
+    exact hcA.symm.trans hcB
+  · intro h
+    have hretract :
+        retract α (castZF_apply cA A') =
+          retract α (castZF_apply cA B') := by
+      exact hcA.trans (h.trans hcB.symm)
+    have hcast : castZF_apply cA A' = castZF_apply cA B' := by
+      let rA : {x : ZFSet.{u} // x ∈ ⟦α⟧ᶻ} :=
+        ⟨retract α (castZF_apply cA A'),
+          retract_mem_of_canonical α (castZF_apply_mem cA hA)⟩
+      let rB : {x : ZFSet.{u} // x ∈ ⟦α⟧ᶻ} :=
+        ⟨retract α (castZF_apply cA B'),
+          retract_mem_of_canonical α (castZF_apply_mem cA hB)⟩
+      have hr : rA = rB := Subtype.ext hretract
+      have hcanon := congrArg
+        (fun z : {x : ZFSet.{u} // x ∈ ⟦α⟧ᶻ} =>
+          (B.Dom.canonicalSMT
+            (⟨z.val, α, z.property⟩ : B.Dom.{u})).fst) hr
+      calc
+        castZF_apply cA A' =
+            (B.Dom.canonicalSMT
+              (⟨rA.val, α, rA.property⟩ : B.Dom.{u})).fst := by
+          exact (canonical_of_retract α
+            (castZF_apply_mem cA hA)).symm
+        _ = (B.Dom.canonicalSMT
+              (⟨rB.val, α, rB.property⟩ : B.Dom.{u})).fst := hcanon
+        _ = castZF_apply cA B' := by
+          exact canonical_of_retract α (castZF_apply_mem cA hB)
+    have hpairB :
+        B'.pair (castZF_apply cA A') ∈ (castZF_of_path cA).1 := by
+      rw [hcast]
+      exact castZF_apply_pair cA hB
+    exact castZF_of_path_injective cA A' B' (castZF_apply cA A')
+      hA hB (castZF_apply_mem cA hA)
+      (castZF_apply_pair cA hA) hpairB
+
 /-- An SMT representative of a B integer necessarily has SMT integer type. -/
 theorem RDomCast.target_type_eq_int.{u}
     {X Y : ZFSet.{u}} {σ : SMTType}
@@ -1183,6 +1239,112 @@ theorem RDomCast.optionFunction_graph_retract.{u}
   obtain ⟨c, hc⟩ := hrel
   rw [castPath.eq_graph_reflexive c] at hc
   exact hc
+
+/-- Casting between any two encoder-supported representatives preserves and
+reflects equality of the represented B values.  The only non-homomorphic case
+is an option-valued function cast to its pair/Boolean graph; there the graph
+itself is used as an intermediate representative. -/
+theorem RDomCastSupported.cast_eq_iff.{u}
+    {X Y A' B' : ZFSet.{u}} {α : BType}
+    {σ τ : SMTType}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦α⟧ᶻ}
+    {hA : A' ∈ ⟦σ⟧ᶻ} {hB : B' ∈ ⟦τ⟧ᶻ}
+    (relA : RDomCastSupported (⟨X, α, hX⟩ : B.Dom)
+      (⟨A', σ, hA⟩ : SMT.Dom))
+    (relB : RDomCastSupported (⟨Y, α, hY⟩ : B.Dom)
+      (⟨B', τ, hB⟩ : SMT.Dom))
+    (c : σ ~> τ) :
+    castZF_apply c A' = B' ↔ X = Y := by
+  induction α generalizing σ τ X Y A' B' with
+  | int =>
+      cases relA.supported
+      cases relB.supported
+      rw [castZF_apply_self c hA]
+      exact RDomCast.target_value_eq_iff
+        relA.toRDomCast relB.toRDomCast
+  | bool =>
+      cases relA.supported
+      cases relB.supported
+      rw [castZF_apply_self c hA]
+      exact RDomCast.target_value_eq_iff
+        relA.toRDomCast relB.toRDomCast
+  | prod α β ihα ihβ =>
+      cases hsA : relA.supported with
+      | prod hsAα hsAβ =>
+          rename_i σA τA
+          cases hsB : relB.supported with
+          | prod hsBα hsBβ =>
+              rename_i σB τB
+              obtain ⟨Xα, hXα, Xβ, hXβ, rfl⟩ := ZFSet.mem_prod.mp hX
+              obtain ⟨Yα, hYα, Yβ, hYβ, rfl⟩ := ZFSet.mem_prod.mp hY
+              obtain ⟨Aα, hAα, Aβ, hAβ, rfl⟩ := ZFSet.mem_prod.mp hA
+              obtain ⟨Bα, hBα, Bβ, hBβ, rfl⟩ := ZFSet.mem_prod.mp hB
+              have relA_pair : RDomCastSupported
+                  (⟨Xα.pair Xβ, α ×ᴮ β,
+                    ZFSet.pair_mem_prod.mpr ⟨hXα, hXβ⟩⟩ : B.Dom)
+                  (⟨Aα.pair Aβ, SMTType.pair σA τA,
+                    ZFSet.pair_mem_prod.mpr ⟨hAα, hAβ⟩⟩ : SMT.Dom) := by
+                simpa only [proof_irrel_heq] using relA
+              have relB_pair : RDomCastSupported
+                  (⟨Yα.pair Yβ, α ×ᴮ β,
+                    ZFSet.pair_mem_prod.mpr ⟨hYα, hYβ⟩⟩ : B.Dom)
+                  (⟨Bα.pair Bβ, SMTType.pair σB τB,
+                    ZFSet.pair_mem_prod.mpr ⟨hBα, hBβ⟩⟩ : SMT.Dom) := by
+                simpa only [proof_irrel_heq] using relB
+              obtain ⟨relAα, relAβ⟩ :=
+                RDomCastSupported.of_pair relA_pair
+              obtain ⟨relBα, relBβ⟩ :=
+                RDomCastSupported.of_pair relB_pair
+              cases c with
+              | pair cα cβ =>
+                  rw [castZF_apply_pair_path cα cβ hAα hAβ]
+                  simp only [ZFSet.pair_inj]
+                  have eqα := ihα
+                    (hX := hXα) (hY := hYα)
+                    (hA := hAα) (hB := hBα)
+                    relAα relBα cα
+                  have eqβ := ihβ
+                    (hX := hXβ) (hY := hYβ)
+                    (hA := hAβ) (hB := hBβ)
+                    relAβ relBβ cβ
+                  rw [eqα, eqβ]
+              | refl h =>
+                  rcases h with h | h | h <;> cases h
+  | set γ ih =>
+      cases hsA : relA.supported with
+      | setPred γ =>
+          cases hsB : relB.supported with
+          | setPred =>
+              rw [castZF_apply_self c hA]
+              exact RDomCast.target_value_eq_iff
+                relA.toRDomCast relB.toRDomCast
+          | optionFun α β =>
+              have hcod : SMTType.option β.toSMTType = SMTType.bool :=
+                castable?_of_fun_bool (castable?_of_castPath c)
+              nomatch hcod
+      | optionFun α β =>
+          cases hsB : relB.supported with
+          | setPred =>
+              rw [castPath.eq_graph_reflexive c]
+              change optionGraph α.toSMTType β.toSMTType A' = B' ↔ X = Y
+              have hGraph := optionGraph_mem
+                α.toSMTType β.toSMTType hA
+              have relGraph : RDomCast
+                  (⟨X, BType.set (α ×ᴮ β), hX⟩ : B.Dom)
+                  (⟨optionGraph α.toSMTType β.toSMTType A',
+                    SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+                      SMTType.bool,
+                    hGraph⟩ : SMT.Dom) := by
+                refine ⟨castPath.reflexive
+                  (BType.set (α ×ᴮ β)).toSMTType, ?_⟩
+                rw [castZF_apply_self _ hGraph]
+                exact relA.toRDomCast.optionFunction_graph_retract
+              exact RDomCast.target_value_eq_iff
+                relGraph relB.toRDomCast
+          | optionFun =>
+              rw [castZF_apply_self c hA]
+              exact RDomCast.target_value_eq_iff
+                relA.toRDomCast relB.toRDomCast
 
 theorem graphCollapse_mem.{u} (α β : SMTType) (R : ZFSet.{u}) :
     graphCollapse α β R ∈
