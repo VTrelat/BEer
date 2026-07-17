@@ -82,6 +82,55 @@ theorem B.denote_collect_eq_sep.{u}
       ⟨BType.hasArity_of_foldl_defaultZFSet tau_hasArity, tau_hasArity⟩
       h_neg
 
+/- A successful source collection denotation also supplies the totality of
+its predicate at every tuple selected from its source domain.  This is the
+second source-side ingredient of the lambda retraction argument, alongside
+`B.denote_collect_eq_sep`. -/
+open Classical in
+theorem B.denote_collect_predicate_total.{u}
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom)) :
+    ∀ {x_fin : Fin vs.length → B.Dom.{u}},
+      (∀ i, (x_fin i).snd.fst = tau.get vs.length i ∧
+        (x_fin i).fst ∈ ⟦tau.get vs.length i⟧ᶻ) →
+      ZFSet.ofFinDom x_fin ∈ Dval →
+      ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+        (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ.isSome = true := by
+  intro x_fin hx_typ hx_mem
+  have h_inv := den_collect
+  simp only [B.Term.abstract] at h_inv
+  unfold B.denote at h_inv
+  simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h_inv
+  obtain ⟨D_dom, hden_d, rest⟩ := h_inv
+  have hconv_d : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some D_dom := by
+    convert hden_d using 2
+  have hD_dom_eq : D_dom =
+      (⟨Dval, BType.set tau, hDval⟩ : B.Dom) := by
+    rw [hconv_d] at den_D
+    exact Option.some.inj den_D
+  subst D_dom
+  simp only at rest
+  split at rest
+  · simp only [Option.bind_eq_some_iff] at rest
+    obtain ⟨_, _, rest2⟩ := rest
+    split_ifs at rest2 with h_den_P_cond
+    exact h_den_P_cond hx_typ hx_mem
+  · rename_i h_neg
+    exact absurd
+      ⟨BType.hasArity_of_foldl_defaultZFSet tau_hasArity, tau_hasArity⟩
+      h_neg
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
