@@ -1,7 +1,8 @@
 import SMT.Reasoning.EncodeTermRepresentedDefs
 import SMT.Reasoning.Basic.AbstractSubstDenote
+import SMT.Reasoning.Basic.EncodeTermStruct
 
-open B SMT ZFSet
+open Std.Do B SMT ZFSet
 
 /-!
 # Common represented-binder semantic bridges
@@ -142,3 +143,51 @@ theorem agreesOnFV_substList_update_of_extends.{u}
     · exact (hvz (hts_fv_z t ht v hvt)).elim
 
 end SMT.RenamingContext
+
+/-- A successful binder-body stability check turns the structural declaration
+delta of its encoding into an empty delta.  Consequently the returned term
+has no generated-helper free variables. -/
+theorem encodeTerm_no_new_declarations_fv
+    (E : B.Env) {Lambda : SMT.TypeContext} {t : B.Term} {alpha : B.BType}
+    (typ_t : E.context ⊢ᴮ t : alpha)
+    {used : List SMT.𝒱}
+    (vars_used : ∀ v ∈ t.vars, v ∈ used)
+    (Lambda_inv : ∀ v ∈ t.vars, v ∈ Lambda → v ∈ E.context)
+    (bv_nodup : (B.bv t).Nodup)
+    {n : ℕ} {decl : SMT.Chunk} :
+    ⦃ fun (S : EncoderState) ↦
+        ⌜S.types = Lambda ∧ S.env.freshvarsc = n ∧
+          Lambda.keys ⊆ S.env.usedVars ∧ S.env.usedVars = used ∧
+          S.env.declarations = decl⌝ ⦄
+    do
+      let out ← encodeTerm t E
+      SMT.ensureDeclarationsUnchanged decl.length "represented binder body"
+      pure out
+    ⦃ ⇓? (⟨t', _sigma⟩ : SMT.Term × SMTType) (S' : EncoderState) =>
+      ⌜S'.env.declarations = decl ∧ SMT.fv t' ⊆ B.Term.vars t⌝ ⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, St_used, St_decl⟩ := pre
+  mspec (encodeTerm_decl E typ_t vars_used Lambda_inv bv_nodup
+    (n := St.env.freshvarsc) (decl := decl))
+  rename_i out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨Dlt, St'_decl, _spec_fv, term_fv⟩ := post
+  mspec (SMT.ensureDeclarationsUnchanged_spec (St := St'))
+  mrename_i stable
+  mintro ∀St''
+  mpure stable
+  obtain ⟨rfl, hlen⟩ := stable
+  have hDlt : Dlt = [] :=
+    declaration_delta_eq_nil_of_length St'_decl hlen
+  subst Dlt
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  refine ⟨?_, ?_⟩
+  · simpa using St'_decl
+  · intro v hv
+    simpa only [declVars, List.filterMap_nil, List.mem_union_iff,
+      List.not_mem_nil, or_false] using term_fv hv
