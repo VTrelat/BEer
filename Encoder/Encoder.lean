@@ -244,12 +244,21 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
       ensureDeclarationsUnchanged decls_snap.length "encodeTerm:collect"
-      let xs ← freshVarList αs
-      -- The successful arity check above gives `αs.toProdl = α`; applying the
-      -- option-function directly avoids a redundant global cast helper.
-      let Dxs := .the (.app D' (xs.map .var |>.toPairl))
-      let P' := substList vs ((xs.map .var).concat Dxs) P'
-      return (.lambda xs αs (.ite P' (.some Dxs) (none$ β)), αs.toProdl.fun β.option)
+      -- Keep the emitted function at its advertised domain type `α`.  A
+      -- multi-variable SMT lambda denotes over a right-associated tuple,
+      -- whereas `α` and `toPairl` use the encoder's left-associated tuple
+      -- convention.  Binding one tuple and destructuring it here matches the
+      -- graph-producing cases and preserves the declared `α → Option β` type.
+      let z ← freshVar α
+      let Dapp := .app D' (.var z)
+      let Dz := .the Dapp
+      let P' := substList vs ((toDestPair vs.dropLast (.var z)).concat Dz) P'
+      -- `the` is total in the semantic model, so retain the option equality
+      -- guard to rule out its arbitrary value when `Dapp` is `none`.
+      let defined := .eq Dapp (.some Dz)
+      SMT.eraseFromContext z
+      return (.lambda [z] [α] (.ite (.and defined P') (.some Dz) (none$ β)),
+        .fun α β.option)
     | .fun τ .bool => do
       -- `D` is a set
       let τs := τ.fromProdl <| vs.length - 1
