@@ -3551,65 +3551,63 @@ theorem encodeTerm_bv_used
           mpure preU
           obtain ⟨St₃'_eq, _P_decl_len⟩ := preU
           subst St₃'
-          mspec (Std.Do.Triple.and _
-            (SMT.freshVarList_spec αs')
-            (SMT.freshVarList_decls αs' (decl := St₃.env.declarations)))
-          rename_i xs
-          mrename_i pre4
-          mintro ∀St₄
-          mpure pre4
-          obtain ⟨⟨_, _, _, _, _, St₄_used, _⟩, St₄_decl⟩ := pre4
-          have St₁_to_St₃ : ∀ {v}, v ∈ St₁.env.usedVars → v ∈ St₃.env.usedVars :=
-            fun {v} h => P_used_sub (by rw [St₂_used]; exact h)
-          have hbvD_lifted : ∀ v ∈ SMT.bv D_enc, v ∈ St₄.env.usedVars :=
-            fun v hv => by
-              rw [St₄_used]; exact List.mem_append_right _ (St₁_to_St₃ (D_bv_used v hv))
-          have hbvXs_lifted : ∀ v ∈ SMT.bv ((xs.map SMT.Term.var).toPairl), v ∈ St₄.env.usedVars :=
-            fun v hv => by
-              rw [bv_toPairl_nil (fun t ht => by
-                rw [List.mem_map] at ht; obtain ⟨z, _, rfl⟩ := ht; simp [SMT.bv])] at hv
-              exact absurd hv List.not_mem_nil
-          mspec Std.Do.Spec.pure
-          mpure_intro
-          set Dxs : SMT.Term :=
-            .the (.app D_enc ((xs.map SMT.Term.var).toPairl)) with Dxs_def
-          have Dxs_bv : ∀ v ∈ SMT.bv Dxs, v ∈ St₄.env.usedVars := by
-            intro v hv
-            rw [Dxs_def] at hv
-            simp only [noneCast, SMT.bv, List.append_nil, List.mem_append] at hv
-            rcases hv with hD | hxs
-            · exact hbvD_lifted v hD
-            · exact hbvXs_lifted v hxs
-          have lift3 : ∀ {w}, w ∈ St₃.env.usedVars → w ∈ St₄.env.usedVars :=
-            fun {w} h => by
-              rw [St₄_used]
-              exact List.mem_append_right _ h
-          have liftXs : ∀ {w}, w ∈ xs → w ∈ St₄.env.usedVars :=
-            fun {w} h => by
-              rw [St₄_used]
-              exact List.mem_append_left _ (List.mem_reverse.mpr h)
-          refine ⟨?_, fun v hv => lift3 (St₁_to_St₃ (D_used_sub hv)),
-            ΔD ++ ΔP, ?_, ?_⟩
-          · intro v hv
-            simp only [noneCast, SMT.bv, List.nil_append, List.append_nil,
-              List.mem_append, List.not_mem_nil, false_or, or_false] at hv
-            rcases hv with hvxs | hvP | hvDxs
-            · exact liftXs hvxs
-            · refine bv_substList_subset_of (U := St₄.env.usedVars) ?_ ?_ v hvP
-              · exact fun w hw => lift3 (P_bv_used w hw)
-              · intro t ht w hw
-                simp only [List.concat_eq_append, List.mem_append,
-                  List.mem_singleton] at ht
-                rcases ht with hxs | rfl
-                · rw [List.mem_map] at hxs
-                  obtain ⟨z, _, rfl⟩ := hxs
-                  simp only [SMT.bv, List.not_mem_nil] at hw
-                · exact Dxs_bv w hw
-            · exact Dxs_bv v hvDxs
-          · rw [St₄_decl, hPdecl, St₂_decl, hDdecl, List.append_assoc]
-          · exact DeltaBvOk.append
-              (hDok.mono (fun w hw => lift3 (St₁_to_St₃ hw)))
-              (hPok.mono (fun w hw => lift3 hw))
+          mspec (Std.Do.Triple.and _ SMT.freshVar_spec
+            (SMT.freshVar_decls (decl := St₃.env.declarations)))
+          case post.success z =>
+            mrename_i prez
+            mintro ∀St₄
+            mpure prez
+            obtain ⟨⟨_, _, _, St₄_used_eq, _⟩, St₄_decl⟩ := prez
+            mspec (Std.Do.Triple.and _ SMT.eraseFromContext_spec
+              (SMT.eraseFromContext_decls (decl := St₄.env.declarations)))
+            mrename_i pree
+            mintro ∀St₅
+            mpure pree
+            obtain ⟨⟨_, _, St₅_used⟩, St₅_decl⟩ := pree
+            mspec Std.Do.Spec.pure
+            mpure_intro
+            have St₁_sub_St₂ : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂.env.usedVars :=
+              fun {w} h => by rw [St₂_used]; exact h
+            have lift : ∀ {w}, w ∈ St₃.env.usedVars → w ∈ St₅.env.usedVars := fun {w} h => by
+              rw [St₅_used, St₄_used_eq]; exact List.mem_cons_of_mem _ h
+            have D_bv_lifted : ∀ w ∈ SMT.bv D_enc, w ∈ St₅.env.usedVars :=
+              fun w hw => lift (P_used_sub (St₁_sub_St₂ (D_bv_used w hw)))
+            refine ⟨?_, fun v hv => lift (P_used_sub (St₁_sub_St₂ (D_used_sub hv))),
+              ΔD ++ ΔP, ?_, ?_⟩
+            · intro v hv
+              have hsubst : ∀ w ∈ SMT.bv
+                  (SMT.substList vs
+                    ((toDestPair vs.dropLast (.var z)).concat
+                      (.the (.app D_enc (.var z)))) heqP),
+                  w ∈ St₅.env.usedVars := by
+                intro w hw
+                refine bv_substList_subset_of (U := St₅.env.usedVars) ?_ ?_ w hw
+                · exact fun u hu => lift (P_bv_used u hu)
+                · intro t ht u hu
+                  simp only [List.concat_eq_append, List.mem_append, List.mem_singleton] at ht
+                  rcases ht with hpair | rfl
+                  · rw [bv_toDestPair_nil (by simp [SMT.bv]) hpair] at hu
+                    exact absurd hu List.not_mem_nil
+                  · simp only [noneCast, SMT.bv, List.append_nil, List.mem_append] at hu
+                    exact D_bv_lifted u hu
+              simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
+                List.mem_cons, List.not_mem_nil, false_or, or_false] at hv
+              rcases hv with rfl | hv
+              · rw [St₅_used, St₄_used_eq]
+                exact List.mem_cons_self
+              rcases hv with hv | hvnone
+              · rcases hv with hv | hvD
+                · rcases hv with hvD | hvP
+                  · rcases hvD with hvD | hvD
+                    · exact D_bv_lifted v hvD
+                    · exact D_bv_lifted v hvD
+                  · exact hsubst v hvP
+                · exact D_bv_lifted v hvD
+              · simp only [noneCast, SMT.bv, List.not_mem_nil] at hvnone
+            · rw [St₅_decl, St₄_decl, hPdecl, St₂_decl, hDdecl, List.append_assoc]
+            · exact DeltaBvOk.append
+                (hDok.mono (fun w hw => lift (P_used_sub (St₁_sub_St₂ hw))))
+                (hPok.mono (fun w hw => lift hw))
         · first
           | exact wp_bind_throw _ _ _ _
           | (mvcgen)
@@ -7398,65 +7396,62 @@ theorem encodeTerm_bv_notMem_used
           mpure preU
           obtain ⟨St₃'_eq, _P_decl_len⟩ := preU
           subst St₃'
-          mspec (Std.Do.Triple.and _
-            (SMT.freshVarList_spec αs')
-            (SMT.freshVarList_decls αs' (decl := St₃.env.declarations)))
-          rename_i xs
-          mrename_i pre4
-          mintro ∀St₄
-          mpure pre4
-          obtain ⟨⟨_, _, xs_notMem, _, _, St₄_used, _⟩, St₄_decl⟩ := pre4
-          have St₁_to_St₃ : ∀ {v}, v ∈ St₁.env.usedVars → v ∈ St₃.env.usedVars :=
-            fun {v} h => P_used_sub (by rw [St₂_used]; exact h)
-          have used_to_St₂ : St₀.env.usedVars ⊆ St₂.env.usedVars :=
-            fun w h => by rw [St₂_used]; exact D_used_sub h
-          have used_to_St₃ : St₀.env.usedVars ⊆ St₃.env.usedVars :=
-            fun w h => St₁_to_St₃ (D_used_sub h)
-          have used_to_St₄ : St₀.env.usedVars ⊆ St₄.env.usedVars :=
-            fun w h => by rw [St₄_used]; exact List.mem_append_right _ (used_to_St₃ h)
-          have hbvD_lifted : ∀ v ∈ SMT.bv D_enc, v ∉ St₀.env.usedVars := fun v hv => D_bv v hv
-          have hbvXs_lifted : ∀ v ∈ SMT.bv ((xs.map SMT.Term.var).toPairl), v ∉ St₀.env.usedVars :=
-            fun v hv => by
-              rw [bv_toPairl_nil (fun t ht => by
-                rw [List.mem_map] at ht; obtain ⟨z, _, rfl⟩ := ht; simp [SMT.bv])] at hv
-              exact absurd hv List.not_mem_nil
-          mspec Std.Do.Spec.pure
-          mpure_intro
-          set Dxs : SMT.Term :=
-            .the (.app D_enc ((xs.map SMT.Term.var).toPairl)) with Dxs_def
-          have Dxs_bv :
-              ∀ v ∈ SMT.bv Dxs, v ∉ St₀.env.usedVars := by
-            intro v hv
-            rw [Dxs_def] at hv
-            simp only [noneCast, SMT.bv, List.append_nil, List.mem_append] at hv
-            rcases hv with hD | hxs
-            · exact hbvD_lifted v hD
-            · exact hbvXs_lifted v hxs
-          have lift3 : ∀ {w}, w ∈ St₃.env.usedVars → w ∈ St₄.env.usedVars :=
-            fun {w} h => by
-              rw [St₄_used]
-              exact List.mem_append_right _ h
-          refine ⟨?_, fun v hv => lift3 (St₁_to_St₃ (D_used_sub hv)),
-            ΔD ++ ΔP, ?_, ?_⟩
-          · intro v hv
-            simp only [noneCast, SMT.bv, List.nil_append, List.append_nil,
-              List.mem_append, List.not_mem_nil, false_or, or_false] at hv
-            rcases hv with hvxs | hvP | hvDxs
-            · intro h
-              exact xs_notMem v hvxs (used_to_St₃ h)
-            · refine bv_substList_notMem_of (a := St₀.env.usedVars) ?_ ?_ v hvP
-              · exact fun w hw h => P_bv w hw (used_to_St₂ h)
-              · intro t ht w hw
-                simp only [List.concat_eq_append, List.mem_append,
-                  List.mem_singleton] at ht
-                rcases ht with hxs | rfl
-                · rw [List.mem_map] at hxs
-                  obtain ⟨z, _, rfl⟩ := hxs
-                  simp only [SMT.bv, List.not_mem_nil] at hw
-                · exact Dxs_bv w hw
-            · exact Dxs_bv v hvDxs
-          · rw [St₄_decl, hPdecl, St₂_decl, hDdecl, List.append_assoc]
-          · exact DeltaBvNotMem.append hDok (hPok.mono used_to_St₂)
+          mspec (Std.Do.Triple.and _ SMT.freshVar_spec
+            (SMT.freshVar_decls (decl := St₃.env.declarations)))
+          case post.success z =>
+            mrename_i prez
+            mintro ∀St₄
+            mpure prez
+            obtain ⟨⟨_, _, _, St₄_used_eq, z_notMem⟩, St₄_decl⟩ := prez
+            mspec (Std.Do.Triple.and _ SMT.eraseFromContext_spec
+              (SMT.eraseFromContext_decls (decl := St₄.env.declarations)))
+            mrename_i pree
+            mintro ∀St₅
+            mpure pree
+            obtain ⟨⟨_, _, St₅_used⟩, St₅_decl⟩ := pree
+            mspec Std.Do.Spec.pure
+            mpure_intro
+            have St₁_sub_St₂ : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂.env.usedVars :=
+              fun {w} h => by rw [St₂_used]; exact h
+            have lift : ∀ {w}, w ∈ St₃.env.usedVars → w ∈ St₅.env.usedVars := fun {w} h => by
+              rw [St₅_used, St₄_used_eq]; exact List.mem_cons_of_mem _ h
+            have used_sub_St₂ : St₀.env.usedVars ⊆ St₂.env.usedVars :=
+              fun w h => St₁_sub_St₂ (D_used_sub h)
+            have used_sub_St₃ : St₀.env.usedVars ⊆ St₃.env.usedVars :=
+              fun w h => P_used_sub (used_sub_St₂ h)
+            refine ⟨?_, fun v hv => lift (P_used_sub (St₁_sub_St₂ (D_used_sub hv))),
+              ΔD ++ ΔP, ?_, ?_⟩
+            · intro v hv
+              have hsubst : ∀ w ∈ SMT.bv
+                  (SMT.substList vs
+                    ((toDestPair vs.dropLast (.var z)).concat
+                      (.the (.app D_enc (.var z)))) heqP),
+                  w ∉ St₀.env.usedVars := by
+                intro w hw
+                refine bv_substList_notMem_of (a := St₀.env.usedVars) ?_ ?_ w hw
+                · exact fun u hu h => P_bv u hu (used_sub_St₂ h)
+                · intro t ht u hu
+                  simp only [List.concat_eq_append, List.mem_append, List.mem_singleton] at ht
+                  rcases ht with hpair | rfl
+                  · rw [bv_toDestPair_nil (by simp [SMT.bv]) hpair] at hu
+                    exact absurd hu List.not_mem_nil
+                  · simp only [noneCast, SMT.bv, List.append_nil, List.mem_append] at hu
+                    exact D_bv u hu
+              simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
+                List.mem_cons, List.not_mem_nil, false_or, or_false] at hv
+              rcases hv with rfl | hv
+              · exact fun h => z_notMem (used_sub_St₃ h)
+              rcases hv with hv | hvnone
+              · rcases hv with hv | hvD
+                · rcases hv with hvD | hvP
+                  · rcases hvD with hvD | hvD
+                    · exact D_bv v hvD
+                    · exact D_bv v hvD
+                  · exact hsubst v hvP
+                · exact D_bv v hvD
+              · simp only [noneCast, SMT.bv, List.not_mem_nil] at hvnone
+            · rw [St₅_decl, St₄_decl, hPdecl, St₂_decl, hDdecl, List.append_assoc]
+            · exact DeltaBvNotMem.append hDok (hPok.mono used_sub_St₂)
         · first
           | exact wp_bind_throw _ _ _ _
           | (mvcgen)
