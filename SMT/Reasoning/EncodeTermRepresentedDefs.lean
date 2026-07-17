@@ -11,6 +11,33 @@ initial SMT valuation is therefore allowed to use a noncanonical type such as
 `α → Option β` for a B relation of type `ℙ (α × β)`.
 -/
 
+/-- An append-only declaration delta with unchanged length is empty.  Binder
+encoders use this after `ensureDeclarationsUnchanged` to rule out a body
+introducing global helper names. -/
+theorem declaration_delta_eq_nil_of_length
+    {decl delta out : SMT.Chunk}
+    (happend : out = decl ++ delta)
+    (hlen : out.length = decl.length) :
+    delta = [] := by
+  rw [happend, List.length_append] at hlen
+  have hlen' : decl.length + delta.length = decl.length + 0 := by
+    simpa using hlen
+  exact List.length_eq_zero_iff.mp (Nat.add_left_cancel hlen')
+
+/-- If an encoding run has appended no declarations, its structural
+free-variable bound contains no generated helper names. -/
+theorem encoded_fv_subset_source_of_declaration_stability
+    {decl delta out : SMT.Chunk} {t : B.Term} {t' : SMT.Term}
+    (happend : out = decl ++ delta)
+    (hlen : out.length = decl.length)
+    (hfv : SMT.fv t' ⊆ B.Term.vars t ∪ declVars delta) :
+    SMT.fv t' ⊆ B.Term.vars t := by
+  have hdelta : delta = [] :=
+    declaration_delta_eq_nil_of_length happend hlen
+  subst delta
+  intro v hv
+  simpa [declVars] using hfv hv
+
 /-- Constructor-specific successful-result shape information used when one
 encoder branch is factored through another branch with the same recursive
 prefix.  Only shapes needed by such transfers are recorded. -/
