@@ -917,6 +917,62 @@ theorem represented_option_app_some_of_mem_canonical.{u}
       ⟨Wb.fst, hWb_mem⟩ |>.property)] at hsem
   simpa [Dval, Wa, Wb, proof_irrel_heq] using hsem.mpr hmem
 
+/-- Eliminating an option-valued target term whose value is a canonical
+`some` produces the corresponding payload.  The conclusion deliberately
+keeps only the value and type tag, so it is insensitive to proof fields in
+the dependent domain representation. -/
+theorem denote_the_of_some.{u}
+    {t : SMT.Term} {Theta : SMT.RenamingContext.Context.{u}}
+    (hcov_t : SMT.RenamingContext.CoversFV Theta t)
+    {D W : SMT.Dom.{u}} {beta : SMTType}
+    (hden_t : ⟦t.abstract Theta hcov_t⟧ˢ = some D)
+    (hD_type : D.snd.fst = SMTType.option beta)
+    (hW_type : W.snd.fst = beta)
+    (hD_value : D.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val) :
+    ∃ (hcov_the : SMT.RenamingContext.CoversFV Theta (SMT.Term.the t))
+      (Dthe : SMT.Dom.{u}),
+      ⟦(SMT.Term.the t).abstract Theta hcov_the⟧ˢ = some Dthe ∧
+      Dthe.snd.fst = beta ∧ Dthe.fst = W.fst := by
+  classical
+  have hcov_the : SMT.RenamingContext.CoversFV Theta (SMT.Term.the t) := by
+    intro v hv
+    exact hcov_t v (by simpa [SMT.fv] using hv)
+  refine ⟨hcov_the, ?_⟩
+  rcases D with ⟨Dval, Dsigma, hDmem⟩
+  dsimp at hD_type hD_value
+  subst Dsigma
+  let Wpayload : {x // x ∈ ⟦beta⟧ᶻ} :=
+    ⟨W.fst, by simpa [hW_type] using W.snd.snd⟩
+  let Wsome : ZFSet.Option ⟦beta⟧ᶻ := ZFSet.Option.some Wpayload
+  have hD_value' : Dval = Wsome.val := by
+    simpa [Wsome, Wpayload] using hD_value
+  let Dopt : ZFSet.Option ⟦beta⟧ᶻ := ⟨Dval, hDmem⟩
+  have hDopt_eq : Dopt = Wsome := by
+    apply Subtype.ext
+    exact hD_value'
+  have hthe : ZFSet.Option.the SMTType.toZFSet_nonempty Wsome = Wpayload := by
+    unfold Wsome
+    unfold ZFSet.Option.the
+    rw [dif_neg (ZFSet.Option.some_ne_none Wpayload)]
+    have hspec := Classical.choose_spec
+      (Or.resolve_left
+        (ZFSet.Option.casesOn (ZFSet.Option.some Wpayload))
+        (ZFSet.Option.some_ne_none Wpayload))
+    rw [ZFSet.Option.some.injEq] at hspec
+    exact hspec.symm
+  let Dthe : SMT.Dom := ⟨(ZFSet.Option.the SMTType.toZFSet_nonempty Dopt).val,
+    beta, SetLike.coe_mem _⟩
+  refine ⟨Dthe, ?_, rfl, ?_⟩
+  · rw [SMT.Term.abstract.eq_def, SMT.denote]
+    conv =>
+      lhs
+      rw [SMT.RenamingContext.denote_abstract_proof_irrel t Theta _ hcov_t]
+    rw [hden_t]
+    rfl
+  · dsimp [Dthe]
+    rw [hDopt_eq, hthe]
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
