@@ -587,6 +587,14 @@ theorem BType.get_cast
   subst m
   rfl
 
+/-- Transport a source-value tuple component along an equality of tuple
+arities. -/
+theorem ZFSet_get_cast
+    {x : ZFSet.{u}} {n m : ℕ} (h : n = m) (i : Fin n) :
+    x.get n i = x.get m (Fin.cast h i) := by
+  subst m
+  rfl
+
 /-- Before the last component, a pair tuple projects through its left
 component. -/
 theorem ZFSet_get_pair_before_last
@@ -621,6 +629,73 @@ theorem BType_get_pair_last
     BType.get (alpha ×ᴮ beta) (n + 1) ⟨n, by omega⟩ = beta := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_one.mpr hn
   simp [BType.get]
+
+/-- Projecting a non-final component of a pair tuple through a `dropLast`
+binder list gives the corresponding component of the left source value. -/
+theorem ZFSet_get_pair_before_last_dropLast
+    {vs : List B.𝒱} {a b : ZFSet.{u}} {i : ℕ}
+    (hvs : 2 ≤ vs.length) (hi : i < vs.dropLast.length) :
+    (a.pair b).get vs.length ⟨i, by
+      rw [List.length_dropLast] at hi
+      omega⟩ =
+      a.get vs.dropLast.length ⟨i, hi⟩ := by
+  let itotal : Fin vs.length := ⟨i, by
+    rw [List.length_dropLast] at hi
+    omega⟩
+  let iprefix : Fin vs.dropLast.length := ⟨i, hi⟩
+  change (a.pair b).get vs.length itotal =
+    a.get vs.dropLast.length iprefix
+  have hlen : vs.length = (vs.length - 2 + 1) + 1 := by omega
+  have hpref : vs.dropLast.length = vs.length - 2 + 1 := by
+    rw [List.length_dropLast]
+    omega
+  have hi_n : i < vs.length - 2 + 1 := by
+    rw [List.length_dropLast] at hi
+    omega
+  have hgeneric := ZFSet_get_pair_before_last (a := a) (b := b)
+    (n := vs.length - 2 + 1) (i := i) (by omega) hi_n
+  calc
+    (a.pair b).get vs.length itotal =
+        (a.pair b).get (vs.length - 2 + 1 + 1) (Fin.cast hlen itotal) :=
+      ZFSet_get_cast hlen itotal
+    _ = a.get (vs.length - 2 + 1) (Fin.cast hpref iprefix) := by
+      simpa only [itotal, iprefix, proof_irrel_heq] using hgeneric
+    _ = a.get vs.dropLast.length iprefix :=
+      (ZFSet_get_cast hpref iprefix).symm
+
+/-- Projecting a non-final component of a product source type through a
+`dropLast` binder list gives the corresponding component of the left type. -/
+theorem BType_get_pair_before_last_dropLast
+    {vs : List B.𝒱} {alpha beta : BType} {i : ℕ}
+    (hvs : 2 ≤ vs.length) (hi : i < vs.dropLast.length) :
+    BType.get (alpha ×ᴮ beta) vs.length ⟨i, by
+      rw [List.length_dropLast] at hi
+      omega⟩ =
+      BType.get alpha vs.dropLast.length ⟨i, hi⟩ := by
+  let itotal : Fin vs.length := ⟨i, by
+    rw [List.length_dropLast] at hi
+    omega⟩
+  let iprefix : Fin vs.dropLast.length := ⟨i, hi⟩
+  change BType.get (alpha ×ᴮ beta) vs.length itotal =
+    BType.get alpha vs.dropLast.length iprefix
+  have hlen : vs.length = (vs.length - 2 + 1) + 1 := by omega
+  have hpref : vs.dropLast.length = vs.length - 2 + 1 := by
+    rw [List.length_dropLast]
+    omega
+  have hi_n : i < vs.length - 2 + 1 := by
+    rw [List.length_dropLast] at hi
+    omega
+  have hgeneric := BType_get_pair_before_last (alpha := alpha) (beta := beta)
+    (n := vs.length - 2 + 1) (i := i) (by omega) hi_n
+  calc
+    BType.get (alpha ×ᴮ beta) vs.length itotal =
+        BType.get (alpha ×ᴮ beta) (vs.length - 2 + 1 + 1)
+          (Fin.cast hlen itotal) :=
+      BType.get_cast hlen itotal
+    _ = BType.get alpha (vs.length - 2 + 1) (Fin.cast hpref iprefix) := by
+      simpa only [itotal, iprefix, proof_irrel_heq] using hgeneric
+    _ = BType.get alpha vs.dropLast.length iprefix :=
+      (BType.get_cast hpref iprefix).symm
 
 /-- Each element of `toDestPair vs d acc d` denotes under `Θ`. For indices `j < vs.length`,
     the denotation value's ZFSet component equals `D_val.fst.get vs.length j` and its type
