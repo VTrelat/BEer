@@ -253,6 +253,17 @@ theorem B.Dom.canonicalSMT_type.{u} (d : B.Dom.{u}) :
   rcases d with ⟨X, α, hX⟩
   rfl
 
+/-- Source semantic values are equal when their values and type tags agree;
+the dependent membership witnesses are proof irrelevant. -/
+theorem B.Dom.ext_type_value.{u}
+    {X Y : ZFSet.{u}} {alpha beta : BType}
+    {hX : X ∈ ⟦alpha⟧ᶻ} {hY : Y ∈ ⟦beta⟧ᶻ}
+    (htype : alpha = beta) (hvalue : X = Y) :
+    (⟨X, alpha, hX⟩ : B.Dom) = ⟨Y, beta, hY⟩ := by
+  subst beta
+  subst Y
+  rfl
+
 open Classical in
 /-- Canonical representation commutes with binary source pairing.  This is
 the value-level form of the product canonical isomorphism used when an
