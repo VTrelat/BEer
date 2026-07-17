@@ -1502,6 +1502,126 @@ theorem collect_ite_truth_of_total_body_source_fv_fresh.{u}
     hctx_source_upd hbody_ext_upd hden_P_upd hrel_P hden_D hden_body
     hD_type hD_true
 
+/-- Transport a represented Boolean predicate through an arbitrary binder
+substitution after a fresh outer binder has been installed.  Unlike the
+collection-set helper above, this lemma has no enclosing `ite`: it is the
+form required by the option-function `collect` arm, whose domain test and
+payload extraction are handled separately. -/
+theorem collect_subst_truth_of_total_body_source_fv_fresh.{u}
+    {Penc : SMT.Term}
+    (xs : List SMT.𝒱) (ts : List SMT.Term)
+    {DeltaCtx ThetaBase : SMT.RenamingContext.Context.{u}}
+    {z : SMT.𝒱} {W : SMT.Dom.{u}}
+    (Ds : List SMT.Dom.{u})
+    (hlen_xt : xs.length = ts.length) (hlen_xd : xs.length = Ds.length)
+    (hnodup : xs.Nodup)
+    (hxs_not_bv : ∀ x ∈ xs, x ∉ SMT.bv Penc)
+    (hts_bv_nil : ∀ t ∈ ts, SMT.bv t = [])
+    (hts_fv_not_bv : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ SMT.bv Penc)
+    (hts_not_none : ∀ t ∈ ts, t ≠ SMT.Term.none)
+    (hts_fv_disj_xs : ∀ t ∈ ts, ∀ w ∈ SMT.fv t, w ∉ xs)
+    (hts_den : ∀ (i : ℕ) (_hi_x : i < xs.length) (hi_t : i < ts.length)
+      (hi_d : i < Ds.length),
+      ∃ (ht_cov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W)) ts[i]),
+        ⟦ts[i].abstract (Function.update DeltaCtx z (some W)) ht_cov⟧ˢ =
+          some Ds[i])
+    (hcov_sub : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W))
+        (SMT.substList xs ts Penc))
+    (hcov_upd : SMT.RenamingContext.CoversFV
+      (Function.updates (Function.update DeltaCtx z (some W)) xs
+        (Ds.map Option.some)) Penc)
+    {Pterm : B.Term} {E : B.Env} {Lambda Gamma : SMT.TypeContext}
+    {sigma : SMTType} {used : List SMT.𝒱}
+    (P_total : EncodeTermRepTotal.{u}
+      Pterm E BType.bool Lambda Penc sigma Gamma used)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv Pterm, (Xi v).isSome = true)
+    (related : RValuationCastSupportedOnFV Xi ThetaBase Pterm)
+    (wf : B.RenWF E.context Xi)
+    (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
+    (source_respects : B.RenamingContext.RespectsTypeContextOnFV
+      ThetaBase Lambda Pterm)
+    (ThetaBase_dom : ∀ v, ThetaBase v ≠ none → v ∈ Lambda)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦BType.bool⟧ᶻ}
+    (den_P : ⟦Pterm.abstract Xi Xi_fv⟧ᴮ =
+      some (⟨Pval, BType.bool, hPval⟩ : B.Dom))
+    (bound_values : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_d : i < Ds.length),
+      ThetaBase xs[i] = some Ds[i])
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars Pterm)
+    (z_not_xs : z ∉ xs)
+    (z_not_fv_Penc : z ∉ SMT.fv Penc)
+    (z_not_vars_source : z ∉ B.Term.vars Pterm)
+    (hctx_source : ∀ v ∈ B.Term.vars Pterm, v ∉ xs →
+      DeltaCtx v = ThetaBase v) :
+    ∃ dP : SMT.Dom.{u},
+      ⟦(SMT.substList xs ts Penc).abstract
+        (Function.update DeltaCtx z (some W)) hcov_sub⟧ˢ = some dP ∧
+      (dP.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue) := by
+  obtain ⟨ThetaBody, hcov_P, dP, hbody_ext, hvalues, _hbody_rel,
+    _hbody_none, _source_respects, _target_respects, _hbody_dom,
+    hden_P, _hdP_type, hrel_P⟩ :=
+    EncodeTermRepTotal.bound_body P_total Xi_fv related wf ThetaBase_none
+      source_respects ThetaBase_dom den_P bound_values
+  have hcov_P_upd : SMT.RenamingContext.CoversFV
+      (Function.update ThetaBody z (some W)) Penc :=
+    SMT.RenamingContext.coversFV_update_of_notMem z_not_fv_Penc hcov_P
+  have hden_P_upd : ⟦Penc.abstract (Function.update ThetaBody z (some W))
+      hcov_P_upd⟧ˢ = some dP := by
+    calc
+      ⟦Penc.abstract (Function.update ThetaBody z (some W)) hcov_P_upd⟧ˢ =
+          ⟦Penc.abstract ThetaBody hcov_P⟧ˢ := by
+        symm
+        exact SMT.RenamingContext.denote_update_of_notMem (h := hcov_P)
+          z_not_fv_Penc
+      _ = some dP := hden_P
+  have hvalues_upd : ∀ (i : ℕ) (hi_x : i < xs.length)
+      (hi_d : i < Ds.length),
+      (Function.update ThetaBody z (some W)) xs[i] = some Ds[i] := by
+    intro i hi_x hi_d
+    have hxz : xs[i] ≠ z := by
+      intro h
+      apply z_not_xs
+      rw [← h]
+      exact List.getElem_mem hi_x
+    rw [Function.update_of_ne hxz]
+    exact hvalues i hi_x hi_d
+  have hbody_ext_upd : SMT.RenamingContext.Extends
+      (Function.update ThetaBody z (some W))
+      (Function.update ThetaBase z (some W)) := by
+    intro v d hv
+    by_cases hvz : v = z
+    · subst v
+      simpa using hv
+    · rw [Function.update_of_ne hvz]
+      apply hbody_ext
+      rw [Function.update_of_ne hvz] at hv
+      exact hv
+  have hctx_source_upd : ∀ v ∈ B.Term.vars Pterm, v ∉ xs →
+      (Function.update DeltaCtx z (some W)) v =
+        (Function.update ThetaBase z (some W)) v := by
+    intro v hv hvs
+    have hvz : v ≠ z := by
+      intro h
+      subst v
+      exact z_not_vars_source hv
+    rw [Function.update_of_ne hvz, Function.update_of_ne hvz]
+    exact hctx_source v hv hvs
+  have hagrees : SMT.RenamingContext.AgreesOnFV
+      (Function.updates (Function.update DeltaCtx z (some W)) xs
+        (Ds.map Option.some))
+      (Function.update ThetaBody z (some W)) Penc :=
+    SMT.RenamingContext.agreesOnFV_updates_of_source_fv
+      hlen_xd hnodup hcov_upd hvalues_upd hPenc_fv hctx_source_upd
+      hbody_ext_upd
+  obtain ⟨hden_sub, htruth_sub⟩ :=
+    SMT.RenamingContext.denote_substList_bool_truth_of_agrees
+      Penc xs ts Ds hlen_xt hlen_xd hnodup hxs_not_bv hts_bv_nil
+      hts_fv_not_bv hts_not_none hts_fv_disj_xs hts_den hcov_sub
+      hcov_upd hcov_P_upd hagrees hden_P_upd hrel_P
+  exact ⟨dP, hden_sub, htruth_sub⟩
+
 /-- Specialize the represented collection-body bridge to the tuple projections
 emitted by the encoder.  This packages the routine length, freshness, and
 denotation facts for `toDestPair`, leaving callers with the semantic data for
