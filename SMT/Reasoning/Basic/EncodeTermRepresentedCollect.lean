@@ -500,3 +500,65 @@ theorem B.denote_bool_true_iff_forall.{u}
     exact htrue
   · intro h
     exact h P BType.bool hP hden
+
+/-- Convert a pointwise Boolean body bridge into the extensional bridge used
+by `retract_lamVal_eq_collect`.  The pointwise form is what the
+representation-aware predicate totality theorem produces; the target form
+quantifies over all dependent presentations of the source Boolean result. -/
+theorem collect_hbridge_of_pointwise_bool.{u}
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    {Dval : ZFSet.{u}}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    {Delta : SMT.RenamingContext.Context.{u}} {z : SMT.𝒱}
+    {ite_body : SMT.Term}
+    (tau_hasArity : tau.hasArity vs.length)
+    (hcov_ite_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV (Function.update Delta z (some W))
+        ite_body)
+    (pointwise : ∀ (x : ZFSet.{u}) (hx_mem : x ∈ ⟦tau⟧ᶻ)
+      (_hx_D : x ∈ Dval),
+      let Wx : SMT.Dom :=
+        ⟨(ZFSet.fapply (BType.canonicalIsoSMTType tau).1
+          (ZFSet.is_func_is_pfunc (BType.canonicalIsoSMTType tau).2.1)
+          ⟨x, by rwa [ZFSet.is_func_dom_eq
+            (BType.canonicalIsoSMTType tau).2.1]⟩).1,
+          tau.toSMTType, ZFSet.fapply_mem_range _ _⟩
+      let x_fin : Fin vs.length → B.Dom := fun i =>
+        ⟨x.get vs.length i, ⟨tau.get vs.length i,
+          get_mem_type_of_isTuple
+            (hasArity_of_mem_toZFSet tau_hasArity hx_mem)
+            tau_hasArity hx_mem⟩⟩
+      ∀ body_val : SMT.Dom,
+        ⟦ite_body.abstract (Function.update Delta z (some Wx))
+          (hcov_ite_upd Wx)⟧ˢ = some body_val →
+        ∃ (Pval : ZFSet.{u}) (hPval : Pval ∈ ⟦BType.bool⟧ᶻ),
+          ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+            (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ =
+            some (⟨Pval, BType.bool, hPval⟩ : B.Dom) ∧
+          (body_val.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue)) :
+    ∀ (x : ZFSet.{u}) (hx_mem : x ∈ ⟦tau⟧ᶻ)
+      (_hx_D : x ∈ Dval),
+      let Wx : SMT.Dom :=
+        ⟨(ZFSet.fapply (BType.canonicalIsoSMTType tau).1
+          (ZFSet.is_func_is_pfunc (BType.canonicalIsoSMTType tau).2.1)
+          ⟨x, by rwa [ZFSet.is_func_dom_eq
+            (BType.canonicalIsoSMTType tau).2.1]⟩).1,
+          tau.toSMTType, ZFSet.fapply_mem_range _ _⟩
+      let x_fin : Fin vs.length → B.Dom := fun i =>
+        ⟨x.get vs.length i, ⟨tau.get vs.length i,
+          get_mem_type_of_isTuple
+            (hasArity_of_mem_toZFSet tau_hasArity hx_mem)
+            tau_hasArity hx_mem⟩⟩
+      ∀ body_val : SMT.Dom,
+        ⟦ite_body.abstract (Function.update Delta z (some Wx))
+          (hcov_ite_upd Wx)⟧ˢ = some body_val →
+        (body_val.fst = ZFSet.zftrue ↔
+          ∀ (Px : ZFSet.{u}) (P_ty : BType) (hP_val : Px ∈ ⟦P_ty⟧ᶻ),
+            ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+              (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ =
+              some (⟨Px, P_ty, hP_val⟩ : B.Dom) → Px = ZFSet.zftrue) := by
+  intro x hx_mem _hx_D Wx x_fin body_val hbody
+  obtain ⟨Pval, hPval, hden, htruth⟩ :=
+    pointwise x hx_mem _hx_D body_val hbody
+  exact htruth.trans (B.denote_bool_true_iff_forall hden)
