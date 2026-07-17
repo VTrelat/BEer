@@ -275,6 +275,54 @@ theorem B.denote_collect_default_predicate_exists.{u}
   subst P_ty
   exact ⟨XiP_fv, Pval, hPval, hden⟩
 
+/-- The projections introduced by the set-valued collection encoder preserve
+the representation relation componentwise.  This packages the dependent
+tuple bookkeeping needed when the predicate totality theorem is run under a
+particular collection element. -/
+theorem toDestPair_denote_represented_components.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ [])
+    {tau : BType} (tau_hasArity : tau.hasArity vs.length)
+    {x : ZFSet.{u}} (hx_mem : x ∈ ⟦tau⟧ᶻ)
+    {z : SMT.𝒱} {Delta : SMT.RenamingContext.Context.{u}}
+    {Wx : SMT.Dom.{u}}
+    (hcov_z : SMT.RenamingContext.CoversFV Delta (.var z))
+    (hden_z : ⟦(SMT.Term.var z).abstract Delta hcov_z⟧ˢ = some Wx)
+    (hWx_type : Wx.snd.fst = tau.toSMTType)
+    (hWx_mem : Wx.fst ∈ ⟦tau.toSMTType⟧ᶻ)
+    (hWx_retract : retract tau Wx.fst = x) :
+    ∀ (i : ℕ) (hi_vs : i < vs.length)
+      (hi_pair : i < (toDestPair vs (.var z)).length),
+      ∃ (hcov : SMT.RenamingContext.CoversFV Delta
+          ((toDestPair vs (.var z))[i]'hi_pair))
+        (Di : SMT.Dom.{u}),
+        ⟦((toDestPair vs (.var z))[i]'hi_pair).abstract Delta hcov⟧ˢ =
+          some Di ∧
+        RDomCastSupported
+          (⟨x.get vs.length ⟨i, hi_vs⟩,
+            tau.get vs.length ⟨i, hi_vs⟩,
+            get_mem_type_of_isTuple
+              (hasArity_of_mem_toZFSet tau_hasArity hx_mem)
+              tau_hasArity hx_mem⟩ : B.Dom)
+          Di := by
+  intro i hi_vs hi_pair
+  obtain ⟨hcov_i, Di, hden_i, hfst_i, htype_i⟩ :=
+    toDestPair_denote_gen tau vs (.var z) Wx Delta [] [] vs_nemp
+      hcov_z hden_z hWx_type hWx_mem tau_hasArity rfl (by simp)
+      i hi_vs hi_pair
+  refine ⟨hcov_i, Di, hden_i, ?_⟩
+  apply RDom.toRDomCastSupported
+  rw [RDom]
+  refine ⟨htype_i, ?_⟩
+  calc
+    retract (tau.get vs.length ⟨i, hi_vs⟩) Di.fst =
+        retract (tau.get vs.length ⟨i, hi_vs⟩)
+          (Wx.fst.get vs.length ⟨i, hi_vs⟩) := by rw [hfst_i]
+    _ = (retract tau Wx.fst).get vs.length ⟨i, hi_vs⟩ := by
+      rw [retract_get_comm
+        (hasArity_of_mem_toSMTZFSet tau_hasArity hWx_mem)
+        tau_hasArity hWx_mem]
+    _ = x.get vs.length ⟨i, hi_vs⟩ := by rw [hWx_retract]
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
