@@ -612,6 +612,115 @@ theorem collect_ite_truth_of_total_body_source_fv.{u}
     hts_den hcov_sub hcov_upd hcov_P hvalues hPenc_fv hctx_source
     hbody_ext hden_P hrel_P hden_D hden_body hD_type hD_true
 
+/-- Specialize the represented collection-body bridge to the tuple projections
+emitted by the encoder.  This packages the routine length, freshness, and
+denotation facts for `toDestPair`, leaving callers with the semantic data for
+the dynamically chosen binder values. -/
+theorem collect_ite_truth_of_total_body_toDestPair.{u}
+    {Dapp Penc body : SMT.Term}
+    {vs : List SMT.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {z : SMT.𝒱}
+    {Delta ThetaBase : SMT.RenamingContext.Context.{u}}
+    {ss : Fin vs.length → SMT.Dom.{u}}
+    (hbody_def : body = Dapp.ite
+      (SMT.substList vs (toDestPair vs (.var z)) Penc) (.bool false))
+    (hcov_body : SMT.RenamingContext.CoversFV Delta body)
+    (hcov_Dapp : SMT.RenamingContext.CoversFV Delta Dapp)
+    (hcov_sub : SMT.RenamingContext.CoversFV Delta
+      (SMT.substList vs (toDestPair vs (.var z)) Penc))
+    (hcov_upd : SMT.RenamingContext.CoversFV
+      (Function.updates Delta vs ((List.ofFn ss).map Option.some)) Penc)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc)
+    (hz_not_vs : z ∉ vs)
+    (hcomponents : ∀ i : Fin vs.length,
+      ∃ hcov : SMT.RenamingContext.CoversFV Delta
+          ((toDestPair vs (.var z))[i.val]'(by
+            rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+            exact i.isLt)),
+        ⟦((toDestPair vs (.var z))[i.val]'(by
+          rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+          exact i.isLt)).abstract Delta hcov⟧ˢ = some (ss i))
+    {Pterm : B.Term} {E : B.Env} {Lambda Gamma : SMT.TypeContext}
+    {sigma : SMTType} {used : List SMT.𝒱}
+    (P_total : EncodeTermRepTotal.{u}
+      Pterm E BType.bool Lambda Penc sigma Gamma used)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv Pterm, (Xi v).isSome = true)
+    (related : RValuationCastSupportedOnFV Xi ThetaBase Pterm)
+    (wf : B.RenWF E.context Xi)
+    (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
+    (source_respects : B.RenamingContext.RespectsTypeContextOnFV
+      ThetaBase Lambda Pterm)
+    (ThetaBase_dom : ∀ v, ThetaBase v ≠ none → v ∈ Lambda)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦BType.bool⟧ᶻ}
+    (den_P : ⟦Pterm.abstract Xi Xi_fv⟧ᴮ =
+      some (⟨Pval, BType.bool, hPval⟩ : B.Dom))
+    (bound_values : ∀ (i : ℕ) (hi_x : i < vs.length)
+      (_hi_d : i < (List.ofFn ss).length),
+      ThetaBase vs[i] = some (ss ⟨i, hi_x⟩))
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars Pterm)
+    (hctx_source : ∀ v ∈ B.Term.vars Pterm, v ∉ vs →
+      Delta v = ThetaBase v)
+    {dD dBody : SMT.Dom.{u}}
+    (hden_D : ⟦Dapp.abstract Delta hcov_Dapp⟧ˢ = some dD)
+    (hden_body : ⟦body.abstract Delta hcov_body⟧ˢ = some dBody)
+    (hD_type : dD.snd.fst = SMTType.bool)
+    (hD_true : dD.fst = ZFSet.zftrue) :
+    dBody.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue := by
+  have hlen_xt : vs.length = (toDestPair vs (.var z)).length := by
+    rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+    simp
+  have hlen_xd : vs.length = (List.ofFn ss).length := by simp
+  have hbound_values : ∀ (i : ℕ) (hi_x : i < vs.length)
+      (hi_d : i < (List.ofFn ss).length),
+      ThetaBase vs[i] = some (List.ofFn ss)[i] := by
+    intro i hi_x hi_d
+    simpa only [List.getElem_ofFn, Fin.getElem_fin] using
+      bound_values i hi_x hi_d
+  have hts_fv_not_bv : ∀ t ∈ toDestPair vs (.var z),
+      ∀ w ∈ SMT.fv t, w ∉ SMT.bv Penc := by
+    intro t ht w hw
+    rw [SMT_fv_toDestPair_subset ht hw]
+    exact hz_not_bv
+  have hts_fv_disj_xs : ∀ t ∈ toDestPair vs (.var z),
+      ∀ w ∈ SMT.fv t, w ∉ vs := by
+    intro t ht w hw
+    rw [SMT_fv_toDestPair_subset ht hw]
+    exact hz_not_vs
+  have hts_den : ∀ (i : ℕ) (_hi_x : i < vs.length)
+      (hi_t : i < (toDestPair vs (.var z)).length)
+      (hi_d : i < (List.ofFn ss).length),
+      ∃ (ht_cov : SMT.RenamingContext.CoversFV Delta
+          (toDestPair vs (.var z))[i]),
+        ⟦(toDestPair vs (.var z))[i].abstract Delta ht_cov⟧ˢ =
+          some (List.ofFn ss)[i] := by
+    intro i hi_x _hi_t _hi_d
+    let j : Fin vs.length := ⟨i, hi_x⟩
+    obtain ⟨hcov, hden⟩ := hcomponents j
+    refine ⟨hcov, ?_⟩
+    simpa [j] using hden
+  exact collect_ite_truth_of_total_body_source_fv
+    (xs := vs) (ts := toDestPair vs (.var z)) (Ds := List.ofFn ss)
+    (Delta := Delta) (ThetaBase := ThetaBase)
+    (Pterm := Pterm) (E := E) (Lambda := Lambda) (Gamma := Gamma)
+    (sigma := sigma) (used := used) (P_total := P_total)
+    (Xi := Xi) (Xi_fv := Xi_fv) (related := related) (wf := wf)
+    (ThetaBase_none := ThetaBase_none)
+    (source_respects := source_respects) (ThetaBase_dom := ThetaBase_dom)
+    (Pval := Pval) (hPval := hPval) (den_P := den_P)
+    (bound_values := hbound_values) (hPenc_fv := hPenc_fv)
+    (hctx_source := hctx_source) (dD := dD) (dBody := dBody)
+    (hden_D := hden_D) (hden_body := hden_body)
+    (hD_type := hD_type) (hD_true := hD_true)
+    (hbody_def := hbody_def) (hcov_body := hcov_body)
+    (hcov_Dapp := hcov_Dapp) (hcov_sub := hcov_sub)
+    (hcov_upd := hcov_upd) (hlen_xt := hlen_xt) (hlen_xd := hlen_xd)
+    (hnodup := vs_nodup) (hxs_not_bv := hvs_not_bv)
+    (hts_bv_nil := toDestPair_bv_nil) (hts_fv_not_bv := hts_fv_not_bv)
+    (hts_not_none := toDestPair_ne_none) (hts_fv_disj_xs := hts_fv_disj_xs)
+    (hts_den := hts_den)
+
 /-- A fixed Boolean B denotation is equivalent to the extensional truth
 form required by the collection retraction lemma.  The latter quantifies over
 all dependent-pair presentations of the same `Option B.Dom`; injectivity of
