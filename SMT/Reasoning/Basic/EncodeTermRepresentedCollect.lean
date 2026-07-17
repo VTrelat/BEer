@@ -323,6 +323,91 @@ theorem toDestPair_denote_represented_components.{u}
         tau_hasArity hWx_mem]
     _ = x.get vs.length ⟨i, hi_vs⟩ := by rw [hWx_retract]
 
+open Classical in
+/-- Install the canonical projections of a collection element as a
+representation-aware binder valuation.  Outside the binder names the
+ambient valuation is unchanged; at the binder names each projection is
+related to its source component by the preceding lemma. -/
+theorem represented_toDestPair_bound_context.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {tau : BType} (tau_hasArity : tau.hasArity vs.length)
+    {x : ZFSet.{u}} (hx_mem : x ∈ ⟦tau⟧ᶻ)
+    {z : SMT.𝒱} {Delta : SMT.RenamingContext.Context.{u}}
+    {Wx : SMT.Dom.{u}}
+    (hcov_z : SMT.RenamingContext.CoversFV Delta (.var z))
+    (hden_z : ⟦(SMT.Term.var z).abstract Delta hcov_z⟧ˢ = some Wx)
+    (hWx_type : Wx.snd.fst = tau.toSMTType)
+    (hWx_mem : Wx.fst ∈ ⟦tau.toSMTType⟧ᶻ)
+    (hWx_retract : retract tau Wx.fst = x)
+    {Xi : B.RenamingContext.Context.{u}}
+    {Theta : SMT.RenamingContext.Context.{u}} {P : B.Term}
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs →
+      match Xi v, Theta v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False) :
+    ∃ ss : Fin vs.length → SMT.Dom.{u},
+      (∀ i,
+        ∃ hcov : SMT.RenamingContext.CoversFV Delta
+            ((toDestPair vs (.var z))[i.val]'(by
+              rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+              exact i.isLt)),
+          ⟦((toDestPair vs (.var z))[i.val]'(by
+              rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+              exact i.isLt)).abstract Delta hcov⟧ˢ = some (ss i) ∧
+          RDomCastSupported
+            (⟨x.get vs.length i, tau.get vs.length i,
+              get_mem_type_of_isTuple
+                (hasArity_of_mem_toZFSet tau_hasArity hx_mem)
+                tau_hasArity hx_mem⟩ : B.Dom)
+            (ss i)) ∧
+      RValuationCastSupportedOnFV
+        (Function.updates Xi vs
+          (List.ofFn fun i => some
+            (⟨x.get vs.length i, tau.get vs.length i,
+              get_mem_type_of_isTuple
+                (hasArity_of_mem_toZFSet tau_hasArity hx_mem)
+                tau_hasArity hx_mem⟩ : B.Dom)))
+        (Function.updates Theta vs
+          (List.ofFn fun i => some (ss i))) P := by
+  let x_fin : Fin vs.length → B.Dom.{u} := fun i =>
+    ⟨x.get vs.length i, tau.get vs.length i,
+      get_mem_type_of_isTuple
+        (hasArity_of_mem_toZFSet tau_hasArity hx_mem)
+        tau_hasArity hx_mem⟩
+  have hcomponent : ∀ i : Fin vs.length,
+      ∃ (hcov : SMT.RenamingContext.CoversFV Delta
+          ((toDestPair vs (.var z))[i.val]'(by
+            rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+            exact i.isLt)))
+        (Di : SMT.Dom.{u}),
+        ⟦((toDestPair vs (.var z))[i.val]'(by
+            rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+            exact i.isLt)).abstract Delta hcov⟧ˢ = some Di ∧
+        RDomCastSupported (x_fin i) Di := by
+    intro i
+    simpa [x_fin] using
+      (toDestPair_denote_represented_components vs_nemp tau_hasArity
+        hx_mem hcov_z hden_z hWx_type hWx_mem hWx_retract
+        i.val i.isLt (by
+          rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+          exact i.isLt))
+  let ss : Fin vs.length → SMT.Dom.{u} := fun i =>
+    Classical.choose (Classical.choose_spec (hcomponent i))
+  refine ⟨ss, ?_, ?_⟩
+  · intro i
+    let hcov := Classical.choose (hcomponent i)
+    obtain ⟨hden, hrel⟩ :=
+      Classical.choose_spec (Classical.choose_spec (hcomponent i))
+    refine ⟨hcov, ?_, ?_⟩
+    · simpa [ss] using hden
+    · simpa [ss, x_fin] using hrel
+  · simpa [x_fin] using
+      (RValuationCastSupportedOnFV.updates vs_nodup x_fin ss ambient
+        (fun i => by
+          obtain ⟨hden, hrel⟩ :=
+            Classical.choose_spec (Classical.choose_spec (hcomponent i))
+          simpa [ss] using hrel))
+
 /-- If the collection-domain application is true, the generated `ite` has the
 same truth value as its substituted predicate branch. -/
 theorem collect_ite_truth_of_true_domain.{u}
