@@ -27,8 +27,7 @@ def castApp : Term × SMTType → Term × SMTType → Encoder (Term × SMTType)
     if h : τ ⊑ ξ then
       -- loosen f
       let ⟨«f!», f!_spec⟩ ← loosenAux_prf "app!" (β := (.fun (.pair ξ σ) .bool)) (.chpred (.pair h.toCastPath (castPath.reflexive σ))) f
-      declareConst «f!» (.fun (.pair ξ σ) .bool)
-      addSpec «f!» f!_spec
+      declareConstWithSpec «f!» (.fun (.pair ξ σ) .bool) f!_spec
 
       -- cast to function
       let f!! ← freshVar (ξ.fun (.option σ)) "app!!"
@@ -38,13 +37,15 @@ def castApp : Term × SMTType → Term × SMTType → Encoder (Term × SMTType)
       let f!!_spec : Term := .forall [u, v] [τ, σ] (.eq
         (.app (.var «f!») (.pair (.var u) (.var v)))
         (.eq (.app (.var f!!) (.var u)) (.some (.var v))))
+      -- `u` and `v` occur only below the universal binder.
+      eraseFromContext u
+      eraseFromContext v
       addSpec f!! f!!_spec
       return (.the (.app (.var «f!!») x), σ)
     else if h : ξ ⊑ τ then
       -- loosen x
       let ⟨x!, x!_spec⟩ ← loosenAux_prf "app!" h.toCastPath x
-      declareConst x! τ
-      addSpec x! x!_spec
+      declareConstWithSpec x! τ x!_spec
 
       -- cast to function
       let «f!» ← freshVar (τ.fun (.option σ)) "app!"
@@ -54,31 +55,30 @@ def castApp : Term × SMTType → Term × SMTType → Encoder (Term × SMTType)
       let f!_spec : Term := .forall [u, v] [τ, σ] (.eq
         (.app f (.pair (.var u) (.var v)))
         (.eq (.app (.var «f!») (.var u)) (.some (.var v))))
+      -- `u` and `v` occur only below the universal binder.
+      eraseFromContext u
+      eraseFromContext v
       addSpec «f!» f!_spec
       return (.the (.app (.var «f!») (.var x!)), σ)
     else throw s!"encodeTerm:app: Failed to unify {τ} with {ξ}"
   | (f, .fun α .bool), (x, α') => do
     if h : α ⊑ α' then
       let ⟨«f!», f!_spec⟩ ← loosenAux_prf "app!" (castPath.chpred h.toCastPath) f
-      declareConst «f!» (α'.fun .bool)
-      addSpec «f!» f!_spec
+      declareConstWithSpec «f!» (α'.fun .bool) f!_spec
       return (.app (.var «f!») x, .bool)
     else if h : α' ⊑ α then
       let ⟨x!, x!_spec⟩ ← loosenAux_prf "app!" (castPath.chpred h.toCastPath) x
-      declareConst x! α
-      addSpec x! x!_spec
+      declareConstWithSpec x! α x!_spec
       return (.app f (.var x!), .bool)
     else throw s!"encodeTerm:app: Failed to unify {α} with {α'}"
   | (f, .fun τ (.option σ)), (x, ξ) => do
     if h : τ ⊑ ξ then
       let ⟨«f!», f!_spec⟩ ← loosenAux_prf "app!" (β := ξ.fun (.option σ)) (castPath.fun (by nofun) h.toCastPath (castPath.reflexive σ.option)) f
-      declareConst «f!» (ξ.fun (.option σ))
-      addSpec «f!» f!_spec
+      declareConstWithSpec «f!» (ξ.fun (.option σ)) f!_spec
       return (.the (.app (.var «f!») x), σ)
     else if h : ξ ⊑ τ then
       let ⟨x!, x!_spec⟩ ← loosenAux_prf "app!" h.toCastPath x
-      declareConst x! τ
-      addSpec x! x!_spec
+      declareConstWithSpec x! τ x!_spec
       return (.the (.app f (.var x!)), σ)
     else throw s!"encodeTerm:app: Failed to unify {τ} with {ξ}"
   | (_, τ), _ => throw s!"encodeTerm:app: Expected a function, got {τ}"

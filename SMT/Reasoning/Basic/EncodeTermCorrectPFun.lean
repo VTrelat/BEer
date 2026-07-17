@@ -32,7 +32,7 @@ private theorem mem_retract_set_iff_app_canonical_eq_zftrue
     simpa using h
 
 -- Helper: app of a characteristic predicate applied to a pair of variables denotes as .bool
-private theorem denote_app_var_pair_var_var.{u}
+theorem denote_app_var_pair_var_var.{u}
     {α β : SMTType} {WR Wx Wy : SMT.Dom.{u}}
     (hWR_ty : WR.2.1 = SMTType.fun (SMTType.pair α β) .bool)
     (hWx_ty : Wx.2.1 = α) (hWx_mem : Wx.1 ∈ ⟦α⟧ᶻ)
@@ -177,7 +177,7 @@ private theorem pair_hasArity_get_mem'
     · have hi' : i = ⟨1, by simp⟩ := Fin.ext hi; rw [hi']; simpa [ZFSet.get] using hx₂
 
 set_option maxHeartbeats 8000000 in
-private theorem funBinaryForallEqZftrue.{u}
+theorem funBinaryForallEqZftrue.{u}
     {Δctx : SMT.RenamingContext.Context.{u}} {a : SMT.Term} {v₁ v₂ : SMT.𝒱} {τ₁ τ₂ : SMTType}
     (hφ_forall : RenamingContext.CoversFV Δctx (SMT.Term.forall [v₁, v₂] [τ₁, τ₂] a))
     (hgo_cov : ∀ x ∈ SMT.fv a, x ∉ [v₁, v₂] → (Δctx x).isSome = true)
@@ -305,7 +305,7 @@ private theorem funBinaryForallEqZftrue.{u}
 -- Inversion of funBinaryForallEqZftrue: if the forall denotes to zftrue,
 -- then each body value is zftrue.
 set_option maxHeartbeats 8000000 in
-private theorem funBinaryForallTrueAt.{u}
+theorem funBinaryForallTrueAt.{u}
     {Δctx : SMT.RenamingContext.Context.{u}} {a : SMT.Term} {v₁ v₂ : SMT.𝒱} {τ₁ τ₂ : SMTType}
     (hφ_forall : RenamingContext.CoversFV Δctx (SMT.Term.forall [v₁, v₂] [τ₁, τ₂] a))
     (hgo_cov : ∀ x ∈ SMT.fv a, x ∉ [v₁, v₂] → (Δctx x).isSome = true)

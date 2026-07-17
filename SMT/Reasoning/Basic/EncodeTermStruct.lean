@@ -61,6 +61,27 @@ private theorem castUnion_state.erase_insert_self {a : SMT.𝒱} {τ : SMTType}
   rw [AList.entries_insert_of_notMem ha]
   exact List.kerase_cons_eq rfl
 
+private theorem castApp_state.erase_insert_self {a : SMT.𝒱} {τ : SMTType}
+    {s : SMT.TypeContext} (ha : a ∉ s) : (s.insert a τ).erase a = s := by
+  apply AList.ext
+  show List.kerase a (AList.insert a τ s).entries = s.entries
+  rw [AList.entries_insert_of_notMem ha]
+  exact List.kerase_cons_eq rfl
+
+private theorem castApp_state.erase_insert_ne {a b : SMT.𝒱} {τ : SMTType}
+    {s : SMT.TypeContext} (hab : a ≠ b) :
+    (s.insert b τ).erase a = (s.erase a).insert b τ := by
+  apply AList.ext
+  show List.kerase a (AList.insert b τ s).entries
+      = (AList.insert b τ (s.erase a)).entries
+  rw [AList.entries_insert, AList.entries_insert]
+  show List.kerase a (⟨b, τ⟩ :: List.kerase b s.entries)
+      = ⟨b, τ⟩ :: List.kerase b (s.erase a).entries
+  rw [List.kerase_cons_ne (by simpa using hab)]
+  show ⟨b, τ⟩ :: List.kerase a (List.kerase b s.entries)
+      = ⟨b, τ⟩ :: List.kerase b (List.kerase a s.entries)
+  rw [List.kerase_kerase]
+
 /-- Any computation `m` followed by an unconditional `throw` satisfies every
 `mayThrow` postcondition: the overall computation always throws, and `mayThrow`
 imposes no obligation on thrown outcomes. Used to discharge the (statically
@@ -1885,6 +1906,8 @@ theorem castApp_state
     mpure pre
     obtain ⟨fv1_le, fv1_Λ_sub, fv1_fresh, fv1_not_used, fv1_used_sub,
       fv1_keys_sub, fv1_preserves, fv1_fv_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -1928,6 +1951,8 @@ theorem castApp_state
     mpure pre
     obtain ⟨xv1_le, xv1_Λ_sub, xv1_fresh, xv1_not_used, xv1_used_sub,
       xv1_keys_sub, xv1_preserves, xv1_fv_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -1971,6 +1996,8 @@ theorem castApp_state
     mpure pre
     obtain ⟨fv1_le, fv1_Λ_sub, fv1_fresh, fv1_not_used, fv1_used_sub,
       fv1_keys_sub, fv1_preserves, fv1_fv_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2014,6 +2041,8 @@ theorem castApp_state
     mpure pre
     obtain ⟨xv1_le, xv1_Λ_sub, xv1_fresh, xv1_not_used, xv1_used_sub,
       xv1_keys_sub, xv1_preserves, xv1_fv_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2057,6 +2086,8 @@ theorem castApp_state
     mpure pre
     obtain ⟨fv1_le, fv1_Λ_sub, fv1_fresh, fv1_not_used, fv1_used_sub,
       fv1_keys_sub, fv1_preserves, fv1_fv_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2096,84 +2127,83 @@ theorem castApp_state
     rename_i v_var
     mpure pre4
     obtain ⟨St₄_types_eq, v_fresh, St₄_fvc, St₄_used_eq, v_not_used⟩ := pre4
+    mspec SMT.eraseFromContext_spec (v := u_var) (Γ := St₄.types)
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨St5_types_eq, St5_fvc, St5_used_eq⟩ := pre5
+    mspec SMT.eraseFromContext_spec (v := v_var) (Γ := St5.types)
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨St6_types_eq, St6_fvc, St6_used_eq⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨_, _, hs2_fvc, hs2_used, hs2_types⟩ := pres2
     mspec Std.Do.Spec.pure
     mpure_intro
-    -- Membership of the freshly-declared `ff` in each state's types.
+    have u_ne_v : u_var ≠ v_var := by
+      intro h
+      apply v_fresh
+      rw [St₃_types_eq, AList.mem_insert]
+      exact Or.inl h.symm
+    have v_fresh_St₂ : v_var ∉ St₂.types := by
+      intro hv
+      apply v_fresh
+      rw [St₃_types_eq, AList.mem_insert]
+      exact Or.inr hv
+    have St6_types_base : St6.types = St₂.types := by
+      rw [St6_types_eq, St5_types_eq, St₄_types_eq, St₃_types_eq,
+        castApp_state.erase_insert_ne u_ne_v,
+        castApp_state.erase_insert_self u_fresh,
+        castApp_state.erase_insert_self v_fresh_St₂]
     have ff_in_St₂ : ff ∈ AList.keys St₂.types := by
       rw [St₂_types_eq]
       exact AList.mem_keys.mp (AList.mem_insert _ |>.mpr (Or.inl rfl))
-    have St₂_into_St₃ : AList.keys St₂.types ⊆ AList.keys St₃.types := by
+    have St₁_into_St₂ : AList.keys St₁.types ⊆ AList.keys St₂.types := by
       intro w hw
-      rw [← AList.mem_keys, St₃_types_eq, AList.mem_insert]
+      rw [← AList.mem_keys, St₂_types_eq, AList.mem_insert]
       exact Or.inr (AList.mem_keys.mp hw)
-    have St₃_into_St₄ : AList.keys St₃.types ⊆ AList.keys St₄.types := by
-      intro w hw
-      rw [← AList.mem_keys, St₄_types_eq, AList.mem_insert]
-      exact Or.inr (AList.mem_keys.mp hw)
-    have ff_in_St₄ : ff ∈ AList.keys St₄.types :=
-      St₃_into_St₄ (St₂_into_St₃ ff_in_St₂)
     and_intros
-    · rw [hs2_fvc, St₄_fvc, St₃_fvc, St₂_fvc]
+    · rw [hs2_fvc, St6_fvc, St5_fvc, St₄_fvc, St₃_fvc, St₂_fvc]
       exact le_trans fv1_le (Nat.le_succ_of_le (Nat.le_succ_of_le (Nat.le_succ _)))
-    · rw [hs2_types]
+    · rw [hs2_types, St6_types_base]
       have h12 : St₁.types ⊆ St₂.types :=
         St₂_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem ff_fresh
-      have h23 : St₂.types ⊆ St₃.types :=
-        St₃_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem u_fresh
-      have h34 : St₃.types ⊆ St₄.types :=
-        St₄_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem v_fresh
       exact AList.subset_trans
         (SMT.TypeContext.entries_subset_insert_of_notMem fv1_fresh)
-        (AList.subset_trans fv1_Λ_sub
-          (AList.subset_trans h12 (AList.subset_trans h23 h34)))
-    · rw [hs2_used, St₄_used_eq, St₃_used_eq, St₂_used_eq]
+        (AList.subset_trans fv1_Λ_sub h12)
+    · rw [hs2_used, St6_used_eq, St5_used_eq, St₄_used_eq, St₃_used_eq, St₂_used_eq]
       intro w hw
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
         (List.mem_cons_of_mem _ (fv1_used_sub hw)))
-    · rw [hs2_types, hs2_used, St₄_types_eq, St₄_used_eq, St₃_types_eq, St₃_used_eq,
-        St₂_types_eq, St₂_used_eq]
-      exact keys_insert_subset_cons (keys_insert_subset_cons
-        (keys_insert_subset_cons fv1_keys_sub))
-    · rw [hs2_types]
+    · rw [hs2_types, St6_types_base, hs2_used, St6_used_eq, St5_used_eq,
+        St₄_used_eq, St₃_used_eq, St₂_types_eq, St₂_used_eq]
+      intro w hw
+      exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+        (keys_insert_subset_cons fv1_keys_sub hw))
+    · rw [hs2_types, St6_types_base]
       intro w hw
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
       rcases hw with hwff | hwx
-      · exact List.mem_union_iff.mpr (Or.inl (hwff ▸ ff_in_St₄))
+      · exact List.mem_union_iff.mpr (Or.inl (hwff ▸ ff_in_St₂))
       · rcases List.mem_union_iff.mp (hx_fv hwx) with hΛ | hX
         · have hx_in_St₁ : w ∈ AList.keys St₁.types :=
             AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub
               (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))
-          have hx_in_St₂ : w ∈ AList.keys St₂.types := by
-            rw [← AList.mem_keys, St₂_types_eq, AList.mem_insert]
-            exact Or.inr (AList.mem_keys.mp hx_in_St₁)
-          exact List.mem_union_iff.mpr (Or.inl (St₃_into_St₄ (St₂_into_St₃ hx_in_St₂)))
+          exact List.mem_union_iff.mpr (Or.inl (St₁_into_St₂ hx_in_St₁))
         · exact List.mem_union_iff.mpr (Or.inr hX)
-    · rw [hs2_types]
+    · rw [hs2_types, St6_types_base]
       intro w hw hΛ
       have hw_St₁ : w ∉ St₁.types := fv1_preserves w hw hΛ
-      have hw_St₂used : w ∈ St₂.env.usedVars :=
-        St₂_used_eq ▸ List.mem_cons_of_mem ff (fv1_used_sub hw)
-      have hw_St₃used : w ∈ St₃.env.usedVars :=
-        St₃_used_eq ▸ List.mem_cons_of_mem u_var hw_St₂used
       have hw_ne_ff : w ≠ ff := fun h => ff_not_used (h ▸ fv1_used_sub hw)
-      have hw_ne_u : w ≠ u_var := fun h => u_not_used (h ▸ hw_St₂used)
-      have hw_ne_v : w ≠ v_var := fun h => v_not_used (h ▸ hw_St₃used)
       intro hw_in
-      rw [St₄_types_eq, AList.mem_insert] at hw_in
+      rw [St₂_types_eq, AList.mem_insert] at hw_in
       rcases hw_in with rfl | hw_in
-      · exact hw_ne_v rfl
-      · rw [St₃_types_eq, AList.mem_insert] at hw_in
-        rcases hw_in with rfl | hw_in
-        · exact hw_ne_u rfl
-        · rw [St₂_types_eq, AList.mem_insert] at hw_in
-          rcases hw_in with rfl | hw_in
-          · exact hw_ne_ff rfl
-          · exact hw_St₁ hw_in
+      · exact hw_ne_ff rfl
+      · exact hw_St₁ hw_in
   case vc2.h_1.isFalse.isTrue =>
     rename_i hxeq hfeq _ _ St hpre
     obtain ⟨rfl, rfl, sub, rfl, hf_fv, hx_fv⟩ := hpre
@@ -2187,6 +2217,8 @@ theorem castApp_state
     mpure pre
     obtain ⟨fv1_le, fv1_Λ_sub, fv1_fresh, fv1_not_used, fv1_used_sub,
       fv1_keys_sub, fv1_preserves, fv1_fv_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2226,13 +2258,38 @@ theorem castApp_state
     rename_i v_var
     mpure pre4
     obtain ⟨St₄_types_eq, v_fresh, St₄_fvc, St₄_used_eq, v_not_used⟩ := pre4
+    mspec SMT.eraseFromContext_spec (v := u_var) (Γ := St₄.types)
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨St5_types_eq, St5_fvc, St5_used_eq⟩ := pre5
+    mspec SMT.eraseFromContext_spec (v := v_var) (Γ := St5.types)
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨St6_types_eq, St6_fvc, St6_used_eq⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨_, _, hs2_fvc, hs2_used, hs2_types⟩ := pres2
     mspec Std.Do.Spec.pure
     mpure_intro
+    have u_ne_v : u_var ≠ v_var := by
+      intro h
+      apply v_fresh
+      rw [St₃_types_eq, AList.mem_insert]
+      exact Or.inl h.symm
+    have v_fresh_St₂ : v_var ∉ St₂.types := by
+      intro hv
+      apply v_fresh
+      rw [St₃_types_eq, AList.mem_insert]
+      exact Or.inr hv
+    have St6_types_base : St6.types = St₂.types := by
+      rw [St6_types_eq, St5_types_eq, St₄_types_eq, St₃_types_eq,
+        castApp_state.erase_insert_ne u_ne_v,
+        castApp_state.erase_insert_self u_fresh,
+        castApp_state.erase_insert_self v_fresh_St₂]
     have fv1_in_St₁ : fv1 ∈ AList.keys St₁.types :=
       AList.mem_keys.mp (AList.mem_of_subset fv1_Λ_sub (AList.mem_insert _ |>.mpr (Or.inl rfl)))
     have ff_in_St₂ : ff ∈ AList.keys St₂.types := by
@@ -2242,67 +2299,40 @@ theorem castApp_state
       intro w hw
       rw [← AList.mem_keys, St₂_types_eq, AList.mem_insert]
       exact Or.inr (AList.mem_keys.mp hw)
-    have St₂_into_St₃ : AList.keys St₂.types ⊆ AList.keys St₃.types := by
-      intro w hw
-      rw [← AList.mem_keys, St₃_types_eq, AList.mem_insert]
-      exact Or.inr (AList.mem_keys.mp hw)
-    have St₃_into_St₄ : AList.keys St₃.types ⊆ AList.keys St₄.types := by
-      intro w hw
-      rw [← AList.mem_keys, St₄_types_eq, AList.mem_insert]
-      exact Or.inr (AList.mem_keys.mp hw)
-    have fv1_in_St₄ : fv1 ∈ AList.keys St₄.types :=
-      St₃_into_St₄ (St₂_into_St₃ (St₁_into_St₂ fv1_in_St₁))
-    have ff_in_St₄ : ff ∈ AList.keys St₄.types :=
-      St₃_into_St₄ (St₂_into_St₃ ff_in_St₂)
+    have fv1_in_St₂ : fv1 ∈ AList.keys St₂.types := St₁_into_St₂ fv1_in_St₁
     and_intros
-    · rw [hs2_fvc, St₄_fvc, St₃_fvc, St₂_fvc]
+    · rw [hs2_fvc, St6_fvc, St5_fvc, St₄_fvc, St₃_fvc, St₂_fvc]
       exact le_trans fv1_le (Nat.le_succ_of_le (Nat.le_succ_of_le (Nat.le_succ _)))
-    · rw [hs2_types]
+    · rw [hs2_types, St6_types_base]
       have h12 : St₁.types ⊆ St₂.types :=
         St₂_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem ff_fresh
-      have h23 : St₂.types ⊆ St₃.types :=
-        St₃_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem u_fresh
-      have h34 : St₃.types ⊆ St₄.types :=
-        St₄_types_eq ▸ SMT.TypeContext.entries_subset_insert_of_notMem v_fresh
       exact AList.subset_trans
         (SMT.TypeContext.entries_subset_insert_of_notMem fv1_fresh)
-        (AList.subset_trans fv1_Λ_sub
-          (AList.subset_trans h12 (AList.subset_trans h23 h34)))
-    · rw [hs2_used, St₄_used_eq, St₃_used_eq, St₂_used_eq]
+        (AList.subset_trans fv1_Λ_sub h12)
+    · rw [hs2_used, St6_used_eq, St5_used_eq, St₄_used_eq, St₃_used_eq, St₂_used_eq]
       intro w hw
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
         (List.mem_cons_of_mem _ (fv1_used_sub hw)))
-    · rw [hs2_types, hs2_used, St₄_types_eq, St₄_used_eq, St₃_types_eq, St₃_used_eq,
-        St₂_types_eq, St₂_used_eq]
-      exact keys_insert_subset_cons (keys_insert_subset_cons
-        (keys_insert_subset_cons fv1_keys_sub))
-    · rw [hs2_types]
+    · rw [hs2_types, St6_types_base, hs2_used, St6_used_eq, St5_used_eq,
+        St₄_used_eq, St₃_used_eq, St₂_types_eq, St₂_used_eq]
+      intro w hw
+      exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+        (keys_insert_subset_cons fv1_keys_sub hw))
+    · rw [hs2_types, St6_types_base]
       intro w hw
       simp only [SMT.fv, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
       rcases hw with hwff | hwfv1
-      · exact List.mem_union_iff.mpr (Or.inl (hwff ▸ ff_in_St₄))
-      · exact List.mem_union_iff.mpr (Or.inl (hwfv1 ▸ fv1_in_St₄))
-    · rw [hs2_types]
+      · exact List.mem_union_iff.mpr (Or.inl (hwff ▸ ff_in_St₂))
+      · exact List.mem_union_iff.mpr (Or.inl (hwfv1 ▸ fv1_in_St₂))
+    · rw [hs2_types, St6_types_base]
       intro w hw hΛ
       have hw_St₁ : w ∉ St₁.types := fv1_preserves w hw hΛ
-      have hw_St₂used : w ∈ St₂.env.usedVars :=
-        St₂_used_eq ▸ List.mem_cons_of_mem ff (fv1_used_sub hw)
-      have hw_St₃used : w ∈ St₃.env.usedVars :=
-        St₃_used_eq ▸ List.mem_cons_of_mem u_var hw_St₂used
       have hw_ne_ff : w ≠ ff := fun h => ff_not_used (h ▸ fv1_used_sub hw)
-      have hw_ne_u : w ≠ u_var := fun h => u_not_used (h ▸ hw_St₂used)
-      have hw_ne_v : w ≠ v_var := fun h => v_not_used (h ▸ hw_St₃used)
       intro hw_in
-      rw [St₄_types_eq, AList.mem_insert] at hw_in
+      rw [St₂_types_eq, AList.mem_insert] at hw_in
       rcases hw_in with rfl | hw_in
-      · exact hw_ne_v rfl
-      · rw [St₃_types_eq, AList.mem_insert] at hw_in
-        rcases hw_in with rfl | hw_in
-        · exact hw_ne_u rfl
-        · rw [St₂_types_eq, AList.mem_insert] at hw_in
-          rcases hw_in with rfl | hw_in
-          · exact hw_ne_ff rfl
-          · exact hw_St₁ hw_in
+      · exact hw_ne_ff rfl
+      · exact hw_St₁ hw_in
 
 set_option maxHeartbeats 4000000 in
 /-- Purely structural specification of `castMembership` (no `B`-typing, no
@@ -3763,6 +3793,8 @@ theorem castApp_decl
     mpure pre
     obtain ⟨fL_le, fL_Λ_sub, fL_fresh, fL_not_used, fL_used_sub,
       fL_keys_sub, fL_preserves, fL_fv_sub, fL_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -3808,6 +3840,8 @@ theorem castApp_decl
     mpure pre
     obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
       x!_keys_sub, x!_preserves, x!_fv_sub, x!_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -3853,6 +3887,8 @@ theorem castApp_decl
     mpure pre
     obtain ⟨fL_le, fL_Λ_sub, fL_fresh, fL_not_used, fL_used_sub,
       fL_keys_sub, fL_preserves, fL_fv_sub, fL_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -3898,6 +3934,8 @@ theorem castApp_decl
     mpure pre
     obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
       x!_keys_sub, x!_preserves, x!_fv_sub, x!_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -3943,6 +3981,8 @@ theorem castApp_decl
     mpure pre
     obtain ⟨fL_le, fL_Λ_sub, fL_fresh, fL_not_used, fL_used_sub,
       fL_keys_sub, fL_preserves, fL_fv_sub, fL_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -3976,15 +4016,26 @@ theorem castApp_decl
           mrename_i pref3
           mpure pref3
           rename_i v_var
+          mspec SMT.eraseFromContext_decls (v := u_var)
+            (decl := St₄.env.declarations)
+          mrename_i pree1
+          mintro ∀St5
+          mpure pree1
+          mspec SMT.eraseFromContext_decls (v := v_var)
+            (decl := St5.env.declarations)
+          mrename_i pree2
+          mintro ∀St6
+          mpure pree2
           mspec SMT.addSpec_spec
           mrename_i pres2
-          mintro ∀St₄s
+          mintro ∀St6s
           mpure pres2
           obtain ⟨hs2_decl, _, _, _, _⟩ := pres2
           mspec Std.Do.Spec.pure
           mpure_intro
           exact ⟨_,
-            by rw [hs2_decl, pref3, pref2, hd2_decl, pref, hs_decl, hd_decl, fL_decl]
+            by rw [hs2_decl, pree2, pree1, pref3, pref2, hd2_decl, pref, hs_decl,
+                 hd_decl, fL_decl]
                simp only [List.concat_eq_append, List.append_assoc, List.cons_append,
                  List.nil_append]
                rfl,
@@ -4028,6 +4079,8 @@ theorem castApp_decl
     mpure pre
     obtain ⟨x!_le, x!_Λ_sub, x!_fresh, x!_not_used, x!_used_sub,
       x!_keys_sub, x!_preserves, x!_fv_sub, x!_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -4061,15 +4114,26 @@ theorem castApp_decl
           mrename_i pref3
           mpure pref3
           rename_i v_var
+          mspec SMT.eraseFromContext_decls (v := u_var)
+            (decl := St₄.env.declarations)
+          mrename_i pree1
+          mintro ∀St5
+          mpure pree1
+          mspec SMT.eraseFromContext_decls (v := v_var)
+            (decl := St5.env.declarations)
+          mrename_i pree2
+          mintro ∀St6
+          mpure pree2
           mspec SMT.addSpec_spec
           mrename_i pres2
-          mintro ∀St₄s
+          mintro ∀St6s
           mpure pres2
           obtain ⟨hs2_decl, _, _, _, _⟩ := pres2
           mspec Std.Do.Spec.pure
           mpure_intro
           exact ⟨_,
-            by rw [hs2_decl, pref3, pref2, hd2_decl, pref, hs_decl, hd_decl, x!_decl]
+            by rw [hs2_decl, pree2, pree1, pref3, pref2, hd2_decl, pref, hs_decl,
+                 hd_decl, x!_decl]
                simp only [List.concat_eq_append, List.append_assoc, List.cons_append,
                  List.nil_append]
                rfl,
@@ -4188,6 +4252,8 @@ theorem castApp_decl_domEq
     mpure pre
     obtain ⟨fL_le, fL_Λ_sub, fL_fresh, fL_not_used, fL_used_sub,
       fL_keys_sub, fL_preserves, fL_fv_sub, fL_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d

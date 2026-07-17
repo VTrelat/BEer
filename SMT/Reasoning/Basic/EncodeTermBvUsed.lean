@@ -859,6 +859,8 @@ theorem castApp_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.𝒱} {n 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -887,6 +889,8 @@ theorem castApp_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.𝒱} {n 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -915,6 +919,8 @@ theorem castApp_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.𝒱} {n 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -943,6 +949,8 @@ theorem castApp_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.𝒱} {n 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -971,6 +979,8 @@ theorem castApp_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.𝒱} {n 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -1001,15 +1011,26 @@ theorem castApp_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.𝒱} {n 
     mintro ∀St₄
     mpure pre4
     obtain ⟨_, _, _, St₄_used_eq, _⟩ := pre4
+    mspec SMT.eraseFromContext_spec (Γ := St₄.types)
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨_, _, St5_used_eq⟩ := pre5
+    mspec SMT.eraseFromContext_spec (Γ := St5.types)
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨_, _, St6_used_eq⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨_, _, _, hs2_used, _⟩ := pres2
     mspec Std.Do.Spec.pure
     mpure_intro
-    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₄s.env.usedVars := fun {w} h => by
-      rw [hs2_used, St₄_used_eq, St₃_used_eq, hd2_used, St₂_used_eq, hs_used, hd_used]
+    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St6s.env.usedVars := fun {w} h => by
+      rw [hs2_used, St6_used_eq, St5_used_eq, St₄_used_eq, St₃_used_eq, hd2_used,
+        St₂_used_eq, hs_used, hd_used]
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ h))
     refine ⟨?_, fun w hw => lift (L_used_sub hw)⟩
     intro v hv
@@ -1026,6 +1047,8 @@ theorem castApp_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.𝒱} {n 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -1056,15 +1079,26 @@ theorem castApp_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.𝒱} {n 
     mintro ∀St₄
     mpure pre4
     obtain ⟨_, _, _, St₄_used_eq, _⟩ := pre4
+    mspec SMT.eraseFromContext_spec (Γ := St₄.types)
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨_, _, St5_used_eq⟩ := pre5
+    mspec SMT.eraseFromContext_spec (Γ := St5.types)
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨_, _, St6_used_eq⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨_, _, _, hs2_used, _⟩ := pres2
     mspec Std.Do.Spec.pure
     mpure_intro
-    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₄s.env.usedVars := fun {w} h => by
-      rw [hs2_used, St₄_used_eq, St₃_used_eq, hd2_used, St₂_used_eq, hs_used, hd_used]
+    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St6s.env.usedVars := fun {w} h => by
+      rw [hs2_used, St6_used_eq, St5_used_eq, St₄_used_eq, St₃_used_eq, hd2_used,
+        St₂_used_eq, hs_used, hd_used]
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ h))
     refine ⟨?_, fun w hw => lift (L_used_sub hw)⟩
     intro v hv
@@ -2455,6 +2489,8 @@ theorem castApp_decls_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub, L_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2485,6 +2521,8 @@ theorem castApp_decls_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub, L_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2515,6 +2553,8 @@ theorem castApp_decls_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub, L_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2545,6 +2585,8 @@ theorem castApp_decls_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨L_used, L_bv, L_used_sub, L_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2575,6 +2617,8 @@ theorem castApp_decls_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨f!_used, f!_bv, f!_used_sub, f!_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2605,14 +2649,26 @@ theorem castApp_decls_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.�
     mintro ∀St₄
     mpure pre4
     obtain ⟨St₄_used_eq, St₄_decl⟩ := pre4
+    mspec SMT.eraseFromContext_used_decls
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨St5_used_eq, St5_decl⟩ := pre5
+    mspec SMT.eraseFromContext_used_decls
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨St6_used_eq, St6_decl⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨hs2_decl, _, _, hs2_used, _⟩ := pres2
+    rw [St6_used_eq, St5_used_eq] at hs2_used
+    rw [St6_decl, St5_decl] at hs2_decl
     mspec Std.Do.Spec.pure
     mpure_intro
-    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₄s.env.usedVars := fun {w} h => by
+    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St6s.env.usedVars := fun {w} h => by
       rw [hs2_used, St₄_used_eq, St₃_used_eq, hd2_used, St₂_used_eq, hs_used, hd_used]
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ h))
     exact ⟨_,
@@ -2648,6 +2704,8 @@ theorem castApp_decls_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.�
     mintro ∀St₁
     mpure pre
     obtain ⟨x!_used, x!_bv, x!_used_sub, x!_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -2678,14 +2736,26 @@ theorem castApp_decls_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.�
     mintro ∀St₄
     mpure pre4
     obtain ⟨St₄_used_eq, St₄_decl⟩ := pre4
+    mspec SMT.eraseFromContext_used_decls
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨St5_used_eq, St5_decl⟩ := pre5
+    mspec SMT.eraseFromContext_used_decls
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨St6_used_eq, St6_decl⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨hs2_decl, _, _, hs2_used, _⟩ := pres2
+    rw [St6_used_eq, St5_used_eq] at hs2_used
+    rw [St6_decl, St5_decl] at hs2_decl
     mspec Std.Do.Spec.pure
     mpure_intro
-    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₄s.env.usedVars := fun {w} h => by
+    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St6s.env.usedVars := fun {w} h => by
       rw [hs2_used, St₄_used_eq, St₃_used_eq, hd2_used, St₂_used_eq, hs_used, hd_used]
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ h))
     exact ⟨_,
@@ -4637,6 +4707,8 @@ theorem castApp_bv_notMem (f x : SMT.Term) (sf sx : SMTType) {avoid used : List 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -4665,6 +4737,8 @@ theorem castApp_bv_notMem (f x : SMT.Term) (sf sx : SMTType) {avoid used : List 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -4693,6 +4767,8 @@ theorem castApp_bv_notMem (f x : SMT.Term) (sf sx : SMTType) {avoid used : List 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -4721,6 +4797,8 @@ theorem castApp_bv_notMem (f x : SMT.Term) (sf sx : SMTType) {avoid used : List 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -4749,6 +4827,8 @@ theorem castApp_bv_notMem (f x : SMT.Term) (sf sx : SMTType) {avoid used : List 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -4779,15 +4859,26 @@ theorem castApp_bv_notMem (f x : SMT.Term) (sf sx : SMTType) {avoid used : List 
     mintro ∀St₄
     mpure pre4
     obtain ⟨_, _, _, St₄_used_eq, _⟩ := pre4
+    mspec SMT.eraseFromContext_spec (Γ := St₄.types)
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨_, _, St5_used_eq⟩ := pre5
+    mspec SMT.eraseFromContext_spec (Γ := St5.types)
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨_, _, St6_used_eq⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨_, _, _, hs2_used, _⟩ := pres2
     mspec Std.Do.Spec.pure
     mpure_intro
-    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₄s.env.usedVars := fun {w} h => by
-      rw [hs2_used, St₄_used_eq, St₃_used_eq, hd2_used, St₂_used_eq, hs_used, hd_used]
+    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St6s.env.usedVars := fun {w} h => by
+      rw [hs2_used, St6_used_eq, St5_used_eq, St₄_used_eq, St₃_used_eq, hd2_used,
+        St₂_used_eq, hs_used, hd_used]
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ h))
     refine ⟨?_, fun w hw => lift (L_used_sub hw)⟩
     intro v hv
@@ -4804,6 +4895,8 @@ theorem castApp_bv_notMem (f x : SMT.Term) (sf sx : SMTType) {avoid used : List 
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -4834,15 +4927,26 @@ theorem castApp_bv_notMem (f x : SMT.Term) (sf sx : SMTType) {avoid used : List 
     mintro ∀St₄
     mpure pre4
     obtain ⟨_, _, _, St₄_used_eq, _⟩ := pre4
+    mspec SMT.eraseFromContext_spec (Γ := St₄.types)
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨_, _, St5_used_eq⟩ := pre5
+    mspec SMT.eraseFromContext_spec (Γ := St5.types)
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨_, _, St6_used_eq⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨_, _, _, hs2_used, _⟩ := pres2
     mspec Std.Do.Spec.pure
     mpure_intro
-    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₄s.env.usedVars := fun {w} h => by
-      rw [hs2_used, St₄_used_eq, St₃_used_eq, hd2_used, St₂_used_eq, hs_used, hd_used]
+    have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St6s.env.usedVars := fun {w} h => by
+      rw [hs2_used, St6_used_eq, St5_used_eq, St₄_used_eq, St₃_used_eq, hd2_used,
+        St₂_used_eq, hs_used, hd_used]
       exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ h))
     refine ⟨?_, fun w hw => lift (L_used_sub hw)⟩
     intro v hv
@@ -5809,6 +5913,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub, L_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -5837,6 +5943,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub, L_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -5865,6 +5973,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub, L_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -5893,6 +6003,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨L_notMem, L_bv, L_used_sub, L_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -5921,6 +6033,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨f!_notMem, f!_bv, f!_used_sub, f!_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -5953,9 +6067,19 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
     mintro ∀St₄
     mpure pre4
     obtain ⟨⟨_, _, _, St₄_used_eq, b_notMem⟩, St₄_decl⟩ := pre4
+    mspec SMT.eraseFromContext_used_decls
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨St5_used_eq, St5_decl⟩ := pre5
+    mspec SMT.eraseFromContext_used_decls
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨St6_used_eq, St6_decl⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨hs2_decl, _, _, hs2_used, _⟩ := pres2
     mspec Std.Do.Spec.pure
@@ -5968,7 +6092,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
       rw [St₃_used_eq]; exact List.mem_cons_of_mem _ (havsub₂d h)
     have b_notMem_avoid : _ ∉ avoid := fun h => b_notMem (havsub₃ h)
     exact ⟨_,
-      by rw [hs2_decl, St₄_decl, St₃_decl, hd2_decl, St₂_decl, hs_decl, hd_decl, f!_decl]
+      by rw [hs2_decl, St6_decl, St5_decl, St₄_decl, St₃_decl, hd2_decl, St₂_decl,
+           hs_decl, hd_decl, f!_decl]
          simp only [List.concat_eq_append, List.append_assoc, List.cons_append, List.nil_append]
          rfl,
       by
@@ -5988,7 +6113,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
             · exact a_notMem_avoid
             · exact b_notMem_avoid,
       fun w hw => by
-        rw [hs2_used, St₄_used_eq, St₃_used_eq, hd2_used, St₂_used_eq, hs_used, hd_used]
+        rw [hs2_used, St6_used_eq, St5_used_eq, St₄_used_eq, St₃_used_eq, hd2_used,
+          St₂_used_eq, hs_used, hd_used]
         exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (f!_used_sub hw)))⟩
   case vc2.h_1.isFalse.isTrue =>
     rename_i hxeq hfeq _ _ St hpre
@@ -6000,6 +6126,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
     mintro ∀St₁
     mpure pre
     obtain ⟨x!_notMem, x!_bv, x!_used_sub, x!_decl⟩ := pre
+    unfold SMT.declareConstWithSpec
+    mspec Std.Do.Spec.bind
     mspec SMT.declareConst_spec
     mrename_i pred
     mintro ∀St₁d
@@ -6032,9 +6160,19 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
     mintro ∀St₄
     mpure pre4
     obtain ⟨⟨_, _, _, St₄_used_eq, b_notMem⟩, St₄_decl⟩ := pre4
+    mspec SMT.eraseFromContext_used_decls
+    mrename_i pre5
+    mintro ∀St5
+    mpure pre5
+    obtain ⟨St5_used_eq, St5_decl⟩ := pre5
+    mspec SMT.eraseFromContext_used_decls
+    mrename_i pre6
+    mintro ∀St6
+    mpure pre6
+    obtain ⟨St6_used_eq, St6_decl⟩ := pre6
     mspec SMT.addSpec_spec
     mrename_i pres2
-    mintro ∀St₄s
+    mintro ∀St6s
     mpure pres2
     obtain ⟨hs2_decl, _, _, hs2_used, _⟩ := pres2
     mspec Std.Do.Spec.pure
@@ -6047,7 +6185,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
       rw [St₃_used_eq]; exact List.mem_cons_of_mem _ (havsub₂d h)
     have b_notMem_avoid : _ ∉ avoid := fun h => b_notMem (havsub₃ h)
     exact ⟨_,
-      by rw [hs2_decl, St₄_decl, St₃_decl, hd2_decl, St₂_decl, hs_decl, hd_decl, x!_decl]
+      by rw [hs2_decl, St6_decl, St5_decl, St₄_decl, St₃_decl, hd2_decl, St₂_decl,
+           hs_decl, hd_decl, x!_decl]
          simp only [List.concat_eq_append, List.append_assoc, List.cons_append, List.nil_append]
          rfl,
       by
@@ -6068,7 +6207,8 @@ theorem castApp_decls_bv_notMem (f x : SMT.Term) (sf sx : SMTType)
             · exact b_notMem_avoid
             · exact hbvf v hf,
       fun w hw => by
-        rw [hs2_used, St₄_used_eq, St₃_used_eq, hd2_used, St₂_used_eq, hs_used, hd_used]
+        rw [hs2_used, St6_used_eq, St5_used_eq, St₄_used_eq, St₃_used_eq, hd2_used,
+          St₂_used_eq, hs_used, hd_used]
         exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (x!_used_sub hw)))⟩
 
 set_option maxHeartbeats 4000000 in
