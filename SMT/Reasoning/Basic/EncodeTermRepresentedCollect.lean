@@ -134,6 +134,166 @@ theorem RDomCastSupported.optionFunction_isPFunc_of_source.{u}
       _ = retract beta Z.fst := by rw [hYZ]
       _ = z := hZret
 
+/- A pointwise characteristic-graph specification is sufficient to package an
+option-valued function as a supported representative of a source relation.
+This is the final semantic interface needed by the function-domain collection
+arm: the operational proof only has to establish the truth condition at the
+canonical image of each source pair. -/
+open Classical in
+theorem RDomCastSupported.optionFunction_of_graph_truth.{u}
+    {alpha beta : BType} {S F : ZFSet.{u}}
+    {hS : S ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    {hF : F ∈ ⟦SMTType.fun alpha.toSMTType
+      (SMTType.option beta.toSMTType)⟧ᶻ}
+    (htruth : ∀ (x : ZFSet.{u}) (hx : x ∈ ⟦alpha ×ᴮ beta⟧ᶻ),
+      let X : SMT.Dom.{u} :=
+        B.Dom.canonicalSMT (⟨x, alpha ×ᴮ beta, hx⟩ : B.Dom)
+      let G := optionGraph alpha.toSMTType beta.toSMTType F
+      let hGfunc :
+          ⟦SMTType.pair alpha.toSMTType beta.toSMTType⟧ᶻ.IsFunc
+            ZFSet.𝔹 G := by
+        simpa [SMTType.toZFSet] using
+          (optionGraph_mem alpha.toSMTType beta.toSMTType hF)
+      (ZFSet.fapply G (ZFSet.is_func_is_pfunc hGfunc)
+        ⟨X.fst, by
+          rw [ZFSet.is_func_dom_eq hGfunc]
+          dsimp [X]
+          exact (B.Dom.canonicalSMT
+            (⟨x, alpha ×ᴮ beta, hx⟩ : B.Dom)).snd.snd⟩).val =
+          ZFSet.zftrue ↔ x ∈ S) :
+    RDomCastSupported
+      (⟨S, BType.set (alpha ×ᴮ beta), hS⟩ : B.Dom)
+      (⟨F, SMTType.fun alpha.toSMTType
+        (SMTType.option beta.toSMTType), hF⟩ : SMT.Dom) := by
+  refine ⟨?_, BType.SupportedSMT.optionFun alpha beta⟩
+  apply RDomCast.toRDomCastAdmissible_of_supported
+  · refine ⟨castPath.graph (castPath.reflexive alpha.toSMTType)
+      (castPath.reflexive beta.toSMTType), ?_⟩
+    change retract (BType.set (alpha ×ᴮ beta))
+      (optionGraph alpha.toSMTType beta.toSMTType F) = S
+    let G := optionGraph alpha.toSMTType beta.toSMTType F
+    have hG : G ∈ ⟦SMTType.fun
+        (SMTType.pair alpha.toSMTType beta.toSMTType) SMTType.bool⟧ᶻ :=
+      optionGraph_mem alpha.toSMTType beta.toSMTType hF
+    have hGfunc : ⟦SMTType.pair alpha.toSMTType beta.toSMTType⟧ᶻ.IsFunc
+        ZFSet.𝔹 G := by
+      simpa [SMTType.toZFSet] using hG
+    have hGfunc' : ⟦(alpha ×ᴮ beta).toSMTType⟧ᶻ.IsFunc
+        ZFSet.𝔹 G := by
+      simpa using hGfunc
+    apply ZFSet.ext
+    intro x
+    rw [retract, ZFSet.mem_sep]
+    constructor
+    · rintro ⟨hx, hpred⟩
+      rw [dif_pos hx, dif_pos hGfunc'] at hpred
+      let X : SMT.Dom.{u} :=
+        B.Dom.canonicalSMT (⟨x, alpha ×ᴮ beta, hx⟩ : B.Dom)
+      have hXdom : X.fst ∈ G.Dom (ZFSet.is_rel_of_is_func hGfunc) := by
+        rw [ZFSet.is_func_dom_eq hGfunc]
+        dsimp [X]
+        exact (B.Dom.canonicalSMT
+          (⟨x, alpha ×ᴮ beta, hx⟩ : B.Dom)).snd.snd
+      have htruth' := htruth x hx
+      change (ZFSet.fapply G (ZFSet.is_func_is_pfunc hGfunc)
+        ⟨X.fst, hXdom⟩).val = ZFSet.zftrue ↔ x ∈ S at htruth'
+      apply htruth'.mp
+      simpa [G, X] using hpred
+    · intro hxS
+      refine ⟨?_, ?_⟩
+      · rw [BType.toZFSet, ZFSet.mem_powerset] at hS
+        exact hS hxS
+      · have hx : x ∈ ⟦alpha ×ᴮ beta⟧ᶻ := by
+          rw [BType.toZFSet, ZFSet.mem_powerset] at hS
+          exact hS hxS
+        rw [dif_pos hx, dif_pos hGfunc']
+        let X : SMT.Dom.{u} :=
+          B.Dom.canonicalSMT (⟨x, alpha ×ᴮ beta, hx⟩ : B.Dom)
+        have hXdom : X.fst ∈ G.Dom (ZFSet.is_rel_of_is_func hGfunc) := by
+          rw [ZFSet.is_func_dom_eq hGfunc]
+          dsimp [X]
+          exact (B.Dom.canonicalSMT
+            (⟨x, alpha ×ᴮ beta, hx⟩ : B.Dom)).snd.snd
+        have htruth' := htruth x hx
+        change (ZFSet.fapply G (ZFSet.is_func_is_pfunc hGfunc)
+          ⟨X.fst, hXdom⟩).val = ZFSet.zftrue ↔ x ∈ S at htruth'
+        simpa [G, X] using htruth'.mpr hxS
+  · exact BType.SupportedSMT.optionFun alpha beta
+
+/-- At a pair of canonical target values, the characteristic graph of an
+option-valued function is true exactly when the function returns that `some`
+value.  This is the target-only half of the option-collection bridge. -/
+theorem optionGraph_apply_eq_zftrue_iff.{u}
+    (alpha beta : SMTType) {F x y : ZFSet.{u}}
+    (hF : F ∈ ⟦SMTType.fun alpha (SMTType.option beta)⟧ᶻ)
+    (hx : x ∈ ⟦alpha⟧ᶻ) (hy : y ∈ ⟦beta⟧ᶻ) :
+    let G := optionGraph alpha beta F
+    let Gapp := ZFSet.fapply G (ZFSet.is_func_is_pfunc (by
+      simpa [SMTType.toZFSet] using
+        (optionGraph_mem alpha beta hF) :
+          ⟦SMTType.pair alpha beta⟧ᶻ.IsFunc ZFSet.𝔹 G))
+      ⟨x.pair y, by
+        rw [ZFSet.is_func_dom_eq (by
+          simpa [SMTType.toZFSet] using
+            (optionGraph_mem alpha beta hF) :
+              ⟦SMTType.pair alpha beta⟧ᶻ.IsFunc ZFSet.𝔹 G)]
+        exact ZFSet.pair_mem_prod.mpr ⟨hx, hy⟩⟩
+    let Fapp := ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+      simpa [SMTType.toZFSet] using hF :
+        ⟦alpha⟧ᶻ.IsFunc ⟦SMTType.option beta⟧ᶻ F))
+      ⟨x, by
+        rw [ZFSet.is_func_dom_eq (by
+          simpa [SMTType.toZFSet] using hF :
+            ⟦alpha⟧ᶻ.IsFunc ⟦SMTType.option beta⟧ᶻ F)]
+        exact hx⟩
+    let someY := ZFSet.Option.some (S := ⟦beta⟧ᶻ) ⟨y, hy⟩
+    Gapp.val = ZFSet.zftrue ↔ Fapp.val = someY.val := by
+  dsimp only
+  let G := optionGraph alpha beta F
+  have hG : G ∈ ⟦SMTType.fun (SMTType.pair alpha beta) SMTType.bool⟧ᶻ :=
+    optionGraph_mem alpha beta hF
+  have hGfunc : ⟦SMTType.pair alpha beta⟧ᶻ.IsFunc ZFSet.𝔹 G := by
+    simpa [SMTType.toZFSet] using hG
+  have hFfunc : ⟦alpha⟧ᶻ.IsFunc ⟦SMTType.option beta⟧ᶻ F := by
+    simpa [SMTType.toZFSet] using hF
+  have hxy_prod : x.pair y ∈ ⟦alpha⟧ᶻ.prod ⟦beta⟧ᶻ :=
+    ZFSet.pair_mem_prod.mpr ⟨hx, hy⟩
+  have hxy_dom : x.pair y ∈ G.Dom (ZFSet.is_rel_of_is_func hGfunc) := by
+    rw [ZFSet.is_func_dom_eq hGfunc]
+    exact hxy_prod
+  have hpair_graph :
+      (ZFSet.fapply G (ZFSet.is_func_is_pfunc hGfunc)
+        ⟨x.pair y, hxy_dom⟩).val = ZFSet.zftrue ↔
+        x.pair y ∈ predGraph alpha beta G := by
+    unfold predGraph
+    rw [ZFSet.mem_sep, ZFSet.pair_mem_prod]
+    simp only [hx, hy, and_self, true_and]
+    constructor
+    · intro happ
+      rw [← happ]
+      exact ZFSet.fapply.def (ZFSet.is_func_is_pfunc hGfunc) _
+    · intro hmem
+      exact Subtype.ext_iff.mp
+        (ZFSet.fapply.of_pair (ZFSet.is_func_is_pfunc hGfunc) hmem)
+  have hgraph_mem : x.pair y ∈ predGraph alpha beta G ↔
+      x.pair (ZFSet.Option.some (S := ⟦beta⟧ᶻ) ⟨y, hy⟩).val ∈ F := by
+    exact mem_predGraph_optionGraph_iff alpha beta F hF x y hx hy
+  have hpair_app :
+      x.pair (ZFSet.Option.some (S := ⟦beta⟧ᶻ) ⟨y, hy⟩).val ∈ F ↔
+        (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+          ⟨x, by
+            rw [ZFSet.is_func_dom_eq hFfunc]
+            exact hx⟩).val =
+          (ZFSet.Option.some (S := ⟦beta⟧ᶻ) ⟨y, hy⟩).val := by
+    constructor
+    · intro hpair
+      exact Subtype.ext_iff.mp
+        (ZFSet.fapply.of_pair (ZFSet.is_func_is_pfunc hFfunc) hpair)
+    · intro happ
+      rw [← happ]
+      exact ZFSet.fapply.def (ZFSet.is_func_is_pfunc hFfunc) _
+  exact hpair_graph.trans (hgraph_mem.trans hpair_app)
+
 /- Unfold a successful source collection denotation into the separation
 equation used by the SMT-lambda retraction proof.  Keeping this source-only
 fact independent of the target representation lets the main and alternative
