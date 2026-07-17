@@ -579,6 +579,49 @@ theorem BType_get_step_down {α β : BType} {n : ℕ} {j : ℕ}
     BType.get α (n + 1) ⟨j, hj_small⟩
   rw [dif_neg (by omega)]
 
+/-- Transport a source-type tuple component along an equality of tuple
+arities. -/
+theorem BType.get_cast
+    {tau : BType} {n m : ℕ} (h : n = m) (i : Fin n) :
+    tau.get n i = tau.get m (Fin.cast h i) := by
+  subst m
+  rfl
+
+/-- Before the last component, a pair tuple projects through its left
+component. -/
+theorem ZFSet_get_pair_before_last
+    {a b : ZFSet.{u}} {n i : ℕ} (hn : 0 < n) (hi : i < n) :
+    (a.pair b).get (n + 1) ⟨i, by omega⟩ = a.get n ⟨i, hi⟩ := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_one.mpr hn
+  simpa only [ZFSet.π₁_pair, proof_irrel_heq] using
+    (ZFSet_get_step_down (x := a.pair b) (n := k) (j := i)
+      (by omega) hi)
+
+/-- Before the last component, a product source type projects through its
+left component. -/
+theorem BType_get_pair_before_last
+    {alpha beta : BType} {n i : ℕ} (hn : 0 < n) (hi : i < n) :
+    BType.get (alpha ×ᴮ beta) (n + 1) ⟨i, by omega⟩ =
+      BType.get alpha n ⟨i, hi⟩ := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_one.mpr hn
+  simpa only [proof_irrel_heq] using
+    (BType_get_step_down (α := alpha) (β := beta) (n := k) (j := i)
+      (by omega) hi)
+
+/-- The last component of a nontrivial pair tuple is its right value. -/
+theorem ZFSet_get_pair_last
+    {a b : ZFSet.{u}} {n : ℕ} (hn : 0 < n) :
+    (a.pair b).get (n + 1) ⟨n, by omega⟩ = b := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_one.mpr hn
+  simp [ZFSet.get, Fin.ext_iff, Fin.val_last]
+
+/-- The last component of a nontrivial product tuple is its right type. -/
+theorem BType_get_pair_last
+    {alpha beta : BType} {n : ℕ} (hn : 0 < n) :
+    BType.get (alpha ×ᴮ beta) (n + 1) ⟨n, by omega⟩ = beta := by
+  obtain ⟨k, rfl⟩ := Nat.exists_eq_add_one.mpr hn
+  simp [BType.get]
+
 /-- Each element of `toDestPair vs d acc d` denotes under `Θ`. For indices `j < vs.length`,
     the denotation value's ZFSet component equals `D_val.fst.get vs.length j` and its type
     component equals `(τ.get vs.length j).toSMTType`. -/
