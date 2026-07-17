@@ -225,7 +225,7 @@ renaming context `Δ_ctx` and S_enc denotation. It is called for both the origin
 and alt cases.
 -/
 set_option maxHeartbeats 1200000 in
-private theorem pow_denotation_aux.{u}
+theorem pow_denotation_aux.{u}
     {β : BType}
     {S_enc : SMT.Term} {x E : SMT.𝒱}
     -- pred and tpow definitions
@@ -246,7 +246,8 @@ private theorem pow_denotation_aux.{u}
     (hE_not_ctx : E ∉ ctx) (hx_not_ctx : x ∉ ctx)
     -- Generic renaming context
     {Δ_ctx : SMT.RenamingContext.Context}
-    (Δctx_wt : ∀ v (d : SMT.Dom), Δ_ctx v = some d → ∀ τ, ctx.lookup v = some τ → d.snd.fst = τ)
+    (Δctx_respects :
+      SMT.RenamingContext.RespectsTypeContextOnFV Δ_ctx ctx S_enc)
     (hΔ_covers_S : RenamingContext.CoversFV Δ_ctx S_enc)
     (hΔ_covers_tpow : RenamingContext.CoversFV Δ_ctx tpow)
     -- S_enc denotation under Δ_ctx
@@ -259,6 +260,17 @@ private theorem pow_denotation_aux.{u}
     : ∃ (a : ZFSet.{u}) (a_1 : SMTType) (h : a ∈ ⟦a_1⟧ᶻ),
         ⟦tpow.abstract Δ_ctx hΔ_covers_tpow⟧ˢ = some ⟨a, ⟨a_1, h⟩⟩ ∧
           ⟨X.powerset, ⟨β.set.set, hT⟩⟩ ≘ᶻ ⟨a, ⟨a_1, h⟩⟩ := by
+  have Δctx_wt_fv :
+      ∀ {v : SMT.𝒱} {d : SMT.Dom} {τ : SMTType},
+        v ∈ SMT.fv S_enc →
+        Δ_ctx v = some d →
+        ctx.lookup v = some τ →
+        d.snd.fst = τ := by
+    intro v d τ hv hd hlookup
+    obtain ⟨d', hd', htype⟩ := Δctx_respects hv hlookup
+    have hdd : d = d' := Option.some.inj (hd.symm.trans hd')
+    subst d'
+    exact htype
   have hx_not_ctxE : x ∉ ctx.insert E (.fun β.toSMTType .bool) := by
     rw [AList.mem_insert]
     simp [hx_ne_E, hx_not_ctx]
@@ -524,7 +536,7 @@ private theorem pow_denotation_aux.{u}
         have hvE : v ≠ E := fun h => hE_not_mem_fv_S_enc (h ▸ hv_S)
         rw [AList.lookup_insert_ne hvE] at hlk
         obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
-        refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+        refine ⟨d, ?_, Δctx_wt_fv hv_S hd hlk⟩
         rw [Function.update_of_ne hvx, Function.update_of_ne hvE]; exact hd
     obtain ⟨Dbody, hden_body, hDbody_ty⟩ :=
       denote_and_some_bool_of_some_bool hden_lhs hDlhs_ty hden_not hDnot_ty
@@ -570,7 +582,7 @@ private theorem pow_denotation_aux.{u}
           · exact absurd hx hvx
           · exact hvS
         obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
-        refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+        refine ⟨d, ?_, Δctx_wt_fv hv_S hd hlk⟩
         rw [Function.update_of_ne hvx, Function.update_of_ne hvE]; exact hd
   have hforall_total :
       ∀ F : SMT.Dom,
@@ -680,7 +692,7 @@ private theorem pow_denotation_aux.{u}
             · rw [AList.lookup_insert_ne hvE] at hlk
               have hv_S : v ∈ SMT.fv S_enc := hv_cases.resolve_left hvE
               obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
-              refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+              refine ⟨d, ?_, Δctx_wt_fv hv_S hd hlk⟩
               rw [Function.update_of_ne hvE]; exact hd
         _ = Dy.snd.fst := by
             symm
@@ -704,7 +716,7 @@ private theorem pow_denotation_aux.{u}
             · rw [AList.lookup_insert_ne hvE] at hlk
               have hv_S : v ∈ SMT.fv S_enc := hv_cases.resolve_left hvE
               obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
-              refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+              refine ⟨d, ?_, Δctx_wt_fv hv_S hd hlk⟩
               rw [Function.update_of_ne hvE]; exact hd
         _ = (⟦(SMT.Term.abstract.go
             (Term.forall [x] [β.toSMTType] pred) [E] Δ_ctx hgo_cov_forall).uncurry y_1⟧ˢ.get
@@ -749,7 +761,7 @@ private theorem pow_denotation_aux.{u}
         · exact hvS
         · exact absurd hvx hv_ne_x
       obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
-      exact ⟨d, hd, Δctx_wt v d hd σ hlk⟩
+      exact ⟨d, hd, Δctx_wt_fv hv_S hd hlk⟩
     cases hτa
     exact ⟨a, ha, hD⟩
   rcases hden with ⟨a, h, hden⟩
@@ -977,21 +989,29 @@ private theorem pow_denotation_aux.{u}
           have hDforall_ty : Dforall.snd.fst = SMTType.bool := by
             apply SMT.RenamingContext.denote_type_of_typing_fv typ_forall _
               (hcov_forall_upd FY) hden_forall
-            apply SMT.RenamingContext.respects_update_of_wt (setDom_ty hY_mem) Δctx_wt
-            intro w hw hwE
-            -- w ∈ SMT.fv (Term.forall [x] [β.toSMTType] pred), w ≠ E
-            -- = fv(pred) \ {x}, so w ≠ x; fv(pred) = {E, x} ∪ fv(S_enc); with w ≠ E, w ≠ x: w ∈ fv(S_enc)
-            have hw_S : w ∈ SMT.fv S_enc := by
-              rw [hpred_def] at hw
-              simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_singleton,
-                List.mem_cons, List.mem_nil_iff, or_false] at hw
-              obtain ⟨hw_inner, hw_ne_x⟩ := hw
-              rcases hw_inner with ((hE | hx) | hwS | hx)
-              · exact absurd hE hwE
-              · exact absurd hx hw_ne_x
-              · exact hwS
-              · exact absurd hx hw_ne_x
-            exact hΔ_covers_S w hw_S
+            intro w σ hw hlk
+            by_cases hwE : w = E
+            · subst w
+              rw [AList.lookup_insert] at hlk
+              cases hlk
+              exact ⟨setDom hY_mem, Function.update_self _ _ _,
+                setDom_ty hY_mem⟩
+            · rw [AList.lookup_insert_ne hwE] at hlk
+              have hw_S : w ∈ SMT.fv S_enc := by
+                rw [hpred_def] at hw
+                simp only [SMT.fv, List.mem_removeAll_iff,
+                  List.mem_append, List.mem_singleton, List.mem_cons,
+                  List.mem_nil_iff, or_false] at hw
+                obtain ⟨hw_inner, hw_ne_x⟩ := hw
+                rcases hw_inner with ((hE | hx) | hwS | hx)
+                · exact absurd hE hwE
+                · exact absurd hx hw_ne_x
+                · exact hwS
+                · exact absurd hx hw_ne_x
+              obtain ⟨d, hd, htype⟩ := Δctx_respects hw_S hlk
+              exact ⟨d, by
+                rw [Function.update_of_ne hwE]
+                exact hd, htype⟩
           have hγ_eq_Dforall_ty :
               ((⟦(SMT.Term.abstract.go
                   (Term.forall [x] [β.toSMTType] pred) [E] Δ_ctx
@@ -1328,7 +1348,7 @@ private theorem pow_denotation_aux.{u}
                     have hvE : v ≠ E := fun h => hE_not_mem_fv_S_enc (h ▸ hv_S)
                     rw [AList.lookup_insert_ne hvE] at hlk
                     obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (hΔ_covers_S v hv_S)
-                    refine ⟨d, ?_, Δctx_wt v d hd σ hlk⟩
+                    refine ⟨d, ?_, Δctx_wt_fv hv_S hd hlk⟩
                     rw [Function.update_of_ne hvx, Function.update_of_ne hvE]; exact hd
                 have hden_body_false :
                     ⟦(((@ˢSMT.Term.var E) (SMT.Term.var x)) ∧ˢ
@@ -1935,7 +1955,14 @@ theorem encodeTerm_spec.pow_case.{u} (fv_sub_typings : B.FvSubTypings) (S : B.Te
                               hE_not_mem_fv_S_enc hx_not_mem_fv_S_enc
                               hE_not_bv_S_enc hx_not_bv_S_enc
                               typ_S_enc hE_not_ctx hx_not_ctx
-                              (Δctx_wt := SMT.RenamingContext.ExtendsOnSourceFV.wt Δ'_ext_S typ_S_enc)
+                              (Δctx_respects := by
+                                intro v τ hv hlookup
+                                obtain ⟨d, hd⟩ :=
+                                  Option.isSome_iff_exists.mp
+                                    (Δ'_covers_S v hv)
+                                exact ⟨d, hd,
+                                  SMT.RenamingContext.ExtendsOnSourceFV.wt
+                                    Δ'_ext_S typ_S_enc v d hd τ hlookup⟩)
                               Δ'_covers_S hpow_cov hSenc den_S_enc
                               hX retract_Senc_eq_X hT
                           refine ⟨a, a_1, h, hden, hRDom, ?_⟩
@@ -2029,13 +2056,21 @@ theorem encodeTerm_spec.pow_case.{u} (fv_sub_typings : B.FvSubTypings) (S : B.Te
                                 hE_not_mem_fv_S_enc hx_not_mem_fv_S_enc
                                 hE_not_bv_S_enc hx_not_bv_S_enc
                                 typ_S_enc hE_not_ctx hx_not_ctx
-                                (Δctx_wt := fun v d hv τ hτ => by
-                                  simp only [Δ'_alt] at hv
+                                (Δctx_respects := by
+                                  intro v τ hv hτ
+                                  obtain ⟨d, hd⟩ :=
+                                    Option.isSome_iff_exists.mp
+                                      (hcov_S_alt v hv)
+                                  refine ⟨d, hd, ?_⟩
+                                  simp only [Δ'_alt] at hd
                                   cases hΔ : Δ₀_alt v with
-                                  | some d' => simp [hΔ] at hv; subst hv; exact Δ₀_alt_wt v d' hΔ τ hτ
+                                  | some d' =>
+                                      simp [hΔ] at hd
+                                      subst d
+                                      exact Δ₀_alt_wt v d' hΔ τ hτ
                                   | none =>
-                                    simp [hΔ] at hv
-                                    exact Δ'_alt_S_wt_out v d hv τ hτ)
+                                      simp [hΔ] at hd
+                                      exact Δ'_alt_S_wt_out v d hd τ hτ)
                                 hcov_S_alt hcov_tpow_alt hSval_alt den_S_alt_final
                                 hX_alt hRDom_retract hT_alt
                             refine ⟨Δ'_alt, hext_alt, ?_, ?_, hcov_tpow_alt,
