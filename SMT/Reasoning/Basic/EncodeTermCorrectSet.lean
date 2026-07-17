@@ -2102,7 +2102,7 @@ theorem encodeTerm_spec.pow_case.{u} (fv_sub_typings : B.FvSubTypings) (S : B.Te
                                 exact Δ'_alt_S_dom_out v hv
 
 set_option maxHeartbeats 4000000 in
-private theorem cprod_case_denotation_aux.{u_1}
+theorem cprod_case_denotation_aux.{u_1}
     {αx βx : BType} {X Y : ZFSet.{u_1}}
     {hT : X.prod Y ∈ ⟦(αx ×ᴮ βx).set⟧ᶻ}
     {ctx : SMT.TypeContext} {S_enc T_enc : SMT.Term}

@@ -5,6 +5,56 @@ open Std.Do B SMT ZFSet Classical
 
 /-! # Representation-aware set constructors -/
 
+namespace SMT.RenamingContext
+
+/-- Complete a valuation with canonical defaults away from a selected list of
+variables.  On the selected variables the original represented values are
+preserved exactly. -/
+noncomputable def completeOutside.{u} (Theta : Context.{u})
+    (Gamma : SMT.TypeContext) (keep : List SMT.𝒱) : Context.{u} :=
+  fun v =>
+    if v ∈ keep then Theta v
+    else
+      match Gamma.lookup v with
+      | some sigma => some ⟨sigma.defaultZFSet, sigma,
+          SMTType.mem_toZFSet_of_defaultZFSet⟩
+      | none => none
+
+@[simp]
+theorem completeOutside_eq_of_mem.{u}
+    {Theta : Context.{u}} {Gamma : SMT.TypeContext}
+    {keep : List SMT.𝒱} {v : SMT.𝒱} (hv : v ∈ keep) :
+    completeOutside Theta Gamma keep v = Theta v := by
+  simp [completeOutside, hv]
+
+/-- The completed valuation is fully type-correct when the values retained on
+`keep` already respect their type-context lookups. -/
+theorem completeOutside_wt.{u}
+    {Theta : Context.{u}} {Gamma : SMT.TypeContext}
+    {keep : List SMT.𝒱}
+    (hkeep : ∀ {v : SMT.𝒱} {sigma : SMTType},
+      v ∈ keep → Gamma.lookup v = some sigma →
+        ∃ d : SMT.Dom.{u}, Theta v = some d ∧ d.snd.fst = sigma) :
+    ∀ v (d : SMT.Dom.{u}),
+      completeOutside Theta Gamma keep v = some d →
+      ∀ sigma, Gamma.lookup v = some sigma → d.snd.fst = sigma := by
+  intro v d hden sigma hlookup
+  by_cases hv : v ∈ keep
+  · rw [completeOutside_eq_of_mem hv] at hden
+    obtain ⟨d', hd', htype⟩ := hkeep hv hlookup
+    have hdd : d = d' := Option.some.inj (hden.symm.trans hd')
+    subst d'
+    exact htype
+  · unfold completeOutside at hden
+    rw [if_neg hv, hlookup] at hden
+    have hd :
+        (⟨sigma.defaultZFSet, sigma,
+          SMTType.mem_toZFSet_of_defaultZFSet⟩ : SMT.Dom) = d :=
+      Option.some.inj hden
+    rw [← hd]
+
+end SMT.RenamingContext
+
 /-- The powerset of a well-typed B set has the expected B set type. -/
 theorem powerset_mem_btype.{u} {beta : BType} {X : ZFSet.{u}}
     (hX : X ∈ ⟦BType.set beta⟧ᶻ) :
