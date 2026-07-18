@@ -1,5 +1,6 @@
 import SMT.Reasoning.Basic.AbstractSubstDenote
 import SMT.Reasoning.Basic.DenotationTotality
+import SMT.Reasoning.Basic.EncodeTermBvUsed
 import SMT.Reasoning.SubstLemmas
 
 open Std.Do B SMT ZFSet
@@ -295,6 +296,266 @@ theorem toDestPair_typing_gen (Γ : SMT.TypeContext) :
               simp only [List.getElem_cons_succ]
               exact hacc j'' (by omega))
         j τ_j hget
+
+/-- Capture-safe substitution typing.  A replacement may carry bound names
+provided all of them are disjoint from the bound names of the target.  The
+ordinary substitution rule is the binder-free specialization of this lemma;
+the option-valued collection encoder needs this stronger form for its
+appended domain payload. -/
+theorem SMT_Typing_subst_of_bv_disjoint
+    {Gamma : SMT.TypeContext} {x : SMT.𝒱} (t e : SMT.Term) {tau : SMTType}
+    (typ_t : Gamma ⊢ˢ t : tau)
+    (bv_disjoint : ∀ v ∈ SMT.bv e, v ∉ SMT.bv t)
+    (typ_e : (hx : (Gamma.lookup x).isSome = true) →
+      Gamma ⊢ˢ e : (Gamma.lookup x).get hx) :
+    Gamma ⊢ˢ SMT.subst x e t : tau := by
+  by_cases h_fv : x ∈ SMT.fv t
+  · have hx_mem : x ∈ Gamma := SMT.Typing.mem_context_of_mem_fv typ_t h_fv
+    obtain ⟨alpha, alpha_def⟩ := Option.isSome_iff_exists.mp
+      (AList.lookup_isSome.mpr hx_mem)
+    have h_e_typed : Gamma ⊢ˢ e : alpha := by
+      have hsome : (Gamma.lookup x).isSome = true := by
+        simp [alpha_def]
+      have htyp := typ_e hsome
+      simpa only [alpha_def, Option.get_some] using htyp
+    exact core t e typ_t bv_disjoint alpha_def h_e_typed
+  · rwa [SMT_not_mem_fv_subst h_fv]
+where
+  core (t e : SMT.Term) {Gamma : SMT.TypeContext} {x : SMT.𝒱}
+      {tau alpha : SMTType}
+      (typ_t : Gamma ⊢ˢ t : tau)
+      (bv_disjoint : ∀ v ∈ SMT.bv e, v ∉ SMT.bv t)
+      (alpha_def : Gamma.lookup x = some alpha)
+      (typ_e : Gamma ⊢ˢ e : alpha) :
+      Gamma ⊢ˢ SMT.subst x e t : tau := by
+    induction typ_t generalizing e with
+    | var Gamma v tau hlookup =>
+      unfold SMT.subst
+      split_ifs with heq
+      · subst heq
+        cases alpha_def ▸ hlookup
+        exact typ_e
+      · exact .var Gamma v tau hlookup
+    | int Gamma n =>
+      simp only [SMT.subst]
+      exact .int Gamma n
+    | bool Gamma b =>
+      simp only [SMT.subst]
+      exact .bool Gamma b
+    | app Gamma f a tau sigma _ _ ihf iha =>
+      unfold SMT.subst
+      refine .app Gamma _ _ tau sigma ?_ ?_
+      · exact ihf e (by
+          intro v hv hfv
+          exact bv_disjoint v hv (by simp [SMT.bv, hfv])) alpha_def typ_e
+      · exact iha e (by
+          intro v hv hfv
+          exact bv_disjoint v hv (by simp [SMT.bv, hfv])) alpha_def typ_e
+    | lambda Gamma vs taus body gamma hvs hfresh hlen_pos hlen_eq _ ih =>
+      unfold SMT.subst
+      split_ifs with hxvs
+      · exact .lambda Gamma vs taus body gamma hvs hfresh hlen_pos hlen_eq
+          (by assumption)
+      · refine SMT.Typing.lambda Gamma vs taus _ gamma hvs ?_ hlen_pos hlen_eq ?_
+        · intro v hvvs hvsub
+          rcases SMT.bv_subst_mem_or e hvsub with hbody | he
+          · exact hfresh v hvvs hbody
+          · exact bv_disjoint v he (by simp [SMT.bv, hvvs])
+        · refine ih e ?_ ?_ ?_
+          · intro v hv hbody
+            exact bv_disjoint v hv (by simp [SMT.bv, hbody])
+          · rw [SMT.TypeContext.lookup_update Gamma x vs taus hlen_eq hxvs]
+            exact alpha_def
+          · apply SMT.Typing.weakening
+              (entries_subset_update_of_fresh hvs hlen_eq) typ_e
+            intro v hv hvctx
+            rw [SMT.TypeContext.mem_update_iff Gamma v vs taus hlen_eq] at hvctx
+            rcases hvctx with hvvs | hvGamma
+            · exact bv_disjoint v hv (by simp [SMT.bv, hvvs])
+            · exact SMT.Typing.bv_notMem_context typ_e v hv hvGamma
+    | «forall» Gamma vs taus body hvs hfresh hlen_pos hlen_eq _ ih =>
+      unfold SMT.subst
+      split_ifs with hxvs
+      · exact .forall Gamma vs taus body hvs hfresh hlen_pos hlen_eq
+          (by assumption)
+      · refine SMT.Typing.forall Gamma vs taus _ hvs ?_ hlen_pos hlen_eq ?_
+        · intro v hvvs hvsub
+          rcases SMT.bv_subst_mem_or e hvsub with hbody | he
+          · exact hfresh v hvvs hbody
+          · exact bv_disjoint v he (by simp [SMT.bv, hvvs])
+        · refine ih e ?_ ?_ ?_
+          · intro v hv hbody
+            exact bv_disjoint v hv (by simp [SMT.bv, hbody])
+          · rw [SMT.TypeContext.lookup_update Gamma x vs taus hlen_eq hxvs]
+            exact alpha_def
+          · apply SMT.Typing.weakening
+              (entries_subset_update_of_fresh hvs hlen_eq) typ_e
+            intro v hv hvctx
+            rw [SMT.TypeContext.mem_update_iff Gamma v vs taus hlen_eq] at hvctx
+            rcases hvctx with hvvs | hvGamma
+            · exact bv_disjoint v hv (by simp [SMT.bv, hvvs])
+            · exact SMT.Typing.bv_notMem_context typ_e v hv hvGamma
+    | «exists» Gamma vs taus body hvs hfresh hlen_pos hlen_eq _ ih =>
+      unfold SMT.subst
+      split_ifs with hxvs
+      · exact .exists Gamma vs taus body hvs hfresh hlen_pos hlen_eq
+          (by assumption)
+      · refine SMT.Typing.exists Gamma vs taus _ hvs ?_ hlen_pos hlen_eq ?_
+        · intro v hvvs hvsub
+          rcases SMT.bv_subst_mem_or e hvsub with hbody | he
+          · exact hfresh v hvvs hbody
+          · exact bv_disjoint v he (by simp [SMT.bv, hvvs])
+        · refine ih e ?_ ?_ ?_
+          · intro v hv hbody
+            exact bv_disjoint v hv (by simp [SMT.bv, hbody])
+          · rw [SMT.TypeContext.lookup_update Gamma x vs taus hlen_eq hxvs]
+            exact alpha_def
+          · apply SMT.Typing.weakening
+              (entries_subset_update_of_fresh hvs hlen_eq) typ_e
+            intro v hv hvctx
+            rw [SMT.TypeContext.mem_update_iff Gamma v vs taus hlen_eq] at hvctx
+            rcases hvctx with hvvs | hvGamma
+            · exact bv_disjoint v hv (by simp [SMT.bv, hvvs])
+            · exact SMT.Typing.bv_notMem_context typ_e v hv hvGamma
+    | eq Gamma a b sigma _ _ iha ihb =>
+      unfold SMT.subst
+      refine .eq Gamma _ _ sigma ?_ ?_
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact ihb e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+    | and Gamma a b _ _ iha ihb =>
+      unfold SMT.subst
+      refine .and Gamma _ _ ?_ ?_
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact ihb e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+    | or Gamma a b _ _ iha ihb =>
+      unfold SMT.subst
+      refine .or Gamma _ _ ?_ ?_
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact ihb e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+    | not Gamma a _ iha =>
+      unfold SMT.subst
+      apply SMT.Typing.not Gamma _
+      exact iha e (by
+        intro v hv hmem
+        exact bv_disjoint v hv (by simpa [SMT.bv] using hmem)) alpha_def typ_e
+    | imp Gamma a b _ _ iha ihb =>
+      unfold SMT.subst
+      refine .imp Gamma _ _ ?_ ?_
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact ihb e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+    | ite Gamma c a b sigma _ _ _ ihc iha ihb =>
+      unfold SMT.subst
+      refine .ite Gamma _ _ _ sigma ?_ ?_ ?_
+      · exact ihc e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact ihb e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+    | some Gamma a sigma _ iha =>
+      unfold SMT.subst
+      apply SMT.Typing.some Gamma _ sigma
+      exact iha e (by
+        intro v hv hmem
+        exact bv_disjoint v hv (by simpa [SMT.bv] using hmem)) alpha_def typ_e
+    | none Gamma sigma =>
+      simp only [SMT.subst]
+      exact .none Gamma sigma
+    | the Gamma a sigma _ iha =>
+      unfold SMT.subst
+      apply SMT.Typing.the Gamma _ sigma
+      exact iha e (by
+        intro v hv hmem
+        exact bv_disjoint v hv (by simpa [SMT.bv] using hmem)) alpha_def typ_e
+    | pair Gamma a sigma a' sigma' _ _ iha iha' =>
+      unfold SMT.subst
+      refine .pair Gamma _ sigma _ sigma' ?_ ?_
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact iha' e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+    | fst Gamma a sigma sigma' _ iha =>
+      unfold SMT.subst
+      apply SMT.Typing.fst Gamma _ sigma sigma'
+      exact iha e (by
+        intro v hv hmem
+        exact bv_disjoint v hv (by simpa [SMT.bv] using hmem)) alpha_def typ_e
+    | snd Gamma a sigma sigma' _ iha =>
+      unfold SMT.subst
+      apply SMT.Typing.snd Gamma _ sigma sigma'
+      exact iha e (by
+        intro v hv hmem
+        exact bv_disjoint v hv (by simpa [SMT.bv] using hmem)) alpha_def typ_e
+    | distinct Gamma ts sigma hts ih =>
+      unfold SMT.subst
+      apply SMT.Typing.distinct Gamma _ sigma
+      intro a ha
+      rw [List.mem_map] at ha
+      obtain ⟨item, _, rfl⟩ := ha
+      exact ih item.1 item.2 e (by
+        intro v hv hmem
+        apply bv_disjoint v hv
+        simp only [SMT.bv, List.mem_flatten]
+        exact ⟨SMT.bv item.1,
+          List.mem_map.mpr ⟨item, List.mem_attach _ _, rfl⟩, hmem⟩)
+        alpha_def typ_e
+    | le Gamma a b _ _ iha ihb =>
+      unfold SMT.subst
+      refine .le Gamma _ _ ?_ ?_
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact ihb e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+    | add Gamma a b _ _ iha ihb =>
+      unfold SMT.subst
+      refine .add Gamma _ _ ?_ ?_
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact ihb e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+    | sub Gamma a b _ _ iha ihb =>
+      unfold SMT.subst
+      refine .sub Gamma _ _ ?_ ?_
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact ihb e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+    | mul Gamma a b _ _ iha ihb =>
+      unfold SMT.subst
+      refine .mul Gamma _ _ ?_ ?_
+      · exact iha e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
+      · exact ihb e (by
+          intro v hv hmem
+          exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
 
 theorem fromProdl_length_of_hasArity {τ : BType} {n : ℕ} (h : τ.hasArity n) :
     (τ.toSMTType.fromProdl (n - 1)).length = n := by
