@@ -3073,6 +3073,154 @@ theorem represented_option_collect_subst_truth_of_some.{u}
     (bound_none ss) (bound_respects ss) (bound_dom ss) den_P hbound_values
     hPenc_fv z_not_fv_Penc z_not_vars_source hctx_source'
 
+open Classical in
+/-- Build the source and target predicate facts needed by the guarded graph
+bridge at a source-domain pair.  This is the function-valued analogue of the
+pointwise predicate setup used by the set-valued collection proof. -/
+theorem represented_option_collect_predicate_setup.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ []) (prefix_nemp : vs.dropLast ≠ [])
+    (vs_nodup : vs.Nodup)
+    {D P : B.Term} {alpha beta : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (hprod_arity : (alpha ×ᴮ beta).hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set (alpha ×ᴮ beta), hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set (alpha ×ᴮ beta), hT⟩ : B.Dom))
+    {a b : ZFSet.{u}} (ha : a ∈ ⟦alpha⟧ᶻ) (hb : b ∈ ⟦beta⟧ᶻ)
+    (hvs : 2 ≤ vs.length)
+    {x_fin : Fin vs.length → B.Dom.{u}}
+    (hx_fin : ∀ i, x_fin i =
+      (⟨(a.pair b).get vs.length i,
+        (alpha ×ᴮ beta).get vs.length i,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet hprod_arity
+            (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩))
+          hprod_arity (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩ : B.Dom))
+    (hmem_D : a.pair b ∈ Dval)
+    {Penc Dapp : SMT.Term} {z : SMT.𝒱}
+    {Theta : SMT.RenamingContext.Context.{u}} {Wa : SMT.Dom.{u}}
+    (hcov_z : SMT.RenamingContext.CoversFV
+      (Function.update Theta z (some Wa)) (.var z))
+    (hden_z : ⟦(SMT.Term.var z).abstract
+      (Function.update Theta z (some Wa)) hcov_z⟧ˢ = some Wa)
+    (hWa_type : Wa.snd.fst = alpha.toSMTType)
+    (hWa_mem : Wa.fst ∈ ⟦alpha.toSMTType⟧ᶻ)
+    (hWa_retract : retract alpha Wa.fst = a)
+    {DappVal Wb : SMT.Dom.{u}}
+    (hcov_Dapp : SMT.RenamingContext.CoversFV
+      (Function.update Theta z (some Wa)) Dapp)
+    (hden_Dapp : ⟦Dapp.abstract
+      (Function.update Theta z (some Wa)) hcov_Dapp⟧ˢ = some DappVal)
+    (hDapp_type : DappVal.snd.fst = SMTType.option beta.toSMTType)
+    (hWb_type : Wb.snd.fst = beta.toSMTType)
+    (hWb_retract : retract beta Wb.fst = b)
+    (hDapp_value : DappVal.fst = (ZFSet.Option.some
+      (S := ⟦beta.toSMTType⟧ᶻ) ⟨Wb.fst,
+        by rw [← hWb_type]; exact Wb.snd.snd⟩).val)
+    (hDapp_bv : SMT.bv Dapp = [])
+    (hDapp_fv_not_bv : ∀ w ∈ SMT.fv Dapp, w ∉ SMT.bv Penc)
+    (hDapp_fv_disj_vs : ∀ w ∈ SMT.fv Dapp, w ∉ vs)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc) (hz_not_vs : z ∉ vs)
+    (hcov_sub : SMT.RenamingContext.CoversFV
+      (Function.update Theta z (some Wa))
+      (SMT.substList vs
+        ((toDestPair vs.dropLast (.var z)).concat (.the Dapp)) Penc))
+    (hcov_upd : ∀ ss : Fin vs.length → SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.updates (Function.update Theta z (some Wa)) vs
+          ((List.ofFn ss).map Option.some)) Penc)
+    {Ebody : B.Env} {LambdaP GammaP : SMT.TypeContext}
+    {sigmaP : SMTType} {usedP : List SMT.𝒱}
+    (typ_P : Ebody.context ⊢ᴮ P : BType.bool)
+    (P_total : EncodeTermRepTotal.{u}
+      P Ebody BType.bool LambdaP Penc sigmaP GammaP usedP)
+    (hP_sigma : sigmaP = SMTType.bool)
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs →
+      match Xi v, Theta v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False)
+    (wf : B.RenWF Ebody.context
+      (Function.updates Xi vs (List.ofFn fun i => some (x_fin i))))
+    (bound_none : ∀ ss : Fin vs.length → SMT.Dom.{u},
+      ∀ v ∉ usedP,
+        Function.updates Theta vs
+          ((List.ofFn ss).map Option.some) v = none)
+    (bound_respects : ∀ ss : Fin vs.length → SMT.Dom.{u},
+      B.RenamingContext.RespectsTypeContextOnFV
+        (Function.updates Theta vs
+          ((List.ofFn ss).map Option.some)) LambdaP P)
+    (bound_dom : ∀ ss : Fin vs.length → SMT.Dom.{u},
+      ∀ v,
+        Function.updates Theta vs
+          ((List.ofFn ss).map Option.some) v ≠ none → v ∈ LambdaP)
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars P)
+    (z_not_fv_Penc : z ∉ SMT.fv Penc)
+    (z_not_vars_P : z ∉ B.Term.vars P) :
+    ∃ (Pval : ZFSet.{u}) (hPval : Pval ∈ ⟦BType.bool⟧ᶻ)
+      (Dp : SMT.Dom.{u}),
+      ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+        (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ =
+        some (⟨Pval, BType.bool, hPval⟩ : B.Dom) ∧
+      ⟦(SMT.substList vs
+        ((toDestPair vs.dropLast (.var z)).concat (.the Dapp)) Penc).abstract
+        (Function.update Theta z (some Wa)) hcov_sub⟧ˢ = some Dp ∧
+      Dp.snd.fst = SMTType.bool ∧
+      (Dp.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue) := by
+  have hpair_type : a.pair b ∈ ⟦alpha ×ᴮ beta⟧ᶻ :=
+    ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩
+  have hpair_arity : (a.pair b).hasArity vs.length :=
+    hasArity_of_mem_toZFSet hprod_arity hpair_type
+  have hx_fin_type : ∀ i, (x_fin i).snd.fst =
+      (alpha ×ᴮ beta).get vs.length i ∧
+      (x_fin i).fst ∈ ⟦(alpha ×ᴮ beta).get vs.length i⟧ᶻ := by
+    intro i
+    have hmem := (x_fin i).snd.snd
+    rw [hx_fin i] at hmem
+    rw [hx_fin i]
+    exact ⟨rfl, hmem⟩
+  have hx_fin_def : x_fin = fun i =>
+      (⟨(a.pair b).get vs.length i,
+        (alpha ×ᴮ beta).get vs.length i,
+        get_mem_type_of_isTuple hpair_arity hprod_arity hpair_type⟩ : B.Dom) := by
+    funext i
+    simpa only [proof_irrel_heq] using hx_fin i
+  have hx_fin_eq : ZFSet.ofFinDom x_fin = a.pair b := by
+    rw [hx_fin_def]
+    simpa only [proof_irrel_heq] using
+      (ZFSet.ofFinDom_get (List.length_pos_iff.mpr vs_nemp)
+        (fun i => get_mem_type_of_isTuple hpair_arity hprod_arity hpair_type)
+        hpair_arity hprod_arity)
+  have hx_fin_D : ZFSet.ofFinDom x_fin ∈ Dval := by
+    rw [hx_fin_eq]
+    exact hmem_D
+  obtain ⟨XiP_fv, Pval, hPval, den_P⟩ :=
+    B.denote_collect_predicate_exists Xi_fv vs_nemp vs_nodup hprod_arity
+      den_D den_collect typ_P hx_fin_type hx_fin_D wf
+  obtain ⟨Dp, hden_Psub, hDp_type, htruth⟩ :=
+    represented_option_collect_subst_truth_of_some
+      (Penc := Penc) (Dapp := Dapp) prefix_nemp vs_nodup ha hb hvs
+      hprod_arity hx_fin hcov_z hden_z hWa_type hWa_mem hWa_retract
+      hcov_Dapp hden_Dapp hDapp_type hWb_type hWb_retract hDapp_value
+      hDapp_bv hDapp_fv_not_bv hDapp_fv_disj_vs hvs_not_bv hz_not_bv
+      hz_not_vs hcov_sub hcov_upd P_total XiP_fv ambient wf bound_none
+      bound_respects bound_dom den_P hPenc_fv z_not_fv_Penc z_not_vars_P
+      (by intro _ _ _; rfl)
+  have den_P_go :
+      ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+        (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ =
+        some (⟨Pval, BType.bool, hPval⟩ : B.Dom) := by
+    rw [denote_term_abstract_go_eq_term_abstract vs_nodup vs_nemp x_fin
+      XiP_fv]
+    exact den_P
+  exact ⟨Pval, hPval, Dp, den_P_go, hden_Psub,
+    hDp_type.trans hP_sigma, htruth⟩
+
 /-- Specialize the represented collection-body bridge to the tuple projections
 emitted by the encoder.  This packages the routine length, freshness, and
 denotation facts for `toDestPair`, leaving callers with the semantic data for
