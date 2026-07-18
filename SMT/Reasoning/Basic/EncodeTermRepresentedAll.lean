@@ -1608,7 +1608,7 @@ theorem encodeTerm_rep_spec.all_case.{u}
     (vs : List B.𝒱) (D P : B.Term)
     (D_ih : EncodeTermRepIH.{u} D)
     (P_ih : EncodeTermRepIH.{u} P)
-    (P_scoped : EncodeTermRepScopedBoolIH.{u} P)
+    (P_scoped : EncodeTermRepScopedBoolFromIH.{u} P)
     (binder_admissible : EncodeTermAllBinderAdmissible.{u})
     (wd_P : B.Term.WellDefined.{u} P)
     (E : B.Env) {Lambda : SMT.TypeContext} {alpha : BType}
@@ -2236,6 +2236,10 @@ theorem encodeTerm_rep_spec.all_case.{u}
             ThetaP_dom_base den_P vars_used_P_base
             PBase_types_sub_Ebody_on_P_vars P_bv_nodup
             respects_P_base fv_P_in_base wf_P
+            (⟨St3.types, DeclarationContextTrace.nil _,
+              St3_sub_PBase_types⟩ :
+              DeclarationContextEnvelope St3.types [] PBase.types)
+            fv_P_in_St3 (ScopedSpecsTyping.nil St3.types)
             (n := PBase.env.freshvarsc)
             (decl := PBase.env.declarations)))
         (encodeTerm_bv_used Ebody (t := P)
@@ -2251,7 +2255,7 @@ theorem encodeTerm_rep_spec.all_case.{u}
     mintro ∀St4
     mpure pre
     dsimp at pre
-    obtain ⟨⟨⟨P_post, ⟨DltP, P_decl_eq, P_ctx, P_trace,
+    obtain ⟨⟨⟨P_post, ⟨DltP, P_decl_eq, P_trace, P_envelope,
         P_sc_total, P_guard, P_specs_op, P_sc_typing⟩⟩,
       bv_Penc_used, _P_used_sub_bv, P_decl_bv⟩,
       bv_Penc_not_used, _P_used_sub_struct, DltP_struct,
@@ -2363,7 +2367,7 @@ theorem encodeTerm_rep_spec.all_case.{u}
           rcases (SMT.TypeContext.mem_update_iff
             St4.types v zs sigmas zs_len).mp hv5' with hvz | hv4
           · exact .inr (.inl hvz)
-          · rcases P_ctx.mem_classify hv4 with hv3 | hvP
+          · rcases P_trace.context_generated.mem_classify hv4 with hv3 | hvP
             · exact .inl hv3
             · exact .inr (.inr hvP)
       | have _option_branch := sigmas_eq
@@ -2410,7 +2414,8 @@ theorem encodeTerm_rep_spec.all_case.{u}
         have St5_mem_classify : ∀ v, v ∈ St5.types →
             v ∈ St3.types ∨ v ∈ zs ∨ v ∈ declVars DltP := by
           intro v hv5
-          rcases P_ctx.mem_classify hv5 with hvbase | hvP
+          rcases P_trace.context_generated.mem_classify hv5 with
+            hvbase | hvP
           · have PBase_update : PBase.types =
                 St3.types.update zs sigmas zs_len := by
               rw [PBase_types, SMT.TypeContext.update_eq_zip_foldl]
@@ -2520,7 +2525,8 @@ theorem encodeTerm_rep_spec.all_case.{u}
     mpure pre
     obtain ⟨⟨used_sub_M, types_sub_M, keys_sub_M, sigmaMem_eq,
       typ_mem, fv_tuple_mem, fv_Denc_mem, mem_preserves,
-      DltM, mem_decl_eq, mem_ctx, mem_trace, mem_decl_fresh, mem_sem,
+      DltM, mem_decl_eq, mem_ctx, mem_trace, mem_decl_fresh,
+      _mem_fv_dep, _mem_specs_fv_dep, mem_sem,
       mem_specs_op, mem_sc_typing⟩,
       ⟨DltM_struct, mem_decl_struct, mem_specs_fv, mem_fv⟩⟩ := pre
     have DltM_struct_eq : DltM = DltM_struct := by
@@ -3804,8 +3810,10 @@ theorem encodeTerm_rep_spec.all_case.{u}
             vs zs wsV vs_zs_len wsV_len vs_nodup zs_disj_vs
             specs_bv_fresh hzs_vals all_specs_GammaM hresp_orig
             hcov_sub hterms
-        have P_scope : ScopedContextExtends PBase.types DltP GammaM :=
-          fun e he => St4_sub_GammaM (P_trace.scoped_extends he)
+        have P_scope : ScopedContextExtends St3.types DltP GammaM := by
+          intro e he
+          apply St4_sub_GammaM
+          exact P_envelope.scoped_extends (by simpa using he)
         have M_scope : ScopedContextExtends St5.types DltM GammaM :=
           fun e he => St6_sub_GammaM (mem_trace.scoped_extends he)
         have typ_P_GammaM : GammaM ⊢ˢ Penc : SMTType.bool :=
