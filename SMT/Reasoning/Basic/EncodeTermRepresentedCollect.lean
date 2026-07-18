@@ -294,6 +294,41 @@ theorem optionGraph_apply_eq_zftrue_iff.{u}
       exact ZFSet.fapply.def (ZFSet.is_func_is_pfunc hFfunc) _
   exact hpair_graph.trans (hgraph_mem.trans hpair_app)
 
+/- A successful collection denotation first evaluates its source domain.  This
+extractor recovers that well-typed domain value without exposing the remaining
+predicate-totality machinery of the source interpreter. -/
+open Classical in
+theorem B.denote_collect_domain_exists.{u}
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    {Ectx : B.TypeContext} (typ_D : Ectx ⊢ᴮ D : BType.set tau)
+    (wf : B.RenWF Ectx Xi)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom)) :
+    ∃ (Dval : ZFSet.{u}) (hDval : Dval ∈ ⟦BType.set tau⟧ᶻ),
+      ⟦D.abstract Xi
+        (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+        some (⟨Dval, BType.set tau, hDval⟩ : B.Dom) := by
+  have den_inv := den_collect
+  simp only [B.Term.abstract] at den_inv
+  unfold B.denote at den_inv
+  simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at den_inv
+  obtain ⟨⟨Dval, Dty, hDval⟩, den_D_raw, _⟩ := den_inv
+  have den_D0 : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, Dty, hDval⟩ : B.Dom) := by
+    convert den_D_raw using 2
+  have Dty_eq : Dty = BType.set tau := by
+    exact (denote_welltyped_eq
+      (t := D.abstract Xi (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv))))
+      ⟨_, WFTC.of_abstract, BType.set tau,
+        by convert Typing.of_abstract _ typ_D⟩
+      den_D0).symm
+  subst Dty
+  exact ⟨Dval, hDval, den_D0⟩
+
 /- Unfold a successful source collection denotation into the separation
 equation used by the SMT-lambda retraction proof.  Keeping this source-only
 fact independent of the target representation lets the main and alternative
