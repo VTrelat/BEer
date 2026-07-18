@@ -1946,6 +1946,46 @@ theorem denote_guarded_option_term_some_iff.{u}
     hW_type hden_body' hdomain hpredicate hmembership
 
 open Classical in
+/-- Lift the domain-only reverse direction of guarded-option semantics back
+to concrete SMT syntax.  Unlike the bidirectional theorem, it does not need a
+separate denotation witness for the substituted predicate. -/
+theorem denote_guarded_option_term_some_implies_domain.{u}
+    {Dapp Psub : SMT.Term}
+    {Theta : SMT.RenamingContext.Context.{u}}
+    {Dd Dbody W : SMT.Dom.{u}} {beta : SMTType}
+    (hcov_Dapp : SMT.RenamingContext.CoversFV Theta Dapp)
+    (hden_Dapp : ⟦Dapp.abstract Theta hcov_Dapp⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta)
+    (hW_type : W.snd.fst = beta)
+    (hcov_body : SMT.RenamingContext.CoversFV Theta
+      (SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq Dapp (SMT.Term.some (SMT.Term.the Dapp))) Psub)
+        (SMT.Term.some (SMT.Term.the Dapp)) (none$ beta)))
+    (hden_body : ⟦(SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq Dapp (SMT.Term.some (SMT.Term.the Dapp))) Psub)
+        (SMT.Term.some (SMT.Term.the Dapp)) (none$ beta)).abstract Theta hcov_body⟧ˢ =
+        some Dbody)
+    (hbody_value : Dbody.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val) :
+    Dd.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val := by
+  have hden_body' : ⟦SMT.PHOAS.Term.ite
+      (SMT.PHOAS.Term.and
+        (SMT.PHOAS.Term.eq (Dapp.abstract Theta hcov_Dapp)
+          (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the
+            (Dapp.abstract Theta hcov_Dapp))))
+        (Psub.abstract Theta (by
+          intro v hv
+          exact hcov_body v (SMT.fv.mem_ite (.inl
+            (SMT.fv.mem_and (.inr hv)))))))
+      (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the
+        (Dapp.abstract Theta hcov_Dapp)))
+      (SMT.PHOAS.Term.none beta)⟧ˢ = some Dbody := by
+    simpa only [noneCast, SMT.Term.abstract, proof_irrel_heq] using hden_body
+  exact denote_guarded_option_some_implies_domain hden_Dapp hD_type hW_type
+    hden_body' hbody_value
+
+open Classical in
 /-- The concrete guarded option body denotes the canonical payload exactly
 when the corresponding source tuple belongs to a collected relation.  This
 joins the source separation equation to the domain and predicate facts that
