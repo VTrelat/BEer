@@ -557,6 +557,91 @@ where
           intro v hv hmem
           exact bv_disjoint v hv (by simp [SMT.bv, hmem])) alpha_def typ_e
 
+/-- Substituting an equal-length prefix followed by one final payload is the
+same as first substituting the prefix and then substituting the final binder.
+This exposes the capture-safe final substitution used by option collections. -/
+theorem SMT_substList_snoc
+    {xs : List SMT.𝒱} {ts : List SMT.Term} {x : SMT.𝒱}
+    {t e : SMT.Term} (hxs : xs.length = ts.length) :
+    SMT.substList (xs ++ [x]) (ts.concat t) e =
+      SMT.subst x t (SMT.substList xs ts e) := by
+  induction xs generalizing ts e with
+  | nil =>
+    cases ts with
+    | nil => simp [SMT.substList]
+    | cons s ts => simp at hxs
+  | cons y xs ih =>
+    cases ts with
+    | nil => simp at hxs
+    | cons s ts =>
+      simp only [List.length_cons] at hxs
+      unfold SMT.substList
+      exact ih (Nat.succ.inj hxs)
+
+/-- The guarded option body used for a function-valued collection is well
+typed under a fresh one-variable lambda binder. -/
+theorem SMT_Typing_guarded_option_lambda
+    {Gamma : SMT.TypeContext} {alpha beta : SMTType}
+    {D Psub : SMT.Term} {z : SMT.𝒱}
+    (z_not_Gamma : z ∉ Gamma)
+    (z_not_bv_D : z ∉ SMT.bv D)
+    (typ_D : Gamma ⊢ˢ D : alpha.fun (SMTType.option beta))
+    (typ_Psub : Gamma.insert z alpha ⊢ˢ Psub : SMTType.bool) :
+    Gamma ⊢ˢ (λˢ [z]) [alpha]
+      (SMT.Term.ite
+        (SMT.Term.and
+          (SMT.Term.eq ((@ˢD) (.var z))
+            (SMT.Term.some (SMT.Term.the ((@ˢD) (.var z)))))
+          Psub)
+        (SMT.Term.some (SMT.Term.the ((@ˢD) (.var z))))
+        (none$ beta)) :
+      alpha.fun (SMTType.option beta) := by
+  have hupdate : SMT.TypeContext.update Gamma [z] [alpha] rfl =
+      Gamma.insert z alpha := by
+    simp only [SMT.TypeContext.update, List.length_cons, List.length_nil,
+      zero_add, Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin,
+      Fin.val_eq_zero, List.getElem_cons_zero, Fin.foldl_succ, Fin.foldl_zero]
+  have z_not_bv_Psub : z ∉ SMT.bv Psub := by
+    intro hz
+    exact SMT.Typing.bv_notMem_context typ_Psub z hz
+      (AList.lookup_isSome.mp (Option.isSome_of_eq_some
+        (AList.lookup_insert Gamma)))
+  refine SMT.Typing.lambda Gamma [z] [alpha] _ (SMTType.option beta)
+    ?_ ?_ (by simp) rfl ?_
+  · intro v hv
+    rw [List.mem_singleton] at hv
+    subst v
+    exact z_not_Gamma
+  · intro v hv
+    rw [List.mem_singleton] at hv
+    subst v
+    simp only [SMT.bv, List.append_nil, List.mem_append, not_or]
+    refine ⟨⟨⟨⟨z_not_bv_D, z_not_bv_D⟩, z_not_bv_Psub⟩,
+      z_not_bv_D⟩, ?_⟩
+    simp [noneCast, SMT.bv]
+  · rw [hupdate]
+    have h_ins := SMT.TypeContext.entries_subset_insert_of_notMem
+      (v := z) (τ := alpha) z_not_Gamma
+    have typ_D_z : Gamma.insert z alpha ⊢ˢ D :
+        alpha.fun (SMTType.option beta) :=
+      SMT.Typing.weakening h_ins typ_D
+        (SMT.Typing.bv_notMem_insert_of_fresh typ_D z_not_bv_D)
+    have typ_z : Gamma.insert z alpha ⊢ˢ SMT.Term.var z : alpha :=
+      SMT.Typing.var _ z alpha (AList.lookup_insert Gamma)
+    have typ_Dapp : Gamma.insert z alpha ⊢ˢ ((@ˢD) (.var z)) :
+        SMTType.option beta :=
+      SMT.Typing.app _ _ _ _ _ typ_D_z typ_z
+    have typ_payload : Gamma.insert z alpha ⊢ˢ
+        SMT.Term.the ((@ˢD) (.var z)) : beta :=
+      SMT.Typing.the _ _ _ typ_Dapp
+    have typ_some : Gamma.insert z alpha ⊢ˢ
+        SMT.Term.some (SMT.Term.the ((@ˢD) (.var z))) :
+        SMTType.option beta :=
+      SMT.Typing.some _ _ _ typ_payload
+    refine SMT.Typing.ite _ _ _ _ _ ?_ typ_some (SMT.Typing.none _ beta)
+    exact SMT.Typing.and _ _ _
+      (SMT.Typing.eq _ _ _ _ typ_Dapp typ_some) typ_Psub
+
 theorem fromProdl_length_of_hasArity {τ : BType} {n : ℕ} (h : τ.hasArity n) :
     (τ.toSMTType.fromProdl (n - 1)).length = n := by
   induction n generalizing τ with
