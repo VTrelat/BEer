@@ -446,6 +446,9 @@ abbrev CastMembershipRepSpec.{u} (τ : BType)
           ContextGeneratedByDeclarations Λ Γ' Dlt ∧
           DeclarationContextTrace Λ Dlt Γ' ∧
           (∀ v ∈ declVars Dlt, v ∉ used) ∧
+          (SMT.fv t ⊆ (SMT.fv x ∪ SMT.fv S) ∪ declVars Dlt) ∧
+          (∀ b ∈ specBodies Dlt,
+            SMT.fv b ⊆ (SMT.fv x ∪ SMT.fv S) ∪ declVars Dlt) ∧
           CastMembershipRepSemantics.{u} τ x S t σx σS Λ Γ'
             used E'.usedVars Dlt ∧
           (∀ b ∈ specBodies Dlt, Γ' ⊢ˢ b : SMTType.bool) ∧
@@ -468,7 +471,8 @@ theorem castMembership_direct_rep_contract.{u}
   refine ⟨List.Subset.refl _, (fun _ h => h), St_sub, trivial,
     SMT.Typing.app _ _ _ _ _ typ_S typ_x, ?_, ?_, ?_, [], by simp,
     ContextGeneratedByDeclarations.refl _, DeclarationContextTrace.nil _,
-    (by simp [declVars]), ?_, (by simp [specBodies]), ?_⟩
+    (by simp [declVars]), ?_, (by simp [specBodies]), ?_,
+    (by simp [specBodies]), ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inr hv
@@ -476,6 +480,11 @@ theorem castMembership_direct_rep_contract.{u}
     rw [SMT.fv, List.mem_append]
     exact Or.inl hv
   · exact fun _ _ h => h
+  · intro v hv
+    rw [SMT.fv, List.mem_append] at hv
+    change v ∈ (SMT.fv x ∪ SMT.fv S) ∪ []
+    simp only [List.mem_union_iff, List.not_mem_nil, or_false]
+    exact hv.elim Or.inr Or.inl
   · intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
       Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
       Xrel Arel
@@ -614,7 +623,7 @@ theorem castMembership_setPred_cast_rep_contract.{u}
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper σS spec, decl_eq, helper_ctx_gen,
-    helper_ctx_trace, ?_, ?_, ?_, ?_⟩
+    helper_ctx_trace, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
@@ -625,6 +634,24 @@ theorem castMembership_setPred_cast_rep_contract.{u}
     simp only [declVars_helperSpecChunk, List.mem_singleton] at hv
     subst v
     exact helper_not_used
+  · intro v hv
+    simp only [SMT.fv, List.mem_append, List.mem_singleton] at hv
+    simp only [List.mem_union_iff, declVars_helperSpecChunk,
+      List.mem_singleton]
+    rcases hv with hspec | (hS | rfl)
+    · rcases List.mem_union_iff.mp (spec_fv hspec) with hx | hhelper
+      · exact Or.inl (Or.inl hx)
+      · exact Or.inr (List.mem_singleton.mp hhelper)
+    · exact Or.inl (Or.inr hS)
+    · exact Or.inr rfl
+  · intro body hbody v hv
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    simp only [List.mem_union_iff, declVars_helperSpecChunk,
+      List.mem_singleton]
+    rcases List.mem_union_iff.mp (spec_fv hv) with hx | hhelper
+    · exact Or.inl (Or.inl hx)
+    · exact Or.inr (List.mem_singleton.mp hhelper)
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -999,7 +1026,7 @@ theorem castMembership_setPred_reverse_cast_rep_contract.{u}
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper (.fun σx .bool) spec, decl_eq, helper_ctx_gen,
-    helper_ctx_trace, ?_, ?_, ?_, ?_⟩
+    helper_ctx_trace, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inr (by
@@ -1012,6 +1039,24 @@ theorem castMembership_setPred_reverse_cast_rep_contract.{u}
     simp only [declVars_helperSpecChunk, List.mem_singleton] at hv
     subst v
     exact helper_not_used
+  · intro v hv
+    simp only [SMT.fv, List.mem_append, List.mem_singleton] at hv
+    simp only [List.mem_union_iff, declVars_helperSpecChunk,
+      List.mem_singleton]
+    rcases hv with hspec | (rfl | hx)
+    · rcases List.mem_union_iff.mp (spec_fv hspec) with hS | hhelper
+      · exact Or.inl (Or.inr hS)
+      · exact Or.inr (List.mem_singleton.mp hhelper)
+    · exact Or.inr rfl
+    · exact Or.inl (Or.inl hx)
+  · intro body hbody v hv
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    simp only [List.mem_union_iff, declVars_helperSpecChunk,
+      List.mem_singleton]
+    rcases List.mem_union_iff.mp (spec_fv hv) with hS | hhelper
+    · exact Or.inl (Or.inr hS)
+    · exact Or.inr (List.mem_singleton.mp hhelper)
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -1391,7 +1436,7 @@ theorem castMembership_option_rep_contract.{u}
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
     helperSpecChunk helper (.pair a.toSMTType b.toSMTType) spec,
-    decl_eq, helper_ctx_gen, helper_ctx_trace, ?_, ?_, ?_, ?_⟩
+    decl_eq, helper_ctx_gen, helper_ctx_trace, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inl (source_fv_spec hv)
@@ -1402,6 +1447,25 @@ theorem castMembership_option_rep_contract.{u}
     simp only [declVars_helperSpecChunk, List.mem_singleton] at hv
     subst v
     exact helper_not_used
+  · intro v hv
+    simp only [SMT.fv, List.mem_append, List.mem_singleton] at hv
+    simp only [List.mem_union_iff, declVars_helperSpecChunk,
+      List.mem_singleton]
+    rcases hv with hspec | ((hS | rfl) | rfl)
+    · rcases List.mem_union_iff.mp (spec_fv hspec) with hx | hhelper
+      · exact Or.inl (Or.inl hx)
+      · exact Or.inr (List.mem_singleton.mp hhelper)
+    · exact Or.inl (Or.inr hS)
+    · exact Or.inr rfl
+    · exact Or.inr rfl
+  · intro body hbody v hv
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    simp only [List.mem_union_iff, declVars_helperSpecChunk,
+      List.mem_singleton]
+    rcases List.mem_union_iff.mp (spec_fv hv) with hx | hhelper
+    · exact Or.inl (Or.inl hx)
+    · exact Or.inr (List.mem_singleton.mp hhelper)
   intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
     Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
     Xrel Arel
@@ -2166,7 +2230,8 @@ theorem encodeTerm_rep_spec.mem_case.{u}
   mpure pre
   obtain ⟨used_sub_M, types_sub_M, keys_sub_M, smem_eq,
     typ_mem, _fv_x_mem, _fv_S_mem, mem_preserves,
-    Dlt, decl_eq, _mem_ctx, _mem_trace, _mem_decl_fresh, mem_sem,
+    Dlt, decl_eq, _mem_ctx, _mem_trace, _mem_decl_fresh,
+    _mem_fv_dep, _mem_specs_fv_dep, mem_sem,
     _mem_specs_typing, _mem_sc_typing⟩ := pre
   change smem = SMTType.bool at smem_eq
   subst smem
