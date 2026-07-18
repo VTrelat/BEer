@@ -121,8 +121,8 @@ theorem encodeTerm_rep_scoped.eq_case_from.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_envelope, x_sc_total, x_guard,
-      x_sc_typing⟩⟩,
+  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_trace, x_envelope, x_sc_total, x_guard,
+      x_specs_op, x_sc_typing⟩⟩,
       bv_x_used, _x_used_sub_struct, Dltx_struct,
         x_decl_struct, x_delta_ok⟩,
       bv_x_not_used, _⟩ := pre
@@ -218,8 +218,8 @@ theorem encodeTerm_rep_scoped.eq_case_from.{u}
   mintro ∀StS
   mpure pre
   dsimp at pre
-  obtain ⟨⟨⟨S_post, ⟨DltS, S_decl_eq, S_envelope, S_sc_total, S_guard,
-      S_sc_typing⟩⟩,
+  obtain ⟨⟨⟨S_post, ⟨DltS, S_decl_eq, S_trace, S_envelope, S_sc_total, S_guard,
+      S_specs_op, S_sc_typing⟩⟩,
       bv_S_used, _S_used_sub_struct, DltS_struct,
         S_decl_struct, S_delta_ok⟩,
       _bv_S_not_used, _S_used_sub_notmem, DltS_notmem,
@@ -283,7 +283,7 @@ theorem encodeTerm_rep_scoped.eq_case_from.{u}
   mpure pre
   obtain ⟨used_sub_Eq, types_sub_Eq, keys_sub_Eq, seq_eq,
     typ_eq, fv_x_eq, fv_S_eq, eq_preserves,
-    DltEq, eq_decl_eq, _eq_ctx, eq_trace, _eq_decl_fresh,
+    DltEq, eq_decl_eq, eq_ctx, eq_trace, eq_decl_fresh,
     eq_fv_dep, eq_specs_fv_dep, eq_sem,
     eq_specs_op, _eq_sc_typing⟩ := pre
   change seq = SMTType.bool at seq_eq
@@ -299,7 +299,10 @@ theorem encodeTerm_rep_scoped.eq_case_from.{u}
     ScopedGeneratedTyping.of_binary_helper S_envelope eq_trace
       typ_x_final typ_S_enc typ_eq eq_specs_op
       x_sc_typing_full S_sc_typing eq_fv_dep eq_specs_fv_dep
-  refine ⟨(Dltx ++ DltS) ++ DltEq, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨(Dltx ++ DltS) ++ DltEq, ?_,
+    DeclarationContextTrace.append
+      (DeclarationContextTrace.append x_trace S_trace) eq_trace,
+    ?_, ?_, ?_, ?_, ?_⟩
   · rw [eq_decl_eq, S_decl_eq]
     simp only [List.append_assoc]
   · simpa [List.append_assoc] using eq_envelope
@@ -587,4 +590,21 @@ theorem encodeTerm_rep_scoped.eq_case_from.{u}
       hcov_eq denOut target_respects_eq_M specs_M_at_StEq
       hdenOut hdenOut_type
     exact result_rel
+  · intro body hbody
+    rw [specBodies_append, List.mem_append] at hbody
+    rcases hbody with hchildren | heq_body
+    · rw [specBodies_append, List.mem_append] at hchildren
+      rcases hchildren with hxbody | hSbody
+      · have typ_at_S : StS.types ⊢ˢ body : SMTType.bool :=
+          typing_weakening_generated types_sub_S
+            S_trace.context_generated S_delta_not_used.1
+            (x_specs_op body hxbody)
+            (fun v hv => x_delta_ok.2 body hxbody v hv)
+        exact typing_weakening_generated types_sub_Eq eq_ctx
+          eq_decl_fresh typ_at_S
+          (fun v hv => used_sub_S (x_delta_ok.2 body hxbody v hv))
+      · exact typing_weakening_generated types_sub_Eq eq_ctx
+          eq_decl_fresh (S_specs_op body hSbody)
+          (fun v hv => S_delta_ok.2 body hSbody v hv)
+    · exact eq_specs_op body heq_body
   · simpa [List.append_assoc] using eq_sc_typing_clean

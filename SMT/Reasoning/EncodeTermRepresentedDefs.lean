@@ -1096,9 +1096,11 @@ abbrev EncodeTermRepScopedPostFrom.{u}
     (E' : SMT.Env) (Γ' : SMT.TypeContext) : Prop :=
   ∃ Dlt : SMT.Chunk,
     E'.declarations = decl ++ Dlt ∧
+    DeclarationContextTrace Λop Dlt Γ' ∧
     DeclarationContextEnvelope Base (Dpre ++ Dlt) Γ' ∧
     EncodeTermRepScopedTotal.{u} t E α Λop t' σ Γ' E'.usedVars Dlt ∧
     EncodeTermRepGuardedSound.{u} t E α t' σ Base (Dpre ++ Dlt) ∧
+    (∀ b ∈ specBodies Dlt, Γ' ⊢ˢ b : SMTType.bool) ∧
     ScopedGeneratedTyping Base (Dpre ++ Dlt) t' σ
 
 /-- Root instance of `EncodeTermRepScopedPostFrom`, used by binder clients. -/

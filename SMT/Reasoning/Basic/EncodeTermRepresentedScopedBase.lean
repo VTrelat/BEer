@@ -44,7 +44,7 @@ theorem encodeTerm_rep_scoped.var_case_from.{u}
   rw [encodeTerm]
   mvcgen
   case vc1 τ τ_lookup =>
-    refine ⟨[], ?_, (by simpa using input_envelope), ?_, ?_, ?_⟩
+    refine ⟨[], ?_, rfl, (by simpa using input_envelope), ?_, ?_, ?_, ?_⟩
     · simpa [St_decl_eq]
     · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
         Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -106,6 +106,7 @@ theorem encodeTerm_rep_scoped.var_case_from.{u}
           rw [hden_var] at hdenT
           cases hdenT
           exact hR
+    · simp [specBodies]
     · constructor
       · intro Γ_sup Γ_sub _result_bv_fresh
         have hv_fv : v ∈ B.fv (B.Term.var v) := by simp [B.fv]
@@ -166,7 +167,7 @@ theorem encodeTerm_rep_scoped.int_case_from.{u}
   subst T
   injection type_eq with α_eq _
   subst α
-  refine ⟨[], ?_, (by simpa using input_envelope), ?_, ?_, ?_⟩
+  refine ⟨[], ?_, rfl, (by simpa using input_envelope), ?_, ?_, ?_, ?_⟩
   · simpa [St_decl_eq]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -200,6 +201,7 @@ theorem encodeTerm_rep_scoped.int_case_from.{u}
     rw [hden] at hdenT
     cases hdenT
     exact RDom.toRDomCastSupported ⟨rfl, by simp [retract]⟩
+  · simp [specBodies]
   · constructor
     · intro Γ_sup _Γ_sub _result_bv_fresh
       exact SMT.Typing.int Γ_sup i
@@ -251,7 +253,7 @@ theorem encodeTerm_rep_scoped.bool_case_from.{u}
   subst T
   injection type_eq with α_eq _
   subst α
-  refine ⟨[], ?_, (by simpa using input_envelope), ?_, ?_, ?_⟩
+  refine ⟨[], ?_, rfl, (by simpa using input_envelope), ?_, ?_, ?_, ?_⟩
   · simpa [St_decl_eq]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -285,6 +287,7 @@ theorem encodeTerm_rep_scoped.bool_case_from.{u}
     rw [hden] at hdenT
     cases hdenT
     exact RDom.toRDomCastSupported ⟨rfl, by simp [retract]⟩
+  · simp [specBodies]
   · constructor
     · intro Γ_sup _Γ_sub _result_bv_fresh
       exact SMT.Typing.bool Γ_sup b

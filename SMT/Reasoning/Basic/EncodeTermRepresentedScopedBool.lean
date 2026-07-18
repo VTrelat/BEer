@@ -160,8 +160,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨⟨x_post, ⟨Dltx, x_decl_eq, x_envelope, x_sc_total, x_guard,
-      x_sc_typing⟩⟩,
+  obtain ⟨⟨x_post, ⟨Dltx, x_decl_eq, x_trace, x_envelope, x_sc_total, x_guard,
+      x_specs_op, x_sc_typing⟩⟩,
     _bv_x_used, _x_used_sub_struct, Dltx_struct,
       x_decl_struct, x_delta_ok⟩ := pre
   have Dltx_eq : Dltx = Dltx_struct := by
@@ -244,8 +244,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
   mintro ∀Sty
   mpure pre
   dsimp at pre
-  obtain ⟨⟨y_post, ⟨Dlty, y_decl_eq, y_envelope, y_sc_total, y_guard,
-      y_sc_typing⟩⟩,
+  obtain ⟨⟨y_post, ⟨Dlty, y_decl_eq, y_trace, y_envelope, y_sc_total, y_guard,
+      y_specs_op, y_sc_typing⟩⟩,
     _bv_y_not_used, _y_used_sub_struct, Dlty_struct,
       y_decl_struct, y_delta_not_used⟩ := pre
   have Dlty_eq : Dlty = Dlty_struct := by
@@ -266,7 +266,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
 
   mspec Std.Do.Spec.pure
   mpure_intro
-  refine ⟨Dltx ++ Dlty, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨Dltx ++ Dlty, ?_,
+    DeclarationContextTrace.append x_trace y_trace, ?_, ?_, ?_, ?_, ?_⟩
   · rw [y_decl_eq, List.append_assoc]
   · simpa [List.append_assoc] using y_envelope
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
@@ -435,6 +436,27 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
     refine ⟨⟨?_, trivial⟩, .bool⟩
     simpa only [proof_irrel_heq] using
       op.rdomCast_eval X_rel_target.toRDomCast Y_rel_target.toRDomCast
+  · intro body hbody
+    rw [specBodies_append, List.mem_append] at hbody
+    rcases hbody with hbody_x | hbody_y
+    · apply SMT.Typing.weakening types_sub_y (x_specs_op body hbody_x)
+      intro v hv hv_Sty
+      have hv_used : v ∈ Stx.env.usedVars :=
+        x_delta_ok.2 body hbody_x v hv
+      obtain ⟨τv, hlookup⟩ := Option.isSome_iff_exists.mp
+        (AList.lookup_isSome.mpr hv_Sty)
+      have hentry : (⟨v, τv⟩ : Sigma fun _ : SMT.𝒱 => SMTType) ∈
+          Sty.types.entries := AList.mem_lookup_iff.mp hlookup
+      rcases List.mem_append.mp (y_trace.context_generated hentry) with
+        hbase | hdecl
+      · have hv_Stx : v ∈ Stx.types :=
+          AList.mem_keys.mpr (List.mem_map.mpr
+            ⟨⟨v, τv⟩, hbase, rfl⟩)
+        exact SMT.Typing.bv_notMem_context
+          (x_specs_op body hbody_x) v hv hv_Stx
+      · exact y_delta_not_used.1 v
+          (mem_declVars_of_mem_declEntries hdecl) hv_used
+    · exact y_specs_op body hbody_y
   · constructor
     · intro Γ_sup Γ_sub result_bv_fresh
       have Γ_sub' :
@@ -566,8 +588,8 @@ theorem encodeTerm_rep_scoped.not_case_from.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_envelope, x_sc_total, x_guard,
-    x_sc_typing⟩⟩ := pre
+  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_trace, x_envelope, x_sc_total, x_guard,
+    x_specs_op, x_sc_typing⟩⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
     path_x, typ_x_enc, _shape_x, x_preserves,
     Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
@@ -581,7 +603,7 @@ theorem encodeTerm_rep_scoped.not_case_from.{u}
   subst σx
   mspec Std.Do.Spec.pure
   mpure_intro
-  refine ⟨Dltx, x_decl_eq, x_envelope, ?_, ?_, ?_⟩
+  refine ⟨Dltx, x_decl_eq, x_trace, x_envelope, ?_, ?_, x_specs_op, ?_⟩
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
     obtain ⟨X_alt, hX_alt, den_x_alt, T_alt_eq⟩ :=
