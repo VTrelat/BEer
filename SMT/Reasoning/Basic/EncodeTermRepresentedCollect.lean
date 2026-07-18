@@ -1686,6 +1686,36 @@ private theorem collect_denote_and_both_zftrue
     · exact hDq_true
 
 open Classical in
+/-- A successful guarded option body necessarily evaluated its predicate
+branch to a Boolean value.  This is useful in the reverse direction of the
+collection graph proof, where membership in the source domain is recovered
+from the successful output before a represented predicate valuation is built. -/
+theorem denote_guarded_option_predicate_some.{u}
+    {d p : SMT.PHOAS.Term SMT.Dom.{u}}
+    {Dd Dbody : SMT.Dom.{u}} {beta : SMTType}
+    (hden_d : ⟦d⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta)
+    (hden_body : ⟦SMT.PHOAS.Term.ite
+      (SMT.PHOAS.Term.and
+        (SMT.PHOAS.Term.eq d (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))) p)
+      (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))
+      (SMT.PHOAS.Term.none beta)⟧ˢ = some Dbody) :
+    ∃ Dp : SMT.Dom.{u}, ⟦p⟧ˢ = some Dp ∧
+      Dp.snd.fst = SMTType.bool := by
+  rcases Dd with ⟨Dval, Dsigma, hDmem⟩
+  dsimp at hD_type hden_d
+  subst Dsigma
+  cases hp : ⟦p⟧ˢ with
+  | none =>
+      simp [SMT.denote, hden_d, hp] at hden_body
+  | some Dp =>
+      refine ⟨Dp, rfl, ?_⟩
+      rcases Dp with ⟨Pval, Psigma, hPmem⟩
+      dsimp
+      cases Psigma <;> try rfl
+      all_goals simp [SMT.denote, hden_d, hp] at hden_body
+
+open Classical in
 /-- If the guarded option payload has produced `some W`, then both parts of
 its guard succeeded: the domain application was that same `some W`, and the
 substituted Boolean predicate was true. -/
@@ -1800,6 +1830,31 @@ theorem denote_guarded_option_some_elim.{u}
       apply Subtype.ext
       exact hDthe_value
     · exact hP_true
+
+open Classical in
+/-- A successful guarded option output can only carry a payload returned by
+the domain application.  The predicate branch is reconstructed internally,
+so callers do not need to establish it before recovering source-domain
+membership. -/
+theorem denote_guarded_option_some_implies_domain.{u}
+    {d p : SMT.PHOAS.Term SMT.Dom.{u}}
+    {Dd Dbody W : SMT.Dom.{u}} {beta : SMTType}
+    (hden_d : ⟦d⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta)
+    (hW_type : W.snd.fst = beta)
+    (hden_body : ⟦SMT.PHOAS.Term.ite
+      (SMT.PHOAS.Term.and
+        (SMT.PHOAS.Term.eq d (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))) p)
+      (SMT.PHOAS.Term.some (SMT.PHOAS.Term.the d))
+      (SMT.PHOAS.Term.none beta)⟧ˢ = some Dbody)
+    (hbody_value : Dbody.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val) :
+    Dd.fst = (ZFSet.Option.some
+      (S := ⟦beta⟧ᶻ) ⟨W.fst, by rw [← hW_type]; exact W.snd.snd⟩).val := by
+  obtain ⟨Dp, hden_p, hP_type⟩ :=
+    denote_guarded_option_predicate_some hden_d hD_type hden_body
+  exact (denote_guarded_option_some_elim hden_d hD_type hden_p hP_type
+    hW_type hden_body hbody_value).1
 
 open Classical in
 /-- Package the two directions of the guarded option-body semantics against
