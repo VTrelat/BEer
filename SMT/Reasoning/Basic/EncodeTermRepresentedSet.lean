@@ -561,7 +561,7 @@ theorem represented_powerset_direct_lambda.{u}
 /-- The continuation of the powerset encoder after its operand has been
 encoded.  Keeping the continuation named lets the representation proof state
 one reusable contract for both supported operand representations. -/
-private def encodePowTail (S : SMT.Term) (sigma : SMTType) :
+def encodePowTail (S : SMT.Term) (sigma : SMTType) :
     Encoder (SMT.Term × SMTType) :=
   match sigma with
   | .fun alpha .bool => do
