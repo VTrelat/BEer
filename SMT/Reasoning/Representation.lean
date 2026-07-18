@@ -788,6 +788,23 @@ theorem RDom.toRDomCastSupported.{u}
   obtain ⟨rfl, _⟩ := h
   exact BType.SupportedSMT.canonical α
 
+/-- A target value at a canonical SMT type represents the source value obtained
+by retracting that target.  This lets binder proofs use a total target-side
+payload even when it is not the canonical image of a preselected source
+value. -/
+theorem RDomCastSupported.retract_of_canonical_type.{u}
+    {alpha : BType} {D : SMT.Dom.{u}}
+    (hD_type : D.snd.fst = alpha.toSMTType) :
+    RDomCastSupported
+      (⟨retract alpha D.fst, alpha,
+        retract_mem_of_canonical alpha (by
+          rw [← hD_type]
+          exact D.snd.snd)⟩ : B.Dom)
+      D := by
+  apply RDom.toRDomCastSupported
+  rw [RDom]
+  exact ⟨hD_type, rfl⟩
+
 /-- Direct canonical representatives also satisfy representation-aware
 agreement via the reflexive cast. -/
 theorem B.Dom.rdomCast_canonicalSMT.{u} (d : B.Dom.{u}) :
