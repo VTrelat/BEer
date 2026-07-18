@@ -4227,3 +4227,132 @@ theorem represented_collect_option_lambda.{u}
         hPenc_fv z_not_fv_Penc z_not_vars_P)
     hcov_guard hden_guard
   simpa [Wb] using hgraph
+
+open Classical in
+/-- Turn the function-valued collection graph bridge into the denotation form
+required by an encoder run.  This is the option-valued counterpart of
+`represented_collect_set_denote`: typing supplies the lambda denotation and
+its result type, while the guarded-body bridge supplies the representation
+agreement. -/
+theorem represented_collect_option_denote.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ []) (prefix_nemp : vs.dropLast ≠ [])
+    (vs_nodup : vs.Nodup)
+    {D P : B.Term} {alpha beta : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (hprod_arity : (alpha ×ᴮ beta).hasArity vs.length)
+    (hvs : 2 ≤ vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set (alpha ×ᴮ beta), hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set (alpha ×ᴮ beta), hT⟩ : B.Dom))
+    {Denc Penc body : SMT.Term} {z : SMT.𝒱}
+    {ThetaD : SMT.RenamingContext.Context.{u}} {DencVal : SMT.Dom.{u}}
+    (body_def : body = SMT.Term.ite
+      (SMT.Term.and (SMT.Term.eq ((@ˢDenc) (.var z))
+        (SMT.Term.some (SMT.Term.the ((@ˢDenc) (.var z)))))
+      (SMT.substList vs
+        ((toDestPair vs.dropLast (.var z)).concat
+          (.the ((@ˢDenc) (.var z)))) Penc))
+      (SMT.Term.some (SMT.Term.the ((@ˢDenc) (.var z))))
+      (none$ beta.toSMTType))
+    (hcov_lambda : SMT.RenamingContext.CoversFV ThetaD
+      ((λˢ [z]) [alpha.toSMTType] body))
+    {GammaOut : SMT.TypeContext}
+    (typ_lambda : GammaOut ⊢ˢ ((λˢ [z]) [alpha.toSMTType] body) :
+      alpha.toSMTType.fun (SMTType.option beta.toSMTType))
+    (respects_lambda : SMT.RenamingContext.RespectsTypeContextOnFV
+      ThetaD GammaOut ((λˢ [z]) [alpha.toSMTType] body))
+    (hcov_D_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W)) Denc)
+    (den_D_upd : ∀ W : SMT.Dom,
+      ⟦Denc.abstract (Function.update ThetaD z (some W))
+        (hcov_D_upd W)⟧ˢ = some DencVal)
+    (hDenc_type : DencVal.snd.fst = alpha.toSMTType.fun
+      (SMTType.option beta.toSMTType))
+    (hDenc_func : ⟦alpha.toSMTType⟧ᶻ.IsFunc
+      ⟦SMTType.option beta.toSMTType⟧ᶻ DencVal.fst)
+    (D_rel : RDomCastSupported
+      (⟨Dval, BType.set (alpha ×ᴮ beta), hDval⟩ : B.Dom) DencVal)
+    (hcov_body_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W)) body)
+    (hbody_total : ∀ W : SMT.Dom, W.snd.fst = alpha.toSMTType →
+      ∃ bodyVal : SMT.Dom,
+        ⟦body.abstract (Function.update ThetaD z (some W))
+          (hcov_body_upd W)⟧ˢ = some bodyVal)
+    (hDapp_fv_not_bv : ∀ w ∈ SMT.fv ((@ˢDenc) (.var z)),
+      w ∉ SMT.bv Penc)
+    (hDapp_fv_disj_vs : ∀ w ∈ SMT.fv ((@ˢDenc) (.var z)), w ∉ vs)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc) (hz_not_vs : z ∉ vs)
+    (hcov_sub_upd : ∀ W : SMT.Dom,
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W))
+        (SMT.substList vs
+          ((toDestPair vs.dropLast (.var z)).concat
+            (.the ((@ˢDenc) (.var z)))) Penc))
+    (hcov_P_upd : ∀ (W : SMT.Dom) (ss : Fin vs.length → SMT.Dom),
+      SMT.RenamingContext.CoversFV
+        (Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some)) Penc)
+    {Ebody : B.Env} {LambdaP GammaP : SMT.TypeContext}
+    {sigmaP : SMTType} {usedP : List SMT.𝒱}
+    (typ_P : Ebody.context ⊢ᴮ P : BType.bool)
+    (P_total : EncodeTermRepTotal.{u}
+      P Ebody BType.bool LambdaP Penc sigmaP GammaP usedP)
+    (hP_sigma : sigmaP = SMTType.bool)
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs →
+      match Xi v, ThetaD v with
+      | some d, some d' => RDomCastSupported d d'
+      | _, _ => False)
+    (wf_bound : ∀ (a b : ZFSet.{u}) (ha : a ∈ ⟦alpha⟧ᶻ)
+      (hb : b ∈ ⟦beta⟧ᶻ),
+      B.RenWF Ebody.context
+        (Function.updates Xi vs (List.ofFn fun i => some
+          (⟨(a.pair b).get vs.length i,
+            (alpha ×ᴮ beta).get vs.length i,
+            get_mem_type_of_isTuple
+              (hasArity_of_mem_toZFSet hprod_arity
+                (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩))
+              hprod_arity (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩ : B.Dom))))
+    (bound_none : ∀ ss : Fin vs.length → SMT.Dom.{u},
+      ∀ v ∉ usedP,
+        Function.updates ThetaD vs
+          ((List.ofFn ss).map Option.some) v = none)
+    (bound_respects : ∀ ss : Fin vs.length → SMT.Dom.{u},
+      B.RenamingContext.RespectsTypeContextOnFV
+        (Function.updates ThetaD vs
+          ((List.ofFn ss).map Option.some)) LambdaP P)
+    (bound_dom : ∀ ss : Fin vs.length → SMT.Dom.{u},
+      ∀ v,
+        Function.updates ThetaD vs
+          ((List.ofFn ss).map Option.some) v ≠ none → v ∈ LambdaP)
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars P)
+    (z_not_fv_Penc : z ∉ SMT.fv Penc)
+    (z_not_vars_P : z ∉ B.Term.vars P) :
+    ∃ lamVal : SMT.Dom.{u},
+      ⟦((λˢ [z]) [alpha.toSMTType] body).abstract ThetaD
+        hcov_lambda⟧ˢ = some lamVal ∧
+      RDomCastSupported
+        (⟨T, BType.set (alpha ×ᴮ beta), hT⟩ : B.Dom) lamVal := by
+  obtain ⟨lamVal, hden_lambda, hlam_type⟩ :=
+    SMT.RenamingContext.denote_exists_of_typing_fv typ_lambda
+      respects_lambda hcov_lambda
+  refine ⟨lamVal, hden_lambda, ?_⟩
+  exact represented_collect_option_lambda
+    (D := D) (P := P) (alpha := alpha) (beta := beta)
+    (Xi := Xi) (Dval := Dval) (T := T) (Denc := Denc) (Penc := Penc)
+    (body := body) (z := z) (ThetaD := ThetaD) (DencVal := DencVal)
+    (Ebody := Ebody) (LambdaP := LambdaP) (GammaP := GammaP)
+    (sigmaP := sigmaP) (usedP := usedP)
+    vs_nemp prefix_nemp vs_nodup Xi_fv hprod_arity hvs den_D den_collect
+    body_def hcov_lambda hden_lambda hlam_type hcov_D_upd den_D_upd
+    hDenc_type hDenc_func D_rel hcov_body_upd hbody_total
+    hDapp_fv_not_bv hDapp_fv_disj_vs hvs_not_bv hz_not_bv hz_not_vs
+    hcov_sub_upd hcov_P_upd typ_P P_total hP_sigma ambient wf_bound
+    bound_none bound_respects bound_dom hPenc_fv z_not_fv_Penc z_not_vars_P
