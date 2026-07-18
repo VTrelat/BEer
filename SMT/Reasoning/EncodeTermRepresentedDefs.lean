@@ -1110,6 +1110,133 @@ abbrev EncodeTermRepScopedPost.{u}
     (E' : SMT.Env) (Γ' : SMT.TypeContext) : Prop :=
   EncodeTermRepScopedPostFrom.{u} t E α Λ [] Λ decl t' σ E' Γ'
 
+/-- Re-root an operational generated-helper proof at a clean declaration
+prefix.  The structural free-variable bounds ensure that neither the encoded
+term nor a helper specification can depend on irrelevant entries retained by
+the operational input context. -/
+theorem EncodeTermRepScopedPostFrom.of_root.{u}
+    {t : B.Term} {E : B.Env} {α : BType}
+    {Base Λ : SMT.TypeContext} {Dpre decl : SMT.Chunk}
+    {t' : SMT.Term} {σ : SMTType}
+    {E' : SMT.Env} {Γ' : SMT.TypeContext}
+    (typ_t : E.context ⊢ᴮ t : α)
+    (Λ_inv : ∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context)
+    (input_envelope : DeclarationContextEnvelope Base Dpre Λ)
+    (fv_in_Base : ∀ v ∈ B.fv t, v ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
+    (typ_t' : Γ' ⊢ˢ t' : σ)
+    (decl_info : ∃ Dlt : SMT.Chunk,
+      E'.declarations = decl ++ Dlt ∧
+      (∀ b ∈ specBodies Dlt,
+        SMT.fv b ⊆ B.Term.vars t ∪ declVars Dlt) ∧
+      SMT.fv t' ⊆ B.Term.vars t ∪ declVars Dlt)
+    (root : EncodeTermRepScopedPost.{u}
+      t E α Λ decl t' σ E' Γ') :
+    EncodeTermRepScopedPostFrom.{u}
+      t E α Base Dpre Λ decl t' σ E' Γ' := by
+  obtain ⟨Dlt, decl_eq, op_trace, _root_envelope, scoped_total,
+    root_guard, specs_op, _root_typing⟩ := root
+  obtain ⟨Dlt', decl_eq', specs_fv, result_fv⟩ := decl_info
+  have hDlt : Dlt = Dlt' := by
+    apply List.append_right_injective decl
+    exact decl_eq.symm.trans decl_eq'
+  subst Dlt'
+  obtain ⟨Core₀, pre_trace, Core₀_sub_Λ⟩ := input_envelope
+  obtain ⟨Core, local_trace, Core_sub_Γ'⟩ :=
+    op_trace.rebase_subset Core₀_sub_Λ
+  have full_trace :
+      DeclarationContextTrace Base (Dpre ++ Dlt) Core :=
+    DeclarationContextTrace.append pre_trace local_trace
+  have source_fv_Core₀ : ∀ v ∈ B.fv t, v ∈ Core₀ := by
+    intro v hv
+    exact AList.mem_of_subset pre_trace.entries_subset
+      (fv_in_Base v hv)
+  have dependency_mem_Core : ∀ {v},
+      v ∈ B.Term.vars t ∪ declVars Dlt → v ∈ Γ' → v ∈ Core := by
+    intro v hvdep hvΓ'
+    rw [List.mem_union_iff] at hvdep
+    rcases hvdep with hvsrc | hvdecl
+    · rcases B.Term.mem_vars_iff.mp hvsrc with hvfv | hvbv
+      · exact AList.mem_of_subset local_trace.entries_subset
+          (source_fv_Core₀ v hvfv)
+      · rcases op_trace.context_generated.mem_classify hvΓ' with
+          hvΛ | hvdecl'
+        · exact absurd (Λ_inv v hvsrc hvΛ)
+            (B.Typing.bv_notMem_context typ_t v hvbv)
+        · exact local_trace.declVar_mem hvdecl'
+    · exact local_trace.declVar_mem hvdecl
+  have typ_t'_Core : Core ⊢ˢ t' : σ :=
+    SMT.Typing.strengthening_of_fv_subset Core_sub_Γ' typ_t'
+      (fun v hv => dependency_mem_Core (result_fv hv)
+        (SMT.Typing.mem_context_of_mem_fv typ_t' hv))
+  have specs_Core : ∀ b ∈ specBodies Dlt,
+      Core ⊢ˢ b : SMTType.bool := by
+    intro b hb
+    exact SMT.Typing.strengthening_of_fv_subset Core_sub_Γ'
+      (specs_op b hb)
+      (fun v hv => dependency_mem_Core (specs_fv b hb hv)
+        (SMT.Typing.mem_context_of_mem_fv (specs_op b hb) hv))
+  have clean_typing :
+      ScopedGeneratedTyping Base (Dpre ++ Dlt) t' σ := by
+    have local_typing : ScopedGeneratedTyping Core₀ Dlt t' σ :=
+      ScopedGeneratedTyping.of_operational
+        local_trace.context_generated typ_t'_Core specs_Core
+    exact local_typing.append_prefix pre_trace Dpre_typing
+  have clean_guard : EncodeTermRepGuardedSound.{u}
+      t E α t' σ Base (Dpre ++ Dlt) := by
+    intro Γ_sup Γ_scope Δ_alt Δ_fv_alt Θ related_alt wf_alt
+      respects_B_sup respects_SMT_sup specs_sup T_alt hT_alt den_t_alt
+      hcov denT hdenT hdenT_type
+    have Core_sub_sup : Core ⊆ Γ_sup := by
+      intro e he
+      exact Γ_scope (full_trace.context_generated he)
+    have source_fv_Core : ∀ v ∈ B.fv t, v ∈ Core := by
+      intro v hv
+      exact AList.mem_of_subset local_trace.entries_subset
+        (source_fv_Core₀ v hv)
+    have respects_B_Core :
+        B.RenamingContext.RespectsTypeContextOnFV Θ Core t := by
+      intro v τ hv hlookup
+      exact respects_B_sup hv (AList.lookup_of_subset Core_sub_sup hlookup)
+    have respects_B_op :
+        B.RenamingContext.RespectsTypeContextOnFV Θ Γ' t :=
+      respects_B_Core.of_extends
+        (SMT.RenamingContext.extends_refl Θ) Core_sub_Γ'
+        (fun _ h => h) source_fv_Core
+    have respects_SMT_Core :
+        SMT.RenamingContext.RespectsTypeContextOnFV Θ Core t' := by
+      intro v τ hv hlookup
+      exact respects_SMT_sup hv
+        (AList.lookup_of_subset Core_sub_sup hlookup)
+    have respects_SMT_op :
+        SMT.RenamingContext.RespectsTypeContextOnFV Θ Γ' t' :=
+      respects_SMT_Core.of_extends
+        (SMT.RenamingContext.extends_refl Θ) Core_sub_Γ' typ_t'_Core
+    have specs_local_sup : SpecBodiesTrue Θ Γ_sup Dlt :=
+      specs_sup.right_of_append
+    have specs_local_op : SpecBodiesTrue Θ Γ' Dlt := by
+      intro b hb
+      obtain ⟨hcov_b, den_b, respects_b_sup, hden_b,
+        hden_b_type, hden_b_true⟩ := specs_local_sup b hb
+      have respects_b_Core :
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ Core b := by
+        intro v τ hv hlookup
+        exact respects_b_sup hv
+          (AList.lookup_of_subset Core_sub_sup hlookup)
+      have respects_b_op :
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ Γ' b :=
+        respects_b_Core.of_extends
+          (SMT.RenamingContext.extends_refl Θ) Core_sub_Γ'
+          (specs_Core b hb)
+      exact ⟨hcov_b, den_b, respects_b_op, hden_b,
+        hden_b_type, hden_b_true⟩
+    exact root_guard Γ' op_trace.scoped_extends Δ_alt Δ_fv_alt Θ
+      related_alt wf_alt respects_B_op respects_SMT_op specs_local_op
+      T_alt hT_alt den_t_alt hcov denT hdenT hdenT_type
+  exact ⟨Dlt, decl_eq, op_trace,
+    ⟨Core, full_trace, Core_sub_Γ'⟩,
+    scoped_total, clean_guard, specs_op, clean_typing⟩
+
 /-- Representation-aware postcondition for one successful `encodeTerm` run. -/
 abbrev EncodeTermRepPost.{u}
     (t : B.Term) (α : BType) (Λ : SMT.TypeContext)
