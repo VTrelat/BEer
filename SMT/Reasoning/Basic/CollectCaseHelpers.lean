@@ -212,6 +212,59 @@ theorem toDestPair_optionTuple_fv_subset
     right
     simpa [SMT.fv] using hw
 
+namespace SMT.RenamingContext
+
+/-- Coverage of the two encoded collection inputs is enough to cover the
+option-valued lambda emitted by the functional collection arm. -/
+theorem covers_collectOption_lambda.{u}
+    {Theta : Context.{u}} {D P : SMT.Term} {z : SMT.𝒱}
+    {vs : List SMT.𝒱} {alpha beta : SMTType}
+    (hD : CoversFV Theta D) (hP : CoversFV Theta P) :
+    CoversFV Theta ((λˢ [z]) [alpha]
+      (SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq ((@ˢD) (.var z))
+          (SMT.Term.some (SMT.Term.the ((@ˢD) (.var z)))))
+        (SMT.substList vs
+          ((toDestPair vs.dropLast (.var z)).concat
+            (.the ((@ˢD) (.var z)))) P))
+      (SMT.Term.some (SMT.Term.the ((@ˢD) (.var z))))
+        (none$ beta))) := by
+  intro v hv
+  have hv' := collectOption_lambda_fv D P z vs alpha beta hv
+  rw [List.mem_union_iff] at hv'
+  rcases hv' with hD' | hP'
+  · exact hD v hD'
+  · exact hP v hP'
+
+/-- Updating the fresh tuple binder preserves coverage of the guarded option
+body.  Every other free name already belongs to the emitted lambda. -/
+theorem covers_collectOption_body_update.{u}
+    {Theta : Context.{u}} {D P : SMT.Term} {z : SMT.𝒱}
+    {vs : List SMT.𝒱} {alpha beta : SMTType} {W : SMT.Dom.{u}}
+    (hD : CoversFV Theta D) (hP : CoversFV Theta P) :
+    CoversFV (Function.update Theta z (some W))
+      (SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq ((@ˢD) (.var z))
+          (SMT.Term.some (SMT.Term.the ((@ˢD) (.var z)))))
+        (SMT.substList vs
+          ((toDestPair vs.dropLast (.var z)).concat
+            (.the ((@ˢD) (.var z)))) P))
+        (SMT.Term.some (SMT.Term.the ((@ˢD) (.var z))))
+        (none$ beta)) := by
+  intro v hv
+  by_cases hvz : v = z
+  · subst v
+    simp
+  · rw [Function.update_of_ne hvz]
+    apply covers_collectOption_lambda (D := D) (P := P) (z := z)
+      (vs := vs) (alpha := alpha) (beta := beta) hD hP
+    simp only [SMT.fv, List.mem_removeAll_iff, List.mem_singleton]
+    constructor
+    · simpa [SMT.fv] using hv
+    · exact hvz
+
+end SMT.RenamingContext
+
 theorem fromProdl_zero_eq (σ : SMTType) : σ.fromProdl 0 = [σ] := by
   cases σ <;> simp [SMT.SMTType.fromProdl]
 
