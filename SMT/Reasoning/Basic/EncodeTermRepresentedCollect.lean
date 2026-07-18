@@ -2614,10 +2614,11 @@ theorem collect_subst_truth_of_total_body_source_fv_fresh.{u}
     ∃ dP : SMT.Dom.{u},
       ⟦(SMT.substList xs ts Penc).abstract
         (Function.update DeltaCtx z (some W)) hcov_sub⟧ˢ = some dP ∧
+      dP.snd.fst = sigma ∧
       (dP.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue) := by
   obtain ⟨ThetaBody, hcov_P, dP, hbody_ext, hvalues, _hbody_rel,
     _hbody_none, _source_respects, _target_respects, _hbody_dom,
-    hden_P, _hdP_type, hrel_P⟩ :=
+    hden_P, hdP_type, hrel_P⟩ :=
     EncodeTermRepTotal.bound_body P_total Xi_fv related wf ThetaBase_none
       source_respects ThetaBase_dom den_P bound_values
   have hcov_P_upd : SMT.RenamingContext.CoversFV
@@ -2676,7 +2677,7 @@ theorem collect_subst_truth_of_total_body_source_fv_fresh.{u}
       Penc xs ts Ds hlen_xt hlen_xd hnodup hxs_not_bv hts_bv_nil
       hts_fv_not_bv hts_not_none hts_fv_disj_xs hts_den hcov_sub
       hcov_upd hcov_P_upd hagrees hden_P_upd hrel_P
-  exact ⟨dP, hden_sub, htruth_sub⟩
+  exact ⟨dP, hden_sub, hdP_type, htruth_sub⟩
 
 /-- Specialize represented predicate substitution to the tuple emitted by the
 option-function collection arm.  The domain application contributes the final
@@ -2739,6 +2740,7 @@ theorem collect_subst_truth_of_total_body_optionTuple.{u}
       ⟦(SMT.substList vs
         ((toDestPair vs.dropLast (.var z)).concat (.the Dapp)) Penc).abstract
         (Function.update DeltaCtx z (some W)) hcov_sub⟧ˢ = some dP ∧
+      dP.snd.fst = sigma ∧
       (dP.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue) := by
   let ts : List SMT.Term :=
     (toDestPair vs.dropLast (.var z)).concat (.the Dapp)
@@ -2890,6 +2892,7 @@ theorem represented_option_collect_subst_truth_of_some.{u}
       ⟦(SMT.substList vs
         ((toDestPair vs.dropLast (.var z)).concat (.the Dapp)) Penc).abstract
         (Function.update DeltaCtx z (some Wa)) hcov_sub⟧ˢ = some dP ∧
+      dP.snd.fst = sigma ∧
       (dP.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue) := by
   obtain ⟨hcov_payload, Dpayload, hden_payload, hrel_payload⟩ :=
     represented_option_payload_of_some hcov_Dapp hden_Dapp hDapp_type
