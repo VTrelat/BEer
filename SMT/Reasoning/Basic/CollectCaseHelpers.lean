@@ -578,6 +578,30 @@ theorem SMT_substList_snoc
       unfold SMT.substList
       exact ih (Nat.succ.inj hxs)
 
+/-- Type a substitution whose final payload may contain bound names.  The
+prefix uses the ordinary binder-free rule; only the final substitution needs
+the capture-safe disjointness condition. -/
+theorem SMT_Typing_substList_snoc_of_bv_disjoint
+    {Gamma : SMT.TypeContext} {xs : List SMT.𝒱} {ts : List SMT.Term}
+    {x : SMT.𝒱} {t e : SMT.Term} {tau : SMTType}
+    (hxs : xs.length = ts.length)
+    (typ_e : Gamma ⊢ˢ e : tau)
+    (ts_bv : ∀ q ∈ ts, SMT.bv q = [])
+    (ts_typ : ∀ i (hi_x : i < xs.length) (hi_t : i < ts.length),
+      (hx : (Gamma.lookup xs[i]).isSome = true) →
+        Gamma ⊢ˢ ts[i] : (Gamma.lookup xs[i]).get hx)
+    (t_typ : (hx : (Gamma.lookup x).isSome = true) →
+      Gamma ⊢ˢ t : (Gamma.lookup x).get hx)
+    (t_bv_disjoint : ∀ v ∈ SMT.bv t,
+      v ∉ SMT.bv (SMT.substList xs ts e)) :
+    Gamma ⊢ˢ SMT.substList (xs ++ [x]) (ts.concat t) e : tau := by
+  rw [SMT_substList_snoc hxs]
+  apply SMT_Typing_subst_of_bv_disjoint
+  · apply SMT_Typing_substList xs ts e typ_e ts_bv
+    exact ts_typ
+  · exact t_bv_disjoint
+  · exact t_typ
+
 /-- The guarded option body used for a function-valued collection is well
 typed under a fresh one-variable lambda binder. -/
 theorem SMT_Typing_guarded_option_lambda
