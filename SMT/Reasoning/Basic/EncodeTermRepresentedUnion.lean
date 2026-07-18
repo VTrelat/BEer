@@ -23,6 +23,105 @@ theorem set_union_mem.{u} {τ : BType} {F G : ZFSet.{u}}
   rw [ZFSet.mem_union] at hx
   exact hx.elim (fun hxF => hF hxF) (fun hxG => hG hxG)
 
+open Classical in
+/-- Pointwise Boolean union preserves a shared supported element
+representation, including when that representation itself contains encoded
+sets. -/
+theorem represented_setPred_union_of_pointwise.{u}
+    {τ : BType} {ρ : SMTType}
+    (hρ : BType.SupportedSMT τ ρ)
+    {F G Fenc Genc U : ZFSet.{u}}
+    (hF : F ∈ ⟦BType.set τ⟧ᶻ)
+    (hG : G ∈ ⟦BType.set τ⟧ᶻ)
+    (hFenc : Fenc ∈ ⟦SMTType.fun ρ SMTType.bool⟧ᶻ)
+    (hGenc : Genc ∈ ⟦SMTType.fun ρ SMTType.bool⟧ᶻ)
+    (hU : U ∈ ⟦SMTType.fun ρ SMTType.bool⟧ᶻ)
+    (F_rel : RDomCastSupported
+      (⟨F, BType.set τ, hF⟩ : B.Dom)
+      (⟨Fenc, SMTType.fun ρ SMTType.bool, hFenc⟩ : SMT.Dom))
+    (G_rel : RDomCastSupported
+      (⟨G, BType.set τ, hG⟩ : B.Dom)
+      (⟨Genc, SMTType.fun ρ SMTType.bool, hGenc⟩ : SMT.Dom))
+    (hpoint : ∀ (y : ZFSet.{u}) (hy : y ∈ ⟦ρ⟧ᶻ),
+      y.pair ZFSet.zftrue ∈ U ↔
+        y.pair ZFSet.zftrue ∈ Fenc ∨
+          y.pair ZFSet.zftrue ∈ Genc) :
+    RDomCastSupported
+      (⟨F ∪ G, BType.set τ, set_union_mem hF hG⟩ : B.Dom)
+      (⟨U, SMTType.fun ρ SMTType.bool, hU⟩ : SMT.Dom) := by
+  have hFsub : F ⊆ ⟦τ⟧ᶻ := by
+    simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hF
+  have hGsub : G ⊆ ⟦τ⟧ᶻ := by
+    simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hG
+  have hUnionSub : F ∪ G ⊆ ⟦τ⟧ᶻ := by
+    simpa [BType.toZFSet] using
+      ZFSet.mem_powerset.mp (set_union_mem hF hG)
+  have hFfunc : ⟦ρ⟧ᶻ.IsFunc ZFSet.𝔹 Fenc := by
+    simpa [SMTType.toZFSet] using hFenc
+  have hGfunc : ⟦ρ⟧ᶻ.IsFunc ZFSet.𝔹 Genc := by
+    simpa [SMTType.toZFSet] using hGenc
+  have hUfunc : ⟦ρ⟧ᶻ.IsFunc ZFSet.𝔹 U := by
+    simpa [SMTType.toZFSet] using hU
+  apply RDomCastSupported.setPred_of_pointwise
+    hρ hUnionSub hU hUfunc
+  · intro y hy hUtrue
+    have hpairU := ZFSet.fapply.def
+      (ZFSet.is_func_is_pfunc hUfunc)
+      (by rw [ZFSet.is_func_dom_eq hUfunc]; exact hy)
+    rw [hUtrue] at hpairU
+    rcases (hpoint y hy).mp hpairU with hpairF | hpairG
+    · have hFtrue := congrArg Subtype.val
+        (ZFSet.fapply.of_pair
+          (ZFSet.is_func_is_pfunc hFfunc) hpairF)
+      obtain ⟨x, hxF, xrel⟩ :=
+        F_rel.setPred_target_of_true hy hFtrue
+      have hxUnion : x ∈ F ∪ G := by
+        rw [ZFSet.mem_union]
+        exact Or.inl hxF
+      refine ⟨x, hxUnion, ?_⟩
+      simpa only [proof_irrel_heq] using xrel
+    · have hGtrue := congrArg Subtype.val
+        (ZFSet.fapply.of_pair
+          (ZFSet.is_func_is_pfunc hGfunc) hpairG)
+      obtain ⟨x, hxG, xrel⟩ :=
+        G_rel.setPred_target_of_true hy hGtrue
+      have hxUnion : x ∈ F ∪ G := by
+        rw [ZFSet.mem_union]
+        exact Or.inr hxG
+      refine ⟨x, hxUnion, ?_⟩
+      simpa only [proof_irrel_heq] using xrel
+  · intro x hxUnion
+    rw [ZFSet.mem_union] at hxUnion
+    rcases hxUnion with hxF | hxG
+    · obtain ⟨y, hy, xrel⟩ := F_rel.setPred_member_preimage hxF
+      have hFtrue :=
+        (RDomCastSupported.setPred_fapply_eq_zftrue_iff
+          xrel.toRDomCast F_rel).mpr hxF
+      have hpairF := ZFSet.fapply.def
+        (ZFSet.is_func_is_pfunc hFfunc)
+        (by rw [ZFSet.is_func_dom_eq hFfunc]; exact hy)
+      rw [hFtrue] at hpairF
+      have hpairU := (hpoint y hy).mpr (Or.inl hpairF)
+      have hUtrue := congrArg Subtype.val
+        (ZFSet.fapply.of_pair
+          (ZFSet.is_func_is_pfunc hUfunc) hpairU)
+      refine ⟨y, hy, ?_, hUtrue⟩
+      simpa only [proof_irrel_heq] using xrel
+    · obtain ⟨y, hy, xrel⟩ := G_rel.setPred_member_preimage hxG
+      have hGtrue :=
+        (RDomCastSupported.setPred_fapply_eq_zftrue_iff
+          xrel.toRDomCast G_rel).mpr hxG
+      have hpairG := ZFSet.fapply.def
+        (ZFSet.is_func_is_pfunc hGfunc)
+        (by rw [ZFSet.is_func_dom_eq hGfunc]; exact hy)
+      rw [hGtrue] at hpairG
+      have hpairU := (hpoint y hy).mpr (Or.inr hpairG)
+      have hUtrue := congrArg Subtype.val
+        (ZFSet.fapply.of_pair
+          (ZFSet.is_func_is_pfunc hUfunc) hpairU)
+      refine ⟨y, hy, ?_, hUtrue⟩
+      simpa only [proof_irrel_heq] using xrel
+
 private theorem erase_insert_self_rep_union {a : SMT.𝒱} {τ : SMTType}
     {s : SMT.TypeContext} (ha : a ∉ s) : (s.insert a τ).erase a = s := by
   apply AList.ext
@@ -36,24 +135,25 @@ and for the alternative-valuation totality clause. -/
 set_option maxHeartbeats 1600000 in
 @[spec]
 theorem castUnion_direct_rep_spec.{u}
-    (τ : BType) {S T : SMT.Term}
+    (τ : BType) (ρ : SMTType) (hρ : BType.SupportedSMT τ ρ)
+    {S T : SMT.Term}
     {Λ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱}
-    (typ_S : Λ ⊢ˢ S : SMTType.fun τ.toSMTType SMTType.bool)
-    (typ_T : Λ ⊢ˢ T : SMTType.fun τ.toSMTType SMTType.bool)
+    (typ_S : Λ ⊢ˢ S : SMTType.fun ρ SMTType.bool)
+    (typ_T : Λ ⊢ˢ T : SMTType.fun ρ SMTType.bool)
     (bv_S_used : ∀ v ∈ SMT.bv S, v ∈ used)
     (bv_T_used : ∀ v ∈ SMT.bv T, v ∈ used) :
     ⦃ fun ⟨E, Λ'⟩ =>
       ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ Λ.keys ⊆ E.usedVars ∧
         E.usedVars = used⌝ ⦄
     castUnion
-      ⟨S, SMTType.fun τ.toSMTType SMTType.bool⟩
-      ⟨T, SMTType.fun τ.toSMTType SMTType.bool⟩
+      ⟨S, SMTType.fun ρ SMTType.bool⟩
+      ⟨T, SMTType.fun ρ SMTType.bool⟩
     ⦃ ⇓? ⟨t, σ⟩ ⟨E', Γ'⟩ =>
       ⌜used ⊆ E'.usedVars ∧
         Λ ⊆ Γ' ∧
         Γ'.keys ⊆ E'.usedVars ∧
-        σ = SMTType.fun τ.toSMTType SMTType.bool ∧
-        Γ' ⊢ˢ t : SMTType.fun τ.toSMTType SMTType.bool ∧
+        σ = SMTType.fun ρ SMTType.bool ∧
+        Γ' ⊢ˢ t : SMTType.fun ρ SMTType.bool ∧
         (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ∧
         ∀ (Θ : SMT.RenamingContext.Context.{u})
           (hS : RenamingContext.CoversFV Θ S)
@@ -86,13 +186,13 @@ theorem castUnion_direct_rep_spec.{u}
                 denU⌝ ⦄ := by
   have hcastUnion :
       castUnion
-        (S, SMTType.fun τ.toSMTType SMTType.bool)
-        (T, SMTType.fun τ.toSMTType SMTType.bool) = do
-        let z ← SMT.freshVar τ.toSMTType "union!"
+        (S, SMTType.fun ρ SMTType.bool)
+        (T, SMTType.fun ρ SMTType.bool) = do
+        let z ← SMT.freshVar ρ "union!"
         SMT.eraseFromContext z
-        return (.lambda [z] [τ.toSMTType]
+        return (.lambda [z] [ρ]
           (.or (.app S (.var z)) (.app T (.var z))),
-          SMTType.fun τ.toSMTType SMTType.bool) := by
+          SMTType.fun ρ SMTType.bool) := by
     unfold castUnion
     simp
   rw [hcastUnion]
@@ -130,7 +230,7 @@ theorem castUnion_direct_rep_spec.{u}
         fun hz => z_not_used (bv_S_used z hz)
       have z_not_bv_T : z ∉ SMT.bv T :=
         fun hz => z_not_used (bv_T_used z hz)
-      refine SMT.Typing.lambda St₀.types [z] [τ.toSMTType]
+      refine SMT.Typing.lambda St₀.types [z] [ρ]
         _ SMTType.bool ?_ ?_ (by simp) rfl ?_
       · intro v hv
         rw [List.mem_singleton] at hv
@@ -142,8 +242,8 @@ theorem castUnion_direct_rep_spec.{u}
         push_neg
         exact ⟨z_not_bv_S, z_not_bv_T⟩
       · have hupdate :
-            TypeContext.update St₀.types [z] [τ.toSMTType] rfl =
-              St₀.types.insert z τ.toSMTType := by
+            TypeContext.update St₀.types [z] [ρ] rfl =
+              St₀.types.insert z ρ := by
           simp only [TypeContext.update, List.length_cons, List.length_nil,
             zero_add, Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin,
             Fin.val_eq_zero, List.getElem_cons_zero, Fin.foldl_succ,
@@ -172,7 +272,7 @@ theorem castUnion_direct_rep_spec.{u}
       have z_not_fv_T : z ∉ SMT.fv T :=
         funNotMemFvOfNotMemContext typ_T z_fresh
       have hcov_out : RenamingContext.CoversFV Θ
-          (.lambda [z] [τ.toSMTType]
+          (.lambda [z] [ρ]
             (.or (.app S (.var z)) (.app T (.var z)))) := by
         intro v hv
         simp only [SMT.fv, List.removeAll, List.mem_filter,
@@ -188,7 +288,7 @@ theorem castUnion_direct_rep_spec.{u}
         · exact absurd rfl hv_ne_z
       have target_respects_out :
           SMT.RenamingContext.RespectsTypeContextOnFV Θ StE.types
-            (.lambda [z] [τ.toSMTType]
+            (.lambda [z] [ρ]
               (.or (.app S (.var z)) (.app T (.var z)))) := by
         rw [StE_types_eq']
         intro v σ hv hlookup
@@ -207,15 +307,9 @@ theorem castUnion_direct_rep_spec.{u}
         typ_S respects_S hS hdenS
       have denT_type := SMT.RenamingContext.denote_type_of_typing_fv
         typ_T respects_T hT hdenT
-      obtain ⟨denU, hdenU, denU_type, hretU⟩ :=
+      obtain ⟨denU, hdenU, denU_type, _hretU, hpointU⟩ :=
         castUnion_denotation_direct hS hT hdenS hdenT
           denS_type denT_type z_not_fv_S z_not_fv_T hcov_out
-      have hFret := ((RDomCast.iff_RDom_of_type_eq
-        (α := BType.set τ) (σ := denS.snd.fst) denS_type).mp
-        F_rel).2
-      have hGret := ((RDomCast.iff_RDom_of_type_eq
-        (α := BType.set τ) (σ := denT.snd.fst) denT_type).mp
-        G_rel).2
       refine ⟨Θ, hcov_out, denU, RenamingContext.extends_refl Θ,
         ?_, target_respects_out, ?_, hdenU, ?_, ?_⟩
       · intro v hv
@@ -228,16 +322,40 @@ theorem castUnion_direct_rep_spec.{u}
         rw [StE_types_eq']
         exact Θ_dom v hv
       · simpa using denU_type
-      · rcases denU with ⟨U, σU, hU⟩
-        dsimp at denU_type
+      · rcases denS with ⟨Fenc, σS, hFenc⟩
+        rcases denT with ⟨Genc, σT, hGenc⟩
+        rcases denU with ⟨U, σU, hU⟩
+        dsimp at denS_type denT_type denU_type
+        subst σS
+        subst σT
         subst σU
-        refine ⟨?_, .setPred τ⟩
-        refine ⟨castPath.reflexive
-          (SMTType.fun τ.toSMTType SMTType.bool), ?_, ?_⟩
-        · rw [castZF_apply_reflexive _ hU, hretU τ rfl,
-            hFret, hGret]
-        · exact ⟨castPath.reflexive τ.toSMTType,
-            BinderCastAdmissible.reflexive τ (set_union_mem hF hG)⟩
+        let setSupported : BType.SupportedSMT (BType.set τ)
+            (SMTType.fun ρ SMTType.bool) := .setPred hρ
+        have F_supported : RDomCastSupported
+            (⟨F, BType.set τ, hF⟩ : B.Dom)
+            (⟨Fenc, SMTType.fun ρ SMTType.bool, hFenc⟩ : SMT.Dom) :=
+          ⟨RDomCast.toRDomCastAdmissible_of_supported F_rel setSupported,
+            setSupported⟩
+        have G_supported : RDomCastSupported
+            (⟨G, BType.set τ, hG⟩ : B.Dom)
+            (⟨Genc, SMTType.fun ρ SMTType.bool, hGenc⟩ : SMT.Dom) :=
+          ⟨RDomCast.toRDomCastAdmissible_of_supported G_rel setSupported,
+            setSupported⟩
+        exact represented_setPred_union_of_pointwise hρ hF hG
+          hFenc hGenc hU F_supported G_supported hpointU
+
+private theorem castUnion_chpred_via_direct
+    {rho sigma : SMTType} (S T : SMT.Term) (p : rho ~> sigma) :
+    castUnion.chpred S T p = (do
+      let ⟨S!, S!_spec⟩ ←
+        loosenAux_prf "union!" (castPath.chpred p) S
+      declareConst S! (SMTType.fun sigma SMTType.bool)
+      addSpec S! S!_spec
+      castUnion
+        ⟨SMT.Term.var S!, SMTType.fun sigma SMTType.bool⟩
+        ⟨T, SMTType.fun sigma SMTType.bool⟩) := by
+  unfold castUnion.chpred castUnion
+  simp
 
 /-- Semantic core of Gate B.  The helper produced by `loosenAux_prf` denotes
 the graph cast of the option-valued function, and the lambda returned by
@@ -301,7 +419,7 @@ theorem castUnion_graph_denotation.{u}
     ((RDomCast.iff_RDom_of_type_eq (σ :=
       SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool)
       rfl).mp G_rel).2
-  obtain ⟨denU, hdenU, denU_type, hU_retract⟩ :=
+  obtain ⟨denU, hdenU, denU_type, hU_retract, _hpointU⟩ :=
     castUnion_denotation_direct hS! hT h_den_S! h_den_T rfl rfl
       z_not_fv_S! z_not_fv_T hcov
   have hU_retract' := hU_retract (α ×ᴮ β) rfl
@@ -311,15 +429,22 @@ theorem castUnion_graph_denotation.{u}
   refine ⟨⟨Uval,
       SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool,
       hUval⟩, hdenU, ?_⟩
-  refine ⟨?_, .setPred (α ×ᴮ β)⟩
-  refine ⟨castPath.reflexive
-    (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool),
-    ?_, ?_⟩
-  · rw [castZF_apply_reflexive _ hUval, hU_retract', hS!_retract,
+  let supported : BType.SupportedSMT (BType.set (α ×ᴮ β))
+      (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        SMTType.bool) :=
+    .setPred (BType.SupportedSMT.canonical (α ×ᴮ β))
+  have hbare : RDomCast
+      (⟨F ∪ G, BType.set (α ×ᴮ β), relation_union_mem hF hG⟩ : B.Dom)
+      (⟨Uval,
+        SMTType.fun (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool,
+        hUval⟩ : SMT.Dom) := by
+    refine ⟨castPath.reflexive
+      (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        SMTType.bool), ?_⟩
+    rw [castZF_apply_reflexive _ hUval, hU_retract', hS!_retract,
       hG_retract]
-  · exact ⟨castPath.reflexive (α ×ᴮ β).toSMTType,
-      BinderCastAdmissible.reflexive (α ×ᴮ β)
-        (relation_union_mem hF hG)⟩
+  exact ⟨RDomCast.toRDomCastAdmissible_of_supported hbare supported,
+    supported⟩
 
 /- Gate B: the real heterogeneous `castUnion` branch, including
 `loosenAux_prf`, declaration and assertion of the helper graph, and the
@@ -732,16 +857,17 @@ abbrev CastUnionRepSpec.{u} (τ : BType)
                 denU⌝ ⦄
 
 theorem castUnion_direct_rep_contract.{u} (τ : BType)
-    (S T : SMT.Term) :
+    (ρ : SMTType) (hρ : BType.SupportedSMT τ ρ) (S T : SMT.Term) :
     CastUnionRepSpec.{u} τ S T
-      (SMTType.fun τ.toSMTType SMTType.bool)
-      (SMTType.fun τ.toSMTType SMTType.bool) := by
+      (SMTType.fun ρ SMTType.bool)
+      (SMTType.fun ρ SMTType.bool) := by
   unfold CastUnionRepSpec
   intro Λ n used typ_S typ_T bv_S_used bv_T_used
   mstart
   mintro pre ∀St
   mpure pre
-  mspec castUnion_direct_rep_spec τ typ_S typ_T bv_S_used bv_T_used
+  mspec castUnion_direct_rep_spec τ ρ hρ typ_S typ_T
+    bv_S_used bv_T_used
   rename_i out
   obtain ⟨t, σ⟩ := out
   mrename_i post
@@ -749,12 +875,317 @@ theorem castUnion_direct_rep_contract.{u} (τ : BType)
   mpure post
   obtain ⟨used_sub, types_sub, keys_sub, σ_eq, typ_out,
     preserves, semantic⟩ := post
-  change σ = SMTType.fun τ.toSMTType SMTType.bool at σ_eq
+  change σ = SMTType.fun ρ SMTType.bool at σ_eq
   subst σ
   mpure_intro
   exact ⟨used_sub, types_sub, keys_sub,
-    ⟨castPath.reflexive (BType.set τ).toSMTType⟩,
+    (BType.SupportedSMT.setPred hρ).nonemptyCanonicalCastPath,
     typ_out, preserves, semantic⟩
+
+set_option maxHeartbeats 1800000 in
+/-- If two represented characteristic predicates have comparable element
+representations, `castUnion` loosens the left predicate and then reuses the
+direct pointwise-union proof at the common target representation. -/
+theorem castUnion_chpred_rep_contract.{u}
+    (τ : BType) (ρ σ : SMTType)
+    (hρ : BType.SupportedSMT τ ρ)
+    (hσ : BType.SupportedSMT τ σ)
+    (hne : ρ ≠ σ) (hcast : ρ ⊑ σ)
+    (S T : SMT.Term) :
+    CastUnionRepSpec.{u} τ S T
+      (SMTType.fun ρ SMTType.bool)
+      (SMTType.fun σ SMTType.bool) := by
+  unfold CastUnionRepSpec
+  intro Λ n used typ_S typ_T bv_S_used bv_T_used
+  have hfun : SMTType.fun ρ SMTType.bool ⊑
+      SMTType.fun σ SMTType.bool := castable?.chpred hcast
+  have hcastUnion :
+      castUnion (S, SMTType.fun ρ SMTType.bool)
+          (T, SMTType.fun σ SMTType.bool) =
+        castUnion.chpred S T hcast.toCastPath := by
+    simp only [castUnion]
+    rw [dif_neg (by simpa using hne), dif_pos hfun]
+    unfold castUnionAux
+    have hpath : hfun.toCastPath =
+        castPath.chpred hcast.toCastPath := by
+      calc
+        hfun.toCastPath = (castable?.chpred hcast).toCastPath :=
+          congrArg castable?.toCastPath (Subsingleton.elim _ _)
+        _ = castPath.chpred hcast.toCastPath :=
+          SMTType.castable?_to_castPath_chpred hcast
+    rw [hpath]
+  rw [hcastUnion, castUnion_chpred_via_direct S T hcast.toCastPath]
+  mintro pre ∀St₀
+  mpure pre
+  obtain ⟨rfl, rfl, St₀_sub, rfl⟩ := pre
+  mspec loosenAux_prf_spec_univ (Λ := St₀.types)
+    (n := St₀.env.freshvarsc) (used := St₀.env.usedVars)
+    typ_S bv_S_used (castPath.chpred hcast.toCastPath)
+  next out =>
+    obtain ⟨S!, S!_spec⟩ := out
+    mrename_i pre
+    mintro ∀St₁
+    mpure pre
+    obtain ⟨_, St₁_types_sub, S!_fresh, S!_not_used, used_sub₁,
+      St₁_keys_sub, preserves₁, _, _, typ_S!_St₁, _, _, adequacy⟩ := pre
+    mspec SMT.declareConst_spec (v := S!)
+      (τ := SMTType.fun σ SMTType.bool)
+      (decl := St₁.env.declarations) (as := St₁.env.asserts)
+      (n := St₁.env.freshvarsc) (Γ := St₁.types)
+      (used := St₁.env.usedVars)
+    mrename_i pre
+    mintro ∀St₂
+    mpure pre
+    obtain ⟨_, _, St₂_fvc_eq, St₂_used_eq, St₂_types_eq⟩ := pre
+    mspec SMT.addSpec_spec (x! := S!) (x!_spec := S!_spec)
+      (decl := St₂.env.declarations) (as := St₂.env.asserts)
+      (n := St₂.env.freshvarsc) (Γ := St₂.types)
+      (used := St₂.env.usedVars)
+    mrename_i pre
+    mintro ∀St₃
+    mpure pre
+    obtain ⟨_, _, St₃_fvc_eq, St₃_used_eq, St₃_types_eq⟩ := pre
+    have typ_T_St₁ : St₁.types ⊢ˢ T :
+        SMTType.fun σ SMTType.bool :=
+      SMT.Typing.weakening
+        (h := fun v hv => St₁_types_sub
+          (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh hv))
+        typ_T
+        (fun v hv => preserves₁ v (bv_T_used v hv)
+          (SMT.Typing.bv_notMem_context typ_T v hv))
+    have typ_T_St₃ : St₃.types ⊢ˢ T :
+        SMTType.fun σ SMTType.bool := by
+      rwa [St₃_types_eq, St₂_types_eq]
+    have typ_S!_St₃ : St₃.types ⊢ˢ SMT.Term.var S! :
+        SMTType.fun σ SMTType.bool := by
+      rw [St₃_types_eq, St₂_types_eq]
+      exact typ_S!_St₁
+    have bv_T_St₃ : ∀ v ∈ SMT.bv T, v ∈ St₃.env.usedVars := by
+      intro v hv
+      rw [St₃_used_eq, St₂_used_eq]
+      exact used_sub₁ (bv_T_used v hv)
+    have keys_St₃ : St₃.types.keys ⊆ St₃.env.usedVars := by
+      rw [St₃_types_eq, St₂_types_eq, St₃_used_eq, St₂_used_eq]
+      exact St₁_keys_sub
+    mspec castUnion_direct_rep_spec τ σ hσ typ_S!_St₃ typ_T_St₃
+      (by simp [SMT.bv]) bv_T_St₃
+    next out =>
+      obtain ⟨t, σout⟩ := out
+      mrename_i post
+      mintro ∀St₄
+      mpure post
+      obtain ⟨used_sub₄, types_sub₄, keys_sub₄, σout_eq,
+        typ_out, preserves₄, semantic₄⟩ := post
+      change σout = SMTType.fun σ SMTType.bool at σout_eq
+      subst σout
+      mpure_intro
+      and_intros
+      · intro v hv
+        apply used_sub₄
+        rw [St₃_used_eq, St₂_used_eq]
+        exact used_sub₁ hv
+      · intro e he
+        apply types_sub₄
+        rw [St₃_types_eq, St₂_types_eq]
+        exact St₁_types_sub
+          (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh he)
+      · exact keys_sub₄
+      · exact hσ.setPred.nonemptyCanonicalCastPath
+      · exact typ_out
+      · intro v hv hv_not
+        apply preserves₄ v
+        · rw [St₃_used_eq, St₂_used_eq]
+          exact used_sub₁ hv
+        · rw [St₃_types_eq, St₂_types_eq]
+          exact preserves₁ v hv hv_not
+      · intro Θ hS hT Θ_none respects_S respects_T Θ_dom
+          F G hF hG denS denT h_den_S h_den_T F_rel G_rel
+        have pf : ∀ (x! : SMT.𝒱) (X! : SMT.Dom.{u}),
+            ∀ v ∈ SMT.fv (SMT.Term.var x!),
+              (Function.update Θ x! (some X!) v).isSome = true := by
+          intro x! X! v hv
+          rw [SMT.fv, List.mem_singleton] at hv
+          subst v
+          simp [Function.update_self]
+        obtain ⟨Φ, denS!, h_den_var, _hφ, _h_den_φ, denS!_type,
+          _Φ_type, ⟨_Φ_true, cast_pair⟩, _helper_total⟩ :=
+          adequacy Θ hS respects_S pf denS h_den_S
+        let Δhelper := Function.update Θ S! (some denS!)
+        have Δ_S!_none : Θ S! = none := Θ_none S! S!_not_used
+        have Δhelper_ext : RenamingContext.Extends Δhelper Θ :=
+          RenamingContext.extends_update_of_none Δ_S!_none
+        have Λ_sub_St₃ : St₀.types ⊆ St₃.types := by
+          intro e he
+          rw [St₃_types_eq, St₂_types_eq]
+          exact St₁_types_sub
+            (SMT.TypeContext.entries_subset_insert_of_notMem S!_fresh he)
+        have hS!_not_fv_T : S! ∉ SMT.fv T :=
+          funNotMemFvOfNotMemContext typ_T S!_fresh
+        have hT_helper : RenamingContext.CoversFV Δhelper T :=
+          SMT.RenamingContext.coversFV_update_of_notMem hS!_not_fv_T hT
+        have h_den_T_helper :
+            ⟦T.abstract Δhelper hT_helper⟧ˢ = some denT := by
+          have heq : ⟦T.abstract Θ hT⟧ˢ =
+              ⟦T.abstract Δhelper hT_helper⟧ˢ := by
+            rw [← SMT.RenamingContext.denote,
+              ← SMT.RenamingContext.denote]
+            exact SMT.RenamingContext.denote_update_of_notMem hS!_not_fv_T
+          rw [← heq]
+          exact h_den_T
+        have hS!_helper :
+            RenamingContext.CoversFV Δhelper (SMT.Term.var S!) := by
+          intro v hv
+          rw [SMT.fv, List.mem_singleton] at hv
+          subst v
+          simp [Δhelper, Function.update_self]
+        have h_den_S!_helper :
+            ⟦(SMT.Term.var S!).abstract Δhelper hS!_helper⟧ˢ =
+              some denS! := by
+          convert h_den_var using 1
+        have respects_S!_helper :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δhelper St₃.types (SMT.Term.var S!) := by
+          intro v τv hv hlookup
+          rw [SMT.fv, List.mem_singleton] at hv
+          subst v
+          have hlookup_S! := SMT.Typing.varE typ_S!_St₃
+          rw [hlookup] at hlookup_S!
+          cases hlookup_S!
+          exact ⟨denS!, Function.update_self _ _ _, denS!_type⟩
+        have respects_T_helper :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δhelper St₃.types T :=
+          respects_T.of_extends Δhelper_ext Λ_sub_St₃ typ_T
+        have Δhelper_none : ∀ v ∉ St₃.env.usedVars,
+            Δhelper v = none := by
+          intro v hv
+          by_cases hvS! : v = S!
+          · subst v
+            exfalso
+            apply hv
+            rw [St₃_used_eq, St₂_used_eq]
+            apply St₁_keys_sub
+            exact (AList.lookup_isSome).1
+              (Option.isSome_of_eq_some (SMT.Typing.varE typ_S!_St₁))
+          · simp only [Δhelper, Function.update_of_ne hvS!]
+            apply Θ_none
+            intro hv_used
+            apply hv
+            rw [St₃_used_eq, St₂_used_eq]
+            exact used_sub₁ hv_used
+        have Δhelper_dom : ∀ v, Δhelper v ≠ none →
+            v ∈ St₃.types := by
+          intro v hv
+          by_cases hvS! : v = S!
+          · subst v
+            exact (AList.lookup_isSome).1
+              (Option.isSome_of_eq_some (SMT.Typing.varE typ_S!_St₃))
+          · have hv₀ : v ∈ St₀.types := Θ_dom v (by
+              simpa [Δhelper, Function.update_of_ne hvS!] using hv)
+            obtain ⟨τv, hlookup⟩ := Option.isSome_iff_exists.mp
+              (AList.lookup_isSome.mpr hv₀)
+            exact AList.lookup_isSome.mp (Option.isSome_of_eq_some
+              (AList.lookup_of_subset Λ_sub_St₃ hlookup))
+        have denS_type := SMT.RenamingContext.denote_type_of_typing_fv
+          typ_S respects_S hS h_den_S
+        rcases denS with ⟨Fenc, σS, hFenc⟩
+        dsimp at denS_type
+        subst σS
+        rcases denS! with ⟨Fhelper, σhelper, hFhelper⟩
+        dsimp at denS!_type
+        subst σhelper
+        let sourceSupported : BType.SupportedSMT (BType.set τ)
+            (SMTType.fun ρ SMTType.bool) := .setPred hρ
+        have F_supported : RDomCastSupported
+            (⟨F, BType.set τ, hF⟩ : B.Dom)
+            (⟨Fenc, SMTType.fun ρ SMTType.bool, hFenc⟩ : SMT.Dom) :=
+          ⟨RDomCast.toRDomCastAdmissible_of_supported F_rel sourceSupported,
+            sourceSupported⟩
+        have F_helper_supported : RDomCastSupported
+            (⟨F, BType.set τ, hF⟩ : B.Dom)
+            (⟨Fhelper, SMTType.fun σ SMTType.bool,
+              hFhelper⟩ : SMT.Dom) :=
+          RDomCastSupported.of_cast_to_supported F_supported
+            (.setPred hσ) (castPath.chpred hcast.toCastPath) cast_pair
+        obtain ⟨Θ', hcov, denU, Θ'_ext, Θ'_none,
+            target_respects, Θ'_dom, hdenU, hdenU_type, U_rel⟩ :=
+          semantic₄ Δhelper hS!_helper hT_helper Δhelper_none
+            respects_S!_helper respects_T_helper Δhelper_dom
+            F G hF hG
+            (⟨Fhelper, SMTType.fun σ SMTType.bool,
+              hFhelper⟩ : SMT.Dom)
+            denT h_den_S!_helper h_den_T_helper
+            F_helper_supported.toRDomCast G_rel
+        exact ⟨Θ', hcov, denU,
+          RenamingContext.extends_trans Θ'_ext Δhelper_ext,
+          Θ'_none, target_respects, Θ'_dom, hdenU,
+          hdenU_type, U_rel⟩
+
+private theorem castUnion_chpred_swap
+    (ρ σ : SMTType) (hne : ρ ≠ σ) (hcast : σ ⊑ ρ)
+    (S T : SMT.Term) :
+    castUnion
+        ⟨S, SMTType.fun ρ SMTType.bool⟩
+        ⟨T, SMTType.fun σ SMTType.bool⟩ =
+      castUnion
+        ⟨T, SMTType.fun σ SMTType.bool⟩
+        ⟨S, SMTType.fun ρ SMTType.bool⟩ := by
+  simp only [castUnion]
+  have hnefun : SMTType.fun ρ SMTType.bool ≠
+      SMTType.fun σ SMTType.bool := by
+    simpa using hne
+  have hrev : SMTType.fun σ SMTType.bool ⊑
+      SMTType.fun ρ SMTType.bool := castable?.chpred hcast
+  have hnot : ¬SMTType.fun ρ SMTType.bool ⊑
+      SMTType.fun σ SMTType.bool := by
+    intro hfwd
+    exact hnefun (castable?.antisymm hfwd hrev)
+  rw [dif_neg hnefun, dif_neg hnot, dif_pos hrev,
+    dif_neg hnefun.symm, dif_pos hrev]
+
+theorem castUnion_chpred_rev_rep_contract.{u}
+    (τ : BType) (ρ σ : SMTType)
+    (hρ : BType.SupportedSMT τ ρ)
+    (hσ : BType.SupportedSMT τ σ)
+    (hne : ρ ≠ σ) (hcast : σ ⊑ ρ)
+    (S T : SMT.Term) :
+    CastUnionRepSpec.{u} τ S T
+      (SMTType.fun ρ SMTType.bool)
+      (SMTType.fun σ SMTType.bool) := by
+  unfold CastUnionRepSpec
+  intro Λ n used typ_S typ_T bv_S_used bv_T_used
+  rw [castUnion_chpred_swap ρ σ hne hcast S T]
+  mstart
+  mintro pre ∀St
+  mpure pre
+  mspec castUnion_chpred_rep_contract τ σ ρ hσ hρ
+    hne.symm hcast T S typ_T typ_S bv_T_used bv_S_used
+  rename_i out
+  obtain ⟨t, σout⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨used_sub, types_sub, keys_sub, path, typ_out,
+    preserves, semantic⟩ := post
+  mpure_intro
+  refine ⟨used_sub, types_sub, keys_sub, path, typ_out,
+    preserves, ?_⟩
+  intro Θ hS hT Θ_none respects_S respects_T Θ_dom
+    F G hF hG denS denT hdenS hdenT F_rel G_rel
+  obtain ⟨Θ', hcov, denU, Θ'_ext, Θ'_none, target_respects,
+      Θ'_dom, hdenU, hdenU_type, U_rel⟩ :=
+    semantic Θ hT hS Θ_none respects_T respects_S Θ_dom
+      G F hG hF denT denS hdenT hdenS G_rel F_rel
+  refine ⟨Θ', hcov, denU, Θ'_ext, Θ'_none, target_respects,
+    Θ'_dom, hdenU, hdenU_type, ?_⟩
+  rcases denU with ⟨Uval, σU, hUval⟩
+  obtain ⟨⟨⟨c, hret⟩, hadmissible⟩, hsupported⟩ := U_rel
+  refine ⟨⟨⟨c, ?_⟩, ?_⟩, hsupported⟩
+  · calc
+      retract (BType.set τ) (castZF_apply c Uval) = G ∪ F := hret
+      _ = F ∪ G := ZFSet.union_comm
+  · have hunion : G ∪ F = F ∪ G := ZFSet.union_comm
+    simpa only [hunion, proof_irrel_heq] using hadmissible
 
 theorem castUnion_graph_rep_contract.{u}
     (α β : BType) (S T : SMT.Term) :
@@ -855,14 +1286,14 @@ theorem castUnion_graph_rev_rep_contract.{u}
   refine ⟨Θ', hcov, denU, Θ'_ext, Θ'_none, target_respects,
     Θ'_dom, hdenU, hdenU_type, ?_⟩
   rcases denU with ⟨Uval, σU, hUval⟩
-  obtain ⟨⟨c, hret, hadmissible⟩, hsupported⟩ := U_rel
-  refine ⟨⟨c, ?_, ?_⟩, hsupported⟩
+  obtain ⟨⟨⟨c, hret⟩, hadmissible⟩, hsupported⟩ := U_rel
+  refine ⟨⟨⟨c, ?_⟩, ?_⟩, hsupported⟩
   · calc
       retract (BType.set (α ×ᴮ β)) (castZF_apply c Uval) =
           G ∪ F := hret
       _ = F ∪ G := ZFSet.union_comm
   · have hunion : G ∪ F = F ∪ G := ZFSet.union_comm
-    exact hunion ▸ hadmissible
+    simpa only [hunion, proof_irrel_heq] using hadmissible
 
 theorem castUnion_option_rep_contract.{u}
     (α β : BType) (S T : SMT.Term) :
@@ -877,20 +1308,119 @@ theorem castUnion_option_rep_contract.{u}
   simp
   mvcgen
 
+private theorem castable_chpredE_rep {ρ σ : SMTType}
+    (h : SMTType.fun ρ SMTType.bool ⊑
+      SMTType.fun σ SMTType.bool) : ρ ⊑ σ := by
+  cases h with
+  | refl hbase => nomatch hbase
+  | chpred hρ => exact hρ
+  | «fun» hbool _ _ => exact (hbool rfl).elim
+
+private theorem not_castable_chpred_option
+    (ρ α β : SMTType) :
+    ¬SMTType.fun ρ SMTType.bool ⊑
+      SMTType.fun α (SMTType.option β) := by
+  intro h
+  have hcod := castable?_of_fun_bool h
+  contradiction
+
+private theorem supported_prod_eq_canonical_of_graph_cast
+    {α β : BType} {ρ : SMTType}
+    (hρ : BType.SupportedSMT (α ×ᴮ β) ρ)
+    (hcast : SMTType.fun α.toSMTType
+        (SMTType.option β.toSMTType) ⊑
+      SMTType.fun ρ SMTType.bool) :
+    ρ = SMTType.pair α.toSMTType β.toSMTType := by
+  rcases hρ.prodE with ⟨ρα, ρβ, rfl, hρα, hρβ⟩
+  obtain ⟨cα, cβ⟩ := castPath.graph_components hcast.toCastPath
+  have eα : α.toSMTType = ρα := castable?.antisymm
+    (castable?_of_castPath cα.some)
+    (castable?_of_castPath hρα.canonicalCastPath)
+  have eβ : β.toSMTType = ρβ := castable?.antisymm
+    (castable?_of_castPath cβ.some)
+    (castable?_of_castPath hρβ.canonicalCastPath)
+  simp [eα, eβ]
+
+private theorem castUnion_incomparable_rep_contract.{u}
+    (τ : BType) (S T : SMT.Term) (σS σT : SMTType)
+    (hne : σS ≠ σT) (hST : ¬σS ⊑ σT) (hTS : ¬σT ⊑ σS) :
+    CastUnionRepSpec.{u} τ S T σS σT := by
+  unfold CastUnionRepSpec
+  intro Λ n used typ_S typ_T bv_S_used bv_T_used
+  mintro pre ∀St
+  mpure pre
+  simp only [castUnion]
+  rw [dif_neg hne, dif_neg hST, dif_neg hTS]
+  mvcgen
+
 theorem castUnion_supported_rep_contract.{u}
     (τ : BType) (S T : SMT.Term) (σS σT : SMTType)
     (supported_S : BType.SupportedSMT (BType.set τ) σS)
     (supported_T : BType.SupportedSMT (BType.set τ) σT) :
     CastUnionRepSpec.{u} τ S T σS σT := by
   cases supported_S with
-  | setPred τ =>
+  | @setPred τ ρ hρ =>
       cases supported_T with
-      | setPred => exact castUnion_direct_rep_contract τ S T
+      | @setPred _ σ hσ =>
+          by_cases heq : ρ = σ
+          · subst σ
+            exact castUnion_direct_rep_contract τ ρ hρ S T
+          · by_cases hcast : ρ ⊑ σ
+            · exact castUnion_chpred_rep_contract τ ρ σ hρ hσ
+                heq hcast S T
+            · by_cases hrev : σ ⊑ ρ
+              · exact castUnion_chpred_rev_rep_contract τ ρ σ hρ hσ
+                  heq hrev S T
+              · exact castUnion_incomparable_rep_contract τ S T
+                  (SMTType.fun ρ SMTType.bool)
+                  (SMTType.fun σ SMTType.bool)
+                  (by simpa using heq)
+                  (fun h => hcast (castable_chpredE_rep h))
+                  (fun h => hrev (castable_chpredE_rep h))
       | optionFun α β =>
-          exact castUnion_graph_rev_rep_contract α β S T
+          have hne : SMTType.fun ρ SMTType.bool ≠
+              SMTType.fun α.toSMTType
+                (SMTType.option β.toSMTType) := by simp
+          have hforward := not_castable_chpred_option
+            ρ α.toSMTType β.toSMTType
+          unfold CastUnionRepSpec
+          intro Λ n used typ_S typ_T bv_S_used bv_T_used
+          by_cases hgraph : SMTType.fun α.toSMTType
+              (SMTType.option β.toSMTType) ⊑
+            SMTType.fun ρ SMTType.bool
+          · have hρeq :=
+              supported_prod_eq_canonical_of_graph_cast hρ hgraph
+            subst ρ
+            exact castUnion_graph_rev_rep_contract α β S T
+              typ_S typ_T bv_S_used bv_T_used
+          · exact castUnion_incomparable_rep_contract (α ×ᴮ β) S T
+              (SMTType.fun ρ SMTType.bool)
+              (SMTType.fun α.toSMTType
+                (SMTType.option β.toSMTType))
+              hne hforward hgraph typ_S typ_T bv_S_used bv_T_used
   | optionFun α β =>
       cases supported_T with
-      | setPred => exact castUnion_graph_rep_contract α β S T
+      | @setPred _ ρ hρ =>
+          have hne : SMTType.fun α.toSMTType
+                (SMTType.option β.toSMTType) ≠
+              SMTType.fun ρ SMTType.bool := by simp
+          have hreverse := not_castable_chpred_option
+            ρ α.toSMTType β.toSMTType
+          unfold CastUnionRepSpec
+          intro Λ n used typ_S typ_T bv_S_used bv_T_used
+          by_cases hgraph : SMTType.fun α.toSMTType
+              (SMTType.option β.toSMTType) ⊑
+            SMTType.fun ρ SMTType.bool
+          · have hρeq :=
+              supported_prod_eq_canonical_of_graph_cast hρ hgraph
+            subst ρ
+            exact castUnion_graph_rep_contract α β S T
+              typ_S typ_T bv_S_used bv_T_used
+          · exact castUnion_incomparable_rep_contract (α ×ᴮ β) S T
+              (SMTType.fun α.toSMTType
+                (SMTType.option β.toSMTType))
+              (SMTType.fun ρ SMTType.bool)
+              hne hgraph hreverse typ_S typ_T bv_S_used bv_T_used
       | optionFun => exact castUnion_option_rep_contract α β S T
 
 /-! ## Union constructor composition -/

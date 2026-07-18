@@ -448,9 +448,7 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
       refine ⟨denPair, ?_, rfl, ?_, ?_⟩
       · simp only [denPair, SMT.Term.abstract, SMT.denote, Option.pure_def,
           Option.bind_eq_bind, hden_x_final, Option.bind_some, hden_y]
-      · refine ⟨?_, .prod X_rel.supported Y_rel.supported⟩
-        simpa [denPair] using
-          RDomCast.pair X_rel.toRDomCast Y_rel.toRDomCast
+      · simpa [denPair] using RDomCastSupported.pair X_rel Y_rel
       · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
           Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
         rw [B.Term.abstract, B.denote, Option.pure_def,
@@ -557,9 +555,8 @@ theorem encodeTerm_rep_spec.maplet_case.{u}
         · simp only [denPairAlt, SMT.Term.abstract, SMT.denote,
             Option.pure_def, Option.bind_eq_bind, hden_x_alt_final,
             Option.bind_some, hden_y_alt]
-        · refine ⟨?_, .prod X_alt_rel.supported Y_alt_rel.supported⟩
-          simpa [denPairAlt] using
-            RDomCast.pair X_alt_rel.toRDomCast Y_alt_rel.toRDomCast
+        · simpa [denPairAlt] using
+            RDomCastSupported.pair X_alt_rel Y_alt_rel
 
 set_option maxHeartbeats 3000000 in
 theorem encodeTerm_rep_spec.checked_int_case.{u}
@@ -810,6 +807,7 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
           EncodeTermRepresentedArith.CheckedOp.eval,
           SMT.Term.abstract, SMT.denote, hden_x_final, hden_y]
       · refine ⟨?_, .int⟩
+        refine ⟨?_, trivial⟩
         simpa [denOp] using
           op.rdomCast_eval X_rel.toRDomCast Y_rel.toRDomCast
       · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
@@ -913,6 +911,7 @@ theorem encodeTerm_rep_spec.checked_int_case.{u}
             SMT.Term.abstract, SMT.denote, hden_x_alt_final,
             hden_y_alt]
         · refine ⟨?_, .int⟩
+          refine ⟨?_, trivial⟩
           simpa [denOpAlt] using
             op.rdomCast_eval X_alt_rel.toRDomCast Y_alt_rel.toRDomCast
 
@@ -1070,6 +1069,7 @@ theorem encodeTerm_rep_spec.le_case.{u}
         · simp [denLe, SMT.Term.abstract, SMT.denote,
             hden_x_enc, hden_y_enc]
         · refine ⟨?_, .bool⟩
+          refine ⟨?_, trivial⟩
           simpa [denLe] using rdomCast_le X_rel Y_rel
         · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
             Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -1153,6 +1153,7 @@ theorem encodeTerm_rep_spec.le_case.{u}
           · simp [denLeAlt, SMT.Term.abstract, SMT.denote,
               hden_x_alt_enc, hden_y_alt_enc]
           · refine ⟨?_, .bool⟩
+            refine ⟨?_, trivial⟩
             simpa [denLeAlt] using
               rdomCast_le component_alt_rel.1 component_alt_rel.2
 

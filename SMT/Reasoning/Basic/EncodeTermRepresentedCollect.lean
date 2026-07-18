@@ -166,7 +166,7 @@ theorem RDomCastSupported.optionFunction_of_graph_truth.{u}
       (⟨F, SMTType.fun alpha.toSMTType
         (SMTType.option beta.toSMTType), hF⟩ : SMT.Dom) := by
   refine ⟨?_, BType.SupportedSMT.optionFun alpha beta⟩
-  apply RDomCast.toRDomCastAdmissible_of_supported
+  refine ⟨?_, ?_⟩
   · refine ⟨castPath.graph (castPath.reflexive alpha.toSMTType)
       (castPath.reflexive beta.toSMTType), ?_⟩
     change retract (BType.set (alpha ×ᴮ beta))
@@ -218,7 +218,13 @@ theorem RDomCastSupported.optionFunction_of_graph_truth.{u}
         change (ZFSet.fapply G (ZFSet.is_func_is_pfunc hGfunc)
           ⟨X.fst, hXdom⟩).val = ZFSet.zftrue ↔ x ∈ S at htruth'
         simpa [G, X] using htruth'.mpr hxS
-  · exact BType.SupportedSMT.optionFun alpha beta
+  · refine ⟨⟨castPath.reflexive (alpha ×ᴮ beta).toSMTType,
+        BinderCastAdmissible.reflexive (alpha ×ᴮ beta) hS⟩, ?_⟩
+    intro x hxS
+    have hx : x ∈ ⟦alpha ×ᴮ beta⟧ᶻ := by
+      rw [BType.toZFSet, ZFSet.mem_powerset] at hS
+      exact hS hxS
+    exact ValueCastAdmissible.canonical (alpha ×ᴮ beta) hx
 
 /-- At a pair of canonical target values, the characteristic graph of an
 option-valued function is true exactly when the function returns that `some`

@@ -164,7 +164,8 @@ theorem RDomCastSupported.default_tuple_witness.{u}
     refine ⟨hle.toCastPath, ?_⟩
     rfl
   exact ⟨X, Y, hX, hY,
-    ⟨hrel.toRDomCastAdmissible_of_supported supported, supported⟩⟩
+    ⟨RDomCast.toRDomCastAdmissible_of_supported hrel supported,
+      supported⟩⟩
 
 /-- Folding the component projections of a nonempty tuple reconstructs the
 tuple.  This public form is shared by the representation-aware quantifier
@@ -1764,39 +1765,38 @@ theorem encodeTerm_rep_spec.all_case.{u}
   have setRep_supported :
       BType.SupportedSMT (BType.set tau) setRep := by
     simpa [setRep] using D_rel.supported
-  rcases D_rel.supported.setE with hsetPred | ⟨a, b, htau, hoption⟩
+  rcases D_rel.supported.setE with
+    ⟨rho, hsetPred, rho_supported⟩ | ⟨a, b, htau, hoption⟩
   all_goals first
     | dsimp at hsetPred
       subst sigmaD
       simp only [BType.toSMTType] at *
       have hlen_eq : vs.length =
-          (tau.toSMTType.fromProdl (vs.length - 1)).length :=
-        (fromProdl_length_of_hasArity tau_hasArity).symm
+          (rho.fromProdl (vs.length - 1)).length :=
+        (rho_supported.fromProdl_length_of_hasArity tau_hasArity).symm
       rw [dif_pos hlen_eq]
       mspec SMT.mapFinIdxM_all_body_spec vs E.flags
-        (tau.toSMTType.fromProdl (vs.length - 1)) hlen_eq
+        (rho.fromProdl (vs.length - 1)) hlen_eq
       rename_i sigmas
       mrename_i pre
       mintro ∀St2
       mpure pre
       obtain ⟨St2_types, St2_fvc, St2_used, sigmas_len, flag_rel⟩ := pre
+      have selected_contract := binder_admissible E vs D P tau typ_t typ_D
+        Xi Xi_fv_D Dval hDval den_D rho rho_supported sigmas
+        hlen_eq sigmas_len flag_rel
       have component_supported : ∀ i (hi_alpha : i < alphas.length)
           (hi_sigma : i < sigmas.length),
           BType.SupportedSMT alphas[i] sigmas[i] := by
         intro i hi_alpha hi_sigma
         have hi_vs : i < vs.length := vs_alphas_len ▸ hi_alpha
-        have hcomponent := flag_rel i hi_sigma
-        have hfrom :
-            (tau.get vs.length ⟨i, hi_vs⟩).toSMTType =
-              (tau.toSMTType.fromProdl (vs.length - 1))[i] :=
-          toSMTType_get_eq_fromProdl_getElem tau_hasArity hi_vs
+        have hcomponent := selected_contract.1 i hi_sigma
         have hreduce : tau.get vs.length ⟨i, hi_vs⟩ =
             alphas[i] := by
           dsimp [tau]
           simpa using _root_.BType.get_reduce alphas_nemp
             vs_alphas_len ⟨i, hi_vs⟩
-        rw [← hfrom, hreduce] at hcomponent
-        simpa only [List.get_eq_getElem] using hcomponent.supported
+        simpa only [hreduce, List.get_eq_getElem] using hcomponent
       have selected_admissible :
           ∀ (Xi_alt : B.RenamingContext.Context)
             (Xi_fv_D_alt : ∀ v ∈ B.fv D, (Xi_alt v).isSome = true)
@@ -1808,9 +1808,9 @@ theorem encodeTerm_rep_spec.all_case.{u}
             BinderCastAdmissible tau sigmas.toProdl
               hcast.toCastPath Dval_alt := by
         intro Xi_alt Xi_fv_D_alt Dval_alt hDval_alt den_D_alt hcast
-        exact binder_admissible E vs D P tau typ_t typ_D Xi_alt
-          Xi_fv_D_alt Dval_alt hDval_alt den_D_alt sigmas
-          hlen_eq sigmas_len flag_rel hcast
+        exact (binder_admissible E vs D P tau typ_t typ_D Xi_alt
+          Xi_fv_D_alt Dval_alt hDval_alt den_D_alt rho rho_supported
+          sigmas hlen_eq sigmas_len flag_rel).2 hcast
     | dsimp at hoption
       subst sigmaD
       simp only [BType.toSMTType] at *
@@ -3131,6 +3131,12 @@ theorem encodeTerm_rep_spec.all_case.{u}
           (⟨Xtuple_alt, tau, hXtuple_alt⟩ : B.Dom)
           (⟨Ytuple_alt, sigmas.toProdl, hYtuple_alt⟩ : SMT.Dom) := by
         exact ⟨tuple_le.toCastPath, rfl⟩
+      have tuple_alt_supported : RDomCastSupported
+          (⟨Xtuple_alt, tau, hXtuple_alt⟩ : B.Dom)
+          (⟨Ytuple_alt, sigmas.toProdl, hYtuple_alt⟩ : SMT.Dom) :=
+        ⟨RDomCast.toRDomCastAdmissible_of_supported tuple_alt_rel
+            tuple_supported,
+          tuple_supported⟩
       have target_respects_D_Z :
           SMT.RenamingContext.RespectsTypeContextOnFV
             ThetaZ_alt St5.types Denc :=
@@ -3174,7 +3180,7 @@ theorem encodeTerm_rep_spec.all_case.{u}
           Xtuple_alt Dval_alt hXtuple_alt hDval_alt
           (⟨Ytuple_alt, sigmas.toProdl, hYtuple_alt⟩ : SMT.Dom)
           denDenc_alt hden_tuple_alt hden_Denc_Z rfl
-          hdenDenc_alt_type tuple_alt_rel D_alt_rel.toRDomCast
+          hdenDenc_alt_type tuple_alt_supported D_alt_rel
       obtain ⟨ThetaM_alt, hcov_mem_alt, denMem_alt,
           ThetaM_alt_ext, ThetaM_alt_none, target_respects_mem_alt,
           ThetaM_alt_dom, M_specs_alt, hden_mem_alt,
@@ -3644,7 +3650,8 @@ theorem encodeTerm_rep_spec.all_case.{u}
         have tuple_rel_w : RDomCastSupported
             (⟨x_B, tau, hx_B_mem⟩ : B.Dom)
             (⟨x, sigmas.toProdl, hx_mem⟩ : SMT.Dom) :=
-          ⟨tuple_rdom_w.toRDomCastAdmissible_of_supported tuple_supported,
+          ⟨RDomCast.toRDomCastAdmissible_of_supported tuple_rdom_w
+              tuple_supported,
             tuple_supported⟩
         have den_P_go :
             ⟦(B.Term.abstract.go P vs Xi_alt
@@ -4094,7 +4101,7 @@ theorem encodeTerm_rep_spec.all_case.{u}
             x_B Dval_alt hx_B_mem hDval_alt
             (⟨x, sigmas.toProdl, hx_mem⟩ : SMT.Dom) denDenc_alt
             hden_tuple_H hden_D_H rfl hdenDenc_alt_type
-            tuple_rdom_w D_alt_rel.toRDomCast
+            tuple_rel_w D_alt_rel
             hcov_mem_H denMem_H hresp_mem_H specs_M_H
             hden_mem_H hdenMem_H_type
           have typ_sub_P_GammaM : GammaM ⊢ˢ
@@ -4614,7 +4621,7 @@ theorem encodeTerm_rep_spec.all_case.{u}
               x_B Dval_alt hx_B_mem hDval_alt
               (⟨x, sigmas.toProdl, hx_mem⟩ : SMT.Dom) denDenc_alt
               hden_tuple_w hden_D_w rfl hdenDenc_alt_type
-              tuple_rdom_w D_alt_rel.toRDomCast
+              tuple_rel_w D_alt_rel
           obtain ⟨ThetaModel, hcov_mem_model, denMem_model,
               ThetaModel_ext, ThetaModel_none,
               target_respects_mem_model, ThetaModel_dom,

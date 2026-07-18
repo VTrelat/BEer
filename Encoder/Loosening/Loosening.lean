@@ -201,6 +201,7 @@ def castUnion.chpred (S T : Term) {α α' : SMTType} (c_α : α ~> α') : Encode
   declareConst S! (.fun α' .bool)
   addSpec S! S!_spec
   let x ← freshVar α' "union!"
+  eraseFromContext x
   return (.lambda [x] [α'] (.or (.app (.var S!) (.var x)) (.app T (.var x))), .fun α' .bool)
 def castUnion.opt (S T : Term) {α α' : SMTType} (c_α : α ~> α') : Encoder (Term × SMTType) := do
   throw s!"castUnion.opt: Union on option type is not expected from B set operations."
@@ -241,35 +242,68 @@ def castUnion : Term × SMTType → Term × SMTType → Encoder (Term × SMTType
   else if h : β ⊑ α then castUnionAux T S h.toCastPath
   else throw s!"castUnion: cannot loosen {α} to {β} and vice versa"
 
-def castInterAux (S T : Term) {α β : SMTType} : α ~> β → Encoder (Term × SMTType)
-  | @castPath.graph _ _ α' β' c_α c_β => do
-    let ⟨S!, S!_spec⟩ ← loosenAux_prf "inter!" (castPath.graph c_α c_β) S
-    declareConst S! (.fun (.pair α' β') .bool)
-    addSpec S! S!_spec
-    let x ← freshVar (.pair α' β') "inter!"
-    eraseFromContext x
-    return (.lambda [x] [.pair α' β'] (.and (.app (.var S!) (.var x)) (.app T (.var x))), .fun (.pair α' β') .bool)
-  | @castPath.fun _ _ α' β' hβ c_α c_β => do
-    let ⟨S!, S!_spec⟩ ← loosenAux_prf "inter!" (castPath.fun hβ c_α c_β) S
-    declareConst S! (.fun α' β')
-    addSpec S! S!_spec
-    match β' with
-    | .option σ =>
-      let p ← freshVar (.pair α' σ) "inter!"
-      return (.lambda [p] [.pair α' σ]
-        (.and (.eq (.app (.var S!) (.fst (.var p))) (.some (.snd (.var p))))
-             (.eq (.app T (.fst (.var p))) (.some (.snd (.var p))))),
-        .fun (.pair α' σ) .bool)
-    | _ => throw s!"castInterAux.fun: Unexpected codomain type {β'}"
-  | @castPath.chpred _ α' c_α => do
-    let ⟨S!, S!_spec⟩ ← loosenAux_prf "inter!" (castPath.chpred c_α) S
-    declareConst S! (.fun α' .bool)
-    addSpec S! S!_spec
-    let x ← freshVar α' "inter!"
-    return (.lambda [x] [α'] (.and (.app (.var S!) (.var x)) (.app T (.var x))), .fun α' .bool)
-  | .opt _ => do throw s!"castInterAux: Intersection on option type is not expected."
-  | .pair _ _ => do throw s!"castInterAux: Intersection on pair type is not expected."
-  | @castPath.refl α' _ => do throw s!"castInterAux: Intersection on base type {α'} is not expected."
+def castInter.graph (S T : Term) {α β α' β' : SMTType}
+    (c_α : α ~> α') (c_β : β ~> β') : Encoder (Term × SMTType) := do
+  let ⟨S!, S!_spec⟩ ←
+    loosenAux_prf "inter!" (castPath.graph c_α c_β) S
+  declareConst S! (.fun (.pair α' β') .bool)
+  addSpec S! S!_spec
+  let x ← freshVar (.pair α' β') "inter!"
+  eraseFromContext x
+  return (.lambda [x] [.pair α' β']
+    (.and (.app (.var S!) (.var x)) (.app T (.var x))),
+    .fun (.pair α' β') .bool)
+
+def castInter.fun (S T : Term) {α β α' β' : SMTType}
+    (hβ : β ≠ .bool) (c_α : α ~> α') (c_β : β ~> β') :
+    Encoder (Term × SMTType) := do
+  let ⟨S!, S!_spec⟩ ←
+    loosenAux_prf "inter!" (castPath.fun hβ c_α c_β) S
+  declareConst S! (.fun α' β')
+  addSpec S! S!_spec
+  match β' with
+  | .option σ =>
+    let p ← freshVar (.pair α' σ) "inter!"
+    return (.lambda [p] [.pair α' σ]
+      (.and (.eq (.app (.var S!) (.fst (.var p)))
+              (.some (.snd (.var p))))
+            (.eq (.app T (.fst (.var p)))
+              (.some (.snd (.var p))))),
+      .fun (.pair α' σ) .bool)
+  | _ => throw s!"castInterAux.fun: Unexpected codomain type {β'}"
+
+def castInter.chpred (S T : Term) {α α' : SMTType}
+    (c_α : α ~> α') : Encoder (Term × SMTType) := do
+  let ⟨S!, S!_spec⟩ ←
+    loosenAux_prf "inter!" (castPath.chpred c_α) S
+  declareConst S! (.fun α' .bool)
+  addSpec S! S!_spec
+  let x ← freshVar α' "inter!"
+  eraseFromContext x
+  return (.lambda [x] [α']
+    (.and (.app (.var S!) (.var x)) (.app T (.var x))),
+    .fun α' .bool)
+
+def castInter.opt (S T : Term) {α α' : SMTType}
+    (_c_α : α ~> α') : Encoder (Term × SMTType) := do
+  throw s!"castInterAux: Intersection on option type is not expected."
+
+def castInter.pair (S T : Term) {α β α' β' : SMTType}
+    (_c_α : α ~> α') (_c_β : β ~> β') : Encoder (Term × SMTType) := do
+  throw s!"castInterAux: Intersection on pair type is not expected."
+
+def castInter.refl (S T : Term) (α : SMTType) :
+    Encoder (Term × SMTType) := do
+  throw s!"castInterAux: Intersection on base type {α} is not expected."
+
+def castInterAux (S T : Term) {α β : SMTType} :
+    α ~> β → Encoder (Term × SMTType)
+  | .graph c_α c_β     => castInter.graph S T c_α c_β
+  | .fun hβ c_α c_β    => castInter.fun S T hβ c_α c_β
+  | .chpred c_α        => castInter.chpred S T c_α
+  | .opt c_α           => castInter.opt S T c_α
+  | .pair c_α c_β      => castInter.pair S T c_α c_β
+  | @castPath.refl α _ => castInter.refl S T α
 
 def castInter : Term × SMTType → Term × SMTType → Encoder (Term × SMTType) := λ ⟨S, α⟩ ⟨T, β⟩ => do
   if h : α = β then do

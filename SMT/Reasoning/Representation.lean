@@ -127,6 +127,14 @@ theorem castPath.eq_reflexive {σ : SMTType} (c : σ ~> σ) :
           | «fun» _ cσ cτ =>
               rw [castPath.reflexive, ihσ cσ, ihτ cτ]
 
+/-- `toCastPath` exposes a characteristic-predicate cast structurally. -/
+theorem SMTType.castable?_to_castPath_chpred {α β : SMTType}
+    (h : α ⊑ β) :
+    (castable?.chpred h).toCastPath = castPath.chpred h.toCastPath := by
+  rw [castable?.toCastPath]
+  split using contra | _ <;> try contradiction
+  rfl
+
 /-- A reflexive-endpoint cast acts as the identity, independently of the
 particular proof object used to construct the path. -/
 theorem castZF_apply_self.{u} {σ : SMTType} (c : σ ~> σ) {Y : ZFSet.{u}}
@@ -555,6 +563,117 @@ theorem BType.SupportedSMT.reduce_toProdl
       rw [List.toProdl_cons_eq_foldl]
       exact BType.SupportedSMT.foldl_prod h hs
 
+/-- Flattening a supported target tuple at a valid source arity produces one
+target component for every source component. -/
+theorem BType.SupportedSMT.fromProdl_length_of_hasArity
+    {tau : BType} {sigma : SMTType} {n : ℕ}
+    (hs : BType.SupportedSMT tau sigma) (h : tau.hasArity n) :
+    (sigma.fromProdl (n - 1)).length = n := by
+  induction n generalizing tau sigma with
+  | zero =>
+      exact absurd h (by unfold BType.hasArity; exact id)
+  | succ n ih =>
+      cases n with
+      | zero =>
+          cases sigma <;> simp [SMT.SMTType.fromProdl]
+      | succ k =>
+          cases hs with
+          | int => exact absurd h (by unfold BType.hasArity; exact id)
+          | bool => exact absurd h (by unfold BType.hasArity; exact id)
+          | setPred hsigma =>
+              exact absurd h (by unfold BType.hasArity; exact id)
+          | optionFun alpha beta =>
+              exact absurd h (by unfold BType.hasArity; exact id)
+          | @prod alpha beta sigma tau hsigma htau =>
+              unfold BType.hasArity at h
+              show ((SMTType.pair sigma tau).fromProdl (k + 1)).length =
+                k + 2
+              rw [SMT.SMTType.fromProdl, List.length_concat]
+              have hlen := ih hsigma h
+              simp only [Nat.add_sub_cancel] at hlen
+              omega
+
+/-- Each flattened target tuple component supports the corresponding source
+component selected by `BType.get`. -/
+theorem BType.SupportedSMT.get_fromProdl_of_hasArity
+    {tau : BType} {sigma : SMTType} {n : ℕ}
+    (hs : BType.SupportedSMT tau sigma) (h : tau.hasArity n)
+    {i : ℕ} (hi : i < n) :
+    BType.SupportedSMT
+      (tau.get n ⟨i, hi⟩)
+      ((sigma.fromProdl (n - 1))[i]'(by
+        have hlen := hs.fromProdl_length_of_hasArity h
+        omega)) := by
+  induction n generalizing tau sigma i with
+  | zero => exact absurd hi (Nat.not_lt_zero _)
+  | succ n ih =>
+      cases n with
+      | zero =>
+          have hi0 : i = 0 := Nat.lt_one_iff.mp hi
+          subst i
+          cases sigma <;>
+            simpa [BType.get, SMT.SMTType.fromProdl] using hs
+      | succ k =>
+          cases hs with
+          | int => exact absurd h (by unfold BType.hasArity; exact id)
+          | bool => exact absurd h (by unfold BType.hasArity; exact id)
+          | setPred hsigma =>
+              exact absurd h (by unfold BType.hasArity; exact id)
+          | optionFun alpha beta =>
+              exact absurd h (by unfold BType.hasArity; exact id)
+          | @prod alpha beta sigma rho hsigma hrho =>
+              have hleft : alpha.hasArity (k + 1) := h
+              have hleft_len : (sigma.fromProdl k).length = k + 1 := by
+                have := hsigma.fromProdl_length_of_hasArity hleft
+                simpa only [Nat.add_sub_cancel] using this
+              suffices hsuff : BType.SupportedSMT
+                  ((alpha ×ᴮ beta).get (k + 1 + 1) ⟨i, hi⟩)
+                  (((sigma.fromProdl k).concat rho)[i]'(by
+                    rw [List.length_concat, hleft_len]
+                    omega)) by
+                have hfp :
+                    (SMTType.pair sigma rho).fromProdl (k + 1 + 1 - 1) =
+                      (sigma.fromProdl k).concat rho := by
+                  simp [SMT.SMTType.fromProdl]
+                simp only [hfp]
+                exact hsuff
+              by_cases hilast : i = k + 1
+              · subst i
+                have hsource :
+                    (alpha ×ᴮ beta).get (k + 2)
+                      ⟨k + 1, hi⟩ = beta := by
+                  unfold BType.get
+                  simp
+                rw [hsource]
+                have htarget :
+                    ((sigma.fromProdl k).concat rho)[k + 1]'(by
+                      rw [List.length_concat, hleft_len]
+                      omega) = rho := by
+                  simp only [List.concat_eq_append]
+                  rw [List.getElem_append_right (by omega)]
+                  simp [hleft_len]
+                rw [htarget]
+                exact hrho
+              · have hi_small : i < k + 1 := by omega
+                have hsource :
+                    (alpha ×ᴮ beta).get (k + 2) ⟨i, hi⟩ =
+                      alpha.get (k + 1) ⟨i, hi_small⟩ := by
+                  show (if _ : i = k + 1 then beta else
+                    alpha.get (k + 1) ⟨i, _⟩) = _
+                  rw [dif_neg hilast]
+                rw [hsource]
+                have htarget :
+                    ((sigma.fromProdl k).concat rho)[i]'(by
+                      rw [List.length_concat, hleft_len]
+                      omega) =
+                      (sigma.fromProdl k)[i]'(by omega) := by
+                  simp only [List.concat_eq_append]
+                  rw [List.getElem_append_left (by
+                    rw [hleft_len]
+                    exact hi_small)]
+                rw [htarget]
+                exact ih hsigma hleft hi_small
+
 private theorem List.reduce_append_singleton
     {α : Type} (f : α → α → α) (xs : List α) (x : α)
     (hne : xs ≠ []) (hne' : xs ++ [x] ≠ []) :
@@ -940,6 +1059,28 @@ theorem RDomCastAdmissible.pair.{u}
   refine ⟨RDomCast.pair hx.toRDomCast hy.toRDomCast, ?_⟩
   simpa [ValueCastAdmissible] using
     And.intro hx.valueCastAdmissible hy.valueCastAdmissible
+
+/-- Supported representation agreement is closed under pairing.  Both the
+cast/retraction witness and the recursive binder-admissibility certificates
+are assembled componentwise. -/
+theorem RDomCastSupported.pair.{u}
+    {X Y X' Y' : ZFSet.{u}} {α β : BType} {σ τ : SMTType}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦β⟧ᶻ}
+    {hX' : X' ∈ ⟦σ⟧ᶻ} {hY' : Y' ∈ ⟦τ⟧ᶻ}
+    (hx : RDomCastSupported
+      (⟨X, α, hX⟩ : B.Dom)
+      (⟨X', σ, hX'⟩ : SMT.Dom))
+    (hy : RDomCastSupported
+      (⟨Y, β, hY⟩ : B.Dom)
+      (⟨Y', τ, hY'⟩ : SMT.Dom)) :
+    RDomCastSupported
+      (⟨X.pair Y, α ×ᴮ β,
+        ZFSet.pair_mem_prod.mpr ⟨hX, hY⟩⟩ : B.Dom)
+      (⟨X'.pair Y', SMTType.pair σ τ,
+        ZFSet.pair_mem_prod.mpr ⟨hX', hY'⟩⟩ : SMT.Dom) := by
+  exact ⟨RDomCastAdmissible.pair hx.toRDomCastAdmissible
+      hy.toRDomCastAdmissible,
+    .prod hx.supported hy.supported⟩
 
 /-- A represented pair determines represented components. -/
 theorem RDomCast.of_pair.{u}
@@ -1610,6 +1751,105 @@ theorem castZF_apply_chpred_fapply_eq_zftrue_iff.{u}
         (ZFSet.is_func_is_pfunc hF'_func) z).val) harg
     exact happ_arg.symm.trans (happ.trans htrue)
 
+open Classical in
+/-- A cast relation at an encoder-supported target shape carries the complete
+recursive binder-admissibility invariant.  For characteristic predicates,
+membership in the retracted set supplies a target preimage; the induction
+hypothesis then propagates admissibility through nested represented values. -/
+theorem RDomCast.toRDomCastAdmissible_of_supported.{u}
+    {d : B.Dom.{u}} {d' : SMT.Dom.{u}}
+    (h : RDomCast d d')
+    (hs : BType.SupportedSMT d.snd.fst d'.snd.fst) :
+    RDomCastAdmissible d d' := by
+  rcases d with ⟨X, alpha, hX⟩
+  rcases d' with ⟨Y, sigma, hY⟩
+  refine ⟨h, ?_⟩
+  change BType.SupportedSMT alpha sigma at hs
+  change ValueCastAdmissible alpha sigma X
+  induction hs generalizing X Y with
+  | int => trivial
+  | bool => trivial
+  | @prod alpha beta sigma tau hsigma htau ihsigma ihtau =>
+      obtain ⟨A, hA, B, hB, rfl⟩ := ZFSet.mem_prod.mp hX
+      obtain ⟨A', hA', B', hB', rfl⟩ := ZFSet.mem_prod.mp hY
+      obtain ⟨hleft, hright⟩ := RDomCast.of_pair h
+      change ValueCastAdmissible alpha sigma (A.pair B).π₁ ∧
+        ValueCastAdmissible beta tau (A.pair B).π₂
+      simpa only [ZFSet.π₁_pair, ZFSet.π₂_pair] using
+        And.intro (ihsigma A hA A' hA' hleft)
+          (ihtau B hB B' hB' hright)
+  | @setPred tau sigma hsigma ih =>
+      obtain ⟨p, hret⟩ := h
+      cases p with
+      | refl hbase => nomatch hbase
+      | chpred p =>
+          have hXsub : X ⊆ ⟦tau⟧ᶻ := by
+            simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hX
+          have hpreimage : ∀ (x : ZFSet.{u}) (hxX : x ∈ X),
+              ∃ (y : ZFSet.{u}) (hy : y ∈ ⟦sigma⟧ᶻ),
+                RDomCast
+                  (⟨x, tau, hXsub hxX⟩ : B.Dom)
+                  (⟨y, sigma, hy⟩ : SMT.Dom) := by
+            intro x hxX
+            have hx : x ∈ ⟦tau⟧ᶻ := hXsub hxX
+            let xcan := (B.Dom.canonicalSMT
+              (⟨x, tau, hx⟩ : B.Dom)).fst
+            have hxcan : xcan ∈ ⟦tau.toSMTType⟧ᶻ := by
+              change (B.Dom.canonicalSMT
+                (⟨x, tau, hx⟩ : B.Dom)).fst ∈
+                  ⟦tau.toSMTType⟧ᶻ
+              rw [← B.Dom.canonicalSMT_type
+                (⟨x, tau, hx⟩ : B.Dom)]
+              exact (B.Dom.canonicalSMT
+                (⟨x, tau, hx⟩ : B.Dom)).snd.snd
+            let F' := castZF_apply (castPath.chpred p) Y
+            have hF' : F' ∈
+                ⟦SMTType.fun tau.toSMTType SMTType.bool⟧ᶻ :=
+              castZF_apply_mem (castPath.chpred p) hY
+            have hF'func : ⟦tau.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 F' := by
+              simpa [SMTType.toZFSet] using hF'
+            have hxRetract : x ∈ retract (BType.set tau) F' := by
+              rw [hret]
+              exact hxX
+            have htrue :
+                (ZFSet.fapply F' (ZFSet.is_func_is_pfunc hF'func)
+                  ⟨xcan, by
+                    rw [ZFSet.is_func_dom_eq hF'func]
+                    exact hxcan⟩).val = ZFSet.zftrue := by
+              rw [retract, ZFSet.mem_sep] at hxRetract
+              simpa only [dif_pos hx, dif_pos hF'func, xcan,
+                proof_irrel_heq] using hxRetract.2
+            obtain ⟨y, hy, hcast, _⟩ :=
+              (castZF_apply_chpred_fapply_eq_zftrue_iff p hY hxcan).mp
+                (by simpa only [F', proof_irrel_heq] using htrue)
+            refine ⟨y, hy, ⟨p, ?_⟩⟩
+            calc
+              retract tau (castZF_apply p y) = retract tau xcan := by
+                rw [hcast]
+              _ = x := by
+                dsimp [xcan]
+                exact retract_of_canonical tau hx
+          constructor
+          · exact ⟨p, fun x hxX => by
+              obtain ⟨y, hy, hrel⟩ := hpreimage x hxX
+              obtain ⟨q, hret⟩ := hrel
+              have hqp : q = p := castPath.eq_of_endpoints q p
+              subst q
+              exact ⟨y, hy, hret⟩⟩
+          · intro x hxX
+            obtain ⟨y, hy, hrel⟩ := hpreimage x hxX
+            exact ih x (hXsub hxX) y hy hrel
+      | «fun» hne _ _ => exact (hne rfl).elim
+  | optionFun alpha beta =>
+      have hXsub : X ⊆ ⟦alpha ×ᴮ beta⟧ᶻ := by
+        simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hX
+      constructor
+      · exact ⟨castPath.reflexive (alpha ×ᴮ beta).toSMTType,
+          BinderCastAdmissible.reflexive (alpha ×ᴮ beta) hX⟩
+      · intro x hxX
+        exact ValueCastAdmissible.canonical (alpha ×ᴮ beta)
+          (hXsub hxX)
+
 /-- Applying a represented characteristic predicate directly to a represented
 argument computes source membership, even when both use a noncanonical
 supported element representation. -/
@@ -1698,6 +1938,180 @@ theorem RDomCastSupported.setPred_member_preimage.{u}
       obtain ⟨y, hy, hret⟩ := hpreimage x hx
       refine ⟨y, hy, ⟨⟨⟨c, hret⟩, hnested x hx⟩, ?_⟩⟩
       simpa only [proof_irrel_heq] using hsτ
+
+open Classical in
+/-- Every target point accepted by a represented characteristic predicate is
+a supported representative of a source member.  Recursive
+`ValueCastAdmissible` data is what upgrades the direct cast/retraction witness
+when the element itself contains represented sets. -/
+theorem RDomCastSupported.setPred_target_of_true.{u}
+    {τ : BType} {σ : SMTType} {S F y : ZFSet.{u}}
+    {hS : S ∈ ⟦BType.set τ⟧ᶻ}
+    {hF : F ∈ ⟦SMTType.fun σ SMTType.bool⟧ᶻ}
+    (Srel : RDomCastSupported
+      (⟨S, BType.set τ, hS⟩ : B.Dom)
+      (⟨F, SMTType.fun σ SMTType.bool, hF⟩ : SMT.Dom))
+    (hy : y ∈ ⟦σ⟧ᶻ)
+    (htrue :
+      (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+        simpa [SMTType.toZFSet] using hF :
+          ⟦σ⟧ᶻ.IsFunc ZFSet.𝔹 F))
+        ⟨y, by
+          rw [ZFSet.is_func_dom_eq (by
+            simpa [SMTType.toZFSet] using hF :
+              ⟦σ⟧ᶻ.IsFunc ZFSet.𝔹 F)]
+          exact hy⟩).val = ZFSet.zftrue) :
+    ∃ (x : ZFSet.{u}) (hx : x ∈ S),
+      RDomCastSupported
+        (⟨x, τ, by
+          rw [BType.toZFSet, ZFSet.mem_powerset] at hS
+          exact hS hx⟩ : B.Dom)
+        (⟨y, σ, hy⟩ : SMT.Dom) := by
+  cases hs : Srel.supported with
+  | setPred hσ =>
+      let c := hσ.canonicalCastPath
+      let x := retract τ (castZF_apply c y)
+      have hxτ : x ∈ ⟦τ⟧ᶻ :=
+        retract_mem_of_canonical τ (castZF_apply_mem c hy)
+      have Xrel : RDomCast
+          (⟨x, τ, hxτ⟩ : B.Dom)
+          (⟨y, σ, hy⟩ : SMT.Dom) := by
+        exact ⟨c, rfl⟩
+      have hxS :=
+        (RDomCastSupported.setPred_fapply_eq_zftrue_iff Xrel Srel).mp
+          htrue
+      have hadm := Srel.toRDomCastAdmissible.valueCastAdmissible
+      change SetCastAdmissible τ S
+          (SMTType.fun σ SMTType.bool) ∧
+        (∀ z ∈ S, ValueCastAdmissible τ σ z) at hadm
+      refine ⟨x, hxS, ?_⟩
+      exact ⟨⟨Xrel, hadm.2 x hxS⟩, by
+        simpa only [proof_irrel_heq] using hσ⟩
+
+open Classical in
+/-- Build a supported characteristic-predicate representation from exact
+pointwise correspondence.  The forward direction rules out target points that
+do not represent source members; the backward direction supplies both a true
+target preimage and the recursive binder-admissibility certificate required by
+nested represented sets. -/
+theorem RDomCastSupported.setPred_of_pointwise.{u}
+    {alpha : BType} {sigma : SMTType}
+    (hsigma : BType.SupportedSMT alpha sigma)
+    {S F : ZFSet.{u}}
+    (hSsub : S ⊆ ⟦alpha⟧ᶻ)
+    (hF : F ∈ ⟦SMTType.fun sigma SMTType.bool⟧ᶻ)
+    (hFfunc : ⟦sigma⟧ᶻ.IsFunc ZFSet.𝔹 F)
+    (hforward : ∀ (y : ZFSet.{u}) (hy : y ∈ ⟦sigma⟧ᶻ),
+      (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+        ⟨y, by rw [ZFSet.is_func_dom_eq hFfunc]; exact hy⟩).val =
+          ZFSet.zftrue →
+      ∃ (x : ZFSet.{u}) (hx : x ∈ S),
+        RDomCastSupported
+          (⟨x, alpha, hSsub hx⟩ : B.Dom)
+          (⟨y, sigma, hy⟩ : SMT.Dom))
+    (hbackward : ∀ (x : ZFSet.{u}) (hx : x ∈ S),
+      ∃ (y : ZFSet.{u}) (hy : y ∈ ⟦sigma⟧ᶻ),
+        RDomCastSupported
+          (⟨x, alpha, hSsub hx⟩ : B.Dom)
+          (⟨y, sigma, hy⟩ : SMT.Dom) ∧
+        (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+          ⟨y, by rw [ZFSet.is_func_dom_eq hFfunc]; exact hy⟩).val =
+            ZFSet.zftrue) :
+    RDomCastSupported
+      (⟨S, BType.set alpha, ZFSet.mem_powerset.mpr hSsub⟩ : B.Dom)
+      (⟨F, SMTType.fun sigma SMTType.bool, hF⟩ : SMT.Dom) := by
+  let c := hsigma.canonicalCastPath
+  let Fcan := castZF_apply (castPath.chpred c) F
+  have hFcan :
+      Fcan ∈ ⟦SMTType.fun alpha.toSMTType SMTType.bool⟧ᶻ :=
+    castZF_apply_mem (castPath.chpred c) hF
+  have hFcanfunc : ⟦alpha.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 Fcan := by
+    simpa [SMTType.toZFSet] using hFcan
+  refine ⟨⟨?_, ?_⟩, .setPred hsigma⟩
+  · refine ⟨castPath.chpred c, ?_⟩
+    change retract (BType.set alpha) Fcan = S
+    apply ZFSet.ext
+    intro x
+    rw [retract, ZFSet.mem_sep]
+    constructor
+    · rintro ⟨hxalpha, htrue⟩
+      simp only [dif_pos hxalpha, dif_pos hFcanfunc] at htrue
+      let xcan := (B.Dom.canonicalSMT
+        (⟨x, alpha, hxalpha⟩ : B.Dom)).fst
+      have hxcan : xcan ∈ ⟦alpha.toSMTType⟧ᶻ := by
+        change (B.Dom.canonicalSMT
+          (⟨x, alpha, hxalpha⟩ : B.Dom)).fst ∈
+            ⟦alpha.toSMTType⟧ᶻ
+        rw [← B.Dom.canonicalSMT_type
+          (⟨x, alpha, hxalpha⟩ : B.Dom)]
+        exact (B.Dom.canonicalSMT
+          (⟨x, alpha, hxalpha⟩ : B.Dom)).snd.snd
+      have hcastTrue :=
+        (castZF_apply_chpred_fapply_eq_zftrue_iff c hF hxcan).mp htrue
+      obtain ⟨y, hy, hcy, hytrue⟩ := hcastTrue
+      obtain ⟨x', hx'S, hrel⟩ := hforward y hy hytrue
+      obtain ⟨d, hd⟩ := hrel.toRDomCast
+      have hdc : d = c := castPath.eq_of_endpoints d c
+      subst d
+      have hretxcan : retract alpha xcan = x := by
+        dsimp [xcan]
+        exact retract_of_canonical alpha hxalpha
+      have hxx' : x = x' := by
+        calc
+          x = retract alpha xcan := hretxcan.symm
+          _ = retract alpha (castZF_apply c y) := by rw [hcy]
+          _ = x' := hd
+      simpa [hxx'] using hx'S
+    · intro hxS
+      have hxalpha : x ∈ ⟦alpha⟧ᶻ := hSsub hxS
+      refine ⟨hxalpha, ?_⟩
+      simp only [dif_pos hxalpha, dif_pos hFcanfunc]
+      obtain ⟨y, hy, hrel, hytrue⟩ := hbackward x hxS
+      obtain ⟨d, hd⟩ := hrel.toRDomCast
+      have hdc : d = c := castPath.eq_of_endpoints d c
+      subst d
+      let xcan := (B.Dom.canonicalSMT
+        (⟨x, alpha, hxalpha⟩ : B.Dom)).fst
+      have hxcan : xcan ∈ ⟦alpha.toSMTType⟧ᶻ := by
+        change (B.Dom.canonicalSMT
+          (⟨x, alpha, hxalpha⟩ : B.Dom)).fst ∈
+            ⟦alpha.toSMTType⟧ᶻ
+        rw [← B.Dom.canonicalSMT_type
+          (⟨x, alpha, hxalpha⟩ : B.Dom)]
+        exact (B.Dom.canonicalSMT
+          (⟨x, alpha, hxalpha⟩ : B.Dom)).snd.snd
+      have hcastmem : castZF_apply c y ∈ ⟦alpha.toSMTType⟧ᶻ :=
+        castZF_apply_mem c hy
+      have hcy : castZF_apply c y = xcan := by
+        let r : B.Dom.{u} :=
+          ⟨retract alpha (castZF_apply c y), alpha,
+            retract_mem_of_canonical alpha hcastmem⟩
+        have hrx : r = (⟨x, alpha, hxalpha⟩ : B.Dom) := by
+          apply B.Dom.ext_type_value rfl
+          exact hd
+        calc
+          castZF_apply c y = r.canonicalSMT.fst := by
+            simpa [r, B.Dom.canonicalSMT] using
+              (canonical_of_retract alpha hcastmem).symm
+          _ = xcan :=
+            congrArg (fun d : B.Dom.{u} => d.canonicalSMT.fst) hrx
+      exact (castZF_apply_chpred_fapply_eq_zftrue_iff c hF hxcan).mpr
+        ⟨y, hy, hcy, hytrue⟩
+  · change SetCastAdmissible alpha S
+        (SMTType.fun sigma SMTType.bool) ∧
+      ∀ x ∈ S, ValueCastAdmissible alpha sigma x
+    constructor
+    · refine ⟨c, ?_⟩
+      intro x hxS
+      obtain ⟨y, hy, hrel, _⟩ := hbackward x hxS
+      obtain ⟨d, hd⟩ := hrel.toRDomCast
+      have hdc : d = c := castPath.eq_of_endpoints d c
+      subst d
+      exact ⟨y, hy, hd⟩
+    · intro x hxS
+      obtain ⟨y, hy, hrel, _⟩ := hbackward x hxS
+      exact hrel.toRDomCastAdmissible.valueCastAdmissible
+
 
 /-- A Boolean-valued function returns true exactly when the corresponding
 input/true pair belongs to its graph. -/
@@ -2019,6 +2433,43 @@ theorem RDomCastSupported.cast_eq_iff.{u}
               rw [castZF_apply_self c hA]
               exact RDomCast.target_value_eq_iff
                 relA.toRDomCast relB.toRDomCast
+
+open Classical in
+/-- Materializing a cast between two supported target representations
+preserves the represented source value.  The target relation is reconstructed
+from its canonical retraction; `cast_eq_iff` identifies that retraction with
+the original source value. -/
+theorem RDomCastSupported.of_cast_to_supported.{u}
+    {tau : BType} {sigma rho : SMTType}
+    {X Y₀ Y : ZFSet.{u}}
+    {hX : X ∈ ⟦tau⟧ᶻ} {hY₀ : Y₀ ∈ ⟦sigma⟧ᶻ}
+    {hY : Y ∈ ⟦rho⟧ᶻ}
+    (rel : RDomCastSupported
+      (⟨X, tau, hX⟩ : B.Dom)
+      (⟨Y₀, sigma, hY₀⟩ : SMT.Dom))
+    (hrho : BType.SupportedSMT tau rho)
+    (c : sigma ~> rho)
+    (hpair : Y₀.pair Y ∈ (castZF_of_path c).1) :
+    RDomCastSupported
+      (⟨X, tau, hX⟩ : B.Dom)
+      (⟨Y, rho, hY⟩ : SMT.Dom) := by
+  let cY := hrho.canonicalCastPath
+  let Z := retract tau (castZF_apply cY Y)
+  have hZ : Z ∈ ⟦tau⟧ᶻ :=
+    retract_mem_of_canonical tau (castZF_apply_mem cY hY)
+  have Zbare : RDomCast
+      (⟨Z, tau, hZ⟩ : B.Dom)
+      (⟨Y, rho, hY⟩ : SMT.Dom) := ⟨cY, rfl⟩
+  have Zrel : RDomCastSupported
+      (⟨Z, tau, hZ⟩ : B.Dom)
+      (⟨Y, rho, hY⟩ : SMT.Dom) :=
+    ⟨RDomCast.toRDomCastAdmissible_of_supported Zbare hrho, hrho⟩
+  have hcast : castZF_apply c Y₀ = Y :=
+    castZF_apply_eq_of_pair c hY₀ hpair
+  have hXZ : X = Z :=
+    (RDomCastSupported.cast_eq_iff rel Zrel c).mp hcast
+  subst X
+  simpa only [proof_irrel_heq] using Zrel
 
 /-- Applying a represented characteristic predicate after casting a supported
 element representative preserves source membership.  The proof uses the

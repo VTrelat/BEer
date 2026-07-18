@@ -1002,9 +1002,12 @@ the quantified domain. The oracle states exactly the missing fact: for every
 successful flag-type selection made by the encoder, each source-domain value
 has an SMT preimage at the selected binder type.
 
-The proof-obligation layer discharges this condition from the functional
-hypotheses that justify entries in `E.flags`; the raw term theorem keeps it
-explicit. -/
+The contract is indexed by the representation actually emitted for the
+quantifier domain.  Besides semantic preimages, it records that every
+successful flag transformation remains in the representation grammar used by
+the induction hypothesis.  The proof-obligation layer discharges both facts
+from the functional hypotheses and environment invariants that justify entries
+in `E.flags`; the raw term theorem keeps them explicit. -/
 abbrev EncodeTermAllBinderAdmissible.{u} : Prop :=
   ∀ (E : B.Env) (vs : List B.𝒱) (D P : B.Term) (τ : BType),
     E.context ⊢ᴮ B.Term.all vs D P : BType.bool →
@@ -1013,15 +1016,19 @@ abbrev EncodeTermAllBinderAdmissible.{u} : Prop :=
       (Δ_fv_D : ∀ v ∈ B.fv D, («Δ» v).isSome = true)
       (𝒟 : ZFSet.{u}) (h𝒟 : 𝒟 ∈ ⟦BType.set τ⟧ᶻ),
       ⟦D.abstract «Δ» Δ_fv_D⟧ᴮ = some ⟨𝒟, ⟨BType.set τ, h𝒟⟩⟩ →
-      ∀ (τs : List SMTType)
+      ∀ (ρ : SMTType) (_hρ : BType.SupportedSMT τ ρ)
+        (τs : List SMTType)
         (hvs_len : vs.length =
-          (τ.toSMTType.fromProdl (vs.length - 1)).length)
+          (ρ.fromProdl (vs.length - 1)).length)
         (hτs_len : τs.length =
-          (τ.toSMTType.fromProdl (vs.length - 1)).length),
+          (ρ.fromProdl (vs.length - 1)).length),
         (∀ i (hi : i < τs.length),
           SMTFlagTypeRel (vs[i]'(by omega) ∈ E.flags)
-            ((τ.toSMTType.fromProdl (vs.length - 1))[i]'(hτs_len ▸ hi))
+            ((ρ.fromProdl (vs.length - 1))[i]'(hτs_len ▸ hi))
             (τs[i]'hi)) →
+        (∀ i (hi : i < τs.length),
+          BType.SupportedSMT
+            (τ.get vs.length ⟨i, by omega⟩) (τs[i]'hi)) ∧
         ∀ (hcast : τs.toProdl ⊑ τ.toSMTType),
           BinderCastAdmissible τ τs.toProdl hcast.toCastPath 𝒟
 

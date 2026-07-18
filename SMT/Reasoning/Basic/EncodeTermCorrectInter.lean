@@ -535,7 +535,10 @@ theorem castInter_denotation_direct.{u_1}
         «Δ» hcov⟧ˢ = some den_t ∧
       den_t.2.1 = .fun γ .bool ∧
       (∀ (α : BType), γ = α.toSMTType →
-        retract α.set den_t.1 = retract α.set den_S.1 ∩ retract α.set den_T.1) := by
+        retract α.set den_t.1 = retract α.set den_S.1 ∩ retract α.set den_T.1) ∧
+      (∀ (w : ZFSet.{u_1}) (hw : w ∈ ⟦γ⟧ᶻ),
+        w.pair zftrue ∈ den_t.1 ↔
+          w.pair zftrue ∈ den_S.1 ∧ w.pair zftrue ∈ den_T.1) := by
   -- Abbreviations
   set andBody := Term.and (.app S (.var z)) (.app T (.var z)) with handBody_def
 
@@ -880,7 +883,7 @@ theorem castInter_denotation_direct.{u_1}
       exact hbf_eq
 
   -- Main conclusion
-  refine ⟨lamVal, ?_, hlamVal_ty, ?_⟩
+  refine ⟨lamVal, ?_, hlamVal_ty, ?_, ?_⟩
   · convert hlamVal using 2
   · intro α hα
     subst hα
@@ -932,6 +935,58 @@ theorem castInter_denotation_direct.{u_1}
         exact Option.some_injective _ (hden_body.symm.trans hden_body')
       rw [fapply_iff hx_α hlamVal_func, hfapply_eq, hDbody_eq]
       exact hDbody'_iff.mpr ⟨hx_S, hx_T⟩
+  · intro w hw
+    obtain ⟨Dbody, hden_body, hfapply_eq⟩ := hlamVal_app w hw
+    obtain ⟨Dbody', hcov_and, hden_body', _, hDbody'_iff⟩ :=
+      hbody_den ⟨w, γ, hw⟩ rfl hw
+    have hDbody_eq : Dbody = Dbody' := by
+      rw [show hcov_andBody_upd ⟨w, γ, hw⟩ = hcov_and from
+        Subsingleton.elim _ _] at hden_body
+      exact Option.some_injective _ (hden_body.symm.trans hden_body')
+    constructor
+    · intro hpair
+      have htrue :
+          (ZFSet.fapply lamVal.fst
+            (ZFSet.is_func_is_pfunc hlamVal_func)
+            ⟨w, by rw [ZFSet.is_func_dom_eq hlamVal_func]; exact hw⟩).val =
+            zftrue :=
+        congrArg Subtype.val
+          (ZFSet.fapply.of_pair
+            (ZFSet.is_func_is_pfunc hlamVal_func) hpair)
+      have hbody_true : Dbody'.fst = zftrue := by
+        rw [← hDbody_eq, ← hfapply_eq]
+        exact htrue
+      obtain ⟨hStrue, hTtrue⟩ := hDbody'_iff.mp hbody_true
+      constructor
+      · have hpairS := ZFSet.fapply.def
+          (ZFSet.is_func_is_pfunc hdenS_func)
+          (by rw [ZFSet.is_func_dom_eq hdenS_func]; exact hw)
+        rwa [hStrue] at hpairS
+      · have hpairT := ZFSet.fapply.def
+          (ZFSet.is_func_is_pfunc hdenT_func)
+          (by rw [ZFSet.is_func_dom_eq hdenT_func]; exact hw)
+        rwa [hTtrue] at hpairT
+    · rintro ⟨hpairS, hpairT⟩
+      have hbody_true : Dbody'.fst = zftrue := by
+        apply hDbody'_iff.mpr
+        constructor
+        · exact congrArg Subtype.val
+            (ZFSet.fapply.of_pair
+              (ZFSet.is_func_is_pfunc hdenS_func) hpairS)
+        · exact congrArg Subtype.val
+            (ZFSet.fapply.of_pair
+              (ZFSet.is_func_is_pfunc hdenT_func) hpairT)
+      have htrue :
+          (ZFSet.fapply lamVal.fst
+            (ZFSet.is_func_is_pfunc hlamVal_func)
+            ⟨w, by rw [ZFSet.is_func_dom_eq hlamVal_func]; exact hw⟩).val =
+            zftrue := by
+        rw [hfapply_eq, hDbody_eq]
+        exact hbody_true
+      have hpairU := ZFSet.fapply.def
+        (ZFSet.is_func_is_pfunc hlamVal_func)
+        (by rw [ZFSet.is_func_dom_eq hlamVal_func]; exact hw)
+      rwa [htrue] at hpairU
 
 set_option maxHeartbeats 800000 in
 @[spec]
@@ -1083,8 +1138,10 @@ theorem castInter_spec
           denote_type_eq_of_typing typ_S (hden := h_den_S) (hΔΓ := respects)
         have den_T_type : den_T.2.1 = .fun γ .bool :=
           denote_type_eq_of_typing typ_T (hden := h_den_T) (hΔΓ := respects)
-        exact castInter_denotation_direct hS hT h_den_S h_den_T
-          den_S_type den_T_type z_not_fv_S z_not_fv_T hcov_lambda
+        obtain ⟨den_t, hden_t, htype_t, hretract_t, _⟩ :=
+          castInter_denotation_direct hS hT h_den_S h_den_T
+            den_S_type den_T_type z_not_fv_S z_not_fv_T hcov_lambda
+        exact ⟨den_t, hden_t, htype_t, hretract_t⟩
 
 set_option maxHeartbeats 500000 in
 theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : B.Term)
@@ -1561,7 +1618,7 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
           exact B_preserves v (St₀_used_sub_St₁ hv) (A_preserves v hv h1 h2_A) h2_B
         -- (8) renaming context + denotation
         · -- Use Δ'' as the renaming context; apply castInter_denotation_direct
-          obtain ⟨den_lambda, hden_lambda, htype_lambda, hretract_lambda⟩ :=
+          obtain ⟨den_lambda, hden_lambda, htype_lambda, hretract_lambda, _⟩ :=
             castInter_denotation_direct Δ''_fv_A Δ''_fv_B
               den_Aenc_Δ'' den_Benc
               (rfl : α.set.toSMTType = .fun γ .bool) (rfl : α.set.toSMTType = .fun γ .bool)
@@ -1781,7 +1838,8 @@ theorem encodeTerm_spec.inter_case.{u} (fv_sub_typings : B.FvSubTypings) (A B : 
                 · exact hcov_B_alt v hv_B
                 · exact absurd rfl hv_ne_z
               -- Apply castInter_denotation_direct with Δ'_alt
-              obtain ⟨den_lambda_alt, hden_lambda_alt, htype_lambda_alt, hretract_lambda_alt⟩ :=
+              obtain ⟨den_lambda_alt, hden_lambda_alt, htype_lambda_alt,
+                hretract_lambda_alt, _⟩ :=
                 castInter_denotation_direct hcov_A_alt hcov_B_alt
                   den_A_alt_final den_B_alt_final
                   (rfl : α.set.toSMTType = .fun γ .bool) (rfl : α.set.toSMTType = .fun γ .bool)
