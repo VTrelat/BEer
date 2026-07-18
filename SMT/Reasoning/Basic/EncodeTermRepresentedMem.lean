@@ -49,82 +49,6 @@ theorem respects_update_helper.{u}
 
 end SMT.RenamingContext
 
-/-- Applying a canonical characteristic-predicate representation to a target
-value computes membership of its retraction in the represented source set. -/
-theorem RDomCast.setPred_apply_eq_mem.{u}
-    {τ : BType} {X S Y F : ZFSet.{u}}
-    (hX : X ∈ ⟦τ⟧ᶻ)
-    (hY : Y ∈ ⟦τ.toSMTType⟧ᶻ)
-    (hF : F ∈ ⟦SMTType.fun τ.toSMTType SMTType.bool⟧ᶻ)
-    (hYret : retract τ Y = X)
-    (hFret : retract (BType.set τ) F = S) :
-    (fapply F (is_func_is_pfunc (by
-      simpa [SMTType.toZFSet] using hF :
-        ⟦τ.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 F))
-      ⟨Y, by
-        rw [is_func_dom_eq (by
-          simpa [SMTType.toZFSet] using hF :
-            ⟦τ.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 F)]
-        exact hY⟩).val = X ∈ᶻ S := by
-  have hF_func : ⟦τ.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 F := by
-    simpa [SMTType.toZFSet] using hF
-  have hY_dom : Y ∈ F.Dom (is_rel_of_is_func hF_func) := by
-    rw [is_func_dom_eq hF_func]
-    exact hY
-  change (fapply F (is_func_is_pfunc hF_func) ⟨Y, hY_dom⟩).val = X ∈ᶻ S
-  by_cases hXS : X ∈ S
-  · have hXS' := hXS
-    rw [← hFret, ← hYret] at hXS'
-    rw [retract, ZFSet.mem_sep] at hXS'
-    obtain ⟨_, happ⟩ := hXS'
-    have hret_mem : retract τ Y ∈ ⟦τ⟧ᶻ := by rwa [hYret]
-    simp only [dif_pos hret_mem, dif_pos hF_func] at happ
-    rw [fapply_eq_Image_singleton hF_func
-      (ZFSet.fapply_mem_range _ _)] at happ
-    simp only [canonical_of_retract τ hY] at happ
-    rw [← fapply_eq_Image_singleton hF_func hY] at happ
-    rw [happ]
-    simp [overloadUnaryOp, hXS]
-  · have hXS' := hXS
-    rw [← hFret, ← hYret] at hXS'
-    rw [retract, ZFSet.mem_sep, not_and] at hXS'
-    have hret_mem : retract τ Y ∈ ⟦τ⟧ᶻ := by rwa [hYret]
-    specialize hXS' hret_mem
-    simp only [dif_pos hret_mem, dif_pos hF_func] at hXS'
-    rw [fapply_eq_Image_singleton hF_func
-      (ZFSet.fapply_mem_range _ _)] at hXS'
-    simp only [canonical_of_retract τ hY] at hXS'
-    rw [← fapply_eq_Image_singleton hF_func hY] at hXS'
-    conv at hXS' =>
-      enter [1, 2]
-      change (⊤ : ZFBool)
-    rw [← Subtype.ext_iff, ← ne_eq, ZFBool.not_top_iff_bot,
-      Subtype.ext_iff] at hXS'
-    rw [hXS']
-    simp [overloadUnaryOp, hXS]
-
-/-- Propositional form of `setPred_apply_eq_mem`. -/
-theorem RDomCast.setPred_apply_eq_zftrue_iff.{u}
-    {τ : BType} {X S Y F : ZFSet.{u}}
-    (hX : X ∈ ⟦τ⟧ᶻ)
-    (hY : Y ∈ ⟦τ.toSMTType⟧ᶻ)
-    (hF : F ∈ ⟦SMTType.fun τ.toSMTType SMTType.bool⟧ᶻ)
-    (hYret : retract τ Y = X)
-    (hFret : retract (BType.set τ) F = S) :
-    (fapply F (is_func_is_pfunc (by
-      simpa [SMTType.toZFSet] using hF :
-        ⟦τ.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 F))
-      ⟨Y, by
-        rw [is_func_dom_eq (by
-          simpa [SMTType.toZFSet] using hF :
-            ⟦τ.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 F)]
-        exact hY⟩).val = ZFSet.zftrue ↔ X ∈ S := by
-  rw [RDomCast.setPred_apply_eq_mem hX hY hF hYret hFret]
-  by_cases hXS : X ∈ S
-  · simp [overloadUnaryOp, hXS]
-  · simpa [overloadUnaryOp, hXS] using
-      (Ne.symm ZFSet.zftrue_ne_zffalse)
-
 /-- The overloaded equality operation with its otherwise implicit domain made
 explicit. -/
 noncomputable def zfEqIn.{u} (A X Y : ZFSet.{u}) : ZFSet.{u} :=
@@ -190,8 +114,7 @@ theorem RDomCastSupported.bool_of_true_iff.{u}
     refine ⟨rfl, ?_⟩
     dsimp [retract]
     exact hPQ.symm
-  exact ⟨hrel.toRDomCastAdmissible_of_supported
-    BType.SupportedSMT.bool, BType.SupportedSMT.bool⟩
+  exact ⟨⟨hrel, trivial⟩, BType.SupportedSMT.bool⟩
 
 /-- Inversion of source-level membership under its typing derivation. -/
 theorem B.denote_mem_inv.{u}
@@ -448,8 +371,8 @@ abbrev CastMembershipRepGuardedSemantics.{u}
         ⟦x.abstract Θ hcov_x⟧ˢ = some denX →
         ⟦S.abstract Θ hcov_S⟧ˢ = some denA →
         denX.snd.fst = σx → denA.snd.fst = σS →
-        RDomCast (⟨X, τ, hX⟩ : B.Dom) denX →
-        RDomCast (⟨A, BType.set τ, hA⟩ : B.Dom) denA →
+        RDomCastSupported (⟨X, τ, hX⟩ : B.Dom) denX →
+        RDomCastSupported (⟨A, BType.set τ, hA⟩ : B.Dom) denA →
         ∀ (hcov_t : SMT.RenamingContext.CoversFV Θ t)
           (denM : SMT.Dom.{u}),
           SMT.RenamingContext.RespectsTypeContextOnFV Θ Γsup t →
@@ -479,8 +402,8 @@ abbrev CastMembershipRepSemantics.{u}
         ⟦x.abstract Θ hcov_x⟧ˢ = some denX →
         ⟦S.abstract Θ hcov_S⟧ˢ = some denA →
         denX.snd.fst = σx → denA.snd.fst = σS →
-        RDomCast (⟨X, τ, hX⟩ : B.Dom) denX →
-        RDomCast (⟨A, BType.set τ, hA⟩ : B.Dom) denA →
+        RDomCastSupported (⟨X, τ, hX⟩ : B.Dom) denX →
+        RDomCastSupported (⟨A, BType.set τ, hA⟩ : B.Dom) denA →
         (∃ (Θ' : SMT.RenamingContext.Context.{u})
           (hcov_t : SMT.RenamingContext.CoversFV Θ' t)
           (denM : SMT.Dom.{u}),
@@ -529,9 +452,9 @@ abbrev CastMembershipRepSpec.{u} (τ : BType)
           ScopedGeneratedTyping Λ Dlt t SMTType.bool⌝⦄
 
 theorem castMembership_direct_rep_contract.{u}
-    (τ : BType) (x S : SMT.Term) :
-    CastMembershipRepSpec.{u} τ x S τ.toSMTType
-      (SMTType.fun τ.toSMTType SMTType.bool) := by
+    (τ : BType) (σ : SMTType) (x S : SMT.Term) :
+    CastMembershipRepSpec.{u} τ x S σ
+      (SMTType.fun σ SMTType.bool) := by
   unfold CastMembershipRepSpec
   intro Λ n used decl typ_x typ_S bv_x_used bv_S_used
   mintro pre ∀St
@@ -571,7 +494,7 @@ theorem castMembership_direct_rep_contract.{u}
       rw [SMT.fv, List.mem_append] at hv
       exact hv.elim (fun h => respects_S h hlookup)
         (fun h => respects_x h hlookup)
-    have hF_func : ⟦τ.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 F := by
+    have hF_func : ⟦σ⟧ᶻ.IsFunc ZFSet.𝔹 F := by
       simpa [SMTType.toZFSet] using hF
     have hX₀_dom : X₀ ∈ F.Dom (is_rel_of_is_func hF_func) := by
       rw [is_func_dom_eq hF_func]
@@ -583,22 +506,18 @@ theorem castMembership_direct_rep_contract.{u}
         some denM := by
       rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
         Option.bind_eq_bind, Option.bind_eq_some_iff]
-      refine ⟨⟨F, SMTType.fun τ.toSMTType SMTType.bool, hF⟩,
+      refine ⟨⟨F, SMTType.fun σ SMTType.bool, hF⟩,
         ?_, ?_⟩
       · simpa only [proof_irrel_heq] using hdenA
       · rw [Option.bind_eq_some_iff]
-        refine ⟨⟨X₀, τ.toSMTType, hX₀⟩, ?_, ?_⟩
+        refine ⟨⟨X₀, σ, hX₀⟩, ?_, ?_⟩
         · simpa only [proof_irrel_heq] using hdenX
         · simp only [dif_pos True.intro,
             dif_pos (is_func_is_pfunc hF_func), dif_pos hX₀_dom, denM]
-    have hcast := castZF_apply_pair
-      (castPath.reflexive τ.toSMTType) hX₀
-    rw [castZF_apply_reflexive τ.toSMTType hX₀] at hcast
     have hiff : denM.fst = ZFSet.zftrue ↔ X ∈ A := by
       dsimp [denM]
-      exact RDomCast.setPred_cast_apply_eq_zftrue_iff
-        (hY := hX₀) Xrel Arel
-        (castPath.reflexive τ.toSMTType) hcast
+      exact RDomCastSupported.setPred_fapply_eq_zftrue_iff
+        Xrel.toRDomCast Arel
     constructor
     · exact ⟨Θ, hcov_t, denM,
         SMT.RenamingContext.extends_refl Θ, Θ_none, respects_t,
@@ -617,7 +536,7 @@ theorem castMembership_direct_rep_contract.{u}
         intro v hv
         rw [SMT.fv, List.mem_append] at hv
         exact hv.elim (hcov_Sg v) (hcov_xg v)
-      have hFg_func : ⟦τ.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 Fg := by
+      have hFg_func : ⟦σ⟧ᶻ.IsFunc ZFSet.𝔹 Fg := by
         simpa [SMTType.toZFSet] using hFg
       have hXg₀_dom : Xg₀ ∈ Fg.Dom (is_rel_of_is_func hFg_func) := by
         rw [is_func_dom_eq hFg_func]
@@ -630,23 +549,19 @@ theorem castMembership_direct_rep_contract.{u}
           hcov_expected⟧ˢ = some denExpected := by
         rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
           Option.bind_eq_bind, Option.bind_eq_some_iff]
-        refine ⟨⟨Fg, SMTType.fun τ.toSMTType SMTType.bool, hFg⟩,
+        refine ⟨⟨Fg, SMTType.fun σ SMTType.bool, hFg⟩,
           ?_, ?_⟩
         · simpa only [proof_irrel_heq] using hdenAg
         · rw [Option.bind_eq_some_iff]
-          refine ⟨⟨Xg₀, τ.toSMTType, hXg₀⟩, ?_, ?_⟩
+          refine ⟨⟨Xg₀, σ, hXg₀⟩, ?_, ?_⟩
           · simpa only [proof_irrel_heq] using hdenXg
           · simp only [dif_pos True.intro,
               dif_pos (is_func_is_pfunc hFg_func),
               dif_pos hXg₀_dom, denExpected]
-      have hcastg := castZF_apply_pair
-        (castPath.reflexive τ.toSMTType) hXg₀
-      rw [castZF_apply_reflexive τ.toSMTType hXg₀] at hcastg
       have hiffg : denExpected.fst = ZFSet.zftrue ↔ Xg ∈ Ag := by
         dsimp [denExpected]
-        exact RDomCast.setPred_cast_apply_eq_zftrue_iff
-          (hY := hXg₀) Xrelg Arelg
-          (castPath.reflexive τ.toSMTType) hcastg
+        exact RDomCastSupported.setPred_fapply_eq_zftrue_iff
+          Xrelg.toRDomCast Arelg
       have hcov_eq : hcov_tg = hcov_expected := Subsingleton.elim _ _
       subst hcov_tg
       have hden_eq : denExpected = denMg :=
@@ -660,12 +575,12 @@ theorem castMembership_direct_rep_contract.{u}
 
 set_option maxHeartbeats 3000000 in
 theorem castMembership_setPred_cast_rep_contract.{u}
-    (τ : BType) (σx : SMTType) (x S : SMT.Term)
-    (hle : σx ⊑ τ.toSMTType)
+    (τ : BType) (σx σS : SMTType) (x S : SMT.Term)
+    (hle : σx ⊑ σS)
     (hfaith : castPath.FVFaithful hle.toCastPath)
-    (hne : σx ≠ τ.toSMTType) :
+    (hne : σx ≠ σS) :
     CastMembershipRepSpec.{u} τ x S σx
-      (SMTType.fun τ.toSMTType SMTType.bool) := by
+      (SMTType.fun σS SMTType.bool) := by
   unfold CastMembershipRepSpec
   intro Λ n used decl typ_x typ_S bv_x_used bv_S_used
   mstart
@@ -687,18 +602,18 @@ theorem castMembership_setPred_cast_rep_contract.{u}
   change t = spec ∧ˢ .app S (.var helper) at t_eq
   subst t
   have helper_ctx_gen : ContextGeneratedByDeclarations Λ St'.types
-      (helperSpecChunk helper τ.toSMTType spec) := by
+      (helperSpecChunk helper σS spec) := by
     rw [helper_ctx_eq]
     exact ContextGeneratedByDeclarations.insert_helper
-      Λ helper τ.toSMTType spec helper_fresh
+      Λ helper σS spec helper_fresh
   have helper_ctx_trace : DeclarationContextTrace Λ
-      (helperSpecChunk helper τ.toSMTType spec) St'.types := by
+      (helperSpecChunk helper σS spec) St'.types := by
     rw [helper_ctx_eq]
     exact DeclarationContextTrace.helperSpecChunk
-      Λ helper τ.toSMTType spec helper_fresh
+      Λ helper σS spec helper_fresh
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
-    helperSpecChunk helper τ.toSMTType spec, decl_eq, helper_ctx_gen,
+    helperSpecChunk helper σS spec, decl_eq, helper_ctx_gen,
     helper_ctx_trace, ?_, ?_, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
@@ -750,7 +665,7 @@ theorem castMembership_setPred_cast_rep_contract.{u}
       exact absurd helper_used_final hv
     · simpa [Θ', Function.update_of_ne hvh] using
         Θ_none v (fun hv_used => hv (used_sub hv_used))
-  have helper_lookup_sup : Γsup.lookup helper = some τ.toSMTType :=
+  have helper_lookup_sup : Γsup.lookup helper = some σS :=
     AList.lookup_of_subset Γsub helper_lookup
   have respects_spec :
       SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup spec :=
@@ -771,7 +686,7 @@ theorem castMembership_setPred_cast_rep_contract.{u}
   have hcov_S' : SMT.RenamingContext.CoversFV Θ' S :=
     SMT.RenamingContext.coversFV_of_extends_of_coversFV Θ'_ext hcov_S
   have hdenA' : ⟦S.abstract Θ' hcov_S'⟧ˢ =
-      some (⟨F, SMTType.fun τ.toSMTType SMTType.bool, hF⟩ : SMT.Dom) := by
+      some (⟨F, SMTType.fun σS SMTType.bool, hF⟩ : SMT.Dom) := by
     have hagree := SMT.RenamingContext.agreesOnFV_of_extends_of_coversFV
       Θ'_ext hcov_S
     exact (SMT.RenamingContext.denote_congr_of_agreesOnFV
@@ -789,9 +704,9 @@ theorem castMembership_setPred_cast_rep_contract.{u}
     rw [helper_lookup_sup] at hlookup
     cases hlookup
     exact ⟨Y, by simp [Θ'], hY_ty⟩
-  have hF_func : ⟦τ.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 F := by
+  have hF_func : ⟦σS⟧ᶻ.IsFunc ZFSet.𝔹 F := by
     simpa [SMTType.toZFSet] using hF
-  have hY_mem : Y.fst ∈ ⟦τ.toSMTType⟧ᶻ := by
+  have hY_mem : Y.fst ∈ ⟦σS⟧ᶻ := by
     rw [← hY_ty]
     exact Y.snd.snd
   have hY_dom : Y.fst ∈ F.Dom (is_rel_of_is_func hF_func) := by
@@ -809,7 +724,7 @@ theorem castMembership_setPred_cast_rep_contract.{u}
       Θ' hcov_app⟧ˢ = some denApp := by
     rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
       Option.bind_eq_bind, Option.bind_eq_some_iff]
-    refine ⟨⟨F, SMTType.fun τ.toSMTType SMTType.bool, hF⟩,
+    refine ⟨⟨F, SMTType.fun σS SMTType.bool, hF⟩,
       ?_, ?_⟩
     · simpa only [proof_irrel_heq] using hdenA'
     · rw [Option.bind_eq_some_iff]
@@ -860,8 +775,8 @@ theorem castMembership_setPred_cast_rep_contract.{u}
     rfl
   have hiff_app : denApp.fst = ZFSet.zftrue ↔ X ∈ A := by
     dsimp [denApp]
-    exact RDomCast.setPred_cast_apply_eq_zftrue_iff
-      (hY := hY_mem) Xrel Arel hle.toCastPath hcast
+    exact RDomCastSupported.setPred_fapply_at_cast_eq_zftrue_iff
+      (hy := hY_mem) Xrel Arel hle.toCastPath hcast
   have hiff : denM.fst = ZFSet.zftrue ↔ X ∈ A := by
     have hdenM_app : denM.fst = denApp.fst := by
       dsimp [denM]
@@ -875,7 +790,7 @@ theorem castMembership_setPred_cast_rep_contract.{u}
     rw [hdenM_app]
     exact hiff_app
   have specs_true : SpecBodiesTrue Θ' Γsup
-      (helperSpecChunk helper τ.toSMTType spec) := by
+      (helperSpecChunk helper σS spec) := by
     intro b hb
     simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
     subst b
@@ -914,7 +829,7 @@ theorem castMembership_setPred_cast_rep_contract.{u}
         _hYw_ty, _hΦg_ty, _hcast_w, hguardg⟩ :=
       exactness Θg hcov_xg respects_x_Λg hpfg
         (⟨Xg₀, σx, hXg₀⟩ : SMT.Dom) hdenXg
-    have hFg_func : ⟦τ.toSMTType⟧ᶻ.IsFunc ZFSet.𝔹 Fg := by
+    have hFg_func : ⟦σS⟧ᶻ.IsFunc ZFSet.𝔹 Fg := by
       simpa [SMTType.toZFSet] using hFg
     obtain ⟨specVal, hspecVal, hden_spec_g,
         appVal, happVal, hden_app_g, denMg_eq⟩ :=
@@ -948,9 +863,9 @@ theorem castMembership_setPred_cast_rep_contract.{u}
       exact Or.inr (by
         rw [SMT.fv, List.mem_append]
         exact Or.inr (by simp [SMT.fv]))
-    have hYg_ty : Yg.snd.fst = τ.toSMTType := by
+    have hYg_ty : Yg.snd.fst = σS := by
       have helper_lookup_supg :
-          Γsupg.lookup helper = some τ.toSMTType :=
+          Γsupg.lookup helper = some σS :=
         Γsubg.lookup_of_declared (by
           simp [declEntries_helperSpecChunk])
       obtain ⟨d, hd, hdty⟩ := respects_tg helper_fv_t
@@ -974,7 +889,7 @@ theorem castMembership_setPred_cast_rep_contract.{u}
         some (⟨specVal, SMTType.bool, hspecVal⟩ : SMT.Dom) := by
       simpa only [hupd, proof_irrel_heq] using hden_spec_g
     have hcast_g' := hcast_g hden_spec_upd hspecVal_true
-    have hYg_mem : Yg.fst ∈ ⟦τ.toSMTType⟧ᶻ := by
+    have hYg_mem : Yg.fst ∈ ⟦σS⟧ᶻ := by
       rw [← hYg_ty]
       exact Yg.snd.snd
     have hYg_dom : Yg.fst ∈ Fg.Dom (is_rel_of_is_func hFg_func) := by
@@ -983,8 +898,8 @@ theorem castMembership_setPred_cast_rep_contract.{u}
     have hiff_app_g :
         (fapply Fg (is_func_is_pfunc hFg_func)
           ⟨Yg.fst, hYg_dom⟩).val = ZFSet.zftrue ↔ Xg ∈ Ag :=
-      RDomCast.setPred_cast_apply_eq_zftrue_iff
-        (hY := hYg_mem) Xrelg Arelg hle.toCastPath hcast_g'
+      RDomCastSupported.setPred_fapply_at_cast_eq_zftrue_iff
+        (hy := hYg_mem) Xrelg Arelg hle.toCastPath hcast_g'
     have hcov_app_g : SMT.RenamingContext.CoversFV Θg
         (.app S (.var helper)) := by
       intro v hv
@@ -1000,7 +915,7 @@ theorem castMembership_setPred_cast_rep_contract.{u}
           some denAppG := by
       rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
         Option.bind_eq_bind, Option.bind_eq_some_iff]
-      refine ⟨⟨Fg, SMTType.fun τ.toSMTType SMTType.bool, hFg⟩,
+      refine ⟨⟨Fg, SMTType.fun σS SMTType.bool, hFg⟩,
         ?_, ?_⟩
       · simpa only [proof_irrel_heq] using hdenAg
       · rw [Option.bind_eq_some_iff]
@@ -1012,6 +927,397 @@ theorem castMembership_setPred_cast_rep_contract.{u}
         · simp only [dif_pos hYg_ty.symm,
             dif_pos (is_func_is_pfunc hFg_func),
             dif_pos hYg_dom, denAppG]
+    have happVal_eq : appVal = denAppG.fst := by
+      have hcov_eq : hcov_app_g =
+          (fun v hv => hcov_tg v (by
+            rw [SMT.fv, List.mem_append]
+            exact Or.inr hv)) := Subsingleton.elim _ _
+      subst hcov_app_g
+      rw [hden_app_g] at hden_app_expected
+      exact congrArg (fun d : SMT.Dom => d.fst)
+        (Option.some.inj hden_app_expected)
+    subst denMg
+    subst specVal
+    have happ_true : appVal = ZFSet.zftrue ↔ Xg ∈ Ag := by
+      rw [happVal_eq]
+      exact hiff_app_g
+    rcases ZFSet.ZFBool.mem_𝔹_iff appVal |>.mp happVal with
+      hfalse | htrue
+    · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
+        overloadBinOp_𝔹, overloadBinOp, hfalse] using happ_true
+    · simpa [EncodeTermRepresentedBool.CheckedOp.eval,
+        overloadBinOp_𝔹, overloadBinOp, htrue] using happ_true
+  · intro body hbody
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    exact (SMT.Typing.andE typ_t).2.1
+  · apply ScopedGeneratedTyping.of_operational helper_ctx_gen typ_t
+    intro b hb
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
+    subst b
+    exact (SMT.Typing.andE typ_t).2.1
+
+set_option maxHeartbeats 3000000 in
+theorem castMembership_setPred_reverse_cast_rep_contract.{u}
+    (τ : BType) (σx σS : SMTType) (x S : SMT.Term)
+    (hnot : ¬ σx ⊑ σS) (hle : σS ⊑ σx)
+    (hfaith : castPath.FVFaithful
+      (castPath.chpred hle.toCastPath))
+    (hne : σx ≠ σS) :
+    CastMembershipRepSpec.{u} τ x S σx
+      (SMTType.fun σS SMTType.bool) := by
+  unfold CastMembershipRepSpec
+  intro Λ n used decl typ_x typ_S bv_x_used bv_S_used
+  mstart
+  mintro pre ∀St
+  mpure pre
+  mspec castMembership_branch3_exact_spec typ_x typ_S hne hnot hle
+    hfaith bv_x_used bv_S_used
+  rename_i out
+  obtain ⟨t, σ⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨_fvc, types_sub, keys_sub, used_sub, σ_eq, typ_t,
+    _fv_t, preserves, _total,
+    helper, spec, decl_eq, t_eq, helper_fresh, helper_not_used,
+    helper_lookup, helper_ctx_eq, spec_fv, source_fv_spec, exactness⟩ := post
+  change σ = SMTType.bool at σ_eq
+  subst σ
+  change t = spec ∧ˢ .app (.var helper) x at t_eq
+  subst t
+  have helper_ctx_gen : ContextGeneratedByDeclarations Λ St'.types
+      (helperSpecChunk helper (.fun σx .bool) spec) := by
+    rw [helper_ctx_eq]
+    exact ContextGeneratedByDeclarations.insert_helper
+      Λ helper (.fun σx .bool) spec helper_fresh
+  have helper_ctx_trace : DeclarationContextTrace Λ
+      (helperSpecChunk helper (.fun σx .bool) spec) St'.types := by
+    rw [helper_ctx_eq]
+    exact DeclarationContextTrace.helperSpecChunk
+      Λ helper (.fun σx .bool) spec helper_fresh
+  mpure_intro
+  refine ⟨used_sub, types_sub, keys_sub, rfl, typ_t, ?_, ?_, preserves,
+    helperSpecChunk helper (.fun σx .bool) spec, decl_eq, helper_ctx_gen,
+    helper_ctx_trace, ?_, ?_, ?_, ?_⟩
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inr (by
+      rw [SMT.fv, List.mem_append]
+      exact Or.inr hv)
+  · intro v hv
+    rw [SMT.fv, List.mem_append]
+    exact Or.inl (source_fv_spec hv)
+  · intro v hv
+    simp only [declVars_helperSpecChunk, List.mem_singleton] at hv
+    subst v
+    exact helper_not_used
+  intro Γsup Γsub Θ hcov_x hcov_S Θ_none respects_x respects_S
+    Θ_dom X A hX hA denX denA hdenX hdenA hdenX_ty hdenA_ty
+    Xrel Arel
+  rcases denX with ⟨X₀, σX, hX₀⟩
+  rcases denA with ⟨F, σA, hF⟩
+  dsimp at hdenX_ty hdenA_ty
+  subst σX
+  subst σA
+  have Λ_sub_sup : Λ ⊆ Γsup :=
+    AList.subset_trans types_sub Γsub
+  have respects_S_Λ :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ S :=
+    respects_S.of_super Λ_sub_sup
+  have hpf : ∀ (S_! : SMT.𝒱) (G : SMT.Dom.{u}),
+      ∀ v ∈ SMT.fv (SMT.Term.var S_!),
+        (Function.update Θ S_! (some G) v).isSome = true := by
+    intro S_! G v hv
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    simp
+  obtain ⟨Φ, G, hden_var, hcov_spec, hden_spec, hG_ty,
+      hΦ_ty, ⟨hΦ_true, hcast⟩, hguard⟩ :=
+    exactness Θ hcov_S respects_S_Λ hpf
+      (⟨F, .fun σS .bool, hF⟩ : SMT.Dom) hdenA
+  let Θ' := Function.update Θ helper (some G)
+  have helper_none : Θ helper = none :=
+    Θ_none helper helper_not_used
+  have Θ'_ext : SMT.RenamingContext.Extends Θ' Θ :=
+    SMT.RenamingContext.extends_update_of_none helper_none
+  have helper_mem_final : helper ∈ St'.types :=
+    AList.lookup_isSome.mp (by rw [helper_lookup]; rfl)
+  have helper_used_final : helper ∈ St'.env.usedVars :=
+    keys_sub helper_mem_final
+  have Θ'_none : ∀ v ∉ St'.env.usedVars, Θ' v = none := by
+    intro v hv
+    by_cases hvh : v = helper
+    · subst v
+      exact absurd helper_used_final hv
+    · simpa [Θ', Function.update_of_ne hvh] using
+        Θ_none v (fun hv_used => hv (used_sub hv_used))
+  have helper_lookup_sup : Γsup.lookup helper = some (.fun σx .bool) :=
+    AList.lookup_of_subset Γsub helper_lookup
+  have respects_spec :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup spec :=
+    SMT.RenamingContext.respects_update_helper spec_fv respects_S
+      helper_lookup_sup hG_ty
+  have respects_x' :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup x := by
+    intro v ξ hv hlookup
+    have hv_ne : v ≠ helper := by
+      intro heq
+      subst v
+      exact helper_fresh
+        (SMT.Typing.mem_context_of_mem_fv typ_x hv)
+    obtain ⟨d, hd, hdty⟩ := respects_x hv hlookup
+    exact ⟨d, by simpa [Θ', Function.update_of_ne hv_ne] using hd,
+      hdty⟩
+  have hcov_x' : SMT.RenamingContext.CoversFV Θ' x :=
+    SMT.RenamingContext.coversFV_of_extends_of_coversFV Θ'_ext hcov_x
+  have hdenX' : ⟦x.abstract Θ' hcov_x'⟧ˢ =
+      some (⟨X₀, σx, hX₀⟩ : SMT.Dom) := by
+    have hagree := SMT.RenamingContext.agreesOnFV_of_extends_of_coversFV
+      Θ'_ext hcov_x
+    exact (SMT.RenamingContext.denote_congr_of_agreesOnFV
+      (t := x) (h1 := hcov_x') (h2 := hcov_x) hagree).trans hdenX
+  have hcov_var : SMT.RenamingContext.CoversFV Θ' (.var helper) := by
+    intro v hv
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    simp [Θ']
+  have respects_var :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup (.var helper) := by
+    intro v ξ hv hlookup
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    rw [helper_lookup_sup] at hlookup
+    cases hlookup
+    exact ⟨G, by simp [Θ'], hG_ty⟩
+  have hG_mem : G.fst ∈ ⟦SMTType.fun σx SMTType.bool⟧ᶻ := by
+    rw [← hG_ty]
+    exact G.snd.snd
+  have hG_func : ⟦σx⟧ᶻ.IsFunc ZFSet.𝔹 G.fst := by
+    simpa [SMTType.toZFSet] using hG_mem
+  have hX₀_dom : X₀ ∈ G.fst.Dom (is_rel_of_is_func hG_func) := by
+    rw [is_func_dom_eq hG_func]
+    exact hX₀
+  let denApp : SMT.Dom.{u} :=
+    ⟨(fapply G.fst (is_func_is_pfunc hG_func)
+        ⟨X₀, hX₀_dom⟩).val,
+      SMTType.bool, ZFSet.fapply_mem_range _ _⟩
+  have hcov_app : SMT.RenamingContext.CoversFV Θ'
+      (.app (.var helper) x) := by
+    intro v hv
+    rw [SMT.fv, List.mem_append] at hv
+    exact hv.elim (hcov_var v) (hcov_x' v)
+  have hden_app : ⟦(SMT.Term.app (.var helper) x).abstract
+      Θ' hcov_app⟧ˢ = some denApp := by
+    rcases G with ⟨Gv, ⟨Gσ, hGv⟩⟩
+    dsimp at hG_ty
+    subst Gσ
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind, Option.bind_eq_some_iff]
+    refine ⟨⟨Gv, .fun σx .bool, hGv⟩, ?_, ?_⟩
+    · simpa only [proof_irrel_heq] using hden_var
+    · rw [Option.bind_eq_some_iff]
+      refine ⟨⟨X₀, σx, hX₀⟩, ?_, ?_⟩
+      · simpa only [proof_irrel_heq] using hdenX'
+      · simp only [dif_pos True.intro,
+          dif_pos (is_func_is_pfunc hG_func), dif_pos hX₀_dom,
+          denApp]
+  have respects_app :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup
+        (.app (.var helper) x) := by
+    intro v ξ hv hlookup
+    rw [SMT.fv, List.mem_append] at hv
+    exact hv.elim (fun h => respects_var h hlookup)
+      (fun h => respects_x' h hlookup)
+  have hcov_t : SMT.RenamingContext.CoversFV Θ'
+      (spec ∧ˢ .app (.var helper) x) := by
+    intro v hv
+    rw [SMT.fv, List.mem_append] at hv
+    exact hv.elim (hcov_spec v) (hcov_app v)
+  have respects_t :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ' Γsup
+        (spec ∧ˢ .app (.var helper) x) := by
+    intro v ξ hv hlookup
+    rw [SMT.fv, List.mem_append] at hv
+    exact hv.elim (fun h => respects_spec h hlookup)
+      (fun h => respects_app h hlookup)
+  have hΦ_mem_bool : Φ.fst ∈ ⟦SMTType.bool⟧ᶻ := by
+    rw [← hΦ_ty]
+    exact Φ.snd.snd
+  rcases Φ with ⟨Φv, ⟨Φσ, hΦv⟩⟩
+  dsimp at hΦ_ty
+  subst Φσ
+  change Φv = ZFSet.zftrue at hΦ_true
+  have hΦv_true : Φv = ZFSet.zftrue := by
+    simpa only using hΦ_true
+  let denM : SMT.Dom.{u} :=
+    ⟨Φv ⋀ᶻ denApp.fst, SMTType.bool,
+      EncodeTermRepresentedBool.CheckedOp.eval_mem .and
+        hΦ_mem_bool denApp.snd.snd⟩
+  have hdenM : ⟦(spec ∧ˢ .app (.var helper) x).abstract
+      Θ' hcov_t⟧ˢ = some denM := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind, Option.bind_eq_some_iff]
+    refine ⟨(⟨Φv, SMTType.bool, hΦv⟩ : SMT.Dom), hden_spec, ?_⟩
+    rw [Option.bind_eq_some_iff]
+    refine ⟨denApp, hden_app, ?_⟩
+    rfl
+  have hiff_app : denApp.fst = ZFSet.zftrue ↔ X ∈ A := by
+    dsimp [denApp]
+    exact RDomCastSupported.setPred_cast_fapply_eq_zftrue_iff
+      (hG := hG_mem) Xrel Arel hle.toCastPath hcast
+  have hiff : denM.fst = ZFSet.zftrue ↔ X ∈ A := by
+    have hdenM_app : denM.fst = denApp.fst := by
+      dsimp [denM]
+      rw [hΦv_true]
+      rcases ZFSet.ZFBool.mem_𝔹_iff denApp.fst |>.mp denApp.snd.snd with
+        hfalse | htrue
+      · rw [hfalse]
+        simp [overloadBinOp_𝔹, overloadBinOp]
+      · rw [htrue]
+        simp [overloadBinOp_𝔹, overloadBinOp]
+    rw [hdenM_app]
+    exact hiff_app
+  have specs_true : SpecBodiesTrue Θ' Γsup
+      (helperSpecChunk helper (.fun σx .bool) spec) := by
+    intro b hb
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hb
+    subst b
+    exact ⟨hcov_spec, (⟨Φv, SMTType.bool, hΦv⟩ : SMT.Dom),
+      respects_spec, hden_spec, rfl, hΦv_true⟩
+  have Θ'_dom : ∀ v, Θ' v ≠ none → v ∈ Γsup := by
+    intro v hv
+    by_cases hvh : v = helper
+    · subst v
+      exact AList.lookup_isSome.mp (by rw [helper_lookup_sup]; rfl)
+    · exact Θ_dom v (by simpa [Θ', Function.update_of_ne hvh] using hv)
+  constructor
+  · exact ⟨Θ', hcov_t, denM, Θ'_ext, Θ'_none, respects_t,
+      Θ'_dom, specs_true, hdenM, rfl, hiff⟩
+  · intro Γsupg Γsubg Θg hcov_xg hcov_Sg _respects_xg respects_Sg
+      Xg Ag hXg hAg denXg denAg hdenXg hdenAg
+      hdenXg_ty hdenAg_ty Xrelg Arelg hcov_tg denMg
+      respects_tg specs_tg hdenMg _hdenMg_ty
+    rcases denXg with ⟨Xg₀, σXg, hXg₀⟩
+    rcases denAg with ⟨Fg, σAg, hFg⟩
+    dsimp at hdenXg_ty hdenAg_ty
+    subst σXg
+    subst σAg
+    have Λ_sub_supg : Λ ⊆ Γsupg := Γsubg.base
+    have respects_S_Λg :
+        SMT.RenamingContext.RespectsTypeContextOnFV Θg Λ S :=
+      respects_Sg.of_super Λ_sub_supg
+    have hpfg : ∀ (S_! : SMT.𝒱) (G : SMT.Dom.{u}),
+        ∀ v ∈ SMT.fv (SMT.Term.var S_!),
+          (Function.update Θg S_! (some G) v).isSome = true := by
+      intro S_! G v hv
+      simp only [SMT.fv, List.mem_singleton] at hv
+      subst v
+      simp
+    obtain ⟨_Φg, _Gw, _hvar_g, _hcov_spec_w, _hden_spec_w,
+        _hGw_ty, _hΦg_ty, _hcast_w, hguardg⟩ :=
+      exactness Θg hcov_Sg respects_S_Λg hpfg
+        (⟨Fg, .fun σS .bool, hFg⟩ : SMT.Dom) hdenAg
+    obtain ⟨specVal, hspecVal, hden_spec_g,
+        appVal, happVal, hden_app_g, denMg_eq⟩ :=
+      EncodeTermRepresentedBool.CheckedOp.smt_denote_inv
+        .and hcov_tg hdenMg
+    have hspec_true := specs_tg spec (by simp)
+    obtain ⟨hcov_spec_g, db, _resp_db, hden_db,
+      _db_ty, hdb_true⟩ := hspec_true
+    have hspecDom_eq :
+        (⟨specVal, SMTType.bool, hspecVal⟩ : SMT.Dom) = db := by
+      have hcov_eq : hcov_spec_g =
+          (fun v hv => hcov_tg v (by
+            rw [SMT.fv, List.mem_append]
+            exact Or.inl hv)) := Subsingleton.elim _ _
+      subst hcov_spec_g
+      rw [hden_spec_g] at hden_db
+      exact Option.some.inj hden_db
+    have hspecVal_true : specVal = ZFSet.zftrue := by
+      rw [← hspecDom_eq] at hdb_true
+      exact hdb_true
+    have helper_some : (Θg helper).isSome = true := by
+      apply hcov_tg helper
+      rw [SMT.fv, List.mem_append]
+      exact Or.inr (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl (by simp [SMT.fv]))
+    obtain ⟨Gg, hGg⟩ := Option.isSome_iff_exists.mp helper_some
+    have helper_fv_t : helper ∈
+        SMT.fv (spec ∧ˢ .app (.var helper) x) := by
+      rw [SMT.fv, List.mem_append]
+      exact Or.inr (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl (by simp [SMT.fv]))
+    have hGg_ty : Gg.snd.fst = .fun σx .bool := by
+      have helper_lookup_supg :
+          Γsupg.lookup helper = some (.fun σx .bool) :=
+        Γsubg.lookup_of_declared (by
+          simp [declEntries_helperSpecChunk])
+      obtain ⟨d, hd, hdty⟩ := respects_tg helper_fv_t
+        helper_lookup_supg
+      rw [hGg] at hd
+      injection hd with hdeq
+      subst d
+      exact hdty
+    have hupd : Function.update Θg helper (some Gg) = Θg := by
+      rw [← hGg]
+      exact Function.update_eq_self helper Θg
+    have hcov_spec_upd : SMT.RenamingContext.CoversFV
+        (Function.update Θg helper (some Gg)) spec := by
+      rw [hupd]
+      exact fun v hv => hcov_tg v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inl hv)
+    obtain ⟨_hsome, hcast_g⟩ := hguardg Gg hGg_ty hcov_spec_upd
+    have hden_spec_upd : ⟦spec.abstract
+        (Function.update Θg helper (some Gg)) hcov_spec_upd⟧ˢ =
+        some (⟨specVal, SMTType.bool, hspecVal⟩ : SMT.Dom) := by
+      simpa only [hupd, proof_irrel_heq] using hden_spec_g
+    have hcast_g' := hcast_g hden_spec_upd hspecVal_true
+    have hGg_mem : Gg.fst ∈ ⟦SMTType.fun σx SMTType.bool⟧ᶻ := by
+      rw [← hGg_ty]
+      exact Gg.snd.snd
+    have hGg_func : ⟦σx⟧ᶻ.IsFunc ZFSet.𝔹 Gg.fst := by
+      simpa [SMTType.toZFSet] using hGg_mem
+    have hXg₀_dom : Xg₀ ∈ Gg.fst.Dom (is_rel_of_is_func hGg_func) := by
+      rw [is_func_dom_eq hGg_func]
+      exact hXg₀
+    have hiff_app_g :
+        (fapply Gg.fst (is_func_is_pfunc hGg_func)
+          ⟨Xg₀, hXg₀_dom⟩).val = ZFSet.zftrue ↔ Xg ∈ Ag :=
+      RDomCastSupported.setPred_cast_fapply_eq_zftrue_iff
+        (hG := hGg_mem) Xrelg Arelg hle.toCastPath hcast_g'
+    have hcov_app_g : SMT.RenamingContext.CoversFV Θg
+        (.app (.var helper) x) := by
+      intro v hv
+      exact hcov_tg v (by
+        rw [SMT.fv, List.mem_append]
+        exact Or.inr hv)
+    let denAppG : SMT.Dom.{u} :=
+      ⟨(fapply Gg.fst (is_func_is_pfunc hGg_func)
+        ⟨Xg₀, hXg₀_dom⟩).val,
+        SMTType.bool, ZFSet.fapply_mem_range _ _⟩
+    have hden_app_expected :
+        ⟦(SMT.Term.app (.var helper) x).abstract Θg hcov_app_g⟧ˢ =
+          some denAppG := by
+      rcases Gg with ⟨Ggv, ⟨Ggσ, hGgv⟩⟩
+      dsimp at hGg_ty
+      subst Ggσ
+      rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+        Option.bind_eq_bind, Option.bind_eq_some_iff]
+      refine ⟨⟨Ggv, .fun σx .bool, hGgv⟩, ?_, ?_⟩
+      · rw [SMT.Term.abstract]
+        simp only [SMT.denote]
+        congr 1
+        exact Option.get_of_eq_some _ hGg
+      · rw [Option.bind_eq_some_iff]
+        refine ⟨⟨Xg₀, σx, hXg₀⟩, ?_, ?_⟩
+        · simpa only [proof_irrel_heq] using hdenXg
+        · simp only [dif_pos True.intro,
+            dif_pos (is_func_is_pfunc hGg_func),
+            dif_pos hXg₀_dom, denAppG]
     have happVal_eq : appVal = denAppG.fst := by
       have hcov_eq : hcov_app_g =
           (fun v hv => hcov_tg v (by
@@ -1291,7 +1597,7 @@ theorem castMembership_option_rep_contract.{u}
       denApp.fst denSome.fst = ZFSet.zftrue ↔ X ∈ A := by
     simpa only [denApp, denSome, someY, proof_irrel_heq] using
       (RDomCast.optionFunction_cast_eq_some_eq_zftrue_iff
-        (hY := hY_mem) Xrel Arel
+        (hY := hY_mem) Xrel.toRDomCast Arel.toRDomCast
           (.pair ha_le.toCastPath hb_le.toCastPath) hcast)
   have hiff_eq : denEq.fst = ZFSet.zftrue ↔ X ∈ A :=
     (denote_eq_fst_eq_zftrue_iff hden_app hden_some rfl
@@ -1550,7 +1856,7 @@ theorem castMembership_option_rep_contract.{u}
         denAppG.fst denSomeG.fst = ZFSet.zftrue ↔ Xg ∈ Ag := by
       simpa only [denAppG, denSomeG, someYg, proof_irrel_heq] using
         (RDomCast.optionFunction_cast_eq_some_eq_zftrue_iff
-          (hY := hYg_mem) Xrelg Arelg
+          (hY := hYg_mem) Xrelg.toRDomCast Arelg.toRDomCast
             (.pair ha_le.toCastPath hb_le.toCastPath) hcast_g')
     have hiff_eq_g : eqVal = ZFSet.zftrue ↔ Xg ∈ Ag :=
       (denote_eq_fst_eq_zftrue_iff hden_app_g hden_some_g rfl
@@ -1590,9 +1896,9 @@ theorem BType.SupportedSMT.nonemptyCanonicalCastPathFaithful
   | prod _ _ ih₁ ih₂ =>
       refine ⟨⟨.pair ih₁.some.val ih₂.some.val, ?_⟩⟩
       exact .pair ih₁.some.property ih₂.some.property
-  | setPred t =>
-      refine ⟨⟨castPath.reflexive (.fun t.toSMTType .bool), ?_⟩⟩
-      exact B.BType.reflexiveCast_fvFaithful (.set t)
+  | setPred _ ih =>
+      refine ⟨⟨castPath.chpred ih.some.val, ?_⟩⟩
+      exact .chpred ih.some.property
   | optionFun a b =>
       refine ⟨⟨.graph (castPath.reflexive a.toSMTType)
         (castPath.reflexive b.toSMTType), ?_⟩⟩
@@ -1628,27 +1934,38 @@ theorem castMembership_supported_rep_contract.{u}
     CastMembershipRepSpec.{u} t x S sx sS := by
   unfold CastMembershipRepSpec
   intro Λ n used decl typ_x typ_S bv_x_used bv_S_used
-  cases hS with
-  | setPred t =>
-      by_cases heq : sx = t.toSMTType
-      · subst sx
-        exact castMembership_direct_rep_contract.{u} t x S
+  rcases hS.setE with hpred | hoption
+  · obtain ⟨sdom, rfl, hdom⟩ := hpred
+    by_cases heq : sx = sdom
+    · subst sx
+      exact castMembership_direct_rep_contract.{u} t sdom x S
+        typ_x typ_S bv_x_used bv_S_used
+    · by_cases hforward : sx ⊑ sdom
+      · exact castMembership_setPred_cast_rep_contract.{u}
+          t sx sdom x S hforward hforward.toCastPath.fvFaithful heq
           typ_x typ_S bv_x_used bv_S_used
-      · let hle : sx ⊑ t.toSMTType :=
-          castable?_of_castPath hx.toCanonicalCastPath
-        exact castMembership_setPred_cast_rep_contract.{u} t sx x S hle
-          (hx.toCastPath_faithful hle) heq typ_x typ_S
-          bv_x_used bv_S_used
-  | optionFun a b =>
-      obtain ⟨sa, sb, rfl, ha, hb⟩ := hx.prodE
-      let ha_le : sa ⊑ a.toSMTType :=
-        castable?_of_castPath ha.toCanonicalCastPath
-      let hb_le : sb ⊑ b.toSMTType :=
-        castable?_of_castPath hb.toCanonicalCastPath
-      exact castMembership_option_rep_contract.{u} a b sa sb x S
-        ha_le hb_le (.pair (ha.toCastPath_faithful ha_le)
-          (hb.toCastPath_faithful hb_le)) typ_x typ_S
-          bv_x_used bv_S_used
+      · by_cases hreverse : sdom ⊑ sx
+        · exact castMembership_setPred_reverse_cast_rep_contract.{u}
+            t sx sdom x S hforward hreverse
+            (castPath.chpred hreverse.toCastPath).fvFaithful heq
+            typ_x typ_S bv_x_used bv_S_used
+        · mintro pre ∀St
+          mpure pre
+          obtain ⟨rfl, rfl, _St_sub, rfl, rfl⟩ := pre
+          unfold castMembership
+          simp only [bind_pure_comp]
+          rw [dif_neg heq, dif_neg hforward, dif_neg hreverse]
+          mspec Std.Do.Spec.throw_StateT
+  · obtain ⟨a, b, rfl, rfl⟩ := hoption
+    obtain ⟨sa, sb, rfl, ha, hb⟩ := hx.prodE
+    let ha_le : sa ⊑ a.toSMTType :=
+      castable?_of_castPath ha.toCanonicalCastPath
+    let hb_le : sb ⊑ b.toSMTType :=
+      castable?_of_castPath hb.toCanonicalCastPath
+    exact castMembership_option_rep_contract.{u} a b sa sb x S
+      ha_le hb_le (.pair (ha.toCastPath_faithful ha_le)
+        (hb.toCastPath_faithful hb_le)) typ_x typ_S
+        bv_x_used bv_S_used
 
 set_option maxHeartbeats 5000000 in
 theorem encodeTerm_rep_spec.mem_case.{u}
@@ -1872,7 +2189,7 @@ theorem encodeTerm_rep_spec.mem_case.{u}
     target_respects_S_M ΔS_dom_M X A hX hA
     (⟨Xenc, sx, hXenc⟩ : SMT.Dom)
     (⟨Aenc, sS, hAenc⟩ : SMT.Dom)
-    hden_x_final hden_S rfl rfl X_rel.toRDomCast A_rel.toRDomCast
+    hden_x_final hden_S rfl rfl X_rel A_rel
   obtain ⟨ΔM, hcov_mem, denM, ΔM_ext, ΔM_none,
     target_respects_mem, ΔM_dom, specs_M, hden_mem,
     hdenM_type, hmem_iff⟩ := good
@@ -2023,7 +2340,7 @@ theorem encodeTerm_rep_spec.mem_case.{u}
         (⟨Xenc_alt, sx, hXenc_alt⟩ : SMT.Dom)
         (⟨Aenc_alt, sS, hAenc_alt⟩ : SMT.Dom)
         hden_x_alt_final hden_S_alt rfl rfl
-        X_alt_rel.toRDomCast A_alt_rel.toRDomCast
+        X_alt_rel A_alt_rel
       obtain ⟨ΔM_alt, hcov_M_alt, denM_alt, ΔM_alt_ext,
           ΔM_alt_none, target_respects_M_alt, ΔM_alt_dom,
           _specs_alt, hden_M_alt, hdenM_alt_type, hmem_alt_iff⟩ := good_alt

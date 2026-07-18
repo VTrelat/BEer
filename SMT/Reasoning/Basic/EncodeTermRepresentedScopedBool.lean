@@ -358,7 +358,7 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
         EncodeTermRepresentedBool.CheckedOp.eval,
         SMT.Term.abstract, SMT.denote, hden_x_alt_final,
         hden_y_alt]
-    · refine ⟨?_, .bool⟩
+    · refine ⟨⟨?_, trivial⟩, .bool⟩
       simpa [denOpAlt] using
         op.rdomCast_eval X_alt_rel.toRDomCast Y_alt_rel.toRDomCast
   · intro Γ_sup Γ_sub Δ_alt Δ_fv_alt Θ related_alt wf_alt
@@ -416,7 +416,7 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
       hcov_y_target ⟨Yenc_alt, SMTType.bool, hYenc_alt⟩
       hden_y_target rfl
     subst denOut
-    refine ⟨?_, .bool⟩
+    refine ⟨⟨?_, trivial⟩, .bool⟩
     simpa only [proof_irrel_heq] using
       op.rdomCast_eval X_rel_target.toRDomCast Y_rel_target.toRDomCast
   · intro body hbody
@@ -628,7 +628,7 @@ theorem encodeTerm_rep_scoped.not_case.{u}
     · intro v τ hv hlookup
       exact target_respects_x_alt (by simpa [SMT.fv] using hv) hlookup
     · simp [denNotAlt, SMT.Term.abstract, SMT.denote, hden_x_alt]
-    · refine ⟨?_, .bool⟩
+    · refine ⟨⟨?_, trivial⟩, .bool⟩
       simpa [denNotAlt] using rdomCast_not X_alt_rel.toRDomCast
   · intro Γ_sup Γ_sub Δ_alt Δ_fv_alt Θ related_alt wf_alt
       respects_B respects_SMT specs_true T_alt hT_alt den_t_alt
@@ -654,7 +654,7 @@ theorem encodeTerm_rep_scoped.not_case.{u}
       hcov_x_target ⟨Xenc_alt, SMTType.bool, hXenc_alt⟩
       hden_x_target rfl
     subst denOut
-    refine ⟨?_, .bool⟩
+    refine ⟨⟨?_, trivial⟩, .bool⟩
     simpa only [proof_irrel_heq] using
       rdomCast_not X_rel_target.toRDomCast
   · constructor

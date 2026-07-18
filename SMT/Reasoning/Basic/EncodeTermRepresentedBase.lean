@@ -94,15 +94,19 @@ theorem RDomCastAdmissible.functionalGraph_as_optionFunction.{u}
       (⟨graphCollapse α.toSMTType β.toSMTType Y,
         SMTType.fun α.toSMTType (SMTType.option β.toSMTType),
         graphCollapse_mem α.toSMTType β.toSMTType Y⟩ : SMT.Dom) := by
-  refine ⟨castPath.graph (castPath.reflexive α.toSMTType)
-    (castPath.reflexive β.toSMTType), ?_, ?_⟩
-  · change retract (BType.set (α ×ᴮ β))
-      (optionGraph α.toSMTType β.toSMTType
-        (graphCollapse α.toSMTType β.toSMTType Y)) = X
-    rw [optionGraph_graphCollapse α.toSMTType β.toSMTType Y hY hfun,
-      hret]
+  refine ⟨RDomCast.functionalGraph_as_optionFunction
+    α β hX hY hfun hret, ?_⟩
+  change SetCastAdmissible (α ×ᴮ β) X
+      (SMTType.fun α.toSMTType (SMTType.option β.toSMTType)) ∧
+    ∀ z ∈ X, ValueCastAdmissible (α ×ᴮ β)
+      (SMTType.pair α.toSMTType β.toSMTType) z
+  refine ⟨?_, ?_⟩
   · exact ⟨castPath.reflexive (α ×ᴮ β).toSMTType,
       BinderCastAdmissible.reflexive (α ×ᴮ β) hX⟩
+  · intro z hz
+    have hX' := hX
+    rw [BType.toZFSet, ZFSet.mem_powerset] at hX'
+    exact ValueCastAdmissible.canonical (α ×ᴮ β) (hX' hz)
 
 theorem RDomCastSupported.functionalGraph_as_optionFunction.{u}
     (α β : BType) {X Y : ZFSet.{u}}

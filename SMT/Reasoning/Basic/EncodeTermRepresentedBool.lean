@@ -388,7 +388,7 @@ theorem encodeTerm_rep_spec.checked_bool_case.{u}
           EncodeTermRepresentedBool.CheckedOp.smtTerm,
           EncodeTermRepresentedBool.CheckedOp.eval,
           SMT.Term.abstract, SMT.denote, hden_x_final, hden_y]
-      · refine ⟨?_, .bool⟩
+      · refine ⟨⟨?_, trivial⟩, .bool⟩
         simpa [denOp] using
           op.rdomCast_eval X_rel.toRDomCast Y_rel.toRDomCast
       · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
@@ -490,7 +490,7 @@ theorem encodeTerm_rep_spec.checked_bool_case.{u}
             EncodeTermRepresentedBool.CheckedOp.eval,
             SMT.Term.abstract, SMT.denote, hden_x_alt_final,
             hden_y_alt]
-        · refine ⟨?_, .bool⟩
+        · refine ⟨⟨?_, trivial⟩, .bool⟩
           simpa [denOpAlt] using
             op.rdomCast_eval X_alt_rel.toRDomCast Y_alt_rel.toRDomCast
 
@@ -639,7 +639,7 @@ theorem encodeTerm_rep_spec.not_case.{u}
         ⟨¬ᶻ Xenc, SMTType.bool, overloadUnaryOp_mem⟩
       refine ⟨denNot, ?_, rfl, ?_, ?_⟩
       · simp [denNot, SMT.Term.abstract, SMT.denote, hden_x]
-      · refine ⟨?_, .bool⟩
+      · refine ⟨⟨?_, trivial⟩, .bool⟩
         simpa [denNot] using rdomCast_not X_rel.toRDomCast
       · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
           Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -672,5 +672,5 @@ theorem encodeTerm_rep_spec.not_case.{u}
           exact target_respects_x_alt
             (by simpa [SMT.fv] using hv) hlookup
         · simp [denNotAlt, SMT.Term.abstract, SMT.denote, hden_x_alt]
-        · refine ⟨?_, .bool⟩
+        · refine ⟨⟨?_, trivial⟩, .bool⟩
           simpa [denNotAlt] using rdomCast_not X_alt_rel.toRDomCast
