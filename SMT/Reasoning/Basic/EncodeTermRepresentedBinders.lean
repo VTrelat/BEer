@@ -274,6 +274,76 @@ theorem agreesOnFV_updates_of_source_fv.{u}
 
 end SMT.RenamingContext
 
+/-- Updating a target valuation at names already recorded as used preserves
+its outside-support invariant.  Binder encoders use this when they install
+arbitrary semantic values for their locally bound variables. -/
+theorem SMT.RenamingContext.updates_none_of_mem_used.{u}
+    {Theta : SMT.RenamingContext.Context.{u}} {vs : List SMT.𝒱}
+    {ss : Fin vs.length -> SMT.Dom.{u}} {used : List SMT.𝒱}
+    (vs_used : ∀ v ∈ vs, v ∈ used)
+    (Theta_none : ∀ v ∉ used, Theta v = none) :
+    ∀ v ∉ used,
+      Function.updates Theta vs ((List.ofFn ss).map Option.some) v = none := by
+  intro v hv
+  have hv_vs : v ∉ vs := by
+    intro hvs
+    exact hv (vs_used v hvs)
+  rw [Function.updates_of_not_mem Theta vs _ v hv_vs]
+  exact Theta_none v hv
+
+/-- Updating a target valuation at entries whose types occur in a target
+context keeps every assigned variable inside that context. -/
+theorem SMT.RenamingContext.updates_dom_of_typed_bounds.{u}
+    {Theta : SMT.RenamingContext.Context.{u}} {Gamma : SMT.TypeContext}
+    {vs : List SMT.𝒱} {ss : Fin vs.length -> SMT.Dom.{u}}
+    (base_dom : ∀ v, Theta v ≠ none -> v ∈ Gamma)
+    (bound_type : ∀ i, Gamma.lookup vs[i] = some (ss i).snd.fst) :
+    ∀ v,
+      Function.updates Theta vs ((List.ofFn ss).map Option.some) v ≠ none ->
+        v ∈ Gamma := by
+  intro v hv
+  by_cases hvs : v ∈ vs
+  · let i : Fin vs.length := ⟨vs.idxOf v, List.idxOf_lt_length_of_mem hvs⟩
+    have hvi : vs[i] = v := List.getElem_idxOf i.isLt
+    apply AList.lookup_isSome.mp
+    apply Option.isSome_of_eq_some
+    have hbound := bound_type i
+    rw [hvi] at hbound
+    exact hbound
+  · rw [Function.updates_of_not_mem Theta vs _ v hvs] at hv
+    exact base_dom v hv
+
+/-- A typed update supplies the B-side free-variable compatibility required
+by a body encoder.  Outside the local binder list it delegates to the ambient
+compatibility witness. -/
+theorem B.RenamingContext.RespectsTypeContextOnFV.updates_of_typed_bounds.{u}
+    {Theta : SMT.RenamingContext.Context.{u}} {Gamma : SMT.TypeContext}
+    {vs : List SMT.𝒱} (vs_nodup : vs.Nodup)
+    {ss : Fin vs.length -> SMT.Dom.{u}} {P : B.Term}
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs -> ∀ tau,
+      Gamma.lookup v = some tau ->
+      ∃ d : SMT.Dom.{u}, Theta v = some d ∧ d.snd.fst = tau)
+    (bound_type : ∀ i, Gamma.lookup vs[i] = some (ss i).snd.fst) :
+    B.RenamingContext.RespectsTypeContextOnFV
+      (Function.updates Theta vs ((List.ofFn ss).map Option.some)) Gamma P := by
+  intro v tau hv hlookup
+  by_cases hvs : v ∈ vs
+  · let i : Fin vs.length := ⟨vs.idxOf v, List.idxOf_lt_length_of_mem hvs⟩
+    have hvi : vs[i] = v := List.getElem_idxOf i.isLt
+    refine ⟨ss i, ?_, ?_⟩
+    · rw [Function.updates_eq_if (by simp) vs_nodup, dif_pos hvs]
+      simp only [List.getElem_map, List.getElem_ofFn]
+      congr 1
+    · have hbound : Gamma.lookup v = some (ss i).snd.fst := by
+        have hbound := bound_type i
+        rw [hvi] at hbound
+        exact hbound
+      exact Option.some.inj (hbound.symm.trans hlookup)
+  · obtain ⟨d, hd, htype⟩ := ambient v hv hvs tau hlookup
+    refine ⟨d, ?_, htype⟩
+    rw [Function.updates_of_not_mem Theta vs _ v hvs]
+    exact hd
+
 /-- A successful binder-body stability check turns the structural declaration
 delta of its encoding into an empty delta.  Consequently the returned term
 has no generated-helper free variables. -/
