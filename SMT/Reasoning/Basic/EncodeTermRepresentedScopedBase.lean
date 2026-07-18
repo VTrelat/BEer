@@ -4,7 +4,7 @@ open Std.Do B SMT ZFSet
 
 /-! # Generated-helper contracts for base terms -/
 
-theorem encodeTerm_rep_scoped.var_case.{u}
+theorem encodeTerm_rep_scoped.var_case_from.{u}
     (v : B.𝒱) (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
     (_typ_t : E.context ⊢ᴮ B.Term.var v : α)
     {«Δ» : B.RenamingContext.Context}
@@ -24,6 +24,10 @@ theorem encodeTerm_rep_scoped.var_case.{u}
       Δ₀ Λ (B.Term.var v))
     (_fv_in_Λ : ∀ w ∈ B.fv (B.Term.var v), w ∈ Λ)
     (_wf : B.RenWF E.context «Δ»)
+    {Base : SMT.TypeContext} {Dpre : SMT.Chunk}
+    (input_envelope : DeclarationContextEnvelope Base Dpre Λ)
+    (fv_in_Base : ∀ w ∈ B.fv (B.Term.var v), w ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
     {n : ℕ} {decl : SMT.Chunk} :
     ⦃ fun ⟨E0, Λ'⟩ =>
       ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
@@ -31,8 +35,8 @@ theorem encodeTerm_rep_scoped.var_case.{u}
         E0.declarations = decl⌝ ⦄
     encodeTerm (B.Term.var v) E
     ⦃ ⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
-      ⌜EncodeTermRepScopedPost.{u} (B.Term.var v) E α Λ decl
-        t' σ E' Γ'⌝ ⦄ := by
+      ⌜EncodeTermRepScopedPostFrom.{u} (B.Term.var v) E α
+        Base Dpre Λ decl t' σ E' Γ'⌝ ⦄ := by
   mstart
   mintro pre ∀St
   mpure pre
@@ -40,8 +44,7 @@ theorem encodeTerm_rep_scoped.var_case.{u}
   rw [encodeTerm]
   mvcgen
   case vc1 τ τ_lookup =>
-    refine ⟨[], ?_, ContextGeneratedByDeclarations.refl _,
-      DeclarationContextTrace.nil _, ?_, ?_, (by simp [specBodies]), ?_⟩
+    refine ⟨[], ?_, (by simpa using input_envelope), ?_, ?_, ?_⟩
     · simpa [St_decl_eq]
     · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
         Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -103,12 +106,21 @@ theorem encodeTerm_rep_scoped.var_case.{u}
           rw [hden_var] at hdenT
           cases hdenT
           exact hR
-    · exact ScopedGeneratedTyping.of_operational
-        (ContextGeneratedByDeclarations.refl St.types)
-        (SMT.Typing.var St.types v τ τ_lookup)
-        (by simp [specBodies])
+    · constructor
+      · intro Γ_sup Γ_sub _result_bv_fresh
+        have hv_fv : v ∈ B.fv (B.Term.var v) := by simp [B.fv]
+        have hv_Base : v ∈ Base := fv_in_Base v hv_fv
+        obtain ⟨τBase, τBase_lookup⟩ :=
+          Option.isSome_iff_exists.mp (AList.lookup_isSome.mpr hv_Base)
+        have τ_lookup' := AList.lookup_of_subset
+          input_envelope.scoped_extends.base τBase_lookup
+        rw [τ_lookup] at τ_lookup'
+        cases τ_lookup'
+        exact SMT.Typing.var Γ_sup v τ
+          (AList.lookup_of_subset Γ_sub.base τBase_lookup)
+      · simpa using Dpre_typing
 
-theorem encodeTerm_rep_scoped.int_case.{u}
+theorem encodeTerm_rep_scoped.int_case_from.{u}
     (i : ℤ) (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
     (_typ_t : E.context ⊢ᴮ B.Term.int i : α)
     {«Δ» : B.RenamingContext.Context}
@@ -128,6 +140,10 @@ theorem encodeTerm_rep_scoped.int_case.{u}
       Δ₀ Λ (B.Term.int i))
     (_fv_in_Λ : ∀ w ∈ B.fv (B.Term.int i), w ∈ Λ)
     (_wf : B.RenWF E.context «Δ»)
+    {Base : SMT.TypeContext} {Dpre : SMT.Chunk}
+    (input_envelope : DeclarationContextEnvelope Base Dpre Λ)
+    (_fv_in_Base : ∀ w ∈ B.fv (B.Term.int i), w ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
     {n : ℕ} {decl : SMT.Chunk} :
     ⦃ fun ⟨E0, Λ'⟩ =>
       ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
@@ -135,8 +151,8 @@ theorem encodeTerm_rep_scoped.int_case.{u}
         E0.declarations = decl⌝ ⦄
     encodeTerm (B.Term.int i) E
     ⦃ ⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
-      ⌜EncodeTermRepScopedPost.{u} (B.Term.int i) E α Λ decl
-        t' σ E' Γ'⌝ ⦄ := by
+      ⌜EncodeTermRepScopedPostFrom.{u} (B.Term.int i) E α
+        Base Dpre Λ decl t' σ E' Γ'⌝ ⦄ := by
   mstart
   mintro pre ∀St
   mpure pre
@@ -150,8 +166,7 @@ theorem encodeTerm_rep_scoped.int_case.{u}
   subst T
   injection type_eq with α_eq _
   subst α
-  refine ⟨[], ?_, ContextGeneratedByDeclarations.refl _,
-    DeclarationContextTrace.nil _, ?_, ?_, (by simp [specBodies]), ?_⟩
+  refine ⟨[], ?_, (by simpa using input_envelope), ?_, ?_, ?_⟩
   · simpa [St_decl_eq]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -185,12 +200,12 @@ theorem encodeTerm_rep_scoped.int_case.{u}
     rw [hden] at hdenT
     cases hdenT
     exact RDom.toRDomCastSupported ⟨rfl, by simp [retract]⟩
-  · exact ScopedGeneratedTyping.of_operational
-      (ContextGeneratedByDeclarations.refl St.types)
-      (SMT.Typing.int St.types i)
-      (by simp [specBodies])
+  · constructor
+    · intro Γ_sup _Γ_sub _result_bv_fresh
+      exact SMT.Typing.int Γ_sup i
+    · simpa using Dpre_typing
 
-theorem encodeTerm_rep_scoped.bool_case.{u}
+theorem encodeTerm_rep_scoped.bool_case_from.{u}
     (b : Bool) (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
     (_typ_t : E.context ⊢ᴮ B.Term.bool b : α)
     {«Δ» : B.RenamingContext.Context}
@@ -210,6 +225,10 @@ theorem encodeTerm_rep_scoped.bool_case.{u}
       Δ₀ Λ (B.Term.bool b))
     (_fv_in_Λ : ∀ w ∈ B.fv (B.Term.bool b), w ∈ Λ)
     (_wf : B.RenWF E.context «Δ»)
+    {Base : SMT.TypeContext} {Dpre : SMT.Chunk}
+    (input_envelope : DeclarationContextEnvelope Base Dpre Λ)
+    (_fv_in_Base : ∀ w ∈ B.fv (B.Term.bool b), w ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
     {n : ℕ} {decl : SMT.Chunk} :
     ⦃ fun ⟨E0, Λ'⟩ =>
       ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
@@ -217,8 +236,8 @@ theorem encodeTerm_rep_scoped.bool_case.{u}
         E0.declarations = decl⌝ ⦄
     encodeTerm (B.Term.bool b) E
     ⦃ ⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
-      ⌜EncodeTermRepScopedPost.{u} (B.Term.bool b) E α Λ decl
-        t' σ E' Γ'⌝ ⦄ := by
+      ⌜EncodeTermRepScopedPostFrom.{u} (B.Term.bool b) E α
+        Base Dpre Λ decl t' σ E' Γ'⌝ ⦄ := by
   mstart
   mintro pre ∀St
   mpure pre
@@ -232,8 +251,7 @@ theorem encodeTerm_rep_scoped.bool_case.{u}
   subst T
   injection type_eq with α_eq _
   subst α
-  refine ⟨[], ?_, ContextGeneratedByDeclarations.refl _,
-    DeclarationContextTrace.nil _, ?_, ?_, (by simp [specBodies]), ?_⟩
+  refine ⟨[], ?_, (by simpa using input_envelope), ?_, ?_, ?_⟩
   · simpa [St_decl_eq]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -267,7 +285,7 @@ theorem encodeTerm_rep_scoped.bool_case.{u}
     rw [hden] at hdenT
     cases hdenT
     exact RDom.toRDomCastSupported ⟨rfl, by simp [retract]⟩
-  · exact ScopedGeneratedTyping.of_operational
-      (ContextGeneratedByDeclarations.refl St.types)
-      (SMT.Typing.bool St.types b)
-      (by simp [specBodies])
+  · constructor
+    · intro Γ_sup _Γ_sub _result_bv_fresh
+      exact SMT.Typing.bool Γ_sup b
+    · simpa using Dpre_typing

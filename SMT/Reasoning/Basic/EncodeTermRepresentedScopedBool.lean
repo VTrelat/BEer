@@ -43,13 +43,13 @@ theorem smt_denote_inv.{u} (op : CheckedOp)
 end EncodeTermRepresentedBool.CheckedOp
 
 set_option maxHeartbeats 4000000 in
-theorem encodeTerm_rep_scoped.checked_bool_case.{u}
+theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
     (op : EncodeTermRepresentedBool.CheckedOp)
     (x y : B.Term)
     (x_ih : EncodeTermRepIH.{u} x)
     (y_ih : EncodeTermRepIH.{u} y)
-    (x_scoped : EncodeTermRepScopedBoolIH.{u} x)
-    (y_scoped : EncodeTermRepScopedBoolIH.{u} y)
+    (x_scoped : EncodeTermRepScopedBoolFromIH.{u} x)
+    (y_scoped : EncodeTermRepScopedBoolFromIH.{u} y)
     (E : B.Env) {Λ : SMT.TypeContext}
     (typ_t : E.context ⊢ᴮ op.term x y : BType.bool)
     {«Δ» : B.RenamingContext.Context}
@@ -70,6 +70,10 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
       Δ₀ Λ (op.term x y))
     (fv_in_Λ : ∀ v ∈ B.fv (op.term x y), v ∈ Λ)
     (wf : B.RenWF E.context «Δ»)
+    {Base : SMT.TypeContext} {Dpre : SMT.Chunk}
+    (input_envelope : DeclarationContextEnvelope Base Dpre Λ)
+    (fv_in_Base : ∀ v ∈ B.fv (op.term x y), v ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
     {n : ℕ} {decl : SMT.Chunk} :
     ⦃fun ⟨E0, Λ'⟩ ↦
       ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
@@ -77,8 +81,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
         E0.declarations = decl⌝ ⦄
     encodeTerm (op.term x y) E
     ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
-      ⌜EncodeTermRepScopedPost.{u} (op.term x y) E BType.bool Λ decl
-        t' σ E' Γ'⌝ ⦄ := by
+      ⌜EncodeTermRepScopedPostFrom.{u} (op.term x y) E BType.bool
+        Base Dpre Λ decl t' σ E' Γ'⌝ ⦄ := by
   mstart
   mintro pre ∀St
   mpure pre
@@ -143,6 +147,9 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
         Δ₀_none_out Δ₀_dom den_x vars_used_x Λ_inv_x
         hx_bv_nodup (respects.mono_fv fv_x_sub)
         (fun v hv => fv_in_Λ v (fv_x_sub hv)) wf
+        input_envelope
+        (fun v hv => fv_in_Base v (fv_x_sub hv))
+        Dpre_typing
         (n := St.env.freshvarsc) (decl := decl)))
     (encodeTerm_bv_used E (t := x) (used := St.env.usedVars)
       (n := St.env.freshvarsc) (decl := St.env.declarations)))
@@ -153,8 +160,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_trace, x_sc_total, x_guard,
-      x_specs_op, x_sc_typing⟩⟩,
+  obtain ⟨⟨x_post, ⟨Dltx, x_decl_eq, x_envelope, x_sc_total, x_guard,
+      x_sc_typing⟩⟩,
     _bv_x_used, _x_used_sub_struct, Dltx_struct,
       x_decl_struct, x_delta_ok⟩ := pre
   have Dltx_eq : Dltx = Dltx_struct := by
@@ -223,6 +230,9 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
         hy_bv_nodup respects_y
         (fun v hv => AList.mem_of_subset types_sub_x
           (fv_in_Λ v (fv_y_sub hv))) wf
+        x_envelope
+        (fun v hv => fv_in_Base v (fv_y_sub hv))
+        x_sc_typing.2
         (n := Stx.env.freshvarsc) (decl := decl ++ Dltx)))
     (encodeTerm_bv_notMem_used E (t := y)
       (used := Stx.env.usedVars) (n := Stx.env.freshvarsc)
@@ -234,8 +244,8 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
   mintro ∀Sty
   mpure pre
   dsimp at pre
-  obtain ⟨⟨y_post, ⟨Dlty, y_decl_eq, y_ctx, y_trace, y_sc_total, y_guard,
-      y_specs_op, y_sc_typing⟩⟩,
+  obtain ⟨⟨y_post, ⟨Dlty, y_decl_eq, y_envelope, y_sc_total, y_guard,
+      y_sc_typing⟩⟩,
     _bv_y_not_used, _y_used_sub_struct, Dlty_struct,
       y_decl_struct, y_delta_not_used⟩ := pre
   have Dlty_eq : Dlty = Dlty_struct := by
@@ -256,10 +266,9 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
 
   mspec Std.Do.Spec.pure
   mpure_intro
-  refine ⟨Dltx ++ Dlty, ?_,
-    ContextGeneratedByDeclarations.append x_ctx y_ctx,
-    DeclarationContextTrace.append x_trace y_trace, ?_, ?_, ?_, ?_⟩
+  refine ⟨Dltx ++ Dlty, ?_, ?_, ?_, ?_, ?_⟩
   · rw [y_decl_eq, List.append_assoc]
+  · simpa [List.append_assoc] using y_envelope
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
     obtain ⟨X_alt, hX_alt, den_x_alt, Y_alt, hY_alt,
@@ -371,10 +380,17 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
     obtain ⟨Xenc_alt, hXenc_alt, hden_x_target,
       Yenc_alt, hYenc_alt, hden_y_target, denOut_eq⟩ :=
       op.smt_denote_inv hcov hdenOut
-    have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
-      Γ_sub.left_of_append
-    have y_scope : ScopedContextExtends Stx.types Dlty Γ_sup :=
-      ScopedContextExtends.right_of_generated x_ctx Γ_sub
+    have Γ_sub' :
+        ScopedContextExtends Base ((Dpre ++ Dltx) ++ Dlty) Γ_sup := by
+      simpa [List.append_assoc] using Γ_sub
+    have x_scope : ScopedContextExtends Base (Dpre ++ Dltx) Γ_sup :=
+      Γ_sub'.left_of_append
+    have y_scope :
+        ScopedContextExtends Base ((Dpre ++ Dltx) ++ Dlty) Γ_sup :=
+      Γ_sub'
+    have specs_true' :
+        SpecBodiesTrue Θ Γ_sup ((Dpre ++ Dltx) ++ Dlty) := by
+      simpa [List.append_assoc] using specs_true
     have hcov_x_target : RenamingContext.CoversFV Θ x_enc := by
       intro v hv
       apply hcov v
@@ -405,46 +421,30 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
       (fun v hv => Δ_fv_alt v (fv_x_sub hv)) Θ
       (related_alt.mono_fv fv_x_sub) wf_alt
       (respects_B.mono_fv fv_x_sub) target_respects_x_sup
-      specs_true.left_of_append X_alt hX_alt den_x_alt
+      specs_true'.left_of_append X_alt hX_alt den_x_alt
       hcov_x_target ⟨Xenc_alt, SMTType.bool, hXenc_alt⟩
       hden_x_target rfl
     have Y_rel_target := y_guard Γ_sup y_scope Δ_alt
       (fun v hv => Δ_fv_alt v (fv_y_sub hv)) Θ
       (related_alt.mono_fv fv_y_sub) wf_alt
       (respects_B.mono_fv fv_y_sub) target_respects_y_sup
-      specs_true.right_of_append Y_alt hY_alt den_y_alt
+      specs_true' Y_alt hY_alt den_y_alt
       hcov_y_target ⟨Yenc_alt, SMTType.bool, hYenc_alt⟩
       hden_y_target rfl
     subst denOut
     refine ⟨⟨?_, trivial⟩, .bool⟩
     simpa only [proof_irrel_heq] using
       op.rdomCast_eval X_rel_target.toRDomCast Y_rel_target.toRDomCast
-  · intro body hbody
-    rw [specBodies_append, List.mem_append] at hbody
-    rcases hbody with hbody_x | hbody_y
-    · apply SMT.Typing.weakening types_sub_y (x_specs_op body hbody_x)
-      intro v hv hv_Sty
-      have hv_used : v ∈ Stx.env.usedVars :=
-        x_delta_ok.2 body hbody_x v hv
-      obtain ⟨τv, hlookup⟩ := Option.isSome_iff_exists.mp
-        (AList.lookup_isSome.mpr hv_Sty)
-      have hentry : (⟨v, τv⟩ : Sigma fun _ : SMT.𝒱 => SMTType) ∈
-          Sty.types.entries := AList.mem_lookup_iff.mp hlookup
-      rcases List.mem_append.mp (y_ctx hentry) with hbase | hdecl
-      · have hv_Stx : v ∈ Stx.types :=
-          AList.mem_keys.mpr (List.mem_map.mpr
-            ⟨⟨v, τv⟩, hbase, rfl⟩)
-        exact SMT.Typing.bv_notMem_context
-          (x_specs_op body hbody_x) v hv hv_Stx
-      · exact y_delta_not_used.1 v
-          (mem_declVars_of_mem_declEntries hdecl) hv_used
-    · exact y_specs_op body hbody_y
   · constructor
     · intro Γ_sup Γ_sub result_bv_fresh
-      have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
-        Γ_sub.left_of_append
-      have y_scope : ScopedContextExtends Stx.types Dlty Γ_sup :=
-        ScopedContextExtends.right_of_generated x_ctx Γ_sub
+      have Γ_sub' :
+          ScopedContextExtends Base ((Dpre ++ Dltx) ++ Dlty) Γ_sup := by
+        simpa [List.append_assoc] using Γ_sub
+      have x_scope : ScopedContextExtends Base (Dpre ++ Dltx) Γ_sup :=
+        Γ_sub'.left_of_append
+      have y_scope :
+          ScopedContextExtends Base ((Dpre ++ Dltx) ++ Dlty) Γ_sup :=
+        Γ_sub'
       have x_bv_fresh : ∀ v ∈ SMT.bv x_enc, v ∉ Γ_sup := by
         intro v hv
         apply result_bv_fresh v
@@ -462,30 +462,7 @@ theorem encodeTerm_rep_scoped.checked_bool_case.{u}
       exact op.smt_typing
         (x_sc_typing.1 Γ_sup x_scope x_bv_fresh)
         (y_sc_typing.1 Γ_sup y_scope y_bv_fresh)
-    · intro Γ_sup Γ_sub specs_bv_fresh
-      have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
-        Γ_sub.left_of_append
-      have y_scope : ScopedContextExtends Stx.types Dlty Γ_sup :=
-        ScopedContextExtends.right_of_generated x_ctx Γ_sub
-      have x_specs_bv_fresh :
-          ∀ b ∈ specBodies Dltx, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
-        intro b hb
-        exact specs_bv_fresh b (by
-          rw [specBodies_append, List.mem_append]
-          exact Or.inl hb)
-      have y_specs_bv_fresh :
-          ∀ b ∈ specBodies Dlty, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
-        intro b hb
-        exact specs_bv_fresh b (by
-          rw [specBodies_append, List.mem_append]
-          exact Or.inr hb)
-      have specs_x_sup :=
-        x_sc_typing.2 Γ_sup x_scope x_specs_bv_fresh
-      have specs_y_sup :=
-        y_sc_typing.2 Γ_sup y_scope y_specs_bv_fresh
-      intro b hb
-      rw [specBodies_append, List.mem_append] at hb
-      exact hb.elim (specs_x_sup b) (specs_y_sup b)
+    · simpa [List.append_assoc] using y_sc_typing.2
 
 theorem smt_denote_not_inv.{u}
     {x : SMT.Term} {Θ : SMT.RenamingContext.Context.{u}}
@@ -508,10 +485,10 @@ theorem smt_denote_not_inv.{u}
   · simpa only [proof_irrel_heq] using hout.symm
 
 set_option maxHeartbeats 2400000 in
-theorem encodeTerm_rep_scoped.not_case.{u}
+theorem encodeTerm_rep_scoped.not_case_from.{u}
     (x : B.Term)
     (x_ih : EncodeTermRepIH.{u} x)
-    (x_scoped : EncodeTermRepScopedBoolIH.{u} x)
+    (x_scoped : EncodeTermRepScopedBoolFromIH.{u} x)
     (E : B.Env) {Λ : SMT.TypeContext}
     (typ_t : E.context ⊢ᴮ ¬ᴮ x : BType.bool)
     {«Δ» : B.RenamingContext.Context}
@@ -531,6 +508,10 @@ theorem encodeTerm_rep_scoped.not_case.{u}
       Δ₀ Λ (¬ᴮ x))
     (fv_in_Λ : ∀ v ∈ B.fv (¬ᴮ x), v ∈ Λ)
     (wf : B.RenWF E.context «Δ»)
+    {Base : SMT.TypeContext} {Dpre : SMT.Chunk}
+    (input_envelope : DeclarationContextEnvelope Base Dpre Λ)
+    (fv_in_Base : ∀ v ∈ B.fv (¬ᴮ x), v ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
     {n : ℕ} {decl : SMT.Chunk} :
     ⦃fun ⟨E0, Λ'⟩ ↦
       ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
@@ -538,8 +519,8 @@ theorem encodeTerm_rep_scoped.not_case.{u}
         E0.declarations = decl⌝ ⦄
     encodeTerm (¬ᴮ x) E
     ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
-      ⌜EncodeTermRepScopedPost.{u} (¬ᴮ x) E BType.bool Λ decl
-        t' σ E' Γ'⌝ ⦄ := by
+      ⌜EncodeTermRepScopedPostFrom.{u} (¬ᴮ x) E BType.bool
+        Base Dpre Λ decl t' σ E' Γ'⌝ ⦄ := by
   mstart
   mintro pre ∀St
   mpure pre
@@ -574,6 +555,9 @@ theorem encodeTerm_rep_scoped.not_case.{u}
       Δ₀_none_out Δ₀_dom den_x vars_used_x Λ_inv_x
       hx_bv_nodup (respects.mono_fv fv_x_sub)
       (fun v hv => fv_in_Λ v (fv_x_sub hv)) wf
+      input_envelope
+      (fun v hv => fv_in_Base v (fv_x_sub hv))
+      Dpre_typing
       (n := St.env.freshvarsc) (decl := decl)))
   clear x_ih x_scoped
   rename_i out_x
@@ -582,8 +566,8 @@ theorem encodeTerm_rep_scoped.not_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_trace, x_sc_total, x_guard,
-    x_specs_op, x_sc_typing⟩⟩ := pre
+  obtain ⟨x_post, ⟨Dltx, x_decl_eq, x_envelope, x_sc_total, x_guard,
+    x_sc_typing⟩⟩ := pre
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
     path_x, typ_x_enc, _shape_x, x_preserves,
     Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
@@ -597,7 +581,7 @@ theorem encodeTerm_rep_scoped.not_case.{u}
   subst σx
   mspec Std.Do.Spec.pure
   mpure_intro
-  refine ⟨Dltx, x_decl_eq, x_ctx, x_trace, ?_, ?_, x_specs_op, ?_⟩
+  refine ⟨Dltx, x_decl_eq, x_envelope, ?_, ?_, ?_⟩
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
     obtain ⟨X_alt, hX_alt, den_x_alt, T_alt_eq⟩ :=

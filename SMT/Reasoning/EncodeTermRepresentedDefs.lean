@@ -284,6 +284,49 @@ theorem DeclarationContextTrace.append
       | pop n => exact ih h₁
       | check_sat => exact ih h₁
 
+/-- Replay a declaration trace from a smaller base context.  Freshness in the
+larger base implies freshness in the smaller one, and the replayed core stays
+entry-wise contained in the original result.  This is the key operation for
+composing declaration traces when an encoder branch leaves irrelevant local
+bindings in its operational context. -/
+theorem DeclarationContextTrace.rebase_subset
+    {LambdaSmall LambdaBig GammaBig : SMT.TypeContext}
+    {Dlt : SMT.Chunk}
+    (hsub : LambdaSmall.entries ⊆ LambdaBig.entries)
+    (htrace : DeclarationContextTrace LambdaBig Dlt GammaBig) :
+    ∃ GammaSmall,
+      DeclarationContextTrace LambdaSmall Dlt GammaSmall ∧
+      GammaSmall.entries ⊆ GammaBig.entries := by
+  induction Dlt generalizing LambdaSmall LambdaBig with
+  | nil =>
+      change GammaBig = LambdaBig at htrace
+      subst GammaBig
+      exact ⟨LambdaSmall, rfl, hsub⟩
+  | cons i D ih =>
+      cases i with
+      | declare_const v tau =>
+          obtain ⟨hvBig, htail⟩ := htrace
+          have hvSmall : v ∉ LambdaSmall := by
+            intro hv
+            exact hvBig (AList.mem_of_subset hsub hv)
+          have hins : (LambdaSmall.insert v tau).entries ⊆
+              (LambdaBig.insert v tau).entries := by
+            rw [AList.entries_insert_of_notMem hvSmall,
+              AList.entries_insert_of_notMem hvBig]
+            intro e he
+            rcases List.mem_cons.mp he with rfl | he
+            · exact List.mem_cons_self
+            · exact List.mem_cons_of_mem _ (hsub he)
+          obtain ⟨GammaSmall, htraceSmall, hfinal⟩ :=
+            ih hins htail
+          exact ⟨GammaSmall, ⟨hvSmall, htraceSmall⟩, hfinal⟩
+      | define_fun v tau sigma body => exact ih hsub htrace
+      | define_const v tau body => exact ih hsub htrace
+      | assert body => exact ih hsub htrace
+      | push n => exact ih hsub htrace
+      | pop n => exact ih hsub htrace
+      | check_sat => exact ih hsub htrace
+
 /-- A declaration trace only adds fresh bindings; every binding present at
 the beginning is therefore still present at the end. -/
 theorem DeclarationContextTrace.entries_subset
@@ -308,6 +351,37 @@ theorem DeclarationContextTrace.entries_subset
       | push n => exact ih h
       | pop n => exact ih h
       | check_sat => exact ih h
+
+/-- The clean result of an exact declaration trace contains no entries other
+than the input context and the declarations recorded by the trace. -/
+theorem DeclarationContextTrace.context_generated
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma) :
+    ContextGeneratedByDeclarations Lambda Gamma Dlt := by
+  induction Dlt generalizing Lambda with
+  | nil =>
+      change Gamma = Lambda at h
+      subst Gamma
+      simpa [declEntries]
+  | cons i D ih =>
+      cases i with
+      | declare_const v tau =>
+          obtain ⟨hv, htail⟩ := h
+          intro e he
+          have he' := ih htail he
+          rw [AList.entries_insert_of_notMem hv] at he'
+          simp only [declEntries, List.filterMap_cons]
+          rcases List.mem_append.mp he' with hins | hdecl
+          · rcases List.mem_cons.mp hins with rfl | hbase
+            · exact List.mem_append.mpr (.inr (List.mem_cons_self))
+            · exact List.mem_append.mpr (.inl hbase)
+          · exact List.mem_append.mpr (.inr (List.mem_cons_of_mem _ hdecl))
+      | define_fun v tau sigma body => simpa [declEntries] using ih h
+      | define_const v tau body => simpa [declEntries] using ih h
+      | assert body => simpa [declEntries] using ih h
+      | push n => simpa [declEntries] using ih h
+      | pop n => simpa [declEntries] using ih h
+      | check_sat => simpa [declEntries] using ih h
 
 /-- Every declaration name in an exact trace is fresh from the trace's input
 context. -/
@@ -534,6 +608,65 @@ theorem DeclarationContextTrace.scoped_extends
     ScopedContextExtends Lambda Dlt Gamma :=
   h.scoped_entries
 
+/-- The declaration-generated core of an encoder run, embedded in its actual
+operational context.  The operational context may additionally retain local
+source-binder entries; those entries are observable in the current encoder
+state but are neither emitted declarations nor dependencies of the generated
+term. -/
+abbrev DeclarationContextEnvelope
+    (Lambda : SMT.TypeContext) (Dlt : SMT.Chunk)
+    (GammaOp : SMT.TypeContext) : Prop :=
+  ∃ GammaCore,
+    DeclarationContextTrace Lambda Dlt GammaCore ∧
+    GammaCore.entries ⊆ GammaOp.entries
+
+theorem DeclarationContextEnvelope.refl (Lambda : SMT.TypeContext) :
+    DeclarationContextEnvelope Lambda [] Lambda :=
+  ⟨Lambda, rfl, fun _ h => h⟩
+
+theorem DeclarationContextEnvelope.of_trace
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma) :
+    DeclarationContextEnvelope Lambda Dlt Gamma :=
+  ⟨Gamma, h, fun _ he => he⟩
+
+/-- Envelopes compose even when the first operational result contains local
+residue: replay the second declaration trace from the first clean core, then
+append the two exact traces. -/
+theorem DeclarationContextEnvelope.append
+    {Lambda Gamma₁ Gamma₂ : SMT.TypeContext}
+    {D₁ D₂ : SMT.Chunk}
+    (h₁ : DeclarationContextEnvelope Lambda D₁ Gamma₁)
+    (h₂ : DeclarationContextEnvelope Gamma₁ D₂ Gamma₂) :
+    DeclarationContextEnvelope Lambda (D₁ ++ D₂) Gamma₂ := by
+  obtain ⟨Core₁, htrace₁, hcore₁⟩ := h₁
+  obtain ⟨Core₂, htrace₂, hcore₂⟩ := h₂
+  obtain ⟨Core₂', htrace₂', hcore₂'⟩ :=
+    htrace₂.rebase_subset hcore₁
+  exact ⟨Core₂', DeclarationContextTrace.append htrace₁ htrace₂',
+    fun e he => hcore₂ (hcore₂' he)⟩
+
+theorem DeclarationContextEnvelope.scoped_extends
+    {Lambda GammaOp : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextEnvelope Lambda Dlt GammaOp) :
+    ScopedContextExtends Lambda Dlt GammaOp := by
+  obtain ⟨GammaCore, htrace, hsub⟩ := h
+  exact fun e he => hsub (htrace.scoped_extends he)
+
+theorem DeclarationContextEnvelope.declVars_fresh_base
+    {Lambda GammaOp : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextEnvelope Lambda Dlt GammaOp) :
+    ∀ v ∈ declVars Dlt, v ∉ Lambda := by
+  obtain ⟨_, htrace, _⟩ := h
+  exact htrace.declVars_fresh_base
+
+theorem DeclarationContextEnvelope.declVars_nodup
+    {Lambda GammaOp : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextEnvelope Lambda Dlt GammaOp) :
+    (declVars Dlt).Nodup := by
+  obtain ⟨_, htrace, _⟩ := h
+  exact htrace.declVars_nodup
+
 theorem ContextGeneratedByDeclarations.refl
     (Λ : SMT.TypeContext) :
     ContextGeneratedByDeclarations Λ Λ [] := by
@@ -602,6 +735,18 @@ theorem ScopedContextExtends.right_of_generated
     · exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl heD₁)))
   · exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inr heD₂)))
 
+/-- Portable typing for the specification bodies already accumulated before
+the current recursive encoder call. -/
+abbrev ScopedSpecsTyping
+    (Λ : SMT.TypeContext) (Dlt : SMT.Chunk) : Prop :=
+  ∀ (Γsup : SMT.TypeContext), ScopedContextExtends Λ Dlt Γsup →
+    (∀ b ∈ specBodies Dlt, ∀ v ∈ SMT.bv b, v ∉ Γsup) →
+    ∀ b ∈ specBodies Dlt, Γsup ⊢ˢ b : SMTType.bool
+
+theorem ScopedSpecsTyping.nil (Λ : SMT.TypeContext) :
+    ScopedSpecsTyping Λ [] := by
+  simp [ScopedSpecsTyping, specBodies]
+
 /-- Syntactic information needed when an encoder result and its generated
 helper specifications are moved from the operational context into a local
 binder scope.  The explicit bound-variable freshness premises are essential:
@@ -613,9 +758,7 @@ abbrev ScopedGeneratedTyping
   (∀ (Γsup : SMT.TypeContext), ScopedContextExtends Λ Dlt Γsup →
     (∀ v ∈ SMT.bv t, v ∉ Γsup) →
     Γsup ⊢ˢ t : σ) ∧
-  (∀ (Γsup : SMT.TypeContext), ScopedContextExtends Λ Dlt Γsup →
-    (∀ b ∈ specBodies Dlt, ∀ v ∈ SMT.bv b, v ∉ Γsup) →
-    ∀ b ∈ specBodies Dlt, Γsup ⊢ˢ b : SMTType.bool)
+  ScopedSpecsTyping Λ Dlt
 
 /-- Lift operational typing into any declaration-generated scope. -/
 theorem ScopedGeneratedTyping.of_operational
@@ -807,21 +950,29 @@ abbrev EncodeTermRepGuardedSound.{u}
         denT.snd.fst = σ →
         RDomCastSupported (⟨T_alt, α, hT_alt⟩ : B.Dom) denT
 
-/-- Declaration-aware postcondition used only where generated helpers are
-re-scoped by a binder.  It is kept separate from `EncodeTermRepPost` so the
-ordinary constructor proof remains lightweight. -/
+/-- Declaration-aware postcondition rooted at a clean context and a prefix of
+already generated declarations.  `Λop` is the actual operational input
+context; it may contain irrelevant local binder residue.  Every portable
+claim is instead made over `Base` and the complete `Dpre ++ Dlt` trace. -/
+abbrev EncodeTermRepScopedPostFrom.{u}
+    (t : B.Term) (E : B.Env) (α : BType)
+    (Base : SMT.TypeContext) (Dpre : SMT.Chunk)
+    (Λop : SMT.TypeContext) (decl : SMT.Chunk)
+    (t' : SMT.Term) (σ : SMTType)
+    (E' : SMT.Env) (Γ' : SMT.TypeContext) : Prop :=
+  ∃ Dlt : SMT.Chunk,
+    E'.declarations = decl ++ Dlt ∧
+    DeclarationContextEnvelope Base (Dpre ++ Dlt) Γ' ∧
+    EncodeTermRepScopedTotal.{u} t E α Λop t' σ Γ' E'.usedVars Dlt ∧
+    EncodeTermRepGuardedSound.{u} t E α t' σ Base (Dpre ++ Dlt) ∧
+    ScopedGeneratedTyping Base (Dpre ++ Dlt) t' σ
+
+/-- Root instance of `EncodeTermRepScopedPostFrom`, used by binder clients. -/
 abbrev EncodeTermRepScopedPost.{u}
     (t : B.Term) (E : B.Env) (α : BType) (Λ : SMT.TypeContext)
     (decl : SMT.Chunk) (t' : SMT.Term) (σ : SMTType)
     (E' : SMT.Env) (Γ' : SMT.TypeContext) : Prop :=
-  ∃ Dlt : SMT.Chunk,
-    E'.declarations = decl ++ Dlt ∧
-    ContextGeneratedByDeclarations Λ Γ' Dlt ∧
-    DeclarationContextTrace Λ Dlt Γ' ∧
-    EncodeTermRepScopedTotal.{u} t E α Λ t' σ Γ' E'.usedVars Dlt ∧
-    EncodeTermRepGuardedSound.{u} t E α t' σ Λ Dlt ∧
-    (∀ b ∈ specBodies Dlt, Γ' ⊢ˢ b : SMTType.bool) ∧
-    ScopedGeneratedTyping Λ Dlt t' σ
+  EncodeTermRepScopedPostFrom.{u} t E α Λ [] Λ decl t' σ E' Γ'
 
 /-- Representation-aware postcondition for one successful `encodeTerm` run. -/
 abbrev EncodeTermRepPost.{u}
@@ -935,6 +1086,38 @@ abbrev EncodeTermRepIH.{u} (t : B.Term) : Prop :=
 /-- Declaration-aware companion induction hypothesis.  Constructor proofs use
 this contract only when a parent binder re-scopes the declarations generated
 by the recursive call. -/
+abbrev EncodeTermRepScopedFromIH.{u} (t : B.Term) : Prop :=
+  ∀ (E : B.Env) {Λ : SMT.TypeContext} {α : BType},
+    E.context ⊢ᴮ t : α →
+    ∀ {«Δ» : B.RenamingContext.Context},
+      (Δ_fv : ∀ v ∈ B.fv t, («Δ» v).isSome = true) →
+    ∀ {Δ₀ : SMT.RenamingContext.Context.{u}},
+      RValuationCastSupportedOnFV «Δ» Δ₀ t →
+    ∀ {used : List SMT.𝒱},
+      (∀ v ∉ used, Δ₀ v = none) →
+      (∀ v, Δ₀ v ≠ none → v ∈ Λ) →
+    ∀ {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ},
+      ⟦t.abstract «Δ» Δ_fv⟧ᴮ = some ⟨T, ⟨α, hT⟩⟩ →
+      (∀ v ∈ t.vars, v ∈ used) →
+      (∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context) →
+      (B.bv t).Nodup →
+      B.RenamingContext.RespectsTypeContextOnFV Δ₀ Λ t →
+      (∀ v ∈ B.fv t, v ∈ Λ) →
+      B.RenWF E.context «Δ» →
+    ∀ {Base : SMT.TypeContext} {Dpre : SMT.Chunk},
+      DeclarationContextEnvelope Base Dpre Λ →
+      (∀ v ∈ B.fv t, v ∈ Base) →
+      ScopedSpecsTyping Base Dpre →
+    ∀ {n : ℕ} {decl : SMT.Chunk},
+      (⦃fun ⟨E0, Λ'⟩ ↦
+        ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+          Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used ∧
+          E0.declarations = decl⌝ ⦄
+      encodeTerm t E
+      ⦃ ⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+        ⌜EncodeTermRepScopedPostFrom.{u} t E α Base Dpre Λ decl
+          t' σ E' Γ'⌝ ⦄)
+
 abbrev EncodeTermRepScopedIH.{u} (t : B.Term) : Prop :=
   ∀ (E : B.Env) {Λ : SMT.TypeContext} {α : BType},
     E.context ⊢ᴮ t : α →
@@ -966,6 +1149,39 @@ abbrev EncodeTermRepScopedIH.{u} (t : B.Term) : Prop :=
 /-- Declaration-aware induction hypothesis needed by `all`.  Its re-scoped
 body is always Boolean, so constructors that cannot synthesize a Boolean need
 no companion theorem. -/
+abbrev EncodeTermRepScopedBoolFromIH.{u} (t : B.Term) : Prop :=
+  ∀ (E : B.Env) {Λ : SMT.TypeContext},
+    E.context ⊢ᴮ t : BType.bool →
+    ∀ {«Δ» : B.RenamingContext.Context},
+      (Δ_fv : ∀ v ∈ B.fv t, («Δ» v).isSome = true) →
+    ∀ {Δ₀ : SMT.RenamingContext.Context.{u}},
+      RValuationCastSupportedOnFV «Δ» Δ₀ t →
+    ∀ {used : List SMT.𝒱},
+      (∀ v ∉ used, Δ₀ v = none) →
+      (∀ v, Δ₀ v ≠ none → v ∈ Λ) →
+    ∀ {T : ZFSet.{u}} {hT : T ∈ ⟦BType.bool⟧ᶻ},
+      ⟦t.abstract «Δ» Δ_fv⟧ᴮ =
+        some ⟨T, ⟨BType.bool, hT⟩⟩ →
+      (∀ v ∈ t.vars, v ∈ used) →
+      (∀ v ∈ t.vars, v ∈ Λ → v ∈ E.context) →
+      (B.bv t).Nodup →
+      B.RenamingContext.RespectsTypeContextOnFV Δ₀ Λ t →
+      (∀ v ∈ B.fv t, v ∈ Λ) →
+      B.RenWF E.context «Δ» →
+    ∀ {Base : SMT.TypeContext} {Dpre : SMT.Chunk},
+      DeclarationContextEnvelope Base Dpre Λ →
+      (∀ v ∈ B.fv t, v ∈ Base) →
+      ScopedSpecsTyping Base Dpre →
+    ∀ {n : ℕ} {decl : SMT.Chunk},
+      (⦃fun ⟨E0, Λ'⟩ ↦
+        ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+          Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used ∧
+          E0.declarations = decl⌝ ⦄
+      encodeTerm t E
+      ⦃ ⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+        ⌜EncodeTermRepScopedPostFrom.{u} t E BType.bool
+          Base Dpre Λ decl t' σ E' Γ'⌝ ⦄)
+
 abbrev EncodeTermRepScopedBoolIH.{u} (t : B.Term) : Prop :=
   ∀ (E : B.Env) {Λ : SMT.TypeContext},
     E.context ⊢ᴮ t : BType.bool →
