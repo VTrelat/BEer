@@ -1,4 +1,5 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedApp
+import SMT.Reasoning.Basic.EncodeTermRepresentedBinders
 import SMT.Reasoning.Basic.EncodeTermCorrectSet
 
 open Std.Do B SMT ZFSet Classical
@@ -62,6 +63,500 @@ theorem powerset_mem_btype.{u} {beta : BType} {X : ZFSet.{u}}
   dsimp [BType.toZFSet] at hX ⊢
   rw [ZFSet.mem_powerset] at hX ⊢
   exact powerset_mono.mpr hX
+
+/-- Every value of a supported target representation has a source preimage.
+This is the representation-aware replacement for choosing a canonical
+retract when powerset candidates themselves are represented sets. -/
+theorem supported_target_preimage.{u}
+    {alpha : BType} {sigma : SMTType}
+    (hsigma : BType.SupportedSMT alpha sigma)
+    (Y : ZFSet.{u}) (hY : Y ∈ ⟦sigma⟧ᶻ) :
+    ∃ (X : ZFSet.{u}) (hX : X ∈ ⟦alpha⟧ᶻ),
+      RDomCastSupported
+        (⟨X, alpha, hX⟩ : B.Dom)
+        (⟨Y, sigma, hY⟩ : SMT.Dom) := by
+  let c := hsigma.canonicalCastPath
+  let X := retract alpha (castZF_apply c Y)
+  have hcast : castZF_apply c Y ∈ ⟦alpha.toSMTType⟧ᶻ :=
+    castZF_apply_mem c hY
+  have hX : X ∈ ⟦alpha⟧ᶻ :=
+    retract_mem_of_canonical alpha hcast
+  have bare : RDomCast
+      (⟨X, alpha, hX⟩ : B.Dom)
+      (⟨Y, sigma, hY⟩ : SMT.Dom) := ⟨c, rfl⟩
+  exact ⟨X, hX, ⟨bare.toRDomCastAdmissible_of_supported hsigma,
+    hsigma⟩⟩
+
+open Classical in
+/-- A predicate on represented characteristic predicates denotes the
+powerset precisely when it recognizes pointwise inclusion.  Unlike the old
+canonical-only bridge, the element representation `rho` is arbitrary but
+supported. -/
+theorem represented_setPred_powerset_of_pointwise.{u}
+    {beta : BType} {rho : SMTType}
+    (hrho : BType.SupportedSMT beta rho)
+    {X F U : ZFSet.{u}}
+    (hX : X ∈ ⟦BType.set beta⟧ᶻ)
+    (hF : F ∈ ⟦SMTType.fun rho SMTType.bool⟧ᶻ)
+    (hU : U ∈ ⟦SMTType.fun
+      (SMTType.fun rho SMTType.bool) SMTType.bool⟧ᶻ)
+    (Xrel : RDomCastSupported
+      (⟨X, BType.set beta, hX⟩ : B.Dom)
+      (⟨F, SMTType.fun rho SMTType.bool, hF⟩ : SMT.Dom))
+    (hpoint : ∀ (Y : ZFSet.{u})
+      (hY : Y ∈ ⟦SMTType.fun rho SMTType.bool⟧ᶻ),
+      (ZFSet.fapply U (ZFSet.is_func_is_pfunc (by
+          simpa [SMTType.toZFSet] using hU :
+            ⟦SMTType.fun rho SMTType.bool⟧ᶻ.IsFunc ZFSet.𝔹 U))
+        ⟨Y, by
+          rw [ZFSet.is_func_dom_eq (by
+            simpa [SMTType.toZFSet] using hU :
+              ⟦SMTType.fun rho SMTType.bool⟧ᶻ.IsFunc ZFSet.𝔹 U)]
+          exact hY⟩).val = ZFSet.zftrue ↔
+        ∀ (y : ZFSet.{u}) (hy : y ∈ ⟦rho⟧ᶻ),
+          (ZFSet.fapply Y (ZFSet.is_func_is_pfunc (by
+              simpa [SMTType.toZFSet] using hY :
+                ⟦rho⟧ᶻ.IsFunc ZFSet.𝔹 Y))
+            ⟨y, by
+              rw [ZFSet.is_func_dom_eq (by
+                simpa [SMTType.toZFSet] using hY :
+                  ⟦rho⟧ᶻ.IsFunc ZFSet.𝔹 Y)]
+              exact hy⟩).val = ZFSet.zftrue →
+          (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+              simpa [SMTType.toZFSet] using hF :
+                ⟦rho⟧ᶻ.IsFunc ZFSet.𝔹 F))
+            ⟨y, by
+              rw [ZFSet.is_func_dom_eq (by
+                simpa [SMTType.toZFSet] using hF :
+                  ⟦rho⟧ᶻ.IsFunc ZFSet.𝔹 F)]
+              exact hy⟩).val = ZFSet.zftrue) :
+    RDomCastSupported
+      (⟨X.powerset, BType.set (BType.set beta),
+        powerset_mem_btype hX⟩ : B.Dom)
+      (⟨U, SMTType.fun (SMTType.fun rho SMTType.bool) SMTType.bool,
+        hU⟩ : SMT.Dom) := by
+  have hXsub : X ⊆ ⟦beta⟧ᶻ := by
+    simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hX
+  have hPowSub : X.powerset ⊆ ⟦BType.set beta⟧ᶻ := by
+    intro Y hY
+    rw [ZFSet.mem_powerset] at hY
+    rw [BType.toZFSet, ZFSet.mem_powerset]
+    exact fun y hy => hXsub (hY hy)
+  have hUfunc : ⟦SMTType.fun rho SMTType.bool⟧ᶻ.IsFunc ZFSet.𝔹 U := by
+    simpa [SMTType.toZFSet] using hU
+  have hFfunc : ⟦rho⟧ᶻ.IsFunc ZFSet.𝔹 F := by
+    simpa [SMTType.toZFSet] using hF
+  apply RDomCastSupported.setPred_of_pointwise
+    (.setPred hrho) hPowSub hU hUfunc
+  · intro Yenc hYenc hUtrue
+    obtain ⟨Y, hY, Yrel⟩ :=
+      supported_target_preimage (.setPred hrho) Yenc hYenc
+    have hYsubX : Y ⊆ X := by
+      intro x hxY
+      obtain ⟨y, hy, xyrel⟩ := Yrel.setPred_member_preimage hxY
+      have hYencfunc : ⟦rho⟧ᶻ.IsFunc ZFSet.𝔹 Yenc := by
+        simpa [SMTType.toZFSet] using hYenc
+      have hYtrue :=
+        (RDomCastSupported.setPred_fapply_eq_zftrue_iff
+          xyrel.toRDomCast Yrel).mpr hxY
+      have hFtrue := (hpoint Yenc hYenc).mp hUtrue y hy hYtrue
+      obtain ⟨x', hx'X, x'yrel⟩ :=
+        Xrel.setPred_target_of_true hy hFtrue
+      have hxx' : x = x' :=
+        (RDomCast.target_value_eq_iff
+          xyrel.toRDomCast x'yrel.toRDomCast).mp rfl
+      exact hxx' ▸ hx'X
+    have hYPow : Y ∈ X.powerset := ZFSet.mem_powerset.mpr hYsubX
+    exact ⟨Y, hYPow, Yrel⟩
+  · intro Y hYPow
+    have hYsubX : Y ⊆ X := ZFSet.mem_powerset.mp hYPow
+    have hYtype : Y ∈ ⟦BType.set beta⟧ᶻ := hPowSub hYPow
+    let c := hrho.canonicalCastPath
+    let body : ZFSet.{u} → ZFSet.{u} := fun y =>
+      if retract beta (castZF_apply c y) ∈ Y
+      then ZFSet.zftrue else ZFSet.zffalse
+    let Yenc : ZFSet.{u} := ZFSet.lambda ⟦rho⟧ᶻ ZFSet.𝔹 body
+    have body_mem : ∀ {y : ZFSet.{u}}, y ∈ ⟦rho⟧ᶻ → body y ∈ ZFSet.𝔹 := by
+      intro y hy
+      simp only [body]
+      split <;> simp
+    have Yenc_func : ⟦rho⟧ᶻ.IsFunc ZFSet.𝔹 Yenc := by
+      exact ZFSet.lambda_isFunc (fun {y} hy => body_mem hy)
+    have hYenc : Yenc ∈ ⟦SMTType.fun rho SMTType.bool⟧ᶻ := by
+      simpa [SMTType.toZFSet] using Yenc_func
+    have Yrel : RDomCastSupported
+        (⟨Y, BType.set beta, hYtype⟩ : B.Dom)
+        (⟨Yenc, SMTType.fun rho SMTType.bool, hYenc⟩ : SMT.Dom) := by
+      apply RDomCastSupported.setPred_of_pointwise
+        hrho (by
+          rw [BType.toZFSet, ZFSet.mem_powerset] at hYtype
+          exact hYtype) hYenc Yenc_func
+      · intro y hy htrue
+        let x := retract beta (castZF_apply c y)
+        have hcast : castZF_apply c y ∈ ⟦beta.toSMTType⟧ᶻ :=
+          castZF_apply_mem c hy
+        have hx : x ∈ ⟦beta⟧ᶻ :=
+          retract_mem_of_canonical beta hcast
+        have happ := ZFSet.fapply_lambda
+          (hf := fun {z} hz => body_mem hz) (ha := hy)
+        have hxY : x ∈ Y := by
+          have hbody : body y = ZFSet.zftrue := by
+            exact happ.symm.trans htrue
+          by_contra hnot
+          change ¬ retract beta (castZF_apply c y) ∈ Y at hnot
+          have hfalse : body y = ZFSet.zffalse := by
+            simp [body, hnot]
+          exact ZFSet.zftrue_ne_zffalse (hbody.symm.trans hfalse)
+        have bare : RDomCast
+            (⟨x, beta, hx⟩ : B.Dom)
+            (⟨y, rho, hy⟩ : SMT.Dom) := ⟨c, rfl⟩
+        exact ⟨x, hxY,
+          ⟨bare.toRDomCastAdmissible_of_supported hrho, hrho⟩⟩
+      · intro x hxY
+        obtain ⟨y, hy, xyrel⟩ :=
+          Xrel.setPred_member_preimage (hYsubX hxY)
+        refine ⟨y, hy, ?_, ?_⟩
+        · simpa only [proof_irrel_heq] using xyrel
+        · have happ := ZFSet.fapply_lambda
+            (hf := fun {z} hz => body_mem hz) (ha := hy)
+          have hret : retract beta (castZF_apply c y) = x := by
+            obtain ⟨c', hc'⟩ := xyrel.toRDomCast
+            have hcc : c' = c := castPath.eq_of_endpoints c' c
+            subst c'
+            exact hc'
+          have hbody : body y = ZFSet.zftrue := by
+            simp [body, hret, hxY]
+          exact happ.trans hbody
+    refine ⟨Yenc, hYenc, Yrel, ?_⟩
+    apply (hpoint Yenc hYenc).mpr
+    intro y hy hYtrue
+    obtain ⟨x, hxY, xyrel⟩ :=
+      Yrel.setPred_target_of_true hy hYtrue
+    exact (RDomCastSupported.setPred_fapply_eq_zftrue_iff
+      xyrel.toRDomCast Xrel).mpr (hYsubX hxY)
+
+open Classical in
+theorem represented_powerset_direct_lambda.{u}
+    {beta : BType} {rho : SMTType}
+    (hrho : BType.SupportedSMT beta rho)
+    {S : SMT.Term} {x P : SMT.𝒱}
+    {Lambda : SMT.TypeContext}
+    {Theta : SMT.RenamingContext.Context.{u}}
+    {X F U : ZFSet.{u}}
+    (hX : X ∈ ⟦BType.set beta⟧ᶻ)
+    (hF : F ∈ ⟦SMTType.fun rho SMTType.bool⟧ᶻ)
+    (hU : U ∈ ⟦SMTType.fun
+      (SMTType.fun rho SMTType.bool) SMTType.bool⟧ᶻ)
+    (typ_pred :
+      (Lambda.insert P (SMTType.fun rho SMTType.bool)).insert x rho ⊢ˢ
+        SMT.Term.imp
+          (SMT.Term.app (SMT.Term.var P) (SMT.Term.var x))
+          (SMT.Term.app S (SMT.Term.var x)) : SMTType.bool)
+    (typ_forall :
+      Lambda.insert P (SMTType.fun rho SMTType.bool) ⊢ˢ
+        SMT.Term.forall [x] [rho]
+          (SMT.Term.imp
+            (SMT.Term.app (SMT.Term.var P) (SMT.Term.var x))
+            (SMT.Term.app S (SMT.Term.var x))) : SMTType.bool)
+    (x_ne_P : x ≠ P)
+    (P_not_fv_S : P ∉ SMT.fv S)
+    (x_not_fv_S : x ∉ SMT.fv S)
+    (hcovS : SMT.RenamingContext.CoversFV Theta S)
+    (respectsS : SMT.RenamingContext.RespectsTypeContextOnFV
+      Theta Lambda S)
+    (hdenS : ⟦S.abstract Theta hcovS⟧ˢ =
+      some (⟨F, SMTType.fun rho SMTType.bool, hF⟩ : SMT.Dom))
+    (Xrel : RDomCastSupported
+      (⟨X, BType.set beta, hX⟩ : B.Dom)
+      (⟨F, SMTType.fun rho SMTType.bool, hF⟩ : SMT.Dom))
+    (hcovOut : SMT.RenamingContext.CoversFV Theta
+      (SMT.Term.lambda [P] [SMTType.fun rho SMTType.bool]
+        (SMT.Term.forall [x] [rho]
+          (SMT.Term.imp
+            (SMT.Term.app (SMT.Term.var P) (SMT.Term.var x))
+            (SMT.Term.app S (SMT.Term.var x))))))
+    (hdenOut :
+      ⟦(SMT.Term.lambda [P] [SMTType.fun rho SMTType.bool]
+        (SMT.Term.forall [x] [rho]
+          (SMT.Term.imp
+            (SMT.Term.app (SMT.Term.var P) (SMT.Term.var x))
+            (SMT.Term.app S (SMT.Term.var x))))).abstract
+          Theta hcovOut⟧ˢ =
+        some (⟨U,
+          SMTType.fun (SMTType.fun rho SMTType.bool) SMTType.bool,
+          hU⟩ : SMT.Dom)) :
+    RDomCastSupported
+      (⟨X.powerset, BType.set (BType.set beta),
+        powerset_mem_btype hX⟩ : B.Dom)
+      (⟨U, SMTType.fun (SMTType.fun rho SMTType.bool) SMTType.bool,
+        hU⟩ : SMT.Dom) := by
+  let pred : SMT.Term :=
+    SMT.Term.imp
+      (SMT.Term.app (SMT.Term.var P) (SMT.Term.var x))
+      (SMT.Term.app S (SMT.Term.var x))
+  have hFfunc : ⟦rho⟧ᶻ.IsFunc ZFSet.𝔹 F := by
+    simpa [SMTType.toZFSet] using hF
+  have hUfunc : ⟦SMTType.fun rho SMTType.bool⟧ᶻ.IsFunc
+      ZFSet.𝔹 U := by
+    simpa [SMTType.toZFSet] using hU
+  apply represented_setPred_powerset_of_pointwise
+    hrho hX hF hU Xrel
+  intro Y hY
+  let WY : SMT.Dom.{u} :=
+    ⟨Y, SMTType.fun rho SMTType.bool, hY⟩
+  let ThetaP := Function.update Theta P (some WY)
+  have hYfunc : ⟦rho⟧ᶻ.IsFunc ZFSet.𝔹 Y := by
+    simpa [SMTType.toZFSet] using hY
+  have hcovS_P : SMT.RenamingContext.CoversFV ThetaP S := by
+    exact SMT.RenamingContext.coversFV_update_of_notMem
+      P_not_fv_S hcovS
+  have hdenS_P : ⟦S.abstract ThetaP hcovS_P⟧ˢ =
+      some (⟨F, SMTType.fun rho SMTType.bool, hF⟩ : SMT.Dom) := by
+    have hden_eq := SMT.RenamingContext.denote_update_of_notMem
+      («Δ» := Theta) (t := S) (x := P) (d := WY)
+      (h := hcovS) P_not_fv_S
+    simpa [ThetaP, SMT.RenamingContext.denote] using hden_eq.symm.trans hdenS
+  have fv_forall_source : ∀ {v : SMT.𝒱},
+      v ∈ SMT.fv (SMT.Term.forall [x] [rho] pred) →
+      v ≠ P → v ∈ SMT.fv S := by
+    intro v hv hvP
+    have hv' :
+        (v = P ∨ v = x ∨ v ∈ SMT.fv S ∨ v = x) ∧ v ≠ x := by
+      simpa [pred, SMT.fv, List.mem_removeAll_iff] using hv
+    obtain ⟨hvbody, hvx⟩ := hv'
+    rcases hvbody with hP | hx | hvS | hx
+    · exact absurd hP hvP
+    · exact absurd hx hvx
+    · exact hvS
+    · exact absurd hx hvx
+  have hcov_forall : SMT.RenamingContext.CoversFV ThetaP
+      (SMT.Term.forall [x] [rho] pred) := by
+    intro v hv
+    by_cases hvP : v = P
+    · subst v
+      simp [ThetaP, Function.update_self]
+    · simp only [ThetaP, Function.update_of_ne hvP]
+      have hvS : v ∈ SMT.fv S := fv_forall_source hv hvP
+      exact hcovS v hvS
+  have respects_forall :
+      SMT.RenamingContext.RespectsTypeContextOnFV ThetaP
+        (Lambda.insert P (SMTType.fun rho SMTType.bool))
+        (SMT.Term.forall [x] [rho] pred) := by
+    intro v sigma hv hlookup
+    by_cases hvP : v = P
+    · subst v
+      rw [AList.lookup_insert] at hlookup
+      cases hlookup
+      exact ⟨WY, by simp [ThetaP, Function.update_self], rfl⟩
+    · rw [AList.lookup_insert_ne hvP] at hlookup
+      have hvS : v ∈ SMT.fv S := fv_forall_source hv hvP
+      obtain ⟨d, hd, htype⟩ := respectsS hvS hlookup
+      exact ⟨d, by simpa [ThetaP, Function.update_of_ne hvP] using hd,
+        htype⟩
+  obtain ⟨Dall, hdenAll, hDallType⟩ :=
+    SMT.RenamingContext.denote_exists_of_typing_fv
+      (by simpa [pred] using typ_forall)
+      respects_forall hcov_forall
+  have houter := single_lambda_fapply_eq_body
+    (alpha := SMTType.fun rho SMTType.bool) (beta := SMTType.bool)
+    hcovOut hdenOut hUfunc
+    (W := WY) (bodyVal := Dall) rfl hY hcov_forall hdenAll
+  have hcov_pred : ∀ W : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaP x (some W)) pred := by
+    intro W v hv
+    by_cases hvx : v = x
+    · subst v
+      simp [Function.update_self]
+    · rw [Function.update_of_ne hvx]
+      by_cases hvP : v = P
+      · subst v
+        simp [ThetaP, Function.update_self]
+      · simp only [ThetaP, Function.update_of_ne hvP]
+        have hvS : v ∈ SMT.fv S := by
+          simpa [pred, SMT.fv, hvx, hvP] using hv
+        exact hcovS v hvS
+  have respects_pred : ∀ (W : SMT.Dom.{u}), W.snd.fst = rho →
+      SMT.RenamingContext.RespectsTypeContextOnFV
+        (Function.update ThetaP x (some W))
+        ((Lambda.insert P (SMTType.fun rho SMTType.bool)).insert x rho)
+        pred := by
+    intro W hWtype v sigma hv hlookup
+    by_cases hvx : v = x
+    · subst v
+      rw [AList.lookup_insert] at hlookup
+      cases hlookup
+      exact ⟨W, Function.update_self _ _ _, hWtype⟩
+    · rw [AList.lookup_insert_ne hvx] at hlookup
+      by_cases hvP : v = P
+      · subst v
+        rw [AList.lookup_insert] at hlookup
+        cases hlookup
+        exact ⟨WY, by simp [ThetaP,
+          Function.update_of_ne x_ne_P.symm, Function.update_self], rfl⟩
+      · rw [AList.lookup_insert_ne hvP] at hlookup
+        have hvS : v ∈ SMT.fv S := by
+          simpa [pred, SMT.fv, hvx, hvP] using hv
+        obtain ⟨d, hd, htype⟩ := respectsS hvS hlookup
+        exact ⟨d, by simpa [ThetaP, Function.update_of_ne hvx,
+          Function.update_of_ne hvP] using hd, htype⟩
+  have body_den : ∀ (W : SMT.Dom.{u}), W.snd.fst = rho →
+      ∃ D : SMT.Dom.{u},
+        ⟦pred.abstract (Function.update ThetaP x (some W))
+          (hcov_pred W)⟧ˢ = some D ∧
+        D.snd.fst = SMTType.bool := by
+    intro W hWtype
+    exact SMT.RenamingContext.denote_exists_of_typing_fv
+      (by simpa [pred] using typ_pred)
+      (respects_pred W hWtype) (hcov_pred W)
+  have hgo_cov : ∀ v ∈ SMT.fv pred, v ∉ [x] →
+      (ThetaP v).isSome = true := by
+    intro v hv hvx
+    have hvx' : v ≠ x := by simpa using hvx
+    let W0 : SMT.Dom.{u} :=
+      ⟨rho.defaultZFSet, rho,
+        SMTType.mem_toZFSet_of_defaultZFSet⟩
+    have hc := hcov_pred W0 v hv
+    simpa [Function.update_of_ne hvx'] using hc
+  have body_total : ∀ W : SMT.Dom.{u}, W.snd.fst = rho →
+      ⟦pred.abstract (Function.update ThetaP x (some W))
+        (hcov_pred W)⟧ˢ.isSome = true := by
+    intro W hWtype
+    obtain ⟨D, hD, _⟩ := body_den W hWtype
+    rw [hD]
+    rfl
+  have body_type : ∀ W : SMT.Dom.{u}, W.snd.fst = rho →
+      ∀ {D : SMT.Dom.{u}},
+        ⟦pred.abstract (Function.update ThetaP x (some W))
+          (hcov_pred W)⟧ˢ = some D →
+        D.snd.fst = SMTType.bool := by
+    intro W hWtype D hD
+    obtain ⟨D', hD', htype⟩ := body_den W hWtype
+    have : D' = D := Option.some.inj (hD'.symm.trans hD)
+    exact this ▸ htype
+  have apps : ∀ (W : SMT.Dom.{u}) (hWtype : W.snd.fst = rho)
+      (hWmem : W.fst ∈ ⟦rho⟧ᶻ),
+      ∃ DL DR : SMT.Dom.{u},
+        DL.snd.fst = SMTType.bool ∧
+        DL.fst = ZFSet.fapply Y (ZFSet.is_func_is_pfunc hYfunc)
+          ⟨W.fst, by
+            rw [ZFSet.is_func_dom_eq hYfunc]
+            exact hWmem⟩ ∧
+        ⟦(SMT.Term.app (SMT.Term.var P) (SMT.Term.var x)).abstract
+          (Function.update ThetaP x (some W)) (by
+            intro v hv
+            exact hcov_pred W v (by
+              simpa only [pred] using SMT.fv.mem_imp (Or.inl hv)))⟧ˢ = some DL ∧
+        DR.snd.fst = SMTType.bool ∧
+        DR.fst = ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+          ⟨W.fst, by
+            rw [ZFSet.is_func_dom_eq hFfunc]
+            exact hWmem⟩ ∧
+        ⟦(SMT.Term.app S (SMT.Term.var x)).abstract
+          (Function.update ThetaP x (some W)) (by
+            intro v hv
+            exact hcov_pred W v (by
+              simpa only [pred] using SMT.fv.mem_imp (Or.inr hv)))⟧ˢ = some DR := by
+    intro W hWtype hWmem
+    have hP_ne_x : P ≠ x := x_ne_P.symm
+    obtain ⟨hcovL, DL, hDLtype, hDLvalue, hdenL⟩ :=
+      funDenoteAppAt
+        (Δctx := ThetaP) (t := SMT.Term.var P) (x := x)
+        (α := rho) (β := SMTType.bool) (Y := WY)
+        (hcov_t_upd := by
+          intro Xarg v hv
+          rw [SMT.fv, List.mem_singleton] at hv
+          subst v
+          simp [Function.update_of_ne hP_ne_x, ThetaP,
+            Function.update_self])
+        (den_t_upd := by
+          intro Xarg
+          rw [SMT.Term.abstract.eq_def, SMT.denote, Option.pure_def,
+            Option.some.injEq]
+          apply Option.get_of_eq_some
+          rw [Function.update_of_ne hP_ne_x]
+          simp [ThetaP, Function.update_self])
+        (hY_ty := rfl) (hY_func := hYfunc)
+        (Xarg := W) (hXarg_ty := hWtype) (hXarg_mem := hWmem)
+    obtain ⟨hcovR, DR, hDRtype, hDRvalue, hdenR⟩ :=
+      funDenoteAppAt
+        (Δctx := ThetaP) (t := S) (x := x)
+        (α := rho) (β := SMTType.bool)
+        (Y := (⟨F, SMTType.fun rho SMTType.bool, hF⟩ : SMT.Dom))
+        (hcov_t_upd := by
+          intro Xarg
+          exact SMT.RenamingContext.coversFV_update_of_notMem
+            x_not_fv_S hcovS_P)
+        (den_t_upd := by
+          intro Xarg
+          have hden_eq := SMT.RenamingContext.denote_update_of_notMem
+            («Δ» := ThetaP) (t := S) (x := x) (d := Xarg)
+            (h := hcovS_P) x_not_fv_S
+          simpa [SMT.RenamingContext.denote] using
+            hden_eq.symm.trans hdenS_P)
+        (hY_ty := rfl) (hY_func := hFfunc)
+        (Xarg := W) (hXarg_ty := hWtype) (hXarg_mem := hWmem)
+    refine ⟨DL, DR, hDLtype, hDLvalue, ?_, hDRtype, hDRvalue, ?_⟩
+    · simpa only [proof_irrel_heq] using hdenL
+    · simpa only [proof_irrel_heq] using hdenR
+  have body_true_iff : ∀ (W : SMT.Dom.{u}) (hWtype : W.snd.fst = rho)
+      (hWmem : W.fst ∈ ⟦rho⟧ᶻ) {D : SMT.Dom.{u}},
+      ⟦pred.abstract (Function.update ThetaP x (some W))
+        (hcov_pred W)⟧ˢ = some D →
+      (D.fst = ZFSet.zftrue ↔
+        (ZFSet.fapply Y (ZFSet.is_func_is_pfunc hYfunc)
+          ⟨W.fst, by
+            rw [ZFSet.is_func_dom_eq hYfunc]
+            exact hWmem⟩).val = ZFSet.zffalse ∨
+        (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+          ⟨W.fst, by
+            rw [ZFSet.is_func_dom_eq hFfunc]
+            exact hWmem⟩).val = ZFSet.zftrue) := by
+    intro W hWtype hWmem D hdenD
+    obtain ⟨DL, DR, hDLtype, hDLvalue, hdenL,
+      hDRtype, hDRvalue, hdenR⟩ := apps W hWtype hWmem
+    have himp := denote_imp_true_iff hdenL hDLtype hdenR hDRtype
+      (by simpa [pred, SMT.Term.abstract, proof_irrel_heq] using hdenD)
+    simpa [hDLvalue, hDRvalue] using himp
+  rw [houter]
+  constructor
+  · intro htrue y hy hYtrue
+    let W : SMT.Dom.{u} := ⟨y, rho, hy⟩
+    obtain ⟨D, hdenD, hDtrue⟩ :=
+      funUnaryForallTrueImpliesAt
+        hcov_forall hgo_cov hcov_pred body_total body_type
+        hdenAll htrue W rfl
+    have hcases := (body_true_iff W rfl hy hdenD).mp hDtrue
+    rcases hcases with hfalse | hsource
+    · exact False.elim (ZFSet.zftrue_ne_zffalse
+        (hYtrue.symm.trans hfalse))
+    · exact hsource
+  · intro hpoint
+    have hexact := funUnaryForallEqZftrue
+      hcov_forall hgo_cov hcov_pred body_total body_type (by
+        intro W hWtype
+        have hWmem : W.fst ∈ ⟦rho⟧ᶻ := by
+          simpa [hWtype] using W.snd.snd
+        obtain ⟨D, hdenD, _⟩ := body_den W hWtype
+        refine ⟨D, hdenD, (body_true_iff W hWtype hWmem hdenD).mpr ?_⟩
+        have hYvalue_mem :
+            (ZFSet.fapply Y (ZFSet.is_func_is_pfunc hYfunc)
+              ⟨W.fst, by
+                rw [ZFSet.is_func_dom_eq hYfunc]
+                exact hWmem⟩).val ∈ ZFSet.𝔹 := by
+          exact (ZFSet.fapply Y (ZFSet.is_func_is_pfunc hYfunc)
+            ⟨W.fst, by
+              rw [ZFSet.is_func_dom_eq hYfunc]
+              exact hWmem⟩).property
+        rw [ZFSet.ZFBool.mem_𝔹_iff] at hYvalue_mem
+        rcases hYvalue_mem with hfalse | htrue
+        · exact Or.inl hfalse
+        · exact Or.inr (hpoint W.fst hWmem htrue))
+    have hEq : Dall =
+        (⟨ZFSet.zftrue, SMTType.bool,
+          ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+      Option.some.inj (hdenAll.symm.trans hexact)
+    exact congrArg (fun d : SMT.Dom => d.fst) hEq
 
 /-- The continuation of the powerset encoder after its operand has been
 encoded.  Keeping the continuation named lets the representation proof state
@@ -177,9 +672,10 @@ abbrev EncodePowTailRepSpec.{u} (beta : BType)
 
 set_option maxHeartbeats 2400000 in
 theorem encodePowTail_direct_rep_spec.{u}
-    (beta : BType) (S : SMT.Term) :
+    (beta : BType) (rho : SMTType)
+    (hrho : BType.SupportedSMT beta rho) (S : SMT.Term) :
     EncodePowTailRepSpec.{u} beta S
-      (SMTType.fun beta.toSMTType SMTType.bool) := by
+      (SMTType.fun rho SMTType.bool) := by
   unfold EncodePowTailRepSpec
   intro Lambda n used typ_S _supported bv_S_used
   unfold encodePowTail
@@ -209,8 +705,8 @@ theorem encodePowTail_direct_rep_spec.{u}
         ((@ˢSMT.Term.var P) (SMT.Term.var x) ⇒ˢ
           (@ˢS) (SMT.Term.var x))
       let tpow : SMT.Term :=
-        (λˢ [P]) [beta.toSMTType.fun SMTType.bool]
-          (Term.forall [x] [beta.toSMTType] pred)
+        (λˢ [P]) [rho.fun SMTType.bool]
+          (Term.forall [x] [rho] pred)
 
       have hP_not_ctx : P ∉ St₀.types := by
         intro h
@@ -236,27 +732,27 @@ theorem encodePowTail_direct_rep_spec.{u}
         funNotMemFvOfNotMemContext typ_S hx_not_ctx
 
       have hx_not_ctxP :
-          x ∉ St₀.types.insert P (.fun beta.toSMTType .bool) := by
+          x ∉ St₀.types.insert P (.fun rho .bool) := by
         rw [AList.mem_insert]
         simp [hx_ne_P, hx_not_ctx]
       have typ_S_P :
-          St₀.types.insert P (.fun beta.toSMTType .bool) ⊢ˢ
-            S : (BType.set beta).toSMTType :=
+          St₀.types.insert P (.fun rho .bool) ⊢ˢ
+            S : SMTType.fun rho SMTType.bool :=
         SMT.Typing.weakening
           (SMT.TypeContext.entries_subset_insert_of_notMem hP_not_ctx)
           typ_S
           (SMT.Typing.bv_notMem_insert_of_fresh typ_S hP_not_bv_S)
       have typ_S_Px :
-          (St₀.types.insert P (.fun beta.toSMTType .bool)).insert
-              x beta.toSMTType ⊢ˢ
-            S : (BType.set beta).toSMTType :=
+          (St₀.types.insert P (.fun rho .bool)).insert
+              x rho ⊢ˢ
+            S : SMTType.fun rho SMTType.bool :=
         SMT.Typing.weakening
           (SMT.TypeContext.entries_subset_insert_of_notMem hx_not_ctxP)
           typ_S_P
           (SMT.Typing.bv_notMem_insert_of_fresh typ_S_P hx_not_bv_S)
       have typ_pred :
-          (St₀.types.insert P (.fun beta.toSMTType .bool)).insert
-              x beta.toSMTType ⊢ˢ pred : .bool := by
+          (St₀.types.insert P (.fun rho .bool)).insert
+              x rho ⊢ˢ pred : .bool := by
         rw [show pred =
           ((@ˢSMT.Term.var P) (SMT.Term.var x) ⇒ˢ
             (@ˢS) (SMT.Term.var x)) from rfl]
@@ -272,8 +768,8 @@ theorem encodePowTail_direct_rep_spec.{u}
           · apply SMT.Typing.var
             rw [AList.lookup_insert]
       have typ_forall :
-          St₀.types.insert P (.fun beta.toSMTType .bool) ⊢ˢ
-            Term.forall [x] [beta.toSMTType] pred : .bool := by
+          St₀.types.insert P (.fun rho .bool) ⊢ˢ
+            Term.forall [x] [rho] pred : .bool := by
         refine SMT.Typing.forall _ _ _ _ ?_ ?_ ?_ ?_ ?_
         · intro v hv
           rw [List.mem_singleton] at hv
@@ -287,11 +783,11 @@ theorem encodePowTail_direct_rep_spec.{u}
         · rfl
         · have hupdate :
               SMT.TypeContext.update
-                  (St₀.types.insert P (.fun beta.toSMTType .bool))
-                  [x] [beta.toSMTType] rfl =
+                  (St₀.types.insert P (.fun rho .bool))
+                  [x] [rho] rfl =
                 (St₀.types.insert P
-                  (.fun beta.toSMTType .bool)).insert
-                    x beta.toSMTType := by
+                  (.fun rho .bool)).insert
+                    x rho := by
             simp only [TypeContext.update, List.length_cons,
               List.length_nil, zero_add, Nat.reduceAdd,
               Fin.cast_eq_self, Fin.getElem_fin, Fin.val_eq_zero,
@@ -300,10 +796,10 @@ theorem encodePowTail_direct_rep_spec.{u}
           exact typ_pred
       have typ_tpow :
           St₀.types ⊢ˢ tpow :
-            .fun (.fun beta.toSMTType .bool) .bool := by
+            .fun (.fun rho .bool) .bool := by
         rw [show tpow =
-          (λˢ [P]) [beta.toSMTType.fun SMTType.bool]
-            (Term.forall [x] [beta.toSMTType] pred) from rfl]
+          (λˢ [P]) [rho.fun SMTType.bool]
+            (Term.forall [x] [rho] pred) from rfl]
         refine SMT.Typing.lambda _ _ _ _ _ ?_ ?_ ?_ ?_ ?_
         · intro v hv
           rw [List.mem_singleton] at hv
@@ -318,8 +814,8 @@ theorem encodePowTail_direct_rep_spec.{u}
         · rfl
         · have hupdate :
               SMT.TypeContext.update St₀.types [P]
-                  [.fun beta.toSMTType .bool] rfl =
-                St₀.types.insert P (.fun beta.toSMTType .bool) := by
+                  [.fun rho .bool] rfl =
+                St₀.types.insert P (.fun rho .bool) := by
             simp only [TypeContext.update, List.length_cons,
               List.length_nil, zero_add, Nat.reduceAdd,
               Fin.cast_eq_self, Fin.getElem_fin, Fin.val_eq_zero,
@@ -338,8 +834,8 @@ theorem encodePowTail_direct_rep_spec.{u}
         rw [St₂_used_eq, St₁_used_eq]
         exact List.mem_cons_of_mem _
           (List.mem_cons_of_mem _ (St₀_sub hv))
-      · exact ⟨castPath.reflexive
-          (BType.set (BType.set beta)).toSMTType⟩
+      · exact (BType.SupportedSMT.setPred
+          (BType.SupportedSMT.setPred hrho)).nonemptyCanonicalCastPath
       · simpa [tpow, pred] using typ_tpow
       · intro v hv hv_not
         exact hv_not
@@ -381,20 +877,25 @@ theorem encodePowTail_direct_rep_spec.{u}
         rcases denS with ⟨Sval, sigmaS, hSval⟩
         dsimp at denS_type
         subst sigmaS
-        have hret :
-            retract (BType.set beta) Sval = X :=
-          ((RDomCast.iff_RDom_of_type_eq
-            (α := BType.set beta) rfl).mp
-              X_rel.toRDomCast).2
-        obtain ⟨a, sigmaPow, ha, hden_pow, hRDom_pow⟩ :=
-          pow_denotation_aux pred rfl tpow rfl hx_ne_P
-            hP_not_fv_S hx_not_fv_S
-            hP_not_bv_S hx_not_bv_S
-            typ_S hP_not_ctx hx_not_ctx
-            (Δ_ctx := Theta)
-            (Δctx_respects := respects_S)
-            hcov_S hcov_tpow hSval hden_S hX hret
-            (powerset_mem_btype hX)
+        obtain ⟨denPow, hden_pow, hdenPow_type⟩ :=
+          SMT.RenamingContext.denote_exists_of_typing_fv
+            typ_tpow target_respects hcov_tpow
+        rcases denPow with ⟨U, sigmaPow, hU⟩
+        dsimp at hdenPow_type
+        subst sigmaPow
+        have Pow_rel : RDomCastSupported
+            (⟨X.powerset, BType.set (BType.set beta),
+              powerset_mem_btype hX⟩ : B.Dom)
+            (⟨U, SMTType.fun (SMTType.fun rho SMTType.bool)
+              SMTType.bool, hU⟩ : SMT.Dom) :=
+          represented_powerset_direct_lambda hrho hX hSval hU
+            (by simpa [pred] using typ_pred)
+            (by simpa [pred] using typ_forall)
+            hx_ne_P hP_not_fv_S hx_not_fv_S hcov_S respects_S
+            (by simpa only [proof_irrel_heq] using hden_S)
+            X_rel
+            (by simpa [tpow, pred] using hcov_tpow)
+            (by simpa [tpow, pred, proof_irrel_heq] using hden_pow)
         refine Exists.intro Theta ?_
         and_intros
         · exact RenamingContext.extends_refl Theta
@@ -408,10 +909,9 @@ theorem encodePowTail_direct_rep_spec.{u}
         · simpa [tpow, pred] using target_respects
         · exact Theta_dom
         · refine ⟨(by simpa [tpow, pred] using hcov_tpow),
-            a, sigmaPow, ha, ?_, ?_, ?_⟩
+            U, SMTType.fun (SMTType.fun rho SMTType.bool)
+              SMTType.bool, hU, ?_, rfl, Pow_rel⟩
           · simpa [tpow, pred] using hden_pow
-          · exact hRDom_pow.1
-          · exact RDom.toRDomCastSupported hRDom_pow
 
 private theorem encodePowTail_graph_eq
     (alpha beta : BType) (S : SMT.Term) :
@@ -485,8 +985,11 @@ theorem encodePowTail_graph_rep_spec.{u}
       St₁_keys_sub (AList.lookup_isSome.mp
         (Option.isSome_of_eq_some helper_lookup_St₁))
     mspec encodePowTail_direct_rep_spec (alpha ×ᴮ beta)
+      (alpha ×ᴮ beta).toSMTType
+      (BType.SupportedSMT.canonical (alpha ×ᴮ beta))
       (SMT.Term.var helper) typ_helper_St₂
-      (.setPred (alpha ×ᴮ beta)) (by simp [SMT.bv])
+      (.setPred (BType.SupportedSMT.canonical (alpha ×ᴮ beta)))
+      (by simp [SMT.bv])
     rename_i outPow
     obtain ⟨tPow, sigmaPow⟩ := outPow
     mrename_i postPow
@@ -638,8 +1141,8 @@ theorem encodePowTail_supported_rep_spec.{u}
     (supported : BType.SupportedSMT (BType.set beta) sigmaS) :
     EncodePowTailRepSpec.{u} beta S sigmaS := by
   cases supported with
-  | setPred =>
-      exact encodePowTail_direct_rep_spec beta S
+  | @setPred _ rho hrho =>
+      exact encodePowTail_direct_rep_spec beta rho hrho S
   | optionFun alpha gamma =>
       exact encodePowTail_graph_rep_spec alpha gamma S
 
