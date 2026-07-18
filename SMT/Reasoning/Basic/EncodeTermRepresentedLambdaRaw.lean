@@ -554,7 +554,7 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
               ThetaBody_none, respects_P_final,
               target_respects_Penc, ThetaBody_dom,
               PencVal, hden_Penc, hPenc_type, P_rel, P_total⟩ := P_post
-          obtain ⟨DltP_scoped, P_scoped_decl, P_ctx_gen, P_trace,
+          obtain ⟨DltP_scoped, P_scoped_decl, P_trace, _P_envelope,
               P_scoped_total, P_guarded, P_specs_typed,
               P_scoped_typing⟩ := P_scoped_post
           obtain ⟨DltP, P_decl_eq, P_specs_fv, Penc_fv⟩ := P_decl_info
