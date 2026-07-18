@@ -1074,7 +1074,7 @@ theorem BType.get_cast
 
 /-- Transport a source-value tuple component along an equality of tuple
 arities. -/
-theorem ZFSet_get_cast
+theorem ZFSet_get_cast.{u}
     {x : ZFSet.{u}} {n m : ℕ} (h : n = m) (i : Fin n) :
     x.get n i = x.get m (Fin.cast h i) := by
   subst m
@@ -1082,7 +1082,7 @@ theorem ZFSet_get_cast
 
 /-- Before the last component, a pair tuple projects through its left
 component. -/
-theorem ZFSet_get_pair_before_last
+theorem ZFSet_get_pair_before_last.{u}
     {a b : ZFSet.{u}} {n i : ℕ} (hn : 0 < n) (hi : i < n) :
     (a.pair b).get (n + 1) ⟨i, by omega⟩ = a.get n ⟨i, hi⟩ := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_one.mpr hn
@@ -1102,7 +1102,7 @@ theorem BType_get_pair_before_last
       (by omega) hi)
 
 /-- The last component of a nontrivial pair tuple is its right value. -/
-theorem ZFSet_get_pair_last
+theorem ZFSet_get_pair_last.{u}
     {a b : ZFSet.{u}} {n : ℕ} (hn : 0 < n) :
     (a.pair b).get (n + 1) ⟨n, by omega⟩ = b := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_one.mpr hn
@@ -1117,7 +1117,7 @@ theorem BType_get_pair_last
 
 /-- Projecting a non-final component of a pair tuple through a `dropLast`
 binder list gives the corresponding component of the left source value. -/
-theorem ZFSet_get_pair_before_last_dropLast
+theorem ZFSet_get_pair_before_last_dropLast.{u}
     {vs : List B.𝒱} {a b : ZFSet.{u}} {i : ℕ}
     (hvs : 2 ≤ vs.length) (hi : i < vs.dropLast.length) :
     (a.pair b).get vs.length ⟨i, by
