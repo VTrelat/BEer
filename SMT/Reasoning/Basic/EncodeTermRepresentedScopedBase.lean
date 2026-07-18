@@ -4,6 +4,40 @@ open Std.Do B SMT ZFSet
 
 /-! # Generated-helper contracts for base terms -/
 
+private theorem encodeTerm_ℤ_scoped_state
+    (E : B.Env) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} {decl : SMT.Chunk} :
+    ⦃fun (⟨E0, Λ'⟩ : EncoderState) ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used ∧
+        E0.declarations = decl⌝⦄
+    encodeTerm B.Term.ℤ E
+    ⦃⇓? _out (⟨E', Γ'⟩ : EncoderState) =>
+      ⌜Γ' = Λ ∧ E'.declarations = decl⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, _St_sub, rfl, rfl⟩ := pre
+  rw [encodeTerm]
+  mspec Std.Do.Spec.get_StateT
+
+private theorem encodeTerm_𝔹_scoped_state
+    (E : B.Env) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} {decl : SMT.Chunk} :
+    ⦃fun (⟨E0, Λ'⟩ : EncoderState) ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used ∧
+        E0.declarations = decl⌝⦄
+    encodeTerm B.Term.𝔹 E
+    ⦃⇓? _out (⟨E', Γ'⟩ : EncoderState) =>
+      ⌜Γ' = Λ ∧ E'.declarations = decl⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, _St_sub, rfl, rfl⟩ := pre
+  rw [encodeTerm]
+  mspec Std.Do.Spec.get_StateT
+
 theorem encodeTerm_rep_scoped.var_case_from.{u}
     (v : B.𝒱) (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
     (_typ_t : E.context ⊢ᴮ B.Term.var v : α)
@@ -292,3 +326,241 @@ theorem encodeTerm_rep_scoped.bool_case_from.{u}
     · intro Γ_sup _Γ_sub _result_bv_fresh
       exact SMT.Typing.bool Γ_sup b
     · simpa using Dpre_typing
+
+theorem encodeTerm_rep_scoped.ℤ_case_from.{u}
+    (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (typ_t : E.context ⊢ᴮ B.Term.ℤ : α)
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ v ∈ B.fv B.Term.ℤ, («Δ» v).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastSupportedOnFV «Δ» Δ₀ B.Term.ℤ)
+    {used : List SMT.𝒱}
+    (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
+    (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (den_t : ⟦B.Term.ℤ.abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨T, ⟨α, hT⟩⟩)
+    (vars_used : ∀ v ∈ B.Term.ℤ.vars, v ∈ used)
+    (Λ_inv : ∀ v ∈ B.Term.ℤ.vars, v ∈ Λ → v ∈ E.context)
+    (bv_nodup : (B.bv B.Term.ℤ).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ B.Term.ℤ)
+    (fv_in_Λ : ∀ v ∈ B.fv B.Term.ℤ, v ∈ Λ)
+    (wf : B.RenWF E.context «Δ»)
+    {Base : SMT.TypeContext} {Dpre : SMT.Chunk}
+    (input_envelope : DeclarationContextEnvelope Base Dpre Λ)
+    (fv_in_Base : ∀ v ∈ B.fv B.Term.ℤ, v ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
+    {n : ℕ} {decl : SMT.Chunk} :
+    ⦃fun (⟨E0, Λ'⟩ : EncoderState) ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used ∧
+        E0.declarations = decl⌝⦄
+    encodeTerm B.Term.ℤ E
+    ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepScopedPostFrom.{u} B.Term.ℤ E α
+        Base Dpre Λ decl t' σ E' Γ'⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, St_used_eq, St_decl_eq⟩ := pre
+  mspec (Std.Do.Triple.and _
+    (encodeTerm_rep_spec.ℤ_case E typ_t Δ_fv related
+      Δ₀_none_out Δ₀_dom den_t vars_used Λ_inv bv_nodup
+      respects fv_in_Λ wf (n := St.env.freshvarsc))
+    (encodeTerm_ℤ_scoped_state E (n := St.env.freshvarsc)
+      (used := St.env.usedVars) (decl := St.env.declarations)))
+  rename_i out
+  obtain ⟨t', σ⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨ordinary_post, state_eq⟩ := post
+  obtain ⟨_used_sub, _types_sub, _keys_sub, _source_used,
+      _path, typ_t', fv_nil, _preserves,
+      Δcur, hcov_cur, _Δcur_ext, _related_cur, _Δcur_none,
+      _respects_B_cur, _respects_SMT_cur, _Δcur_dom,
+      denCur, hden_cur, _hden_cur_type, current_rel, total⟩ :=
+    ordinary_post
+  obtain ⟨types_eq, decl_eq⟩ := state_eq
+  have scoped_total : EncodeTermRepScopedTotal.{u}
+      B.Term.ℤ E α St.types t' σ St'.types St'.env.usedVars [] := by
+    intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
+      Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
+    obtain ⟨Δ'_alt, hcov_alt, denT_alt, Δ'_alt_ext,
+        related'_alt, Δ'_alt_none, respects_B_alt,
+        respects_SMT_alt, Δ'_alt_dom, hden_alt,
+        hden_alt_type, result_alt_rel⟩ :=
+      total Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
+        Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
+    exact ⟨Δ'_alt, hcov_alt, denT_alt, Δ'_alt_ext,
+      related'_alt, Δ'_alt_none, respects_B_alt,
+      respects_SMT_alt, Δ'_alt_dom,
+      (by simp [SpecBodiesTrue, specBodies]), hden_alt,
+      hden_alt_type, result_alt_rel⟩
+  have root_guard : EncodeTermRepGuardedSound.{u}
+      B.Term.ℤ E α t' σ St.types [] := by
+    intro Γ_sup _Γ_scope Δ_alt Δ_fv_alt Θ _related_alt _wf_alt
+      _respects_B _respects_SMT _specs_true T_alt hT_alt den_t_alt
+      hcov denT hdenT _hdenT_type
+    have T_alt_eq : T_alt = T := by
+      rw [B.Term.abstract, B.denote, Option.pure_def,
+        Option.some_inj] at den_t den_t_alt
+      exact (congrArg (fun d => d.fst) den_t_alt).symm.trans
+        (congrArg (fun d => d.fst) den_t)
+    subst T_alt
+    have hagree : RenamingContext.AgreesOnFV Θ Δcur t' := by
+      intro v hv
+      rw [fv_nil] at hv
+      contradiction
+    have hden_eq := RenamingContext.denote_congr_of_agreesOnFV
+      (h1 := hcov) (h2 := hcov_cur) hagree
+    have den_eq : denT = denCur := Option.some.inj
+      (hdenT.symm.trans (hden_eq.trans hden_cur))
+    subst denT
+    simpa only [proof_irrel_heq] using current_rel
+  have root : EncodeTermRepScopedPost.{u}
+      B.Term.ℤ E α St.types decl t' σ St'.env St'.types := by
+    refine ⟨[], ?_, ?_, ?_, scoped_total, root_guard, ?_, ?_⟩
+    · simpa [St_decl_eq] using decl_eq
+    · simpa [types_eq] using DeclarationContextTrace.nil St.types
+    · simpa [types_eq] using DeclarationContextEnvelope.refl St.types
+    · simp [specBodies]
+    · have typ_t'_Λ : St.types ⊢ˢ t' : σ := by
+        simpa [types_eq] using typ_t'
+      exact ScopedGeneratedTyping.of_operational
+        (ContextGeneratedByDeclarations.refl St.types) typ_t'_Λ
+        (by simp [specBodies])
+  have decl_info : ∃ Dlt : SMT.Chunk,
+      St'.env.declarations = decl ++ Dlt ∧
+      (∀ b ∈ specBodies Dlt,
+        SMT.fv b ⊆ B.Term.vars B.Term.ℤ ∪ declVars Dlt) ∧
+      SMT.fv t' ⊆ B.Term.vars B.Term.ℤ ∪ declVars Dlt := by
+    refine ⟨[], ?_, ?_, ?_⟩
+    · simpa [St_decl_eq] using decl_eq
+    · simp [specBodies]
+    · intro v hv
+      rw [fv_nil] at hv
+      contradiction
+  mpure_intro
+  exact EncodeTermRepScopedPostFrom.of_root typ_t Λ_inv
+    input_envelope fv_in_Base Dpre_typing typ_t' decl_info root
+
+theorem encodeTerm_rep_scoped.𝔹_case_from.{u}
+    (E : B.Env) {Λ : SMT.TypeContext} {α : BType}
+    (typ_t : E.context ⊢ᴮ B.Term.𝔹 : α)
+    {«Δ» : B.RenamingContext.Context}
+    (Δ_fv : ∀ v ∈ B.fv B.Term.𝔹, («Δ» v).isSome = true)
+    {Δ₀ : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastSupportedOnFV «Δ» Δ₀ B.Term.𝔹)
+    {used : List SMT.𝒱}
+    (Δ₀_none_out : ∀ v ∉ used, Δ₀ v = none)
+    (Δ₀_dom : ∀ v, Δ₀ v ≠ none → v ∈ Λ)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦α⟧ᶻ}
+    (den_t : ⟦B.Term.𝔹.abstract «Δ» Δ_fv⟧ᴮ =
+      some ⟨T, ⟨α, hT⟩⟩)
+    (vars_used : ∀ v ∈ B.Term.𝔹.vars, v ∈ used)
+    (Λ_inv : ∀ v ∈ B.Term.𝔹.vars, v ∈ Λ → v ∈ E.context)
+    (bv_nodup : (B.bv B.Term.𝔹).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Δ₀ Λ B.Term.𝔹)
+    (fv_in_Λ : ∀ v ∈ B.fv B.Term.𝔹, v ∈ Λ)
+    (wf : B.RenWF E.context «Δ»)
+    {Base : SMT.TypeContext} {Dpre : SMT.Chunk}
+    (input_envelope : DeclarationContextEnvelope Base Dpre Λ)
+    (fv_in_Base : ∀ v ∈ B.fv B.Term.𝔹, v ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
+    {n : ℕ} {decl : SMT.Chunk} :
+    ⦃fun (⟨E0, Λ'⟩ : EncoderState) ↦
+      ⌜Λ' = Λ ∧ E0.freshvarsc = n ∧
+        Λ.keys ⊆ E0.usedVars ∧ E0.usedVars = used ∧
+        E0.declarations = decl⌝⦄
+    encodeTerm B.Term.𝔹 E
+    ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
+      ⌜EncodeTermRepScopedPostFrom.{u} B.Term.𝔹 E α
+        Base Dpre Λ decl t' σ E' Γ'⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, St_used_eq, St_decl_eq⟩ := pre
+  mspec (Std.Do.Triple.and _
+    (encodeTerm_rep_spec.𝔹_case E typ_t Δ_fv related
+      Δ₀_none_out Δ₀_dom den_t vars_used Λ_inv bv_nodup
+      respects fv_in_Λ wf (n := St.env.freshvarsc))
+    (encodeTerm_𝔹_scoped_state E (n := St.env.freshvarsc)
+      (used := St.env.usedVars) (decl := St.env.declarations)))
+  rename_i out
+  obtain ⟨t', σ⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  obtain ⟨ordinary_post, state_eq⟩ := post
+  obtain ⟨_used_sub, _types_sub, _keys_sub, _source_used,
+      _path, typ_t', fv_nil, _preserves,
+      Δcur, hcov_cur, _Δcur_ext, _related_cur, _Δcur_none,
+      _respects_B_cur, _respects_SMT_cur, _Δcur_dom,
+      denCur, hden_cur, _hden_cur_type, current_rel, total⟩ :=
+    ordinary_post
+  obtain ⟨types_eq, decl_eq⟩ := state_eq
+  have scoped_total : EncodeTermRepScopedTotal.{u}
+      B.Term.𝔹 E α St.types t' σ St'.types St'.env.usedVars [] := by
+    intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
+      Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
+    obtain ⟨Δ'_alt, hcov_alt, denT_alt, Δ'_alt_ext,
+        related'_alt, Δ'_alt_none, respects_B_alt,
+        respects_SMT_alt, Δ'_alt_dom, hden_alt,
+        hden_alt_type, result_alt_rel⟩ :=
+      total Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
+        Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
+    exact ⟨Δ'_alt, hcov_alt, denT_alt, Δ'_alt_ext,
+      related'_alt, Δ'_alt_none, respects_B_alt,
+      respects_SMT_alt, Δ'_alt_dom,
+      (by simp [SpecBodiesTrue, specBodies]), hden_alt,
+      hden_alt_type, result_alt_rel⟩
+  have root_guard : EncodeTermRepGuardedSound.{u}
+      B.Term.𝔹 E α t' σ St.types [] := by
+    intro Γ_sup _Γ_scope Δ_alt Δ_fv_alt Θ _related_alt _wf_alt
+      _respects_B _respects_SMT _specs_true T_alt hT_alt den_t_alt
+      hcov denT hdenT _hdenT_type
+    have T_alt_eq : T_alt = T := by
+      rw [B.Term.abstract, B.denote, Option.pure_def,
+        Option.some_inj] at den_t den_t_alt
+      exact (congrArg (fun d => d.fst) den_t_alt).symm.trans
+        (congrArg (fun d => d.fst) den_t)
+    subst T_alt
+    have hagree : RenamingContext.AgreesOnFV Θ Δcur t' := by
+      intro v hv
+      rw [fv_nil] at hv
+      contradiction
+    have hden_eq := RenamingContext.denote_congr_of_agreesOnFV
+      (h1 := hcov) (h2 := hcov_cur) hagree
+    have den_eq : denT = denCur := Option.some.inj
+      (hdenT.symm.trans (hden_eq.trans hden_cur))
+    subst denT
+    simpa only [proof_irrel_heq] using current_rel
+  have root : EncodeTermRepScopedPost.{u}
+      B.Term.𝔹 E α St.types decl t' σ St'.env St'.types := by
+    refine ⟨[], ?_, ?_, ?_, scoped_total, root_guard, ?_, ?_⟩
+    · simpa [St_decl_eq] using decl_eq
+    · simpa [types_eq] using DeclarationContextTrace.nil St.types
+    · simpa [types_eq] using DeclarationContextEnvelope.refl St.types
+    · simp [specBodies]
+    · have typ_t'_Λ : St.types ⊢ˢ t' : σ := by
+        simpa [types_eq] using typ_t'
+      exact ScopedGeneratedTyping.of_operational
+        (ContextGeneratedByDeclarations.refl St.types) typ_t'_Λ
+        (by simp [specBodies])
+  have decl_info : ∃ Dlt : SMT.Chunk,
+      St'.env.declarations = decl ++ Dlt ∧
+      (∀ b ∈ specBodies Dlt,
+        SMT.fv b ⊆ B.Term.vars B.Term.𝔹 ∪ declVars Dlt) ∧
+      SMT.fv t' ⊆ B.Term.vars B.Term.𝔹 ∪ declVars Dlt := by
+    refine ⟨[], ?_, ?_, ?_⟩
+    · simpa [St_decl_eq] using decl_eq
+    · simp [specBodies]
+    · intro v hv
+      rw [fv_nil] at hv
+      contradiction
+  mpure_intro
+  exact EncodeTermRepScopedPostFrom.of_root typ_t Λ_inv
+    input_envelope fv_in_Base Dpre_typing typ_t' decl_info root
