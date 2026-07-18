@@ -395,6 +395,27 @@ theorem B.denote_collect_member_iff.{u}
     ZFSet.mem_sep, dif_pos ⟨hx_arity, tau_hasArity, hx_type⟩]
   simp [den_P]
 
+open Classical in
+/-- Every element selected by source collection semantics already belongs to
+the source domain.  This one-sided form avoids constructing a predicate
+denotation when only the domain fact is needed. -/
+theorem B.denote_collect_mem_domain.{u}
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set tau⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set tau, hT⟩ : B.Dom))
+    {x : ZFSet.{u}} (hx : x ∈ T) :
+    x ∈ Dval := by
+  rw [← B.denote_collect_eq_sep Xi_fv tau_hasArity den_D den_collect] at hx
+  exact (ZFSet.mem_sep.mp hx).1
+
 /- A source collection is a subrelation of its domain.  In particular, when
 the domain is a partial function, the collection result remains a partial
 function.  This supplies the functionality certificate required when the
