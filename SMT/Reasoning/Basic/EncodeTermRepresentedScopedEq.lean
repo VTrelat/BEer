@@ -5,12 +5,12 @@ open Std.Do B SMT ZFSet Classical
 /-! # Generated-helper contract for represented equality -/
 
 set_option maxHeartbeats 6000000 in
-theorem encodeTerm_rep_scoped.eq_case.{u}
+theorem encodeTerm_rep_scoped.eq_case_from.{u}
     (x S : B.Term)
     (x_ih : EncodeTermRepIH.{u} x)
     (S_ih : EncodeTermRepIH.{u} S)
-    (x_scoped : EncodeTermRepScopedIH.{u} x)
-    (S_scoped : EncodeTermRepScopedIH.{u} S)
+    (x_scoped : EncodeTermRepScopedFromIH.{u} x)
+    (S_scoped : EncodeTermRepScopedFromIH.{u} S)
     (E : B.Env) {Λ : SMT.TypeContext}
     (typ_t : E.context ⊢ᴮ x =ᴮ S : BType.bool)
     {«Δ» : B.RenamingContext.Context}
@@ -31,6 +31,10 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
       Δ₀ Λ (x =ᴮ S))
     (fv_in_Λ : ∀ v ∈ B.fv (x =ᴮ S), v ∈ Λ)
     (wf : B.RenWF E.context «Δ»)
+    {Base : SMT.TypeContext} {Dpre : SMT.Chunk}
+    (input_envelope : DeclarationContextEnvelope Base Dpre Λ)
+    (fv_in_Base : ∀ v ∈ B.fv (x =ᴮ S), v ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
     {n : ℕ} {decl : SMT.Chunk} :
     ⦃fun ⟨E₀, Λ'⟩ ↦
       ⌜Λ' = Λ ∧ E₀.freshvarsc = n ∧
@@ -38,8 +42,8 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
         E₀.declarations = decl⌝⦄
     encodeTerm (x =ᴮ S) E
     ⦃⇓? (⟨t', σ⟩ : SMT.Term × SMTType) ⟨E', Γ'⟩ =>
-      ⌜EncodeTermRepScopedPost.{u} (x =ᴮ S) E BType.bool Λ decl
-        t' σ E' Γ'⌝⦄ := by
+      ⌜EncodeTermRepScopedPostFrom.{u} (x =ᴮ S) E BType.bool
+        Base Dpre Λ decl t' σ E' Γ'⌝⦄ := by
   mstart
   mintro pre ∀St
   mpure pre
@@ -102,6 +106,9 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
             rcases hv with h | h <;> [left; right] <;> exact Or.inl h))
           hx_bv_nodup (respects.mono_fv fv_x_sub)
           (fun v hv => fv_in_Λ v (fv_x_sub hv)) wf
+          input_envelope
+          (fun v hv => fv_in_Base v (fv_x_sub hv))
+          Dpre_typing
           (n := St.env.freshvarsc) (decl := decl)))
       (encodeTerm_bv_used E (t := x) (used := St.env.usedVars)
         (n := St.env.freshvarsc) (decl := St.env.declarations)))
@@ -114,8 +121,8 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_ctx, x_trace, x_sc_total, x_guard,
-      x_specs_op, x_sc_typing⟩⟩,
+  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_envelope, x_sc_total, x_guard,
+      x_sc_typing⟩⟩,
       bv_x_used, _x_used_sub_struct, Dltx_struct,
         x_decl_struct, x_delta_ok⟩,
       bv_x_not_used, _⟩ := pre
@@ -196,6 +203,9 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
         hS_bv_nodup respects_S
         (fun v hv => AList.mem_of_subset types_sub_x
           (fv_in_Λ v (fv_S_sub hv))) wf
+        x_envelope
+        (fun v hv => fv_in_Base v (fv_S_sub hv))
+        x_sc_typing.2
           (n := Stx.env.freshvarsc) (decl := decl ++ Dltx)))
       (encodeTerm_bv_used E (t := S) (used := Stx.env.usedVars)
         (n := Stx.env.freshvarsc) (decl := Stx.env.declarations)))
@@ -208,8 +218,8 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
   mintro ∀StS
   mpure pre
   dsimp at pre
-  obtain ⟨⟨⟨S_post, ⟨DltS, S_decl_eq, S_ctx, S_trace, S_sc_total, S_guard,
-      S_specs_op, S_sc_typing⟩⟩,
+  obtain ⟨⟨⟨S_post, ⟨DltS, S_decl_eq, S_envelope, S_sc_total, S_guard,
+      S_sc_typing⟩⟩,
       bv_S_used, _S_used_sub_struct, DltS_struct,
         S_decl_struct, S_delta_ok⟩,
       _bv_S_not_used, _S_used_sub_notmem, DltS_notmem,
@@ -273,21 +283,26 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
   mpure pre
   obtain ⟨used_sub_Eq, types_sub_Eq, keys_sub_Eq, seq_eq,
     typ_eq, fv_x_eq, fv_S_eq, eq_preserves,
-    DltEq, eq_decl_eq, eq_ctx, eq_trace, eq_decl_fresh, eq_sem,
-    eq_specs_op, eq_sc_typing⟩ := pre
+    DltEq, eq_decl_eq, _eq_ctx, eq_trace, _eq_decl_fresh,
+    eq_fv_dep, eq_specs_fv_dep, eq_sem,
+    eq_specs_op, _eq_sc_typing⟩ := pre
   change seq = SMTType.bool at seq_eq
   subst seq
   mpure_intro
-  have children_ctx : ContextGeneratedByDeclarations St.types
-      StS.types (Dltx ++ DltS) :=
-    ContextGeneratedByDeclarations.append x_ctx S_ctx
-  refine ⟨(Dltx ++ DltS) ++ DltEq, ?_,
-    ContextGeneratedByDeclarations.append children_ctx eq_ctx,
-    DeclarationContextTrace.append
-      (DeclarationContextTrace.append x_trace S_trace) eq_trace,
-    ?_, ?_, ?_, ?_⟩
+  have x_sc_typing_full : ScopedGeneratedTyping Base
+      ((Dpre ++ Dltx) ++ DltS) x_enc sx := by
+    constructor
+    · intro Γ_sup Γ_sub result_bv_fresh
+      exact x_sc_typing.1 Γ_sup Γ_sub.left_of_append result_bv_fresh
+    · exact S_sc_typing.2
+  obtain ⟨eq_envelope, eq_sc_typing_clean⟩ :=
+    ScopedGeneratedTyping.of_binary_helper S_envelope eq_trace
+      typ_x_final typ_S_enc typ_eq eq_specs_op
+      x_sc_typing_full S_sc_typing eq_fv_dep eq_specs_fv_dep
+  refine ⟨(Dltx ++ DltS) ++ DltEq, ?_, ?_, ?_, ?_, ?_⟩
   · rw [eq_decl_eq, S_decl_eq]
     simp only [List.append_assoc]
+  · simpa [List.append_assoc] using eq_envelope
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom
       T_alt hT_alt den_t_alt
@@ -405,6 +420,25 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
   · intro Γ_sup Γ_sub Δ_alt Δ_fv_alt Θ related_alt wf_alt
       respects_B respects_SMT specs_true T_alt hT_alt den_t_alt
       hcov_eq denOut hdenOut hdenOut_type
+    have Γ_sub' : ScopedContextExtends Base
+        (((Dpre ++ Dltx) ++ DltS) ++ DltEq) Γ_sup := by
+      simpa [List.append_assoc] using Γ_sub
+    have specs_true' : SpecBodiesTrue Θ Γ_sup
+        (((Dpre ++ Dltx) ++ DltS) ++ DltEq) := by
+      simpa [List.append_assoc] using specs_true
+    have children_scope : ScopedContextExtends Base
+        ((Dpre ++ Dltx) ++ DltS) Γ_sup :=
+      Γ_sub'.left_of_append
+    have x_scope : ScopedContextExtends Base
+        (Dpre ++ Dltx) Γ_sup :=
+      children_scope.left_of_append
+    have specs_children : SpecBodiesTrue Θ Γ_sup
+        ((Dpre ++ Dltx) ++ DltS) :=
+      specs_true'.left_of_append
+    have specs_x : SpecBodiesTrue Θ Γ_sup (Dpre ++ Dltx) :=
+      specs_children.left_of_append
+    have specs_M : SpecBodiesTrue Θ Γ_sup DltEq :=
+      specs_true'.right_of_append
     obtain ⟨X_alt, A_alt, hX_alt, hA_alt,
         den_x_alt, den_S_alt, hT_alt_iff⟩ :=
       denote_eq_inv_rep typ_x typ_S Δ_fv_alt wf_alt den_t_alt
@@ -420,15 +454,6 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
     have target_respects_S_sup :
         SMT.RenamingContext.RespectsTypeContextOnFV Θ Γ_sup S_enc :=
       respects_SMT.mono_fv fv_S_eq
-    have specs_children :
-        SpecBodiesTrue Θ Γ_sup (Dltx ++ DltS) :=
-      specs_true.left_of_append
-    have specs_x : SpecBodiesTrue Θ Γ_sup Dltx :=
-      specs_children.left_of_append
-    have specs_S : SpecBodiesTrue Θ Γ_sup DltS :=
-      specs_children.right_of_append
-    have specs_M : SpecBodiesTrue Θ Γ_sup DltEq :=
-      specs_true.right_of_append
     have typ_x_M : StEq.types ⊢ˢ x_enc : sx :=
       SMT.Typing.weakening types_sub_Eq typ_x_final (by
         intro v hv
@@ -439,44 +464,98 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
         intro v hv
         exact eq_preserves v (bv_S_used v hv)
           (SMT.Typing.bv_notMem_context typ_S_enc v hv))
-    have result_ctx : ContextGeneratedByDeclarations St.types
-        StEq.types ((Dltx ++ DltS) ++ DltEq) :=
-      ContextGeneratedByDeclarations.append children_ctx eq_ctx
-    have StEq_sub_sup : StEq.types ⊆ Γ_sup := by
+    obtain ⟨EqCore, eq_clean_trace, EqCore_sub_StEq⟩ := eq_envelope
+    have EqCore_sub_sup : EqCore ⊆ Γ_sup := by
       intro e he
-      exact Γ_sub (result_ctx he)
-    have target_respects_x_M :
-        SMT.RenamingContext.RespectsTypeContextOnFV Θ StEq.types x_enc :=
-      target_respects_x_sup.of_super StEq_sub_sup
-    have target_respects_S_M :
-        SMT.RenamingContext.RespectsTypeContextOnFV Θ StEq.types S_enc :=
-      target_respects_S_sup.of_super StEq_sub_sup
+      exact Γ_sub' (eq_clean_trace.context_generated he)
+    have EqCore_children_scope : ScopedContextExtends Base
+        ((Dpre ++ Dltx) ++ DltS) EqCore :=
+      eq_clean_trace.scoped_extends.left_of_append
+    have typ_x_Core : EqCore ⊢ˢ x_enc : sx :=
+      x_sc_typing_full.1 EqCore EqCore_children_scope (by
+        intro v hv hvCore
+        exact SMT.Typing.bv_notMem_context typ_x_M v hv
+          (AList.mem_of_subset EqCore_sub_StEq hvCore))
+    have typ_S_Core : EqCore ⊢ˢ S_enc : sS :=
+      S_sc_typing.1 EqCore EqCore_children_scope (by
+        intro v hv hvCore
+        exact SMT.Typing.bv_notMem_context typ_S_M v hv
+          (AList.mem_of_subset EqCore_sub_StEq hvCore))
+    have target_respects_x_Core :
+        SMT.RenamingContext.RespectsTypeContextOnFV Θ EqCore x_enc :=
+      target_respects_x_sup.of_super EqCore_sub_sup
+    have target_respects_S_Core :
+        SMT.RenamingContext.RespectsTypeContextOnFV Θ EqCore S_enc :=
+      target_respects_S_sup.of_super EqCore_sub_sup
     obtain ⟨denX_target, hdenX_target, hdenX_target_type⟩ :=
       SMT.RenamingContext.denote_exists_of_typing_fv
-        typ_x_M target_respects_x_M hcov_x_target
+        typ_x_Core target_respects_x_Core hcov_x_target
     obtain ⟨denA_target, hdenA_target, hdenA_target_type⟩ :=
       SMT.RenamingContext.denote_exists_of_typing_fv
-        typ_S_M target_respects_S_M hcov_S_target
-    have children_scope : ScopedContextExtends St.types
-        (Dltx ++ DltS) Γ_sup := Γ_sub.left_of_append
-    have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
-      children_scope.left_of_append
-    have S_scope : ScopedContextExtends Stx.types DltS Γ_sup :=
-      ScopedContextExtends.right_of_generated x_ctx children_scope
-    have eq_scope : ScopedContextExtends StS.types DltEq Γ_sup :=
-      ScopedContextExtends.right_of_generated children_ctx Γ_sub
+        typ_S_Core target_respects_S_Core hcov_S_target
     have X_rel_target := x_guard Γ_sup x_scope Δ_alt
       (fun v hv => Δ_fv_alt v (fv_x_sub hv)) Θ
       (related_alt.mono_fv fv_x_sub) wf_alt
       (respects_B.mono_fv fv_x_sub) target_respects_x_sup
       specs_x X_alt hX_alt den_x_alt
       hcov_x_target denX_target hdenX_target hdenX_target_type
-    have A_rel_target := S_guard Γ_sup S_scope Δ_alt
+    have A_rel_target := S_guard Γ_sup children_scope Δ_alt
       (fun v hv => Δ_fv_alt v (fv_S_sub hv)) Θ
       (related_alt.mono_fv fv_S_sub) wf_alt
       (respects_B.mono_fv fv_S_sub) target_respects_S_sup
-      specs_S A_alt hA_alt den_S_alt
+      specs_children A_alt hA_alt den_S_alt
       hcov_S_target denA_target hdenA_target hdenA_target_type
+    have helper_dependency_mem_Core :
+        ∀ {v}, v ∈ (SMT.fv x_enc ∪ SMT.fv S_enc) ∪ declVars DltEq →
+          v ∈ EqCore := by
+      intro v hv
+      rw [List.mem_union_iff, List.mem_union_iff] at hv
+      rcases hv with (hvx | hvS) | hvdecl
+      · exact SMT.Typing.mem_context_of_mem_fv typ_x_Core hvx
+      · exact SMT.Typing.mem_context_of_mem_fv typ_S_Core hvS
+      · apply eq_clean_trace.declVar_mem
+        rw [declVars_append, List.mem_append]
+        exact Or.inr hvdecl
+    have typ_eq_Core : EqCore ⊢ˢ eq_enc : SMTType.bool :=
+      SMT.Typing.strengthening_of_fv_subset EqCore_sub_StEq typ_eq
+        (fun v hv => helper_dependency_mem_Core (eq_fv_dep hv))
+    have target_respects_eq_Core :
+        SMT.RenamingContext.RespectsTypeContextOnFV Θ EqCore eq_enc :=
+      respects_SMT.of_super EqCore_sub_sup
+    have target_respects_x_M :
+        SMT.RenamingContext.RespectsTypeContextOnFV Θ StEq.types x_enc :=
+      target_respects_x_Core.of_extends
+        (SMT.RenamingContext.extends_refl Θ)
+        EqCore_sub_StEq typ_x_Core
+    have target_respects_S_M :
+        SMT.RenamingContext.RespectsTypeContextOnFV Θ StEq.types S_enc :=
+      target_respects_S_Core.of_extends
+        (SMT.RenamingContext.extends_refl Θ)
+        EqCore_sub_StEq typ_S_Core
+    have target_respects_eq_M :
+        SMT.RenamingContext.RespectsTypeContextOnFV Θ StEq.types eq_enc :=
+      target_respects_eq_Core.of_extends
+        (SMT.RenamingContext.extends_refl Θ)
+        EqCore_sub_StEq typ_eq_Core
+    have specs_M_at_StEq : SpecBodiesTrue Θ StEq.types DltEq := by
+      intro body hbody
+      obtain ⟨hcov_body, denBody, respects_body_sup, hden_body,
+          hden_body_type, hden_body_true⟩ := specs_M body hbody
+      have typ_body_Core : EqCore ⊢ˢ body : SMTType.bool :=
+        SMT.Typing.strengthening_of_fv_subset EqCore_sub_StEq
+          (eq_specs_op body hbody)
+          (fun v hv => helper_dependency_mem_Core
+            (eq_specs_fv_dep body hbody hv))
+      have respects_body_Core :
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ EqCore body :=
+        respects_body_sup.of_super EqCore_sub_sup
+      have respects_body_M :
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ StEq.types body :=
+        respects_body_Core.of_extends
+          (SMT.RenamingContext.extends_refl Θ)
+          EqCore_sub_StEq typ_body_Core
+      exact ⟨hcov_body, denBody, respects_body_M, hden_body,
+        hden_body_type, hden_body_true⟩
     have target_respects_x_base_M :
         SMT.RenamingContext.RespectsTypeContextOnFV
           ΔS StEq.types x_enc :=
@@ -499,75 +578,13 @@ theorem encodeTerm_rep_scoped.eq_case.{u}
       (⟨Aenc, sS, hAenc⟩ : SMT.Dom)
       hden_x_final hden_S rfl rfl
       X_rel A_rel hTiff
-    have result_rel := eq_guard Γ_sup eq_scope Θ
+    have result_rel := eq_guard StEq.types eq_trace.scoped_extends Θ
       hcov_x_target hcov_S_target
-      target_respects_x_sup target_respects_S_sup
+      target_respects_x_M target_respects_S_M
       X_alt A_alt T_alt hX_alt hA_alt hT_alt denX_target denA_target
       hdenX_target hdenA_target hdenX_target_type hdenA_target_type
       X_rel_target A_rel_target hT_alt_iff
-      hcov_eq denOut respects_SMT specs_M hdenOut hdenOut_type
+      hcov_eq denOut target_respects_eq_M specs_M_at_StEq
+      hdenOut hdenOut_type
     exact result_rel
-  · intro body hbody
-    rw [specBodies_append, List.mem_append] at hbody
-    rcases hbody with hchildren | heq_body
-    · rw [specBodies_append, List.mem_append] at hchildren
-      rcases hchildren with hxbody | hSbody
-      · have typ_at_S : StS.types ⊢ˢ body : SMTType.bool :=
-          typing_weakening_generated types_sub_S S_ctx
-            S_delta_not_used.1 (x_specs_op body hxbody)
-            (fun v hv => x_delta_ok.2 body hxbody v hv)
-        exact typing_weakening_generated types_sub_Eq eq_ctx
-          eq_decl_fresh typ_at_S
-          (fun v hv => used_sub_S (x_delta_ok.2 body hxbody v hv))
-      · exact typing_weakening_generated types_sub_Eq eq_ctx
-          eq_decl_fresh (S_specs_op body hSbody)
-          (fun v hv => S_delta_ok.2 body hSbody v hv)
-    · exact eq_specs_op body heq_body
-  · constructor
-    · intro Γ_sup Γ_sub result_bv_fresh
-      have eq_scope : ScopedContextExtends StS.types DltEq Γ_sup :=
-        ScopedContextExtends.right_of_generated children_ctx Γ_sub
-      exact eq_sc_typing.1 Γ_sup eq_scope result_bv_fresh
-    · intro Γ_sup Γ_sub specs_bv_fresh
-      have children_scope : ScopedContextExtends St.types
-          (Dltx ++ DltS) Γ_sup := Γ_sub.left_of_append
-      have x_scope : ScopedContextExtends St.types Dltx Γ_sup :=
-        children_scope.left_of_append
-      have S_scope : ScopedContextExtends Stx.types DltS Γ_sup :=
-        ScopedContextExtends.right_of_generated x_ctx children_scope
-      have eq_scope : ScopedContextExtends StS.types DltEq Γ_sup :=
-        ScopedContextExtends.right_of_generated children_ctx Γ_sub
-      have x_specs_bv_fresh :
-          ∀ b ∈ specBodies Dltx, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
-        intro b hb
-        exact specs_bv_fresh b (by
-          rw [specBodies_append, List.mem_append]
-          exact Or.inl (by
-            rw [specBodies_append, List.mem_append]
-            exact Or.inl hb))
-      have S_specs_bv_fresh :
-          ∀ b ∈ specBodies DltS, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
-        intro b hb
-        exact specs_bv_fresh b (by
-          rw [specBodies_append, List.mem_append]
-          exact Or.inl (by
-            rw [specBodies_append, List.mem_append]
-            exact Or.inr hb))
-      have eq_specs_bv_fresh :
-          ∀ b ∈ specBodies DltEq, ∀ v ∈ SMT.bv b, v ∉ Γ_sup := by
-        intro b hb
-        exact specs_bv_fresh b (by
-          rw [specBodies_append, List.mem_append]
-          exact Or.inr hb)
-      have x_specs :=
-        x_sc_typing.2 Γ_sup x_scope x_specs_bv_fresh
-      have S_specs :=
-        S_sc_typing.2 Γ_sup S_scope S_specs_bv_fresh
-      have eq_specs :=
-        eq_sc_typing.2 Γ_sup eq_scope eq_specs_bv_fresh
-      intro body hbody
-      rw [specBodies_append, List.mem_append] at hbody
-      rcases hbody with hchildren | heq_body
-      · rw [specBodies_append, List.mem_append] at hchildren
-        exact hchildren.elim (x_specs body) (S_specs body)
-      · exact eq_specs body heq_body
+  · simpa [List.append_assoc] using eq_sc_typing_clean

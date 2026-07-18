@@ -213,6 +213,41 @@ theorem mem_declVars_of_mem_declEntries
       | check_sat =>
           simpa [declVars] using ih (by simpa [declEntries] using h)
 
+theorem exists_mem_declEntries_of_mem_declVars
+    {Dlt : SMT.Chunk} {v : SMT.𝒱} (h : v ∈ declVars Dlt) :
+    ∃ τ : SMTType,
+      (⟨v, τ⟩ : Sigma fun _ : SMT.𝒱 => SMTType) ∈ declEntries Dlt := by
+  induction Dlt with
+  | nil => simp [declVars] at h
+  | cons i D ih =>
+      cases i with
+      | declare_const w σ =>
+          simp only [declVars, List.filterMap_cons, List.mem_cons] at h
+          rcases h with rfl | htail
+          · exact ⟨σ, by simp [declEntries]⟩
+          · obtain ⟨τ, hτ⟩ := ih htail
+            refine ⟨τ, ?_⟩
+            simp only [declEntries, List.filterMap_cons, List.mem_cons]
+            exact Or.inr hτ
+      | define_fun w σ ρ t =>
+          obtain ⟨τ, hτ⟩ := ih (by simpa [declVars] using h)
+          exact ⟨τ, by simpa [declEntries] using hτ⟩
+      | define_const w σ t =>
+          obtain ⟨τ, hτ⟩ := ih (by simpa [declVars] using h)
+          exact ⟨τ, by simpa [declEntries] using hτ⟩
+      | assert t =>
+          obtain ⟨τ, hτ⟩ := ih (by simpa [declVars] using h)
+          exact ⟨τ, by simpa [declEntries] using hτ⟩
+      | push n =>
+          obtain ⟨τ, hτ⟩ := ih (by simpa [declVars] using h)
+          exact ⟨τ, by simpa [declEntries] using hτ⟩
+      | pop n =>
+          obtain ⟨τ, hτ⟩ := ih (by simpa [declVars] using h)
+          exact ⟨τ, by simpa [declEntries] using hτ⟩
+      | check_sat =>
+          obtain ⟨τ, hτ⟩ := ih (by simpa [declVars] using h)
+          exact ⟨τ, by simpa [declEntries] using hτ⟩
+
 /-- Every entry in the operational result context is either an entry of the
 input context or the typed declaration of a generated helper. -/
 abbrev ContextGeneratedByDeclarations
@@ -462,6 +497,14 @@ theorem DeclarationContextTrace.declEntries_subset
       | push n => simpa [declEntries] using ih h
       | pop n => simpa [declEntries] using ih h
       | check_sat => simpa [declEntries] using ih h
+
+theorem DeclarationContextTrace.declVar_mem
+    {Lambda Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextTrace Lambda Dlt Gamma)
+    {v : SMT.𝒱} (hv : v ∈ declVars Dlt) : v ∈ Gamma := by
+  obtain ⟨τ, hτ⟩ := exists_mem_declEntries_of_mem_declVars hv
+  rw [AList.mem_keys]
+  exact List.mem_keys_of_mem (h.declEntries_subset hτ)
 
 /-- The final context of an exact declaration trace contains both its input
 context and every typed declaration in the trace. -/
@@ -760,6 +803,34 @@ abbrev ScopedGeneratedTyping
     Γsup ⊢ˢ t : σ) ∧
   ScopedSpecsTyping Λ Dlt
 
+/-- Prefix a portable generated-term typing contract with an earlier clean
+declaration trace. -/
+theorem ScopedGeneratedTyping.append_prefix
+    {Base Core : SMT.TypeContext} {Dpre Dlt : SMT.Chunk}
+    {t : SMT.Term} {σ : SMTType}
+    (hpre : DeclarationContextTrace Base Dpre Core)
+    (hpre_specs : ScopedSpecsTyping Base Dpre)
+    (h : ScopedGeneratedTyping Core Dlt t σ) :
+    ScopedGeneratedTyping Base (Dpre ++ Dlt) t σ := by
+  constructor
+  · intro Γsup hscope hbv
+    exact h.1 Γsup
+      (ScopedContextExtends.right_of_generated
+        hpre.context_generated hscope) hbv
+  · intro Γsup hscope hall_bv body hbody
+    rw [specBodies_append, List.mem_append] at hbody
+    rcases hbody with hprefix | hlocal
+    · apply hpre_specs Γsup hscope.left_of_append
+        (fun b hb => hall_bv b (by
+          rw [specBodies_append, List.mem_append]
+          exact Or.inl hb)) body hprefix
+    · apply h.2 Γsup
+        (ScopedContextExtends.right_of_generated
+          hpre.context_generated hscope)
+        (fun b hb => hall_bv b (by
+          rw [specBodies_append, List.mem_append]
+          exact Or.inr hb)) body hlocal
+
 /-- Lift operational typing into any declaration-generated scope. -/
 theorem ScopedGeneratedTyping.of_operational
     {Λ Γop : SMT.TypeContext} {Dlt : SMT.Chunk}
@@ -777,6 +848,69 @@ theorem ScopedGeneratedTyping.of_operational
     have hop_sub : Γop ⊆ Γsup := fun e he => hscope (hgen he)
     exact SMT.Typing.weakening hop_sub (hspec b hb)
       (hspec_bv b hb)
+
+/-- Re-scope one operational binary helper step through the clean declaration
+core carried by its two inputs.  The free-variable dependency hypotheses are
+the precise condition needed to strengthen operational typing to that core. -/
+theorem ScopedGeneratedTyping.of_binary_helper
+    {Base LambdaOp GammaOp : SMT.TypeContext}
+    {Dpre Dlt : SMT.Chunk}
+    {A B t : SMT.Term} {σA σB σ : SMTType}
+    (henvelope : DeclarationContextEnvelope Base Dpre LambdaOp)
+    (hstep : DeclarationContextTrace LambdaOp Dlt GammaOp)
+    (htA_op : LambdaOp ⊢ˢ A : σA)
+    (htB_op : LambdaOp ⊢ˢ B : σB)
+    (ht_op : GammaOp ⊢ˢ t : σ)
+    (hspec_op : ∀ b ∈ specBodies Dlt,
+      GammaOp ⊢ˢ b : SMTType.bool)
+    (hA : ScopedGeneratedTyping Base Dpre A σA)
+    (hB : ScopedGeneratedTyping Base Dpre B σB)
+    (ht_fv : SMT.fv t ⊆
+      (SMT.fv A ∪ SMT.fv B) ∪ declVars Dlt)
+    (hspec_fv : ∀ b ∈ specBodies Dlt,
+      SMT.fv b ⊆ (SMT.fv A ∪ SMT.fv B) ∪ declVars Dlt) :
+    DeclarationContextEnvelope Base (Dpre ++ Dlt) GammaOp ∧
+      ScopedGeneratedTyping Base (Dpre ++ Dlt) t σ := by
+  obtain ⟨Core, hpre, hCore_op⟩ := henvelope
+  obtain ⟨Core', hstep', hCore'_op⟩ := hstep.rebase_subset hCore_op
+  have hA_bv : ∀ v ∈ SMT.bv A, v ∉ Core := by
+    intro v hv hvCore
+    exact SMT.Typing.bv_notMem_context htA_op v hv
+      (AList.mem_of_subset hCore_op hvCore)
+  have hB_bv : ∀ v ∈ SMT.bv B, v ∉ Core := by
+    intro v hv hvCore
+    exact SMT.Typing.bv_notMem_context htB_op v hv
+      (AList.mem_of_subset hCore_op hvCore)
+  have htA_Core : Core ⊢ˢ A : σA :=
+    hA.1 Core hpre.scoped_extends hA_bv
+  have htB_Core : Core ⊢ˢ B : σB :=
+    hB.1 Core hpre.scoped_extends hB_bv
+  have dependency_mem_Core' :
+      ∀ {v}, v ∈ (SMT.fv A ∪ SMT.fv B) ∪ declVars Dlt →
+        v ∈ Core' := by
+    intro v hv
+    rw [List.mem_union_iff, List.mem_union_iff] at hv
+    rcases hv with (hvA | hvB) | hvdecl
+    · exact AList.mem_of_subset hstep'.entries_subset
+        (SMT.Typing.mem_context_of_mem_fv htA_Core hvA)
+    · exact AList.mem_of_subset hstep'.entries_subset
+        (SMT.Typing.mem_context_of_mem_fv htB_Core hvB)
+    · exact hstep'.declVar_mem hvdecl
+  have ht_Core' : Core' ⊢ˢ t : σ :=
+    SMT.Typing.strengthening_of_fv_subset hCore'_op ht_op
+      (fun v hv => dependency_mem_Core' (ht_fv hv))
+  have hspec_Core' : ∀ b ∈ specBodies Dlt,
+      Core' ⊢ˢ b : SMTType.bool := by
+    intro b hb
+    exact SMT.Typing.strengthening_of_fv_subset hCore'_op
+      (hspec_op b hb)
+      (fun v hv => dependency_mem_Core' (hspec_fv b hb hv))
+  have hlocal : ScopedGeneratedTyping Core Dlt t σ :=
+    ScopedGeneratedTyping.of_operational hstep'.context_generated
+      ht_Core' hspec_Core'
+  exact ⟨
+    ⟨Core', DeclarationContextTrace.append hpre hstep', hCore'_op⟩,
+    hlocal.append_prefix hpre hA.2⟩
 
 /-- Weaken a typed term across one declaration-generated encoder step.  Bound
 variables already belong to the old used-name set, while every newly declared

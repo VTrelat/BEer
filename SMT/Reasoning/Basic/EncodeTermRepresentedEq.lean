@@ -641,6 +641,9 @@ abbrev CastEqRepScopedSpec.{u} (alpha : BType)
           ContextGeneratedByDeclarations Lambda Gamma' Dlt ∧
           DeclarationContextTrace Lambda Dlt Gamma' ∧
           (∀ v ∈ declVars Dlt, v ∉ used) ∧
+          (SMT.fv t ⊆ (SMT.fv A ∪ SMT.fv B) ∪ declVars Dlt) ∧
+          (∀ b ∈ specBodies Dlt,
+            SMT.fv b ⊆ (SMT.fv A ∪ SMT.fv B) ∪ declVars Dlt) ∧
           CastEqRepSemantics.{u} alpha A B t sigmaA sigmaB
             Lambda Gamma' used E'.usedVars Dlt ∧
           (∀ b ∈ specBodies Dlt, Gamma' ⊢ˢ b : SMTType.bool) ∧
@@ -851,6 +854,7 @@ theorem castEq_direct_rep_scoped_contract.{u}
     SMT.Typing.eq _ _ _ sigma typA typB, ?_, ?_, (fun _ _ h => h),
     [], by simp, ContextGeneratedByDeclarations.refl St.types,
     DeclarationContextTrace.nil St.types, (by simp [declVars]), ?_,
+    (by simp [specBodies]), ?_,
     (by simp [specBodies]), ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
@@ -858,6 +862,10 @@ theorem castEq_direct_rep_scoped_contract.{u}
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inr hv
+  · intro v hv
+    rw [SMT.fv, List.mem_append] at hv
+    change v ∈ (SMT.fv A ∪ SMT.fv B) ∪ []
+    simpa only [List.mem_union_iff, List.not_mem_nil, or_false] using hv
   · intro GammaSup GammaSub Theta hcovA hcovB Theta_none
       respectsA respectsB Theta_dom X Y P hX hY hP denA denB
       hdenA hdenB hdenAty hdenBty relA relB hPiff
@@ -971,7 +979,7 @@ theorem castEq_left_rep_scoped_contract.{u}
   rw [St2_used, St2_types]
   refine ⟨used_sub_out, Lambda_sub1, keys_sub1, True.intro, typOut,
     ?_, ?_, preserves_out, helperSpecChunk helper sigmaB spec, ?_,
-    helper_ctx_gen, helper_ctx_trace, ?_, ?_, ?_, ?_⟩
+    helper_ctx_gen, helper_ctx_trace, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro v hv
     rw [SMT.fv, List.mem_append]
     exact Or.inr (source_fv_spec hv)
@@ -986,6 +994,24 @@ theorem castEq_left_rep_scoped_contract.{u}
     simp only [declVars_helperSpecChunk, List.mem_singleton] at hv
     subst v
     exact helper_not_used_out
+  · intro v hv
+    simp only [SMT.fv, List.mem_append, List.mem_singleton] at hv
+    simp only [List.mem_union_iff, declVars_helperSpecChunk,
+      List.mem_singleton]
+    rcases hv with (rfl | hvB) | hspec
+    · exact Or.inr rfl
+    · exact Or.inl (Or.inr hvB)
+    · rcases List.mem_union_iff.mp (spec_fv hspec) with hA | hhelper
+      · exact Or.inl (Or.inl hA)
+      · exact Or.inr (List.mem_singleton.mp hhelper)
+  · intro body hbody v hv
+    simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+    subst body
+    simp only [List.mem_union_iff, declVars_helperSpecChunk,
+      List.mem_singleton]
+    rcases List.mem_union_iff.mp (spec_fv hv) with hA | hhelper
+    · exact Or.inl (Or.inl hA)
+    · exact Or.inr (List.mem_singleton.mp hhelper)
   · intro GammaSup GammaSub Theta hcovA hcovB Theta_none
       respectsA respectsB Theta_dom X Y P hX hY hP denA denB
       hdenA hdenB hdenAty hdenBty relA relB hPiff
@@ -1051,11 +1077,26 @@ theorem castEq_right_rep_scoped_contract.{u}
   mpure post
   obtain ⟨used_sub, types_sub, keys_sub, sigma_eq, typ_t,
       fv_B_t, fv_A_t, preserves, Dlt, decl_eq, ctx_gen, ctx_trace,
-      decl_fresh, sem_swap, specs_typ, scoped_typ⟩ := post
+      decl_fresh, fv_t_deps_swap, fv_specs_deps_swap,
+      sem_swap, specs_typ, scoped_typ⟩ := post
   mpure_intro
   refine ⟨used_sub, types_sub, keys_sub, sigma_eq, typ_t,
     fv_A_t, fv_B_t, preserves, Dlt, decl_eq, ctx_gen, ctx_trace,
-    decl_fresh, ?_, specs_typ, scoped_typ⟩
+    decl_fresh, ?_, ?_, ?_, specs_typ, scoped_typ⟩
+  · intro v hv
+    have h := fv_t_deps_swap hv
+    simp only [List.mem_union_iff] at h ⊢
+    rcases h with (hB | hA) | hdecl
+    · exact Or.inl (Or.inr hB)
+    · exact Or.inl (Or.inl hA)
+    · exact Or.inr hdecl
+  · intro body hbody v hv
+    have h := fv_specs_deps_swap body hbody hv
+    simp only [List.mem_union_iff] at h ⊢
+    rcases h with (hB | hA) | hdecl
+    · exact Or.inl (Or.inr hB)
+    · exact Or.inl (Or.inl hA)
+    · exact Or.inr hdecl
   intro GammaSup GammaSub Theta hcovA hcovB Theta_none
     respectsA respectsB Theta_dom X Y P hX hY hP denA denB
     hdenA hdenB hdenAty hdenBty relA relB hPiff
