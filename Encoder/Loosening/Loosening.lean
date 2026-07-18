@@ -32,9 +32,9 @@ def castApp : Term × SMTType → Term × SMTType → Encoder (Term × SMTType)
       -- cast to function
       let f!! ← freshVar (ξ.fun (.option σ)) "app!!"
       declareConst f!! (ξ.fun (.option σ))
-      let u ← freshVar τ
+      let u ← freshVar ξ
       let v ← freshVar σ
-      let f!!_spec : Term := .forall [u, v] [τ, σ] (.eq
+      let f!!_spec : Term := .forall [u, v] [ξ, σ] (.eq
         (.app (.var «f!») (.pair (.var u) (.var v)))
         (.eq (.app (.var f!!) (.var u)) (.some (.var v))))
       -- `u` and `v` occur only below the universal binder.
