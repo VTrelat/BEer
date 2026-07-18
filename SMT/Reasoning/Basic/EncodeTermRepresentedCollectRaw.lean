@@ -1,4 +1,4 @@
-import SMT.Reasoning.Basic.EncodeTermRepresentedCollect
+import SMT.Reasoning.Basic.EncodeTermRepresentedCollectSupported
 
 open Std.Do B SMT ZFSet
 
@@ -1618,15 +1618,29 @@ theorem encodeTerm_rep_spec.collect_case.{u}
     rcases DencVal with ⟨DencZF, sigmaVal, hDencMem⟩
     change sigmaVal = tau'.fun SMTType.bool at hDenc_type
     subst sigmaVal
-    have htau' : tau' = tau.toSMTType := by
-      rcases BType.SupportedSMT.setE D_rel.supported with hpred |
-        ⟨a, b, hab, hoption⟩
-      · exact SMTType.fun.inj hpred |>.1
+    have tau'_supported : BType.SupportedSMT tau tau' := by
+      rcases BType.SupportedSMT.setE D_rel.supported with
+        ⟨rho, hpred, rho_supported⟩ | ⟨a, b, hab, hoption⟩
+      · have hrho := SMTType.fun.inj hpred |>.1
+        subst rho
+        exact rho_supported
       · have hcod := SMTType.fun.inj hoption |>.2
         cases hcod
-    subst tau'
+    let sigmas := tau'.fromProdl (vs.length - 1)
+    have sigmas_len : sigmas.length = vs.length := by
+      simpa [sigmas] using
+        tau'_supported.fromProdl_length_of_hasArity tau_hasArity
+    have vs_sigmas_len : vs.length = sigmas.length := sigmas_len.symm
+    have sigmas_toProdl : sigmas.toProdl = tau' := by
+      dsimp [sigmas]
+      have h_arith : (tau'.fromProdl (vs.length - 1)).length =
+          vs.length - 1 + 1 := by
+        rw [sigmas_len]
+        have := List.length_pos_of_ne_nil vs_nemp
+        omega
+      exact SMT.SMTType.fromProdl_toProdl_roundtrip _ _ h_arith
     mspec (SMT.addToContext_forIn_spec
-      (vs.zip (tau.toSMTType.fromProdl (vs.length - 1)))
+      (vs.zip sigmas)
       (Γ := St1.types) (n := St1.env.freshvarsc)
       (used := St1.env.usedVars))
     mrename_i modify_post
@@ -1731,30 +1745,49 @@ theorem encodeTerm_rep_spec.collect_case.{u}
       intro i
       dsimp [xs]
       exact BType.get_reduce alphas_nemp vs_alphas_len i
+    have alphas_sigmas_len : alphas.length = sigmas.length :=
+      vs_alphas_len.symm.trans vs_sigmas_len
+    let Yrun : ZFSet := tau'.defaultZFSet
+    have hYrun : Yrun ∈ ⟦tau'⟧ᶻ :=
+      SMTType.mem_toZFSet_of_defaultZFSet
+    have hYrun_prodl : Yrun ∈ ⟦sigmas.toProdl⟧ᶻ := by
+      rw [sigmas_toProdl]
+      exact hYrun
+    have run_rel : RDomCastSupported
+        (⟨tau.defaultZFSet, tau,
+          BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom)
+        (⟨Yrun, tau', hYrun⟩ : SMT.Dom) := by
+      simpa only [Yrun, proof_irrel_heq] using
+        RDomCastSupported.default_of_supported tau'_supported
+    have run_rel_prodl : RDomCastSupported
+        (⟨tau.defaultZFSet, alphas.reduce (· ×ᴮ ·) alphas_nemp,
+          BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom)
+        (⟨Yrun, sigmas.toProdl, hYrun_prodl⟩ : SMT.Dom) := by
+      simpa only [tau, sigmas_toProdl, proof_irrel_heq] using run_rel
+    let ss : Fin vs.length → SMT.Dom := fun i =>
+      let j : Fin sigmas.length := Fin.cast vs_sigmas_len i
+      ⟨Yrun.get sigmas.length j, sigmas[j],
+        SMTType.mem_get_of_mem_toProdl
+          (fun hs => alphas_nemp (List.length_eq_zero_iff.mp
+            (alphas_sigmas_len.trans (by simp [hs])))) hYrun_prodl⟩
     have hbound_type : ∀ i : Fin vs.length,
-        St2.types.lookup vs[i] = some (xs i).canonicalSMT.snd.fst := by
+        St2.types.lookup vs[i] = some (ss i).snd.fst := by
       intro i
-      have hi_tau : i.val <
-          (tau.toSMTType.fromProdl (vs.length - 1)).length := by
-        rw [fromProdl_length_of_hasArity tau_hasArity]
-        exact i.isLt
+      have hi_sigma : i.val < sigmas.length :=
+        i.isLt.trans_eq vs_sigmas_len
       have hlookup : St2.types.lookup vs[i] =
-          some ((tau.toSMTType.fromProdl
-            (vs.length - 1))[i.val]'hi_tau) := by
+          some (sigmas[i.val]'hi_sigma) := by
         rw [St2_types]
-        exact foldl_insert_lookup_zip vs_nodup i.isLt hi_tau
-      have hget := toSMTType_get_eq_fromProdl_getElem
-        tau_hasArity i.isLt
-      rw [← hget] at hlookup
-      simpa [xs, B.Dom.canonicalSMT_type] using hlookup
+        exact foldl_insert_lookup_zip vs_nodup i.isLt hi_sigma
+      simpa [ss] using hlookup
     let XiP : B.RenamingContext.Context :=
       Function.updates Xi vs (List.ofFn fun i => some (xs i))
     let ThetaP0 : SMT.RenamingContext.Context :=
       Function.updates ThetaD vs
-        ((List.ofFn fun i => (xs i).canonicalSMT).map Option.some)
+        ((List.ofFn ss).map Option.some)
     have hThetaP0_map :
-        (List.ofFn fun i => (xs i).canonicalSMT).map Option.some =
-          List.ofFn (fun i => some (xs i).canonicalSMT) := by
+        (List.ofFn ss).map Option.some =
+          List.ofFn (fun i => some (ss i)) := by
       rw [List.map_ofFn]
       rfl
     have wf_P : B.RenWF Ebody.context XiP := by
@@ -1772,11 +1805,25 @@ theorem encodeTerm_rep_spec.collect_case.{u}
     have related_P : RValuationCastSupportedOnFV XiP ThetaP0 P := by
       dsimp [XiP, ThetaP0]
       rw [hThetaP0_map]
-      apply RValuationCastSupportedOnFV.updates_of_collect_default
-        vs_nodup tau_hasArity
-      intro v hv hv_not_vs
-      exact related_collect_out v
-        (B.fv.mem_collect (.inr ⟨hv, hv_not_vs⟩))
+      apply RValuationCastSupportedOnFV.updates vs_nodup xs ss
+      · intro v hv hv_not_vs
+        exact related_collect_out v
+          (B.fv.mem_collect (.inr ⟨hv, hv_not_vs⟩))
+      · intro i
+        let jalpha : Fin alphas.length := Fin.cast vs_alphas_len i
+        have hcomp := RDomCastSupported.get_of_reduce_toProdl
+          alphas_nemp alphas_sigmas_len
+          BType.mem_toZFSet_of_defaultZFSet hYrun_prodl
+          run_rel_prodl jalpha
+        have hsource : xs i =
+            (⟨tau.defaultZFSet.get alphas.length jalpha, alphas[jalpha],
+              BType.mem_get_of_mem_reduce_toZFSet alphas_nemp
+                BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom) := by
+          exact B.Dom.ext_type_value
+            (BType.get_reduce alphas_nemp vs_alphas_len i)
+            (ZFSet.get_cast vs_alphas_len i)
+        rw [hsource]
+        simpa [ss, jalpha] using hcomp
     have ThetaP0_none : ∀ v ∉ St2.env.usedVars,
         ThetaP0 v = none := by
       intro v hv
@@ -1890,10 +1937,10 @@ theorem encodeTerm_rep_spec.collect_case.{u}
       have Penc_fv : SMT.fv Penc ⊆ B.Term.vars P := by
         intro v hv
         simpa [declVars] using Penc_fv_delta hv
-      mspec (Std.Do.Triple.and (SMT.freshVar tau.toSMTType)
-        (SMT.freshVar_spec (Γ := St3.types) (τ := tau.toSMTType)
+      mspec (Std.Do.Triple.and (SMT.freshVar tau')
+        (SMT.freshVar_spec (Γ := St3.types) (τ := tau')
           (n := St3.env.freshvarsc) (used := St3.env.usedVars))
-        (SMT.freshVar_decls (τ := tau.toSMTType)
+        (SMT.freshVar_decls (τ := tau')
           (decl := St3.env.declarations)))
       rename_i z
       mrename_i fresh_post
@@ -1981,12 +2028,12 @@ theorem encodeTerm_rep_spec.collect_case.{u}
           apply P_preserves v (St1_sub_St2_used (D_bv_used v hv))
             hv_not_St2 hv_not_P_vars
         have typ_Denc_St3 : St3.types ⊢ˢ Denc :
-            tau.toSMTType.fun SMTType.bool :=
+            tau'.fun SMTType.bool :=
           SMT.Typing.weakening St1_sub_St3 typ_Denc hbv_D_notMem_St3
         have z_not_bv_Penc : z ∉ SMT.bv Penc := by
           intro hz
           exact z_not_used (P_bv_used z hz)
-        have typ_Penc_z : St3.types.insert z tau.toSMTType ⊢ˢ
+        have typ_Penc_z : St3.types.insert z tau' ⊢ˢ
             Penc : SMTType.bool :=
           SMT.Typing.weakening
             (SMT.TypeContext.entries_subset_insert_of_notMem z_fresh)
@@ -1996,21 +2043,21 @@ theorem encodeTerm_rep_spec.collect_case.{u}
           intro hz
           exact z_not_used (P_used_sub
             (St1_sub_St2_used (D_bv_used z hz)))
-        have typ_Denc_z : St3.types.insert z tau.toSMTType ⊢ˢ Denc :
-            tau.toSMTType.fun SMTType.bool :=
+        have typ_Denc_z : St3.types.insert z tau' ⊢ˢ Denc :
+            tau'.fun SMTType.bool :=
           SMT.Typing.weakening
             (SMT.TypeContext.entries_subset_insert_of_notMem z_fresh)
             typ_Denc_St3
             (SMT.Typing.bv_notMem_insert_of_fresh
               typ_Denc_St3 z_not_bv_Denc)
-        have typ_z : St3.types.insert z tau.toSMTType ⊢ˢ
-            SMT.Term.var z : tau.toSMTType :=
-          SMT.Typing.var _ z tau.toSMTType
+        have typ_z : St3.types.insert z tau' ⊢ˢ
+            SMT.Term.var z : tau' :=
+          SMT.Typing.var _ z tau'
             (AList.lookup_insert St3.types)
-        have typ_Dapp_z : St3.types.insert z tau.toSMTType ⊢ˢ
+        have typ_Dapp_z : St3.types.insert z tau' ⊢ˢ
             ((@ˢDenc) (.var z)) : SMTType.bool :=
           SMT.Typing.app _ _ _ _ _ typ_Denc_z typ_z
-        have typ_Psub : St3.types.insert z tau.toSMTType ⊢ˢ
+        have typ_Psub : St3.types.insert z tau' ⊢ˢ
             SMT.substList vs (toDestPair vs (.var z)) Penc :
               SMTType.bool := by
           apply SMT_Typing_substList
@@ -2018,16 +2065,16 @@ theorem encodeTerm_rep_spec.collect_case.{u}
           · exact toDestPair_bv_nil
           · intro i hi_x hi_t hx
             have hi_tau : i <
-                (tau.toSMTType.fromProdl (vs.length - 1)).length := by
-              rw [fromProdl_length_of_hasArity tau_hasArity]
+                (tau'.fromProdl (vs.length - 1)).length := by
+              rw [tau'_supported.fromProdl_length_of_hasArity tau_hasArity]
               exact hi_x
             have hlookup_St2 : St2.types.lookup vs[i] = some
-                ((tau.toSMTType.fromProdl
+                ((tau'.fromProdl
                   (vs.length - 1))[i]'hi_tau) := by
               rw [St2_types]
               exact foldl_insert_lookup_zip vs_nodup hi_x hi_tau
             have hlookup_St3 : St3.types.lookup vs[i] = some
-                ((tau.toSMTType.fromProdl
+                ((tau'.fromProdl
                   (vs.length - 1))[i]'hi_tau) :=
               AList.lookup_of_subset P_types_sub hlookup_St2
             have hne : vs[i] ≠ z := by
@@ -2039,41 +2086,41 @@ theorem encodeTerm_rep_spec.collect_case.{u}
                     (D_used_sub (vars_used_vs vs[i]
                       (List.getElem_mem hi_x))))
               exact z_not_used (heq ▸ hvi_used)
-            have hlookup : (St3.types.insert z tau.toSMTType).lookup vs[i] =
-                some ((tau.toSMTType.fromProdl
+            have hlookup : (St3.types.insert z tau').lookup vs[i] =
+                some ((tau'.fromProdl
                   (vs.length - 1))[i]'hi_tau) := by
               rw [AList.lookup_insert_ne hne]
               exact hlookup_St3
-            have hget : ((St3.types.insert z tau.toSMTType).lookup vs[i]).get
-                hx = (tau.toSMTType.fromProdl
+            have hget : ((St3.types.insert z tau').lookup vs[i]).get
+                hx = (tau'.fromProdl
                   (vs.length - 1))[i]'hi_tau := by
               simp [hlookup]
             rw [hget]
             obtain ⟨_, htyp⟩ := toDestPair_typing_gen
-              (St3.types.insert z tau.toSMTType) vs (.var z) (.var z)
-              tau.toSMTType [] [] vs_nemp rfl typ_z
-              (fromProdl_length_of_hasArity tau_hasArity) rfl
+              (St3.types.insert z tau') vs (.var z) (.var z)
+              tau' [] [] vs_nemp rfl typ_z
+              (tau'_supported.fromProdl_length_of_hasArity tau_hasArity) rfl
               (fun j hj => absurd hj (Nat.not_lt_zero j)) i
-              ((tau.toSMTType.fromProdl
+              ((tau'.fromProdl
                 (vs.length - 1))[i]'hi_tau)
               (by
                 simp only [List.append_nil]
                 rw [List.getElem?_eq_getElem hi_tau])
             exact htyp
-        have hupdate : St5.types.update [z] [tau.toSMTType] rfl =
-            St3.types.insert z tau.toSMTType := by
+        have hupdate : St5.types.update [z] [tau'] rfl =
+            St3.types.insert z tau' := by
           rw [St5_types_eq]
           simp only [SMT.TypeContext.update, List.length_cons,
             List.length_nil, zero_add, Nat.reduceAdd, Fin.cast_eq_self,
             Fin.getElem_fin, Fin.val_eq_zero, List.getElem_cons_zero,
             Fin.foldl_succ, Fin.foldl_zero]
         have typ_lambda : St5.types ⊢ˢ
-            (λˢ [z]) [tau.toSMTType]
+            (λˢ [z]) [tau']
               (SMT.Term.ite ((@ˢDenc) (.var z))
                 (SMT.substList vs (toDestPair vs (.var z)) Penc)
                 (.bool false)) :
-            tau.toSMTType.fun SMTType.bool := by
-          refine SMT.Typing.lambda St5.types [z] [tau.toSMTType] _
+            tau'.fun SMTType.bool := by
+          refine SMT.Typing.lambda St5.types [z] [tau'] _
             SMTType.bool ?_ ?_ (Nat.zero_lt_succ 0) rfl ?_
           · intro v hv
             rw [List.mem_singleton] at hv
@@ -2187,7 +2234,7 @@ theorem encodeTerm_rep_spec.collect_case.{u}
         have hden_D_upd : ∀ W : SMT.Dom,
             ⟦Denc.abstract (Function.update ThetaP z (some W))
               (hcov_D_upd W)⟧ˢ =
-              some (⟨DencZF, tau.toSMTType.fun SMTType.bool,
+              some (⟨DencZF, tau'.fun SMTType.bool,
                 hDencMem⟩ : SMT.Dom) := by
           intro W
           calc
@@ -2201,9 +2248,9 @@ theorem encodeTerm_rep_spec.collect_case.{u}
               exact (SMT.RenamingContext.denote_update_of_notMem
                 (h := hcov_D_ThetaP) z_not_fv_Denc).symm
             _ = ⟦Denc.abstract ThetaD hcov_Denc⟧ˢ := hden_D_ThetaP_eq
-            _ = some (⟨DencZF, tau.toSMTType.fun SMTType.bool,
+            _ = some (⟨DencZF, tau'.fun SMTType.bool,
                 hDencMem⟩ : SMT.Dom) := hden_Denc
-        have hDenc_func : ⟦tau.toSMTType⟧ᶻ.IsFunc 𝔹 DencZF := by
+        have hDenc_func : ⟦tau'⟧ᶻ.IsFunc 𝔹 DencZF := by
           have hmem := hDencMem
           rw [SMTType.toZFSet] at hmem
           exact ZFSet.mem_funs.mp hmem
@@ -2268,7 +2315,7 @@ theorem encodeTerm_rep_spec.collect_case.{u}
           · simp
           · exact hcov_sub_upd W v hv_sub
         have hcov_lambda : SMT.RenamingContext.CoversFV ThetaP
-            ((λˢ [z]) [tau.toSMTType] body) := by
+            ((λˢ [z]) [tau'] body) := by
           intro v hv
           simp only [SMT.fv, List.mem_removeAll_iff] at hv
           obtain ⟨hv_body, hv_ne_z⟩ := hv
@@ -2278,7 +2325,7 @@ theorem encodeTerm_rep_spec.collect_case.{u}
           exact hcov
         have target_respects_lambda :
             SMT.RenamingContext.RespectsTypeContextOnFV
-              ThetaP St3.types ((λˢ [z]) [tau.toSMTType] body) := by
+              ThetaP St3.types ((λˢ [z]) [tau'] body) := by
           intro v sigma hv hlookup
           simp only [SMT.fv, List.mem_removeAll_iff] at hv
           obtain ⟨hv_body, hv_ne_z⟩ := hv
@@ -2295,10 +2342,10 @@ theorem encodeTerm_rep_spec.collect_case.{u}
             · exact absurd (SMT_fv_toDestPair_subset ht hv_t) hvz
         have target_respects_lambda_out :
             SMT.RenamingContext.RespectsTypeContextOnFV
-              ThetaP St5.types ((λˢ [z]) [tau.toSMTType] body) := by
+              ThetaP St5.types ((λˢ [z]) [tau'] body) := by
           rw [St5_types_eq]
           exact target_respects_lambda
-        have typ_ite : St3.types.insert z tau.toSMTType ⊢ˢ
+        have typ_ite : St3.types.insert z tau' ⊢ˢ
             body : SMTType.bool := by
           rw [body_def]
           exact SMT.Typing.ite _ _ _ _ _ typ_Dapp_z typ_Psub
@@ -2359,15 +2406,14 @@ theorem encodeTerm_rep_spec.collect_case.{u}
           exact ⟨hx, hxz⟩
         have bound_expected : ∀ i : Fin vs.length,
             St3.types.lookup vs[i] =
-              some ((tau.get vs.length i).toSMTType) := by
+              some ((tau'.fromProdl (vs.length - 1))[i.val]'(by
+                have hlen :=
+                  tau'_supported.fromProdl_length_of_hasArity tau_hasArity
+                exact i.isLt.trans_eq hlen.symm)) := by
           intro i
-          calc
-            St3.types.lookup vs[i] =
-                some (xs i).canonicalSMT.snd.fst :=
-              AList.lookup_of_subset P_types_sub (hbound_type i)
-            _ = some ((tau.get vs.length i).toSMTType) := by
-              apply congrArg some
-              rw [B.Dom.canonicalSMT_type]
+          have hlookup :=
+            AList.lookup_of_subset P_types_sub (hbound_type i)
+          simpa [ss, sigmas] using hlookup
         have source_respects_upd : ∀ ss : Fin vs.length → SMT.Dom,
             (∀ i, St3.types.lookup vs[i] = some (ss i).snd.fst) →
             B.RenamingContext.RespectsTypeContextOnFV
@@ -2436,27 +2482,27 @@ theorem encodeTerm_rep_spec.collect_case.{u}
               some (⟨T, BType.set tau, hT_tau⟩ : B.Dom) := by
           simpa only [tau, proof_irrel_heq] using den_t
         obtain ⟨lamVal, hden_lambda, hrel_lambda⟩ :=
-          represented_collect_set_denote
-            (D := D) (P := P) (tau := tau) (Xi := Xi)
+          represented_collect_set_denote_supported
+            (D := D) (P := P) (tau := tau) (rho := tau') (Xi := Xi)
             (Dval := Dval) (hDval := hDval) (T := T) (hT := hT_tau)
             (Denc := Denc) (Penc := Penc) (ite_body := body) (z := z)
             (ThetaD := ThetaP)
-            (DencVal := (⟨DencZF, tau.toSMTType.fun SMTType.bool,
+            (DencVal := (⟨DencZF, tau'.fun SMTType.bool,
               hDencMem⟩ : SMT.Dom))
             (GammaOut := St5.types) (GammaBody := St3.types)
             (Ebody := Ebody) (LambdaP := St2.types) (GammaP := St3.types)
             (DltP := []) (sigmaP := SMTType.bool)
-            vs_nemp vs_nodup Xi_fv tau_hasArity den_D den_collect_tau
-            body_def z_not_fv_Denc hcov_lambda
+            vs_nemp vs_nodup tau'_supported Xi_fv tau_hasArity den_D
+            den_collect_tau body_def hcov_lambda
             (by simpa [body] using typ_lambda) target_respects_lambda_out
             hcov_D_upd hden_D_upd (by rfl) hDenc_func D_rel
             hcov_body_upd typ_ite Theta_wt hcov_sub_upd
-            fv_substList_disj_vs hgo_cov hcov_P_upd hvs_not_bv
+            hcov_P_upd hvs_not_bv
             z_not_bv_Penc z_not_vs typ_P_body P_guard P_scope typ_Penc
             ambient_P wf_bound bound_expected source_respects_upd
             target_respects_upd specs_true_upd z_not_fv_Penc
         have hlam_type : lamVal.snd.fst =
-            tau.toSMTType.fun SMTType.bool :=
+            tau'.fun SMTType.bool :=
           SMT.RenamingContext.denote_type_of_typing_fv
             (by simpa [body] using typ_lambda) target_respects_lambda_out
             hcov_lambda hden_lambda
@@ -2500,7 +2546,7 @@ theorem encodeTerm_rep_spec.collect_case.{u}
             (List.ofFn fun i => some (xs i))
         let ThetaP0_alt : SMT.RenamingContext.Context :=
           Function.updates ThetaD_alt vs
-            ((List.ofFn fun i => (xs i).canonicalSMT).map Option.some)
+            ((List.ofFn ss).map Option.some)
         have wf_P_alt : B.RenWF Ebody.context XiP_alt := by
           dsimp [XiP_alt]
           exact B.RenWF.updates_ofFn wf_alt vs_nodup vs_context_disj
@@ -2516,11 +2562,26 @@ theorem encodeTerm_rep_spec.collect_case.{u}
             XiP_alt ThetaP0_alt P := by
           dsimp [XiP_alt, ThetaP0_alt]
           rw [hThetaP0_map]
-          apply RValuationCastSupportedOnFV.updates_of_collect_default
-            vs_nodup tau_hasArity
-          intro v hv hv_not_vs
-          exact related_collect_D_alt v
-            (B.fv.mem_collect (.inr ⟨hv, hv_not_vs⟩))
+          apply RValuationCastSupportedOnFV.updates vs_nodup xs ss
+          · intro v hv hv_not_vs
+            exact related_collect_D_alt v
+              (B.fv.mem_collect (.inr ⟨hv, hv_not_vs⟩))
+          · intro i
+            let jalpha : Fin alphas.length := Fin.cast vs_alphas_len i
+            have hcomp := RDomCastSupported.get_of_reduce_toProdl
+              alphas_nemp alphas_sigmas_len
+              BType.mem_toZFSet_of_defaultZFSet hYrun_prodl
+              run_rel_prodl jalpha
+            have hsource : xs i =
+                (⟨tau.defaultZFSet.get alphas.length jalpha,
+                  alphas[jalpha],
+                  BType.mem_get_of_mem_reduce_toZFSet alphas_nemp
+                    BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom) := by
+              exact B.Dom.ext_type_value
+                (BType.get_reduce alphas_nemp vs_alphas_len i)
+                (ZFSet.get_cast vs_alphas_len i)
+            rw [hsource]
+            simpa [ss, jalpha] using hcomp
         have ThetaP0_alt_none_St2 : ∀ v ∉ St2.env.usedVars,
             ThetaP0_alt v = none := by
           intro v hv
@@ -2696,7 +2757,7 @@ theorem encodeTerm_rep_spec.collect_case.{u}
           · simp
           · exact hcov_sub_upd_alt W v hv_sub
         have hcov_lambda_alt : SMT.RenamingContext.CoversFV ThetaP_alt
-            ((λˢ [z]) [tau.toSMTType] body) := by
+            ((λˢ [z]) [tau'] body) := by
           intro v hv
           simp only [SMT.fv, List.mem_removeAll_iff] at hv
           obtain ⟨hv_body, hv_ne_z⟩ := hv
@@ -2706,7 +2767,7 @@ theorem encodeTerm_rep_spec.collect_case.{u}
           exact hcov
         have target_respects_lambda_alt :
             SMT.RenamingContext.RespectsTypeContextOnFV
-              ThetaP_alt St3.types ((λˢ [z]) [tau.toSMTType] body) := by
+              ThetaP_alt St3.types ((λˢ [z]) [tau'] body) := by
           intro v sigma hv hlookup
           simp only [SMT.fv, List.mem_removeAll_iff] at hv
           obtain ⟨hv_body, hv_ne_z⟩ := hv
@@ -2723,7 +2784,7 @@ theorem encodeTerm_rep_spec.collect_case.{u}
             · exact absurd (SMT_fv_toDestPair_subset ht hv_t) hvz
         have target_respects_lambda_out_alt :
             SMT.RenamingContext.RespectsTypeContextOnFV
-              ThetaP_alt St5.types ((λˢ [z]) [tau.toSMTType] body) := by
+              ThetaP_alt St5.types ((λˢ [z]) [tau'] body) := by
           rw [St5_types_eq]
           exact target_respects_lambda_alt
         have Theta_wt_alt : ∀ v ∈ SMT.fv body, ∀ d : SMT.Dom,
@@ -2767,12 +2828,12 @@ theorem encodeTerm_rep_spec.collect_case.{u}
                 exact z_not_fv_Penc (heq ▸ hv))]
             exact hcov_P_alt v hv
         have hDenc_type_alt' : DencVal_alt.snd.fst =
-            tau.toSMTType.fun SMTType.bool := by
+            tau'.fun SMTType.bool := by
           simpa using hDenc_type_alt
-        have hDenc_func_alt : ⟦tau.toSMTType⟧ᶻ.IsFunc
+        have hDenc_func_alt : ⟦tau'⟧ᶻ.IsFunc
             𝔹 DencVal_alt.fst := by
           have hmem : DencVal_alt.fst ∈
-              ⟦tau.toSMTType.fun SMTType.bool⟧ᶻ := by
+              ⟦tau'.fun SMTType.bool⟧ᶻ := by
             rw [← hDenc_type_alt']
             exact DencVal_alt.snd.snd
           rw [SMTType.toZFSet] at hmem
@@ -2844,8 +2905,8 @@ theorem encodeTerm_rep_spec.collect_case.{u}
               some (⟨T_alt, BType.set tau, hT_alt_tau⟩ : B.Dom) := by
           simpa only [tau, proof_irrel_heq] using den_alt
         obtain ⟨lamVal_alt, hden_lambda_alt, hrel_lambda_alt⟩ :=
-          represented_collect_set_denote
-            (D := D) (P := P) (tau := tau) (Xi := Xi_alt)
+          represented_collect_set_denote_supported
+            (D := D) (P := P) (tau := tau) (rho := tau') (Xi := Xi_alt)
             (Dval := Dval_alt) (hDval := hDval_alt)
             (T := T_alt) (hT := hT_alt_tau)
             (Denc := Denc) (Penc := Penc) (ite_body := body) (z := z)
@@ -2853,18 +2914,17 @@ theorem encodeTerm_rep_spec.collect_case.{u}
             (GammaOut := St5.types) (GammaBody := St3.types)
             (Ebody := Ebody) (LambdaP := St2.types) (GammaP := St3.types)
             (DltP := []) (sigmaP := SMTType.bool)
-            vs_nemp vs_nodup Xi_fv_alt tau_hasArity den_D_alt
-            den_collect_alt_tau body_def z_not_fv_Denc hcov_lambda_alt
+            vs_nemp vs_nodup tau'_supported Xi_fv_alt tau_hasArity
+            den_D_alt den_collect_alt_tau body_def hcov_lambda_alt
             (by simpa [body] using typ_lambda)
             target_respects_lambda_out_alt hcov_D_upd_alt hden_D_upd_alt
             hDenc_type_alt' hDenc_func_alt D_rel_alt hcov_body_upd_alt
-            typ_ite Theta_wt_alt hcov_sub_upd_alt
-            fv_substList_disj_vs hgo_cov_alt hcov_P_upd_alt hvs_not_bv
+            typ_ite Theta_wt_alt hcov_sub_upd_alt hcov_P_upd_alt hvs_not_bv
             z_not_bv_Penc z_not_vs typ_P_body P_guard P_scope typ_Penc
             ambient_P_alt wf_bound_alt bound_expected source_respects_upd_alt
             target_respects_upd_alt specs_true_upd_alt z_not_fv_Penc
         have hlam_type_alt : lamVal_alt.snd.fst =
-            tau.toSMTType.fun SMTType.bool :=
+            tau'.fun SMTType.bool :=
           SMT.RenamingContext.denote_type_of_typing_fv
             (by simpa [body] using typ_lambda)
             target_respects_lambda_out_alt hcov_lambda_alt hden_lambda_alt
