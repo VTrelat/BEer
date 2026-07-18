@@ -2064,6 +2064,103 @@ theorem represented_option_collect_guarded_body_iff.{u}
     hx_arity hx_type den_P
 
 open Classical in
+/-- Reduce the graph condition for the guarded option body to predicate
+semantics only when the source pair lies in the domain.  Outside that domain,
+the reverse guarded-body eliminator already rules out the canonical payload,
+so no source predicate evaluation is needed. -/
+theorem represented_option_collect_guarded_body_graph_iff.{u}
+    {vs : List B.𝒱} {D P : B.Term} {alpha beta : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.collect vs D P), (Xi v).isSome = true)
+    (hprod_arity : (alpha ×ᴮ beta).hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_collect (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set (alpha ×ᴮ beta), hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    (den_collect : ⟦(B.Term.collect vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set (alpha ×ᴮ beta), hT⟩ : B.Dom))
+    {a b : ZFSet.{u}} (ha : a ∈ ⟦alpha⟧ᶻ) (hb : b ∈ ⟦beta⟧ᶻ)
+    {x_fin : Fin vs.length → B.Dom.{u}}
+    (hx_fin : ∀ i, x_fin i =
+      (⟨(a.pair b).get vs.length i,
+        (alpha ×ᴮ beta).get vs.length i,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet hprod_arity
+            (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩))
+          hprod_arity (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩ : B.Dom))
+    {Dapp Psub : SMT.Term}
+    {Theta : SMT.RenamingContext.Context.{u}}
+    {Dd Dbody Wb : SMT.Dom.{u}}
+    (hcov_Dapp : SMT.RenamingContext.CoversFV Theta Dapp)
+    (hden_Dapp : ⟦Dapp.abstract Theta hcov_Dapp⟧ˢ = some Dd)
+    (hD_type : Dd.snd.fst = SMTType.option beta.toSMTType)
+    (hWb_type : Wb.snd.fst = beta.toSMTType)
+    (hcov_Psub : SMT.RenamingContext.CoversFV Theta Psub)
+    (hdomain : Dd.fst = (ZFSet.Option.some
+      (S := ⟦beta.toSMTType⟧ᶻ) ⟨Wb.fst,
+        by rw [← hWb_type]; exact Wb.snd.snd⟩).val ↔
+      a.pair b ∈ Dval)
+    (hpredicate : a.pair b ∈ Dval →
+      ∃ (Pval : ZFSet.{u}) (hPval : Pval ∈ ⟦BType.bool⟧ᶻ)
+        (Dp : SMT.Dom.{u}),
+        ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+          (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry (x_fin)⟧ᴮ =
+          some (⟨Pval, BType.bool, hPval⟩ : B.Dom) ∧
+        ⟦Psub.abstract Theta hcov_Psub⟧ˢ = some Dp ∧
+        Dp.snd.fst = SMTType.bool ∧
+        (Dp.fst = ZFSet.zftrue ↔ Pval = ZFSet.zftrue))
+    (hcov_body : SMT.RenamingContext.CoversFV Theta
+      (SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq Dapp (SMT.Term.some (SMT.Term.the Dapp)))
+          Psub)
+        (SMT.Term.some (SMT.Term.the Dapp)) (none$ beta.toSMTType)))
+    (hden_body : ⟦(SMT.Term.ite
+        (SMT.Term.and (SMT.Term.eq Dapp (SMT.Term.some (SMT.Term.the Dapp)))
+          Psub)
+        (SMT.Term.some (SMT.Term.the Dapp)) (none$ beta.toSMTType)).abstract
+          Theta hcov_body⟧ˢ = some Dbody) :
+    Dbody.fst = (ZFSet.Option.some
+      (S := ⟦beta.toSMTType⟧ᶻ) ⟨Wb.fst,
+        by rw [← hWb_type]; exact Wb.snd.snd⟩).val ↔
+      a.pair b ∈ T := by
+  have hpair_type : a.pair b ∈ ⟦alpha ×ᴮ beta⟧ᶻ :=
+    ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩
+  have hpair_arity : (a.pair b).hasArity vs.length :=
+    hasArity_of_mem_toZFSet hprod_arity hpair_type
+  have hx_fin_eq : x_fin = fun i =>
+      (⟨(a.pair b).get vs.length i,
+        (alpha ×ᴮ beta).get vs.length i,
+        get_mem_type_of_isTuple hpair_arity hprod_arity hpair_type⟩ : B.Dom) := by
+    funext i
+    simpa only [proof_irrel_heq] using hx_fin i
+  by_cases hmem_D : a.pair b ∈ Dval
+  · obtain ⟨Pval, hPval, Dp, den_P, hden_Psub, hP_type, htruth⟩ :=
+      hpredicate hmem_D
+    have den_P' :
+        ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+          (B.fv.mem_collect (.inr ⟨hv, hvs⟩)))).uncurry
+            (fun i => ⟨(a.pair b).get vs.length i,
+              (alpha ×ᴮ beta).get vs.length i,
+              get_mem_type_of_isTuple hpair_arity hprod_arity hpair_type⟩)⟧ᴮ =
+          some (⟨Pval, BType.bool, hPval⟩ : B.Dom) := by
+      rw [← hx_fin_eq]
+      exact den_P
+    exact represented_option_collect_guarded_body_iff Xi_fv hprod_arity
+      den_D den_collect hpair_arity hpair_type den_P' hcov_Dapp hden_Dapp
+      hD_type hcov_Psub hden_Psub hP_type hWb_type hcov_body hden_body
+      hdomain htruth
+  · constructor
+    · intro hbody_value
+      have hDapp_value :=
+        denote_guarded_option_term_some_implies_domain hcov_Dapp hden_Dapp
+          hD_type hWb_type hcov_body hden_body hbody_value
+      exact (hmem_D (hdomain.mp hDapp_value)).elim
+    · intro hmem_T
+      exact (hmem_D (B.denote_collect_mem_domain Xi_fv hprod_arity den_D
+        den_collect hmem_T)).elim
+
+open Classical in
 /-- A one-binder SMT lambda evaluates at a typed argument to the denotation
 of its body.  This is phrased with an arbitrary functional codomain so it can
 be reused by both Boolean and option-valued binder encodings. -/
