@@ -158,6 +158,52 @@ theorem denote_substList_bool_truth_of_agrees.{u}
       hagrees hden
   · exact represented_bool_truth_iff hrel
 
+/-- The Boolean substitution bridge when only the final replacement payload
+may carry binders.  It delegates the capture argument to the representation
+independent drop-last substitution theorem. -/
+theorem denote_substList_dropLast_bool_truth_of_agrees.{u}
+    (e : SMT.Term) (xs : List SMT.𝒱) (ts : List SMT.Term)
+    {Delta Theta : Context.{u}} (Ds : List SMT.Dom.{u})
+    (hxs : xs ≠ []) (hts : ts ≠ []) (hDs : Ds ≠ [])
+    (hlen_xt : xs.length = ts.length) (hlen_xd : xs.length = Ds.length)
+    (hnodup : xs.Nodup)
+    (hxs_not_bv : ∀ y ∈ xs, y ∉ SMT.bv e)
+    (hts_prefix_bv_nil : ∀ q ∈ ts.dropLast, SMT.bv q = [])
+    (hts_prefix_fv_not_bv : ∀ q ∈ ts.dropLast,
+      ∀ w ∈ SMT.fv q, w ∉ SMT.bv e)
+    (ht_last_fv_not_bv : ∀ w ∈ SMT.fv (ts.getLast hts), w ∉ SMT.bv e)
+    (hts_prefix_not_none : ∀ q ∈ ts.dropLast, q ≠ SMT.Term.none)
+    (ht_last_not_none : ts.getLast hts ≠ SMT.Term.none)
+    (hts_prefix_fv_disj : ∀ q ∈ ts.dropLast,
+      ∀ w ∈ SMT.fv q, w ∉ xs)
+    (ht_last_fv_disj : ∀ w ∈ SMT.fv (ts.getLast hts), w ∉ xs)
+    (hts_den : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_t : i < ts.length)
+      (hi_d : i < Ds.length),
+      ∃ hcov : CoversFV Delta ts[i],
+        ⟦ts[i].abstract Delta hcov⟧ˢ = some Ds[i])
+    (hcov_sub : CoversFV Delta (SMT.substList xs ts e))
+    (hcov_upd : CoversFV
+      (Function.updates Delta xs (Ds.map Option.some)) e)
+    (hcov_Theta : CoversFV Theta e)
+    (hagrees : AgreesOnFV
+      (Function.updates Delta xs (Ds.map Option.some)) Theta e)
+    {P : ZFSet.{u}} {hP : P ∈ ⟦BType.bool⟧ᶻ}
+    {d : SMT.Dom.{u}}
+    (hden : ⟦e.abstract Theta hcov_Theta⟧ˢ = some d)
+    (hrel : RDomCastSupported
+      (⟨P, BType.bool, hP⟩ : B.Dom) d) :
+    ⟦(SMT.substList xs ts e).abstract Delta hcov_sub⟧ˢ = some d ∧
+      (d.fst = ZFSet.zftrue ↔ P = ZFSet.zftrue) := by
+  constructor
+  · rw [abstract_substList_dropLast_denote e xs ts Ds hxs hts hDs
+      hlen_xt hlen_xd hnodup hxs_not_bv hts_prefix_bv_nil
+      hts_prefix_fv_not_bv ht_last_fv_not_bv hts_prefix_not_none
+      ht_last_not_none hts_prefix_fv_disj ht_last_fv_disj hts_den
+      hcov_sub hcov_upd]
+    exact (denote_congr_of_agreesOnFV
+      (h1 := hcov_upd) (h2 := hcov_Theta) hagrees).trans hden
+  · exact represented_bool_truth_iff hrel
+
 /-- Transfer a substituted body from its evaluation context to an extension
 of the body-totality context.  The only free variables contributed by the
 replacement terms are the freshly bound variable `z`; all remaining body

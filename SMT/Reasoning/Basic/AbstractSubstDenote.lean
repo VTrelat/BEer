@@ -1003,6 +1003,29 @@ theorem fv_mem_fv_substList {v : SMT.𝒱} {xs : List SMT.𝒱} {ts : List SMT.T
           (hts_fv_disj t' (List.mem_cons_of_mem _ ht') w hw))
         (fun t' ht' => hts_bv t' (List.mem_cons_of_mem _ ht'))
 
+/-- A free variable not replaced by a simultaneous substitution remains free
+after it, provided every replacement term avoids the remaining binders.  Unlike
+the earlier convenience lemma, this statement does not require replacement
+terms to be binder-free. -/
+theorem fv_mem_fv_substList_no_bv {v : SMT.𝒱} {xs : List SMT.𝒱}
+    {ts : List SMT.Term} {e : SMT.Term}
+    (hv : v ∈ SMT.fv e) (hvxs : v ∉ xs)
+    (hts_fv_disj : ∀ q ∈ ts, ∀ w ∈ SMT.fv q, w ∉ xs) :
+    v ∈ SMT.fv (SMT.substList xs ts e) := by
+  induction xs generalizing ts e with
+  | nil =>
+    match ts with
+    | [] | _ :: _ => simpa [SMT.substList]
+  | cons x xs ih =>
+    match ts with
+    | [] => simpa [SMT.substList]
+    | q :: ts =>
+      unfold SMT.substList
+      have hvx : v ≠ x := fun h => hvxs (h ▸ List.mem_cons_self ..)
+      exact ih (fv_subst_of_ne hv hvx) (List.not_mem_of_not_mem_cons hvxs)
+        (fun q' hq' w hw => List.not_mem_of_not_mem_cons
+          (hts_fv_disj q' (List.mem_cons_of_mem _ hq') w hw))
+
 set_option maxHeartbeats 1600000 in
 theorem abstract_substList_denote (e : SMT.Term) (xs : List SMT.𝒱) (ts : List SMT.Term)
     {«Δ» : Context} (Ds : List Dom)
@@ -1104,5 +1127,335 @@ theorem abstract_substList_denote (e : SMT.Term) (xs : List SMT.𝒱) (ts : List
         _ = ⟦e.abstract (Function.updates «Δ» (x :: xs) ((D :: Ds).map Option.some)) h_cov_upd⟧ˢ :=
               denote_congr_of_agreesOnFV (h1 := h_cov_upd_e) (h2 := h_cov_upd)
                 (fun v _ => h_ctx_eq v)
+
+/-- Denotation transport for a binder-free substitution prefix followed by one
+capture-safe payload.  This is the form needed when an encoded collection
+passes a nested function application as its final tuple component: the prefix
+may be handled by ordinary simultaneous substitution, while the final payload
+is allowed to contain binders as long as its free variables avoid the target's
+bound variables. -/
+theorem abstract_substList_snoc_denote
+    (e : SMT.Term) (xs : List SMT.𝒱) (ts : List SMT.Term)
+    (x : SMT.𝒱) (t : SMT.Term)
+    {Delta : Context} (Ds : List Dom) {Dlast : Dom}
+    (hlen_xt : xs.length = ts.length) (hlen_xd : xs.length = Ds.length)
+    (hnodup : (xs ++ [x]).Nodup)
+    (hxs_not_bv : ∀ y ∈ xs, y ∉ SMT.bv e)
+    (hx_not_bv : x ∉ SMT.bv e)
+    (hts_bv_nil : ∀ q ∈ ts, SMT.bv q = [])
+    (hts_fv_not_bv : ∀ q ∈ ts, ∀ w ∈ SMT.fv q, w ∉ SMT.bv e)
+    (ht_fv_not_bv : ∀ w ∈ SMT.fv t, w ∉ SMT.bv e)
+    (hts_not_none : ∀ q ∈ ts, q ≠ SMT.Term.none)
+    (ht_not_none : t ≠ SMT.Term.none)
+    (hts_fv_disj_vars : ∀ q ∈ ts, ∀ w ∈ SMT.fv q, w ∉ xs ++ [x])
+    (ht_fv_disj_vars : ∀ w ∈ SMT.fv t, w ∉ xs ++ [x])
+    (hts_den : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_t : i < ts.length)
+      (hi_d : i < Ds.length),
+      ∃ hcov : CoversFV Delta ts[i],
+        ⟦ts[i].abstract Delta hcov⟧ˢ = some Ds[i])
+    {ht_cov : CoversFV Delta t}
+    (ht_den : ⟦t.abstract Delta ht_cov⟧ˢ = some Dlast)
+    (h_cov_sub : CoversFV Delta
+      (SMT.substList (xs ++ [x]) (ts.concat t) e))
+    (h_cov_upd : CoversFV
+      (Function.updates Delta (xs ++ [x]) ((Ds.concat Dlast).map Option.some)) e) :
+    ⟦(SMT.substList (xs ++ [x]) (ts.concat t) e).abstract Delta h_cov_sub⟧ˢ =
+    ⟦e.abstract
+      (Function.updates Delta (xs ++ [x]) ((Ds.concat Dlast).map Option.some))
+      h_cov_upd⟧ˢ := by
+  induction xs generalizing ts Ds e Delta with
+  | nil =>
+    match ts, Ds with
+    | [], [] =>
+      simpa [SMT.substList, Function.updates] using
+        (abstract_subst_denote e x t hx_not_bv ht_fv_not_bv ht_not_none
+          ht_den h_cov_sub h_cov_upd)
+    | [], _ :: _ => simp at hlen_xd
+    | _ :: _, _ => simp at hlen_xt
+  | cons y ys ih =>
+    match ts, Ds with
+    | [], _ => simp at hlen_xt
+    | _ :: _, [] => simp at hlen_xd
+    | q :: qs, D :: Ds =>
+      simp only [List.length_cons] at hlen_xt hlen_xd
+      have hlen_xt' : ys.length = qs.length := Nat.succ_inj.mp hlen_xt
+      have hlen_xd' : ys.length = Ds.length := Nat.succ_inj.mp hlen_xd
+      have hy_not_tail : y ∉ ys ++ [x] := by
+        simpa only [List.cons_append] using (List.nodup_cons.mp hnodup).1
+      have htail_nodup : (ys ++ [x]).Nodup :=
+        (List.nodup_cons.mp hnodup).2
+      have hy_bv : y ∉ SMT.bv e := hxs_not_bv y (List.mem_cons_self ..)
+      have hq_fv_bv : ∀ w ∈ SMT.fv q, w ∉ SMT.bv e :=
+        hts_fv_not_bv q (List.mem_cons_self ..)
+      have hq_not_none : q ≠ SMT.Term.none :=
+        hts_not_none q (List.mem_cons_self ..)
+      have hq_bv_nil : SMT.bv q = [] :=
+        hts_bv_nil q (List.mem_cons_self ..)
+      obtain ⟨hq_cov, hq_den⟩ := hts_den 0
+        (Nat.zero_lt_succ ys.length)
+        (Nat.zero_lt_succ qs.length)
+        (Nat.zero_lt_succ Ds.length)
+      have hbv_subst : ∀ v ∈ SMT.bv (SMT.subst y q e), v ∈ SMT.bv e :=
+        bv_subst_subset hq_bv_nil
+      have htail_d_len : (ys ++ [x]).length = (Ds.concat Dlast).length := by
+        simpa [List.length_append, List.length_concat, hlen_xd']
+      have htail_fv_disj : ∀ r ∈ qs.concat t, ∀ w ∈ SMT.fv r,
+          w ∉ ys ++ [x] := by
+        intro r hr w hw
+        rw [List.concat_eq_append] at hr
+        simp only [List.mem_append, List.mem_singleton] at hr
+        rcases hr with hr | rfl
+        · exact List.not_mem_of_not_mem_cons
+            (hts_fv_disj_vars r (List.mem_cons_of_mem _ hr) w hw)
+        · exact List.not_mem_of_not_mem_cons (ht_fv_disj_vars w hw)
+      have h_cov_upd_tail : CoversFV
+          (Function.updates Delta (ys ++ [x]) ((Ds.concat Dlast).map Option.some))
+          (SMT.subst y q e) := by
+        intro v hv
+        by_cases hvtail : v ∈ ys ++ [x]
+        · exact Function.updates_isSome_of_mem_map_some Delta (ys ++ [x])
+            (Ds.concat Dlast) v hvtail (by simp [htail_d_len])
+        · rw [Function.updates_of_not_mem Delta (ys ++ [x]) _ v hvtail]
+          apply h_cov_sub v
+          simpa only [SMT.substList, List.cons_append, List.concat_cons] using
+            (fv_mem_fv_substList_no_bv (e := SMT.subst y q e) hv hvtail
+              htail_fv_disj)
+      have h_eq_ih := ih (SMT.subst y q e) qs (Delta := Delta) Ds hlen_xt' hlen_xd'
+        htail_nodup
+        (fun z hz hbv => hxs_not_bv z (List.mem_cons_of_mem _ hz)
+          (hbv_subst z hbv))
+        (fun hv => hx_not_bv (hbv_subst x hv))
+        (fun r hr => hts_bv_nil r (List.mem_cons_of_mem _ hr))
+        (fun r hr w hw hbv => hts_fv_not_bv r (List.mem_cons_of_mem _ hr)
+          w hw (hbv_subst w hbv))
+        (fun w hw hbv => ht_fv_not_bv w hw (hbv_subst w hbv))
+        (fun r hr => hts_not_none r (List.mem_cons_of_mem _ hr))
+        (fun r hr w hw => List.not_mem_of_not_mem_cons
+          (hts_fv_disj_vars r (List.mem_cons_of_mem _ hr) w hw))
+        (fun w hw => List.not_mem_of_not_mem_cons (ht_fv_disj_vars w hw))
+        (fun i hi_x hi_t hi_d => hts_den (i + 1)
+          (Nat.add_lt_of_lt_sub hi_x)
+          (Nat.add_lt_of_lt_sub hi_t)
+          (Nat.add_lt_of_lt_sub hi_d))
+        ht_den h_cov_sub h_cov_upd_tail
+      have hq_fv_disj_tail : ∀ w ∈ SMT.fv q, w ∉ ys ++ [x] :=
+        fun w hw => List.not_mem_of_not_mem_cons
+          (hts_fv_disj_vars q (List.mem_cons_self ..) w hw)
+      have hq_cov_tail : CoversFV
+          (Function.updates Delta (ys ++ [x]) ((Ds.concat Dlast).map Option.some)) q := by
+        intro v hv
+        rw [Function.updates_of_not_mem Delta (ys ++ [x]) _ v
+          (hq_fv_disj_tail v hv)]
+        exact hq_cov v hv
+      have hq_den_tail :
+          ⟦q.abstract
+            (Function.updates Delta (ys ++ [x]) ((Ds.concat Dlast).map Option.some))
+            hq_cov_tail⟧ˢ = some D := by
+        have h := denote_congr_of_agreesOnFV (h1 := hq_cov) (h2 := hq_cov_tail)
+          (fun v hv =>
+            (Function.updates_of_not_mem Delta (ys ++ [x]) _ v
+              (hq_fv_disj_tail v hv)).symm)
+        simp only [denote] at h
+        have hq_den' : ⟦q.abstract Delta hq_cov⟧ˢ = some D := by
+          simpa only [List.getElem_cons_zero] using hq_den
+        have h' : ⟦q.abstract Delta hq_cov⟧ˢ =
+            ⟦q.abstract
+              (Function.updates Delta (ys ++ [x]) ((Ds.concat Dlast).map Option.some))
+              hq_cov_tail⟧ˢ := by
+          simpa only [List.getElem_cons_zero] using h
+        rw [← h']
+        exact hq_den'
+      have hctx_eq' : ∀ v,
+          Function.update
+            (Function.updates Delta (ys ++ [x]) ((Ds.concat Dlast).map Option.some))
+            y (some D) v =
+          Function.updates Delta (y :: (ys ++ [x]))
+            ((D :: (Ds.concat Dlast)).map Option.some) v := by
+        intro v
+        show _ = Function.updates (Function.update Delta y (some D))
+          (ys ++ [x]) ((Ds.concat Dlast).map Option.some) v
+        by_cases hvtail : v ∈ ys ++ [x]
+        · have hvy : v ≠ y := fun h => hy_not_tail (h ▸ hvtail)
+          rw [Function.update_of_ne hvy,
+            Function.updates_eq_of_mem_map_some (Function.update Delta y (some D))
+              Delta (ys ++ [x]) (Ds.concat Dlast) v hvtail
+              (by simp [htail_d_len]),
+            Function.updates_eq_of_mem_map_some Delta Delta (ys ++ [x])
+              (Ds.concat Dlast) v hvtail (by simp [htail_d_len])]
+        · rw [Function.updates_of_not_mem (Function.update Delta y (some D))
+              (ys ++ [x]) _ v hvtail]
+          by_cases hvy : v = y
+          · subst hvy
+            simp [Function.update_self]
+          · rw [Function.update_of_ne hvy, Function.update_of_ne hvy,
+              Function.updates_of_not_mem Delta (ys ++ [x]) _ v hvtail]
+      have hctx_eq : ∀ v,
+          Function.update
+            (Function.updates Delta (ys ++ [x]) ((Ds.concat Dlast).map Option.some))
+            y (some D) v =
+          Function.updates Delta ((y :: ys) ++ [x])
+            (((D :: Ds).concat Dlast).map Option.some) v := by
+        intro v
+        simpa only [List.cons_append, List.concat_cons] using hctx_eq' v
+      have h_cov_upd_e : CoversFV
+          (Function.update
+            (Function.updates Delta (ys ++ [x]) ((Ds.concat Dlast).map Option.some))
+            y (some D)) e := fun v hv => by
+          rw [hctx_eq]
+          exact h_cov_upd v hv
+      have h_eq_subst := abstract_subst_denote e y q hy_bv hq_fv_bv hq_not_none
+        hq_den_tail h_cov_upd_tail h_cov_upd_e
+      calc
+        ⟦(SMT.substList ((y :: ys) ++ [x]) ((q :: qs).concat t) e).abstract
+            Delta h_cov_sub⟧ˢ =
+            ⟦(SMT.subst y q e).abstract
+              (Function.updates Delta (ys ++ [x])
+                ((Ds.concat Dlast).map Option.some)) h_cov_upd_tail⟧ˢ := by
+              simpa only [SMT.substList, List.cons_append, List.concat_cons]
+                using h_eq_ih
+        _ = ⟦e.abstract
+              (Function.update
+                (Function.updates Delta (ys ++ [x])
+                  ((Ds.concat Dlast).map Option.some))
+                y (some D)) h_cov_upd_e⟧ˢ := h_eq_subst
+        _ = ⟦e.abstract
+              (Function.updates Delta ((y :: ys) ++ [x])
+                (((D :: Ds).concat Dlast).map Option.some)) h_cov_upd⟧ˢ :=
+              denote_congr_of_agreesOnFV (h1 := h_cov_upd_e) (h2 := h_cov_upd)
+                (fun v _ => hctx_eq v)
+
+/-- A nonempty simultaneous substitution may use a binder-carrying final
+payload.  The list is split into its binder-free prefix and final component,
+then discharged by `abstract_substList_snoc_denote`. -/
+theorem abstract_substList_dropLast_denote
+    (e : SMT.Term) (xs : List SMT.𝒱) (ts : List SMT.Term)
+    {Delta : Context} (Ds : List Dom)
+    (hxs : xs ≠ []) (hts : ts ≠ []) (hDs : Ds ≠ [])
+    (hlen_xt : xs.length = ts.length) (hlen_xd : xs.length = Ds.length)
+    (hnodup : xs.Nodup)
+    (hxs_not_bv : ∀ y ∈ xs, y ∉ SMT.bv e)
+    (hts_prefix_bv_nil : ∀ q ∈ ts.dropLast, SMT.bv q = [])
+    (hts_prefix_fv_not_bv : ∀ q ∈ ts.dropLast,
+      ∀ w ∈ SMT.fv q, w ∉ SMT.bv e)
+    (ht_last_fv_not_bv : ∀ w ∈ SMT.fv (ts.getLast hts), w ∉ SMT.bv e)
+    (hts_prefix_not_none : ∀ q ∈ ts.dropLast, q ≠ SMT.Term.none)
+    (ht_last_not_none : ts.getLast hts ≠ SMT.Term.none)
+    (hts_prefix_fv_disj : ∀ q ∈ ts.dropLast,
+      ∀ w ∈ SMT.fv q, w ∉ xs)
+    (ht_last_fv_disj : ∀ w ∈ SMT.fv (ts.getLast hts), w ∉ xs)
+    (hts_den : ∀ (i : ℕ) (hi_x : i < xs.length) (hi_t : i < ts.length)
+      (hi_d : i < Ds.length),
+      ∃ hcov : CoversFV Delta ts[i],
+        ⟦ts[i].abstract Delta hcov⟧ˢ = some Ds[i])
+    (h_cov_sub : CoversFV Delta (SMT.substList xs ts e))
+    (h_cov_upd : CoversFV
+      (Function.updates Delta xs (Ds.map Option.some)) e) :
+    ⟦(SMT.substList xs ts e).abstract Delta h_cov_sub⟧ˢ =
+    ⟦e.abstract (Function.updates Delta xs (Ds.map Option.some)) h_cov_upd⟧ˢ := by
+  let x := xs.getLast hxs
+  let t := ts.getLast hts
+  let Dlast := Ds.getLast hDs
+  have hxs_split : xs.dropLast ++ [x] = xs := by
+    dsimp [x]
+    exact List.dropLast_append_getLast hxs
+  have hts_split : ts.dropLast ++ [t] = ts := by
+    dsimp [t]
+    exact List.dropLast_append_getLast hts
+  have hDs_split : Ds.dropLast ++ [Dlast] = Ds := by
+    dsimp [Dlast]
+    exact List.dropLast_append_getLast hDs
+  have hprefix_len : xs.dropLast.length = ts.dropLast.length := by
+    rw [List.length_dropLast, List.length_dropLast, hlen_xt]
+  have hprefix_d_len : xs.dropLast.length = Ds.dropLast.length := by
+    rw [List.length_dropLast, List.length_dropLast, hlen_xd]
+  have hsplit_nodup : (xs.dropLast ++ [x]).Nodup := by
+    rw [hxs_split]
+    exact hnodup
+  have hprefix_not_bv : ∀ y ∈ xs.dropLast, y ∉ SMT.bv e := by
+    intro y hy
+    apply hxs_not_bv y
+    rw [← hxs_split]
+    exact List.mem_append_left _ hy
+  have hlast_not_bv : x ∉ SMT.bv e := by
+    dsimp [x]
+    exact hxs_not_bv _ (List.getLast_mem hxs)
+  have hprefix_fv_disj' : ∀ q ∈ ts.dropLast,
+      ∀ w ∈ SMT.fv q, w ∉ xs.dropLast ++ [x] := by
+    intro q hq w hw
+    rw [hxs_split]
+    exact hts_prefix_fv_disj q hq w hw
+  have hlast_fv_disj' : ∀ w ∈ SMT.fv t, w ∉ xs.dropLast ++ [x] := by
+    intro w hw
+    rw [hxs_split]
+    exact ht_last_fv_disj w hw
+  have hprefix_den : ∀ (i : ℕ) (hi_x : i < xs.dropLast.length)
+      (hi_t : i < ts.dropLast.length) (hi_d : i < Ds.dropLast.length),
+      ∃ hcov : CoversFV Delta ts.dropLast[i],
+        ⟦ts.dropLast[i].abstract Delta hcov⟧ˢ = some Ds.dropLast[i] := by
+    intro i hi_x hi_t hi_d
+    have hi_x' : i < xs.length := by
+      rw [List.length_dropLast] at hi_x
+      omega
+    have hi_t' : i < ts.length := by
+      rw [List.length_dropLast] at hi_t
+      omega
+    have hi_d' : i < Ds.length := by
+      rw [List.length_dropLast] at hi_d
+      omega
+    obtain ⟨hcov, hden⟩ := hts_den i hi_x' hi_t' hi_d'
+    refine ⟨?_, ?_⟩
+    · simpa only [List.getElem_dropLast hi_t, proof_irrel_heq] using hcov
+    · simpa only [List.getElem_dropLast hi_t, List.getElem_dropLast hi_d,
+        proof_irrel_heq] using hden
+  have hlast_den :
+      ∃ hcov : CoversFV Delta t,
+        ⟦t.abstract Delta hcov⟧ˢ = some Dlast := by
+    let i := ts.length - 1
+    have hts_pos : 0 < ts.length := List.length_pos_iff.mpr hts
+    have hts_Ds_len : ts.length = Ds.length := hlen_xt.symm.trans hlen_xd
+    have hi_t : i < ts.length := by
+      dsimp [i]
+      omega
+    have hi_x : i < xs.length := by
+      rw [hlen_xt]
+      exact hi_t
+    have hi_d : i < Ds.length := by
+      rw [← hlen_xd, hlen_xt]
+      exact hi_t
+    have hi_dlast : i = Ds.length - 1 := by
+      dsimp [i]
+      omega
+    obtain ⟨hcov, hden⟩ := hts_den i hi_x hi_t hi_d
+    have hlast_cov : CoversFV Delta t := by
+      dsimp [t]
+      simpa only [List.getLast_eq_getElem, proof_irrel_heq] using hcov
+    refine ⟨hlast_cov, ?_⟩
+    calc
+      ⟦t.abstract Delta hlast_cov⟧ˢ = ⟦ts[i].abstract Delta hcov⟧ˢ := by
+        dsimp [t, i]
+        simpa only [List.getLast_eq_getElem, proof_irrel_heq]
+      _ = some Ds[i] := hden
+      _ = some Dlast := by
+        congr 1
+        dsimp [Dlast]
+        rw [List.getLast_eq_getElem]
+        simpa only [hi_dlast]
+  obtain ⟨ht_cov, ht_den⟩ := hlast_den
+  have hcov_sub' : CoversFV Delta
+      (SMT.substList (xs.dropLast ++ [x]) (ts.dropLast.concat t) e) := by
+    rw [List.concat_eq_append, hxs_split, hts_split]
+    exact h_cov_sub
+  have hcov_upd' : CoversFV
+      (Function.updates Delta (xs.dropLast ++ [x])
+        ((Ds.dropLast.concat Dlast).map Option.some)) e := by
+    rw [List.concat_eq_append, hxs_split, hDs_split]
+    exact h_cov_upd
+  have hmain := abstract_substList_snoc_denote e xs.dropLast ts.dropLast x t
+    (Delta := Delta) Ds.dropLast hprefix_len hprefix_d_len hsplit_nodup
+    hprefix_not_bv hlast_not_bv hts_prefix_bv_nil hts_prefix_fv_not_bv
+    ht_last_fv_not_bv hts_prefix_not_none ht_last_not_none hprefix_fv_disj'
+    hlast_fv_disj' hprefix_den ht_den hcov_sub' hcov_upd'
+  simpa only [List.concat_eq_append, hxs_split, hts_split, hDs_split,
+    proof_irrel_heq] using hmain
 
 end SMT.RenamingContext
