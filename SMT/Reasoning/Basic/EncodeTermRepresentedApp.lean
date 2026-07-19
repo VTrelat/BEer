@@ -5774,7 +5774,7 @@ theorem encodeTerm_rep_scoped.app_case_from.{u}
   dsimp at post
   obtain ⟨⟨Ppost, Pscoped⟩, bvP_used, _used_struct,
       DltP_struct, P_decl_struct, P_delta_ok⟩ := post
-  obtain ⟨DltP, P_decl_eq, P_trace, P_envelope, P_total, P_guard,
+  obtain ⟨DltP, P_decl_eq, P_op_envelope, P_envelope, P_total, P_guard,
       P_specs_op, P_sc_typing⟩ := Pscoped
   have DltP_eq : DltP = DltP_struct := by
     rw [P_decl_eq, St_decl_eq] at P_decl_struct
@@ -5894,7 +5894,9 @@ theorem encodeTerm_rep_scoped.app_case_from.{u}
     pair_helper_typing_app P_envelope U_trace typP typU U_specs_op
       P_sc_typing P_fv_dep P_specs_fv_dep
   mpure_intro
-  refine ⟨DltP ++ DltU, ?_, DeclarationContextTrace.append P_trace U_trace,
+  refine ⟨DltP ++ DltU, ?_,
+    DeclarationContextEnvelope.append P_op_envelope
+      (DeclarationContextEnvelope.of_trace U_trace),
     (by simpa [List.append_assoc] using U_envelope), ?_, ?_, ?_, ?_⟩
   · simpa [P_decl_eq, St_decl_eq, List.append_assoc] using U_decl_eq
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt

@@ -2848,13 +2848,18 @@ theorem encodeTerm_rep_scoped.pfun_case_from.{u}
       bv_Senc_used, _S_used_sub_struct, DltS_struct,
       S_decl_struct, S_delta_ok⟩,
     bv_Senc_not_used, _S_used_sub_struct', _DltS_struct',
-      _S_decl_struct', _S_delta_not_used⟩ := post_S
-  obtain ⟨DltS, S_decl_eq, S_trace, S_envelope, S_sc_total,
+      _S_decl_struct', S_delta_not_used⟩ := post_S
+  obtain ⟨DltS, S_decl_eq, S_op_envelope, S_envelope, S_sc_total,
     S_guard, S_specs_op, S_sc_typing⟩ := S_scoped_post
   have DltS_eq : DltS = DltS_struct := by
     rw [S_decl_eq, St_decl_eq] at S_decl_struct
     exact (List.append_right_inj decl).mp S_decl_struct
   subst DltS_struct
+  have DltS_eq' : DltS = _DltS_struct' := by
+    rw [S_decl_eq] at _S_decl_struct'
+    exact (List.append_right_inj St.env.declarations).mp
+      _S_decl_struct'
+  subst _DltS_struct'
   obtain ⟨used_sub_S, types_sub_S, keys_sub_S, covers_S,
     _path_S, typ_Senc, _shape_S, preserves_S,
     DeltaS, hcov_Senc, DeltaS_ext, _related_S, DeltaS_none,
@@ -2872,15 +2877,16 @@ theorem encodeTerm_rep_scoped.pfun_case_from.{u}
     have respects_T : B.RenamingContext.RespectsTypeContextOnFV
         DeltaS StS.types T :=
       respects.of_extends DeltaS_ext types_sub_S fv_T_sub fv_in_Lambda
-    have vars_used_T : ∀ v ∈ T.vars, v ∈ StS.env.usedVars := by
+    have vars_used_T_input : ∀ v ∈ T.vars, v ∈ used := by
       intro v hv
-      apply used_sub_S
       apply vars_used v
       simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
         List.mem_append]
       rcases B.Term.mem_vars_iff.mp hv with h | h
       · exact .inl (.inr h)
       · exact .inr (.inr h)
+    have vars_used_T : ∀ v ∈ T.vars, v ∈ StS.env.usedVars :=
+      fun v hv => used_sub_S (vars_used_T_input v hv)
     have Lambda_inv_T : ∀ v ∈ T.vars,
         v ∈ StS.types → v ∈ E.context := by
       intro v hv hGamma
@@ -2940,7 +2946,7 @@ theorem encodeTerm_rep_scoped.pfun_case_from.{u}
         T_decl_struct, T_delta_ok⟩,
       bv_Tenc_not_used, _T_used_sub_struct', _DltT_struct',
         _T_decl_struct', T_delta_not_used⟩ := post_T
-    obtain ⟨DltT, T_decl_eq, T_trace, T_envelope, T_sc_total,
+    obtain ⟨DltT, T_decl_eq, T_op_envelope, T_envelope, T_sc_total,
       T_guard, T_specs_op, T_sc_typing⟩ := T_scoped_post
     have DltT_eq : DltT = DltT_struct := by
       rw [T_decl_eq] at T_decl_struct
@@ -3024,7 +3030,7 @@ theorem encodeTerm_rep_scoped.pfun_case_from.{u}
       · simp [tail_decl_eq, T_decl_eq, S_decl_eq, St_decl_eq,
           List.append_assoc]
       · simpa [tail_types_eq] using
-          DeclarationContextTrace.append S_trace T_trace
+          DeclarationContextEnvelope.append S_op_envelope T_op_envelope
       · simpa [tail_types_eq, List.append_assoc] using T_envelope
       · intro Delta_alt Delta_fv_alt Delta0_alt related_alt wf_alt
           Delta0_alt_none respects_alt Delta0_alt_dom
@@ -3211,10 +3217,16 @@ theorem encodeTerm_rep_scoped.pfun_case_from.{u}
         rw [specBodies_append, List.mem_append] at hbody
         rcases hbody with hSbody | hTbody
         · have typ_at_T : StT.types ⊢ˢ body : SMTType.bool :=
-            typing_weakening_generated types_sub_T
-              T_trace.context_generated T_delta_not_used.1
-              (S_specs_op body hSbody)
-              (fun v hv => S_delta_ok.2 body hSbody v hv)
+            SMT.Typing.weakening types_sub_T (S_specs_op body hSbody)
+              (fun v hv =>
+                preserves_T v
+                  (S_delta_ok.2 body hSbody v hv)
+                  (SMT.Typing.bv_notMem_context
+                    (S_specs_op body hSbody) v hv)
+                  (fun hvT => S_delta_not_used.2 body hSbody v hv
+                    (by
+                      rw [St_used_eq]
+                      exact vars_used_T_input v hvT)))
           simpa [tail_types_eq] using typ_at_T
         · simpa [tail_types_eq] using T_specs_op body hTbody
       · constructor

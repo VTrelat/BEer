@@ -134,14 +134,15 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
 
   mspec (Std.Do.Triple.and _
     (Std.Do.Triple.and _
-      (x_ih E typ_x
+      (Std.Do.Triple.and _
+        (x_ih E typ_x
         (fun v hv => Δ_fv v (fv_x_sub hv))
         (related.mono_fv fv_x_sub)
         Δ₀_none_out Δ₀_dom den_x vars_used_x Λ_inv_x
         hx_bv_nodup (respects.mono_fv fv_x_sub)
         (fun v hv => fv_in_Λ v (fv_x_sub hv)) wf
         (n := St.env.freshvarsc))
-      (x_scoped E typ_x
+        (x_scoped E typ_x
         (fun v hv => Δ_fv v (fv_x_sub hv))
         (related.mono_fv fv_x_sub)
         Δ₀_none_out Δ₀_dom den_x vars_used_x Λ_inv_x
@@ -151,7 +152,9 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
         (fun v hv => fv_in_Base v (fv_x_sub hv))
         Dpre_typing
         (n := St.env.freshvarsc) (decl := decl)))
-    (encodeTerm_bv_used E (t := x) (used := St.env.usedVars)
+      (encodeTerm_bv_used E (t := x) (used := St.env.usedVars)
+        (n := St.env.freshvarsc) (decl := St.env.declarations)))
+    (encodeTerm_bv_notMem_used E (t := x) (used := St.env.usedVars)
       (n := St.env.freshvarsc) (decl := St.env.declarations)))
   clear x_ih x_scoped
   rename_i out_x
@@ -160,14 +163,20 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
   mintro ∀Stx
   mpure pre
   dsimp at pre
-  obtain ⟨⟨x_post, ⟨Dltx, x_decl_eq, x_trace, x_envelope, x_sc_total, x_guard,
+  obtain ⟨⟨⟨x_post, ⟨Dltx, x_decl_eq, x_trace, x_envelope, x_sc_total, x_guard,
       x_specs_op, x_sc_typing⟩⟩,
     _bv_x_used, _x_used_sub_struct, Dltx_struct,
-      x_decl_struct, x_delta_ok⟩ := pre
+      x_decl_struct, x_delta_ok⟩,
+    _bv_x_not_used, _x_used_sub_not, Dltx_not,
+      x_decl_not, x_delta_not_used⟩ := pre
   have Dltx_eq : Dltx = Dltx_struct := by
     rw [x_decl_eq, St_decl_eq] at x_decl_struct
     exact (List.append_right_inj decl).mp x_decl_struct
   subst Dltx_struct
+  have Dltx_eq_not : Dltx = Dltx_not := by
+    rw [x_decl_eq, St_decl_eq] at x_decl_not
+    exact (List.append_right_inj decl).mp x_decl_not
+  subst Dltx_not
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
     path_x, typ_x_enc, _shape_x, x_preserves,
     Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
@@ -185,15 +194,17 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
   have respects_y : B.RenamingContext.RespectsTypeContextOnFV
       Δx Stx.types y :=
     respects.of_extends Δx_ext types_sub_x fv_y_sub fv_in_Λ
-  have vars_used_y : ∀ v ∈ y.vars, v ∈ Stx.env.usedVars := by
+  have vars_used_y_input : ∀ v ∈ y.vars, v ∈ St.env.usedVars := by
     intro v hv
-    apply used_sub_x
+    rw [St_used_eq]
     apply vars_used v
     rw [op.vars_term]
     simp only [List.mem_union_iff, List.mem_append]
     rcases B.Term.mem_vars_iff.mp hv with h | h
     · exact .inl (.inr h)
     · exact .inr (.inr h)
+  have vars_used_y : ∀ v ∈ y.vars, v ∈ Stx.env.usedVars :=
+    fun v hv => used_sub_x (St_used_eq ▸ vars_used_y_input v hv)
   have Λ_inv_y : ∀ v ∈ y.vars, v ∈ Stx.types → v ∈ E.context := by
     intro v hv hΓ
     have hv_parent : v ∈ (op.term x y).vars := by
@@ -267,7 +278,7 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
   mspec Std.Do.Spec.pure
   mpure_intro
   refine ⟨Dltx ++ Dlty, ?_,
-    DeclarationContextTrace.append x_trace y_trace, ?_, ?_, ?_, ?_, ?_⟩
+    DeclarationContextEnvelope.append x_trace y_trace, ?_, ?_, ?_, ?_, ?_⟩
   · rw [y_decl_eq, List.append_assoc]
   · simpa [List.append_assoc] using y_envelope
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
@@ -443,19 +454,11 @@ theorem encodeTerm_rep_scoped.checked_bool_case_from.{u}
       intro v hv hv_Sty
       have hv_used : v ∈ Stx.env.usedVars :=
         x_delta_ok.2 body hbody_x v hv
-      obtain ⟨τv, hlookup⟩ := Option.isSome_iff_exists.mp
-        (AList.lookup_isSome.mpr hv_Sty)
-      have hentry : (⟨v, τv⟩ : Sigma fun _ : SMT.𝒱 => SMTType) ∈
-          Sty.types.entries := AList.mem_lookup_iff.mp hlookup
-      rcases List.mem_append.mp (y_trace.context_generated hentry) with
-        hbase | hdecl
-      · have hv_Stx : v ∈ Stx.types :=
-          AList.mem_keys.mpr (List.mem_map.mpr
-            ⟨⟨v, τv⟩, hbase, rfl⟩)
-        exact SMT.Typing.bv_notMem_context
-          (x_specs_op body hbody_x) v hv hv_Stx
-      · exact y_delta_not_used.1 v
-          (mem_declVars_of_mem_declEntries hdecl) hv_used
+      exact y_preserves v hv_used
+        (SMT.Typing.bv_notMem_context
+          (x_specs_op body hbody_x) v hv)
+        (fun hvy => x_delta_not_used.2 body hbody_x v hv
+          (vars_used_y_input v hvy)) hv_Sty
     · exact y_specs_op body hbody_y
   · constructor
     · intro Γ_sup Γ_sub result_bv_fresh

@@ -840,7 +840,9 @@ theorem lambda_subst_of_total_body_source_fv_fresh.{u}
     (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
     (source_respects : B.RenamingContext.RespectsTypeContextOnFV
       ThetaBase Lambda Pterm)
-    (ThetaBase_dom : ∀ v, ThetaBase v ≠ none → v ∈ Lambda)
+    (source_fv_in_Lambda : ∀ v ∈ B.fv Pterm, v ∈ Lambda)
+    (bound_in_Lambda : ∀ v ∈ xs, v ∈ Lambda)
+    (Penc_fv_in_Lambda : ∀ v ∈ SMT.fv Penc, v ∈ Lambda)
     {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦alpha⟧ᶻ}
     (den_P : ⟦Pterm.abstract Xi Xi_fv⟧ᴮ =
       some (⟨Pval, alpha, hPval⟩ : B.Dom))
@@ -857,15 +859,38 @@ theorem lambda_subst_of_total_body_source_fv_fresh.{u}
         (Function.update DeltaCtx z (some W)) hcov_sub⟧ˢ = some dP ∧
       dP.snd.fst = sigma ∧
       RDomCastSupported (⟨Pval, alpha, hPval⟩ : B.Dom) dP := by
+  let ThetaCore : SMT.RenamingContext.Context.{u} :=
+    fun v => if v ∈ Lambda then ThetaBase v else none
+  have related_core : RValuationCastSupportedOnFV Xi ThetaCore Pterm := by
+    intro v hv
+    simpa [ThetaCore, source_fv_in_Lambda v hv] using related v hv
+  have ThetaCore_none : ∀ v ∉ used, ThetaCore v = none := by
+    intro v hv
+    by_cases hvLambda : v ∈ Lambda
+    · simpa [ThetaCore, hvLambda] using ThetaBase_none v hv
+    · simp [ThetaCore, hvLambda]
+  have source_respects_core :
+      B.RenamingContext.RespectsTypeContextOnFV
+        ThetaCore Lambda Pterm := by
+    intro v tau hv hlookup
+    obtain ⟨d, hd, hdtype⟩ := source_respects hv hlookup
+    refine ⟨d, ?_, hdtype⟩
+    simpa [ThetaCore, source_fv_in_Lambda v hv] using hd
+  have ThetaCore_dom : ∀ v, ThetaCore v ≠ none → v ∈ Lambda := by
+    intro v hv
+    by_contra hvLambda
+    simp [ThetaCore, hvLambda] at hv
   obtain ⟨ThetaBody, hcov_P, dP, hbody_ext, _hbody_rel,
     _hbody_none, _source_respects, _target_respects, _hbody_dom,
     hden_P, hdP_type, hrel_P⟩ :=
-    P_total Xi Xi_fv ThetaBase related wf ThetaBase_none source_respects
-      ThetaBase_dom Pval hPval den_P
+    P_total Xi Xi_fv ThetaCore related_core wf ThetaCore_none
+      source_respects_core ThetaCore_dom Pval hPval den_P
   have hvalues : ∀ (i : ℕ) (hi_x : i < xs.length)
       (hi_d : i < Ds.length), ThetaBody xs[i] = some Ds[i] := by
     intro i hi_x hi_d
-    exact hbody_ext (bound_values i hi_x hi_d)
+    apply hbody_ext
+    simpa [ThetaCore, bound_in_Lambda xs[i]
+      (List.getElem_mem hi_x)] using bound_values i hi_x hi_d
   have hcov_P_upd : SMT.RenamingContext.CoversFV
       (Function.update ThetaBody z (some W)) Penc :=
     SMT.RenamingContext.coversFV_update_of_notMem z_not_fv_Penc hcov_P
@@ -891,7 +916,7 @@ theorem lambda_subst_of_total_body_source_fv_fresh.{u}
     exact hvalues i hi_x hi_d
   have hbody_ext_upd : SMT.RenamingContext.Extends
       (Function.update ThetaBody z (some W))
-      (Function.update ThetaBase z (some W)) := by
+      (Function.update ThetaCore z (some W)) := by
     intro v d hv
     by_cases hvz : v = z
     · subst v
@@ -900,23 +925,39 @@ theorem lambda_subst_of_total_body_source_fv_fresh.{u}
       apply hbody_ext
       rw [Function.update_of_ne hvz] at hv
       exact hv
-  have hctx_source_upd : ∀ v ∈ B.Term.vars Pterm, v ∉ xs →
+  have hctx_Penc_upd : ∀ v ∈ SMT.fv Penc, v ∉ xs →
       (Function.update DeltaCtx z (some W)) v =
-        (Function.update ThetaBase z (some W)) v := by
+        (Function.update ThetaCore z (some W)) v := by
     intro v hv hvs
     have hvz : v ≠ z := by
       intro h
       subst v
-      exact z_not_vars_source hv
+      exact z_not_fv_Penc hv
     rw [Function.update_of_ne hvz, Function.update_of_ne hvz]
-    exact hctx_source v hv hvs
+    have hraw := hctx_source v (hPenc_fv hv) hvs
+    simpa [ThetaCore, Penc_fv_in_Lambda v hv] using hraw
   have hagrees : SMT.RenamingContext.AgreesOnFV
       (Function.updates (Function.update DeltaCtx z (some W)) xs
         (Ds.map Option.some))
       (Function.update ThetaBody z (some W)) Penc :=
-    SMT.RenamingContext.agreesOnFV_updates_of_source_fv
-      hlen_xd hnodup hcov_upd hvalues_upd hPenc_fv hctx_source_upd
-      hbody_ext_upd
+    by
+      intro v hv
+      by_cases hvxs : v ∈ xs
+      · exact SMT.RenamingContext.updates_eq_of_bound_denotations
+          hlen_xd hnodup hvalues_upd v hvxs
+      · rw [Function.updates_of_not_mem _ xs _ v hvxs]
+        have hbase := hctx_Penc_upd v hv hvxs
+        cases hDelta : Function.update DeltaCtx z (some W) v with
+        | none =>
+            have hcontr := hcov_upd v hv
+            rw [Function.updates_of_not_mem _ xs _ v hvxs,
+              hDelta] at hcontr
+            simp at hcontr
+        | some d =>
+            have hThetaCore :
+                Function.update ThetaCore z (some W) v = some d :=
+              hbase.symm.trans hDelta
+            exact (hbody_ext_upd hThetaCore).symm
   have hden_sub :=
     SMT.RenamingContext.denote_substList_eq_of_denote_and_agrees
       Penc xs ts Ds hlen_xt hlen_xd hnodup hxs_not_bv hts_bv_nil
@@ -1002,7 +1043,9 @@ theorem lambda_subst_of_total_body_toDestPair.{u}
     (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
     (source_respects : B.RenamingContext.RespectsTypeContextOnFV
       ThetaBase Lambda Pterm)
-    (ThetaBase_dom : ∀ v, ThetaBase v ≠ none → v ∈ Lambda)
+    (source_fv_in_Lambda : ∀ v ∈ B.fv Pterm, v ∈ Lambda)
+    (bound_in_Lambda : ∀ v ∈ vs, v ∈ Lambda)
+    (Penc_fv_in_Lambda : ∀ v ∈ SMT.fv Penc, v ∈ Lambda)
     {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦alpha⟧ᶻ}
     (den_P : ⟦Pterm.abstract Xi Xi_fv⟧ᴮ =
       some (⟨Pval, alpha, hPval⟩ : B.Dom))
@@ -1067,7 +1110,10 @@ theorem lambda_subst_of_total_body_toDestPair.{u}
     (Lambda := Lambda) (Gamma := Gamma) (sigma := sigma) (used := used)
     (P_total := P_total) (Xi := Xi) (Xi_fv := Xi_fv)
     (related := related) (wf := wf) (ThetaBase_none := ThetaBase_none)
-    (source_respects := source_respects) (ThetaBase_dom := ThetaBase_dom)
+    (source_respects := source_respects)
+    (source_fv_in_Lambda := source_fv_in_Lambda)
+    (bound_in_Lambda := bound_in_Lambda)
+    (Penc_fv_in_Lambda := Penc_fv_in_Lambda)
     (Pval := Pval) (hPval := hPval) (den_P := den_P)
     (bound_values := hbound_values) (hPenc_fv := hPenc_fv)
     (z_not_xs := hz_not_vs) (z_not_fv_Penc := hz_not_fv_Penc)
@@ -1161,10 +1207,8 @@ theorem represented_lambda_body_at_domain.{u}
       B.RenamingContext.RespectsTypeContextOnFV
         (Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some)) LambdaP P)
-    (ThetaBase_dom : ∀ ss : Fin vs.length → SMT.Dom.{u},
-      (∀ i, LambdaP.lookup vs[i] = some (ss i).snd.fst) →
-      ∀ v, Function.updates ThetaD vs
-        ((List.ofFn ss).map Option.some) v ≠ none → v ∈ LambdaP)
+    (source_fv_in_LambdaP : ∀ v ∈ B.fv P, v ∈ LambdaP)
+    (Penc_fv_in_LambdaP : ∀ v ∈ SMT.fv Penc, v ∈ LambdaP)
     (ThetaD_none : ∀ v ∉ usedP, ThetaD v = none)
     (vs_used : ∀ v ∈ vs, v ∈ usedP)
     (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars P)
@@ -1259,6 +1303,14 @@ theorem represented_lambda_body_at_domain.{u}
     intro i
     obtain ⟨_, _, _, htype⟩ := hcomponents i
     exact (bound_expected i).trans (congrArg some htype).symm
+  have vs_in_LambdaP : ∀ v ∈ vs, v ∈ LambdaP := by
+    intro v hv
+    let i : Fin vs.length :=
+      ⟨vs.idxOf v, List.idxOf_lt_length_of_mem hv⟩
+    have hvi : vs[i] = v := List.getElem_idxOf i.isLt
+    rw [← hvi]
+    exact AList.lookup_isSome.mp
+      (Option.isSome_of_eq_some (bound_expected i))
   let ThetaBase : SMT.RenamingContext.Context.{u} :=
     Function.updates ThetaD vs ((List.ofFn ss).map Option.some)
   have ThetaBase_none : ∀ v ∉ usedP, ThetaBase v = none := by
@@ -1294,8 +1346,8 @@ theorem represented_lambda_body_at_domain.{u}
       hvs_not_bv hz_not_bv hz_not_vs P_total XiP_fv
       (by simpa [ThetaBase, x_fin] using related_P')
       (wf_bound x hx hxD) ThetaBase_none (source_respects ss hss_type)
-      (ThetaBase_dom ss hss_type) den_P bound_values hPenc_fv
-      z_not_vars_P hctx_source
+      source_fv_in_LambdaP vs_in_LambdaP Penc_fv_in_LambdaP den_P
+      bound_values hPenc_fv z_not_vars_P hctx_source
   obtain ⟨hcov_Dapp, Dapp, hDapp_type, hDapp_value, hden_Dapp⟩ :=
     funDenoteAppAtFst (Δctx := ThetaD) (t := Denc) (x := z)
       (α := sigma) (β := SMTType.bool) (γ := gamma) (Y := DencVal)
@@ -1754,10 +1806,8 @@ theorem represented_lambda_of_total_body.{u}
       B.RenamingContext.RespectsTypeContextOnFV
         (Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some)) LambdaP P)
-    (ThetaBase_dom : ∀ ss : Fin vs.length → SMT.Dom.{u},
-      (∀ i, LambdaP.lookup vs[i] = some (ss i).snd.fst) →
-      ∀ v, Function.updates ThetaD vs
-        ((List.ofFn ss).map Option.some) v ≠ none → v ∈ LambdaP)
+    (source_fv_in_LambdaP : ∀ v ∈ B.fv P, v ∈ LambdaP)
+    (Penc_fv_in_LambdaP : ∀ v ∈ SMT.fv Penc, v ∈ LambdaP)
     (ThetaD_none : ∀ v ∉ usedP, ThetaD v = none)
     (vs_used : ∀ v ∈ vs, v ∈ usedP)
     (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars P)
@@ -1853,8 +1903,9 @@ theorem represented_lambda_of_total_body.{u}
         den_lambda hsigma body_def hcov_D_upd den_D_upd hDenc_type
         hDenc_func D_rel hcov_body_upd hcov_sub_upd hcov_P_upd
         hvs_not_bv hz_not_bv hz_not_vs typ_P P_total ambient wf_bound
-        bound_expected source_respects ThetaBase_dom ThetaD_none vs_used
-        hPenc_fv z_not_vars_P hx hxD hWy_type hWy_mem hrel_x
+        bound_expected source_respects source_fv_in_LambdaP
+        Penc_fv_in_LambdaP ThetaD_none vs_used hPenc_fv z_not_vars_P
+        hx hxD hWy_type hWy_mem hrel_x
         hWp_type hWp_mem
     let x_fin : Fin vs.length → B.Dom.{u} := fun i =>
       ⟨x.get vs.length i, tau.get vs.length i,

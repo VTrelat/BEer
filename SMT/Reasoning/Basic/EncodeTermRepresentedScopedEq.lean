@@ -125,11 +125,16 @@ theorem encodeTerm_rep_scoped.eq_case_from.{u}
       x_specs_op, x_sc_typing⟩⟩,
       bv_x_used, _x_used_sub_struct, Dltx_struct,
         x_decl_struct, x_delta_ok⟩,
-      bv_x_not_used, _⟩ := pre
+      bv_x_not_used, _x_used_sub_not, Dltx_not,
+        x_decl_not, x_delta_not_used⟩ := pre
   have Dltx_eq : Dltx = Dltx_struct := by
     rw [x_decl_eq, St_decl_eq] at x_decl_struct
     exact (List.append_right_inj decl).mp x_decl_struct
   subst Dltx_struct
+  have Dltx_eq_not : Dltx = Dltx_not := by
+    rw [x_decl_eq, St_decl_eq] at x_decl_not
+    exact (List.append_right_inj decl).mp x_decl_not
+  subst Dltx_not
   obtain ⟨used_sub_x, types_sub_x, keys_sub_x, x_used,
       _path_x, typ_x_enc, _shape_x, x_preserves,
       Δx, hcov_x, Δx_ext, _related_x, Δx_none, _respects_x,
@@ -144,6 +149,13 @@ theorem encodeTerm_rep_scoped.eq_case_from.{u}
   have respects_S : B.RenamingContext.RespectsTypeContextOnFV
       Δx Stx.types S :=
     respects.of_extends Δx_ext types_sub_x fv_S_sub fv_in_Λ
+  have vars_used_S_input : ∀ v ∈ S.vars, v ∈ St.env.usedVars := by
+    intro v hv
+    rw [St_used_eq]
+    apply vars_used v
+    simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+      List.mem_append] at hv ⊢
+    rcases hv with h | h <;> [left; right] <;> exact Or.inr h
 
   mspec (Std.Do.Triple.and _
     (Std.Do.Triple.and _
@@ -300,8 +312,9 @@ theorem encodeTerm_rep_scoped.eq_case_from.{u}
       typ_x_final typ_S_enc typ_eq eq_specs_op
       x_sc_typing_full S_sc_typing eq_fv_dep eq_specs_fv_dep
   refine ⟨(Dltx ++ DltS) ++ DltEq, ?_,
-    DeclarationContextTrace.append
-      (DeclarationContextTrace.append x_trace S_trace) eq_trace,
+    DeclarationContextEnvelope.append
+      (DeclarationContextEnvelope.append x_trace S_trace)
+      (DeclarationContextEnvelope.of_trace eq_trace),
     ?_, ?_, ?_, ?_, ?_⟩
   · rw [eq_decl_eq, S_decl_eq]
     simp only [List.append_assoc]
@@ -596,10 +609,13 @@ theorem encodeTerm_rep_scoped.eq_case_from.{u}
     · rw [specBodies_append, List.mem_append] at hchildren
       rcases hchildren with hxbody | hSbody
       · have typ_at_S : StS.types ⊢ˢ body : SMTType.bool :=
-          typing_weakening_generated types_sub_S
-            S_trace.context_generated S_delta_not_used.1
-            (x_specs_op body hxbody)
-            (fun v hv => x_delta_ok.2 body hxbody v hv)
+          SMT.Typing.weakening types_sub_S (x_specs_op body hxbody)
+            (fun v hv hv_StS => S_preserves v
+              (x_delta_ok.2 body hxbody v hv)
+              (SMT.Typing.bv_notMem_context
+                (x_specs_op body hxbody) v hv)
+              (fun hvS => x_delta_not_used.2 body hxbody v hv
+                (vars_used_S_input v hvS)) hv_StS)
         exact typing_weakening_generated types_sub_Eq eq_ctx
           eq_decl_fresh typ_at_S
           (fun v hv => used_sub_S (x_delta_ok.2 body hxbody v hv))

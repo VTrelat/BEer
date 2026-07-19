@@ -1096,7 +1096,7 @@ abbrev EncodeTermRepScopedPostFrom.{u}
     (E' : SMT.Env) (Γ' : SMT.TypeContext) : Prop :=
   ∃ Dlt : SMT.Chunk,
     E'.declarations = decl ++ Dlt ∧
-    DeclarationContextTrace Λop Dlt Γ' ∧
+    DeclarationContextEnvelope Λop Dlt Γ' ∧
     DeclarationContextEnvelope Base (Dpre ++ Dlt) Γ' ∧
     EncodeTermRepScopedTotal.{u} t E α Λop t' σ Γ' E'.usedVars Dlt ∧
     EncodeTermRepGuardedSound.{u} t E α t' σ Base (Dpre ++ Dlt) ∧
@@ -1134,15 +1134,16 @@ theorem EncodeTermRepScopedPostFrom.of_root.{u}
       t E α Λ decl t' σ E' Γ') :
     EncodeTermRepScopedPostFrom.{u}
       t E α Base Dpre Λ decl t' σ E' Γ' := by
-  obtain ⟨Dlt, decl_eq, op_trace, _root_envelope, scoped_total,
-    root_guard, specs_op, _root_typing⟩ := root
+  obtain ⟨Dlt, decl_eq, op_envelope, _root_envelope, scoped_total,
+    root_guard, specs_op, root_typing⟩ := root
   obtain ⟨Dlt', decl_eq', specs_fv, result_fv⟩ := decl_info
   have hDlt : Dlt = Dlt' := by
     apply List.append_right_injective decl
     exact decl_eq.symm.trans decl_eq'
   subst Dlt'
   obtain ⟨Core₀, pre_trace, Core₀_sub_Λ⟩ := input_envelope
-  obtain ⟨Core, local_trace, Core_sub_Γ'⟩ :=
+  obtain ⟨OpCore, op_trace, OpCore_sub_Γ'⟩ := op_envelope
+  obtain ⟨Core, local_trace, Core_sub_OpCore⟩ :=
     op_trace.rebase_subset Core₀_sub_Λ
   have full_trace :
       DeclarationContextTrace Base (Dpre ++ Dlt) Core :=
@@ -1152,30 +1153,42 @@ theorem EncodeTermRepScopedPostFrom.of_root.{u}
     exact AList.mem_of_subset pre_trace.entries_subset
       (fv_in_Base v hv)
   have dependency_mem_Core : ∀ {v},
-      v ∈ B.Term.vars t ∪ declVars Dlt → v ∈ Γ' → v ∈ Core := by
-    intro v hvdep hvΓ'
+      v ∈ B.Term.vars t ∪ declVars Dlt → v ∈ OpCore → v ∈ Core := by
+    intro v hvdep hvOpCore
     rw [List.mem_union_iff] at hvdep
     rcases hvdep with hvsrc | hvdecl
     · rcases B.Term.mem_vars_iff.mp hvsrc with hvfv | hvbv
       · exact AList.mem_of_subset local_trace.entries_subset
           (source_fv_Core₀ v hvfv)
-      · rcases op_trace.context_generated.mem_classify hvΓ' with
+      · rcases op_trace.context_generated.mem_classify hvOpCore with
           hvΛ | hvdecl'
         · exact absurd (Λ_inv v hvsrc hvΛ)
             (B.Typing.bv_notMem_context typ_t v hvbv)
         · exact local_trace.declVar_mem hvdecl'
     · exact local_trace.declVar_mem hvdecl
+  have typ_t'_OpCore : OpCore ⊢ˢ t' : σ :=
+    root_typing.1 OpCore op_trace.scoped_extends (by
+      intro v hv hvOpCore
+      exact SMT.Typing.bv_notMem_context typ_t' v hv
+        (AList.mem_of_subset OpCore_sub_Γ' hvOpCore))
   have typ_t'_Core : Core ⊢ˢ t' : σ :=
-    SMT.Typing.strengthening_of_fv_subset Core_sub_Γ' typ_t'
+    SMT.Typing.strengthening_of_fv_subset Core_sub_OpCore typ_t'_OpCore
       (fun v hv => dependency_mem_Core (result_fv hv)
-        (SMT.Typing.mem_context_of_mem_fv typ_t' hv))
+        (SMT.Typing.mem_context_of_mem_fv typ_t'_OpCore hv))
+  have specs_OpCore : ∀ b ∈ specBodies Dlt,
+      OpCore ⊢ˢ b : SMTType.bool := by
+    intro b hb
+    exact root_typing.2 OpCore op_trace.scoped_extends
+      (fun b' hb' v hv hvOpCore =>
+        SMT.Typing.bv_notMem_context (specs_op b' hb') v hv
+          (AList.mem_of_subset OpCore_sub_Γ' hvOpCore)) b hb
   have specs_Core : ∀ b ∈ specBodies Dlt,
       Core ⊢ˢ b : SMTType.bool := by
     intro b hb
-    exact SMT.Typing.strengthening_of_fv_subset Core_sub_Γ'
-      (specs_op b hb)
+    exact SMT.Typing.strengthening_of_fv_subset Core_sub_OpCore
+      (specs_OpCore b hb)
       (fun v hv => dependency_mem_Core (specs_fv b hb hv)
-        (SMT.Typing.mem_context_of_mem_fv (specs_op b hb) hv))
+        (SMT.Typing.mem_context_of_mem_fv (specs_OpCore b hb) hv))
   have clean_typing :
       ScopedGeneratedTyping Base (Dpre ++ Dlt) t' σ := by
     have local_typing : ScopedGeneratedTyping Core₀ Dlt t' σ :=
@@ -1199,9 +1212,9 @@ theorem EncodeTermRepScopedPostFrom.of_root.{u}
       intro v τ hv hlookup
       exact respects_B_sup hv (AList.lookup_of_subset Core_sub_sup hlookup)
     have respects_B_op :
-        B.RenamingContext.RespectsTypeContextOnFV Θ Γ' t :=
+        B.RenamingContext.RespectsTypeContextOnFV Θ OpCore t :=
       respects_B_Core.of_extends
-        (SMT.RenamingContext.extends_refl Θ) Core_sub_Γ'
+        (SMT.RenamingContext.extends_refl Θ) Core_sub_OpCore
         (fun _ h => h) source_fv_Core
     have respects_SMT_Core :
         SMT.RenamingContext.RespectsTypeContextOnFV Θ Core t' := by
@@ -1209,12 +1222,12 @@ theorem EncodeTermRepScopedPostFrom.of_root.{u}
       exact respects_SMT_sup hv
         (AList.lookup_of_subset Core_sub_sup hlookup)
     have respects_SMT_op :
-        SMT.RenamingContext.RespectsTypeContextOnFV Θ Γ' t' :=
+        SMT.RenamingContext.RespectsTypeContextOnFV Θ OpCore t' :=
       respects_SMT_Core.of_extends
-        (SMT.RenamingContext.extends_refl Θ) Core_sub_Γ' typ_t'_Core
+        (SMT.RenamingContext.extends_refl Θ) Core_sub_OpCore typ_t'_Core
     have specs_local_sup : SpecBodiesTrue Θ Γ_sup Dlt :=
       specs_sup.right_of_append
-    have specs_local_op : SpecBodiesTrue Θ Γ' Dlt := by
+    have specs_local_op : SpecBodiesTrue Θ OpCore Dlt := by
       intro b hb
       obtain ⟨hcov_b, den_b, respects_b_sup, hden_b,
         hden_b_type, hden_b_true⟩ := specs_local_sup b hb
@@ -1224,17 +1237,18 @@ theorem EncodeTermRepScopedPostFrom.of_root.{u}
         exact respects_b_sup hv
           (AList.lookup_of_subset Core_sub_sup hlookup)
       have respects_b_op :
-          SMT.RenamingContext.RespectsTypeContextOnFV Θ Γ' b :=
+          SMT.RenamingContext.RespectsTypeContextOnFV Θ OpCore b :=
         respects_b_Core.of_extends
-          (SMT.RenamingContext.extends_refl Θ) Core_sub_Γ'
+          (SMT.RenamingContext.extends_refl Θ) Core_sub_OpCore
           (specs_Core b hb)
       exact ⟨hcov_b, den_b, respects_b_op, hden_b,
         hden_b_type, hden_b_true⟩
-    exact root_guard Γ' op_trace.scoped_extends Δ_alt Δ_fv_alt Θ
+    exact root_guard OpCore op_trace.scoped_extends Δ_alt Δ_fv_alt Θ
       related_alt wf_alt respects_B_op respects_SMT_op specs_local_op
       T_alt hT_alt den_t_alt hcov denT hdenT hdenT_type
-  exact ⟨Dlt, decl_eq, op_trace,
-    ⟨Core, full_trace, Core_sub_Γ'⟩,
+  exact ⟨Dlt, decl_eq, ⟨OpCore, op_trace, OpCore_sub_Γ'⟩,
+    ⟨Core, full_trace,
+      AList.subset_trans Core_sub_OpCore OpCore_sub_Γ'⟩,
     scoped_total, clean_guard, specs_op, clean_typing⟩
 
 /-- Representation-aware postcondition for one successful `encodeTerm` run. -/

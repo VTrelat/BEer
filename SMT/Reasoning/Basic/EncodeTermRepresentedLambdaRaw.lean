@@ -580,8 +580,6 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
               omega
             exact List.length_eq_zero_iff.mp hlen
           subst DltP
-          have St3_types_eq : St3.types = St2.types := by
-            simpa using P_trace
           have P_decl_stable : St3.env.declarations =
               St2.env.declarations := by
             simpa using P_decl_eq
@@ -589,6 +587,16 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
             intro v hv
             have h := Penc_fv hv
             simpa [List.mem_union_iff] using h
+          have typ_Penc_St2 : St2.types ⊢ˢ Penc : gamma := by
+            apply P_scoped_typing.1 St2.types
+            · simp [ScopedContextExtends, declEntries]
+            · intro v hv hvSt2
+              exact SMT.Typing.bv_notMem_context typ_Penc v hv
+                (AList.mem_of_subset St2_sub_St3 hvSt2)
+          have Penc_fv_in_St2 : ∀ v ∈ SMT.fv Penc,
+              v ∈ St2.types := by
+            intro v hv
+            exact SMT.Typing.mem_context_of_mem_fv typ_Penc_St2 hv
 
           mspec SMT.freshVar_spec
           rename_i z
@@ -1107,8 +1115,9 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
             have respects_P_St2 :
                 B.RenamingContext.RespectsTypeContextOnFV
                   ThetaBody St2.types P := by
-              rw [← St3_types_eq]
-              exact respects_P_final
+              intro v sigma hv hlookup
+              exact respects_P_final hv
+                (AList.lookup_of_subset St2_sub_St3 hlookup)
             have source_respects_upd :
                 ∀ ss' : Fin vs.length → SMT.Dom.{u},
                 (∀ i, St2.types.lookup vs[i] = some (ss' i).snd.fst) →
@@ -1121,20 +1130,6 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
               · intro v hv hvs sigma hlookup
                 exact respects_P_St2 hv hlookup
               · exact hss
-            have ThetaBody_dom_St2 : ∀ v, ThetaBody v ≠ none →
-                v ∈ St2.types := by
-              intro v hv
-              rw [← St3_types_eq]
-              exact ThetaBody_dom v hv
-            have ThetaBase_dom :
-                ∀ ss' : Fin vs.length → SMT.Dom.{u},
-                (∀ i, St2.types.lookup vs[i] = some (ss' i).snd.fst) →
-                ∀ v, Function.updates ThetaBody vs
-                  ((List.ofFn ss').map Option.some) v ≠ none →
-                    v ∈ St2.types := by
-              intro ss' hss
-              exact SMT.RenamingContext.updates_dom_of_typed_bounds
-                ThetaBody_dom_St2 hss
             have vs_used_St3 : ∀ v ∈ vs,
                 v ∈ St3.env.usedVars :=
               fun v hv => used_sub_St3 (vs_used_St2 v hv)
@@ -1196,8 +1191,8 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
                 hDenc_func D_rel hcov_body_upd hbody_total hcov_sub_upd
                 hcov_P_upd hvs_not_bv z_not_bv_Penc z_not_vs typ_P
                 P_total ambient_P_final wf_bound bound_expected
-                source_respects_upd ThetaBase_dom ThetaBody_none
-                vs_used_St3 Penc_fv_vars z_not_vars_P
+                source_respects_upd fv_P_in_St2 Penc_fv_in_St2
+                ThetaBody_none vs_used_St3 Penc_fv_vars z_not_vars_P
             refine ⟨ThetaBody, hcov_lambda, ThetaBody_ext0, related_out,
               ThetaBody_none_out, respects_out,
               target_respects_lambda_out, ThetaBody_dom_out,
@@ -1669,8 +1664,9 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
               have respects_P_alt_St2 :
                   B.RenamingContext.RespectsTypeContextOnFV
                     ThetaBody_alt St2.types P := by
-                rw [← St3_types_eq]
-                exact respects_P_alt_out
+                intro v sigma hv hlookup
+                exact respects_P_alt_out hv
+                  (AList.lookup_of_subset St2_sub_St3 hlookup)
               have source_respects_upd_alt :
                   ∀ ss' : Fin vs.length → SMT.Dom.{u},
                   (∀ i, St2.types.lookup vs[i] =
@@ -1685,21 +1681,6 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
                 · intro v hv hvs sigma hlookup
                   exact respects_P_alt_St2 hv hlookup
                 · exact hss
-              have ThetaBody_alt_dom_St2 : ∀ v,
-                  ThetaBody_alt v ≠ none → v ∈ St2.types := by
-                intro v hv
-                rw [← St3_types_eq]
-                exact ThetaBody_alt_dom v hv
-              have ThetaBase_dom_alt :
-                  ∀ ss' : Fin vs.length → SMT.Dom.{u},
-                  (∀ i, St2.types.lookup vs[i] =
-                    some (ss' i).snd.fst) →
-                  ∀ v, Function.updates ThetaBody_alt vs
-                    ((List.ofFn ss').map Option.some) v ≠ none →
-                      v ∈ St2.types := by
-                intro ss' hss
-                exact SMT.RenamingContext.updates_dom_of_typed_bounds
-                  ThetaBody_alt_dom_St2 hss
               have ambient_P_final_alt : ∀ v ∈ B.fv P,
                   v ∉ vs →
                   match Xi_alt v, ThetaBody_alt v with
@@ -1748,9 +1729,8 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
                   hbody_total_alt hcov_sub_upd_alt hcov_P_upd_alt
                   hvs_not_bv z_not_bv_Penc z_not_vs typ_P P_total
                   ambient_P_final_alt wf_bound_alt bound_expected
-                  source_respects_upd_alt ThetaBase_dom_alt
-                  ThetaBody_alt_none vs_used_St3 Penc_fv_vars
-                  z_not_vars_P
+                  source_respects_upd_alt fv_P_in_St2 Penc_fv_in_St2
+                  ThetaBody_alt_none vs_used_St3 Penc_fv_vars z_not_vars_P
               refine ⟨ThetaBody_alt, hcov_lambda_alt, lamVal_alt,
                 ThetaBody_alt_ext0, related_out_alt,
                 ThetaBody_alt_none_out, respects_out_alt,

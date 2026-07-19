@@ -78,7 +78,8 @@ theorem encodeTerm_rep_scoped.var_case_from.{u}
   rw [encodeTerm]
   mvcgen
   case vc1 τ τ_lookup =>
-    refine ⟨[], ?_, rfl, (by simpa using input_envelope), ?_, ?_, ?_, ?_⟩
+    refine ⟨[], ?_, DeclarationContextEnvelope.refl St.types,
+      (by simpa using input_envelope), ?_, ?_, ?_, ?_⟩
     · simpa [St_decl_eq]
     · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt
         Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -201,7 +202,8 @@ theorem encodeTerm_rep_scoped.int_case_from.{u}
   subst T
   injection type_eq with α_eq _
   subst α
-  refine ⟨[], ?_, rfl, (by simpa using input_envelope), ?_, ?_, ?_, ?_⟩
+  refine ⟨[], ?_, DeclarationContextEnvelope.refl St.types,
+    (by simpa using input_envelope), ?_, ?_, ?_, ?_⟩
   · simpa [St_decl_eq]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -287,7 +289,8 @@ theorem encodeTerm_rep_scoped.bool_case_from.{u}
   subst T
   injection type_eq with α_eq _
   subst α
-  refine ⟨[], ?_, rfl, (by simpa using input_envelope), ?_, ?_, ?_, ?_⟩
+  refine ⟨[], ?_, DeclarationContextEnvelope.refl St.types,
+    (by simpa using input_envelope), ?_, ?_, ?_, ?_⟩
   · simpa [St_decl_eq]
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt _wf_alt
       Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
@@ -423,7 +426,7 @@ theorem encodeTerm_rep_scoped.ℤ_case_from.{u}
       B.Term.ℤ E α St.types decl t' σ St'.env St'.types := by
     refine ⟨[], ?_, ?_, ?_, scoped_total, root_guard, ?_, ?_⟩
     · simpa [St_decl_eq] using decl_eq
-    · simpa [types_eq] using DeclarationContextTrace.nil St.types
+    · simpa [types_eq] using DeclarationContextEnvelope.refl St.types
     · simpa [types_eq] using DeclarationContextEnvelope.refl St.types
     · simp [specBodies]
     · have typ_t'_Λ : St.types ⊢ˢ t' : σ := by
@@ -542,7 +545,7 @@ theorem encodeTerm_rep_scoped.𝔹_case_from.{u}
       B.Term.𝔹 E α St.types decl t' σ St'.env St'.types := by
     refine ⟨[], ?_, ?_, ?_, scoped_total, root_guard, ?_, ?_⟩
     · simpa [St_decl_eq] using decl_eq
-    · simpa [types_eq] using DeclarationContextTrace.nil St.types
+    · simpa [types_eq] using DeclarationContextEnvelope.refl St.types
     · simpa [types_eq] using DeclarationContextEnvelope.refl St.types
     · simp [specBodies]
     · have typ_t'_Λ : St.types ⊢ˢ t' : σ := by
