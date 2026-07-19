@@ -1354,6 +1354,77 @@ theorem lambda_body_total_of_denote.{u}
     rw [hbridge'] at hbodyVal'
     simpa [Function.updates, proof_irrel_heq] using hbodyVal'
 
+set_option maxHeartbeats 2000000 in
+open Classical in
+/-- A successfully denoting encoded lambda exposes a denoting domain
+predicate of the expected function type.  The proof evaluates the body at a
+default pair, then removes the fresh lambda variable from the recovered
+domain denotation.  Unlike a typing argument, this remains valid when the
+ambient context contains arbitrary additional declarations. -/
+theorem lambda_domain_denote_of_lambda_denote.{u}
+    {Theta : SMT.RenamingContext.Context.{u}}
+    {z : SMT.𝒱} {sigma gamma : SMTType}
+    {Denc Psub : SMT.Term} {lamVal : SMT.Dom.{u}}
+    (hcov_lambda : SMT.RenamingContext.CoversFV Theta
+      ((λˢ [z]) [sigma.pair gamma]
+        (SMT.Term.and
+          (SMT.Term.app Denc (SMT.Term.fst (.var z)))
+          (SMT.Term.eq (SMT.Term.snd (.var z)) Psub))))
+    (hden_lambda :
+      ⟦((λˢ [z]) [sigma.pair gamma]
+        (SMT.Term.and
+          (SMT.Term.app Denc (SMT.Term.fst (.var z)))
+          (SMT.Term.eq (SMT.Term.snd (.var z)) Psub))).abstract
+          Theta hcov_lambda⟧ˢ = some lamVal)
+    (hcov_body_upd : ∀ W : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV (Function.update Theta z (some W))
+        (SMT.Term.and
+          (SMT.Term.app Denc (SMT.Term.fst (.var z)))
+          (SMT.Term.eq (SMT.Term.snd (.var z)) Psub)))
+    (hcov_D : SMT.RenamingContext.CoversFV Theta Denc)
+    (z_not_fv_D : z ∉ SMT.fv Denc) :
+    ∃ d : SMT.Dom.{u}, ⟦Denc.abstract Theta hcov_D⟧ˢ = some d ∧
+      d.snd.fst = SMTType.fun sigma SMTType.bool := by
+  let W : SMT.Dom.{u} :=
+    ⟨(sigma.pair gamma).defaultZFSet, sigma.pair gamma,
+      SMTType.mem_toZFSet_of_defaultZFSet⟩
+  obtain ⟨bodyVal, hbody⟩ := lambda_body_total_of_denote
+    hcov_lambda hden_lambda hcov_body_upd W rfl
+  have hcov_D_upd : SMT.RenamingContext.CoversFV
+      (Function.update Theta z (some W)) Denc :=
+    SMT.RenamingContext.coversFV_update_of_notMem z_not_fv_D hcov_D
+  simp only [SMT.Term.abstract, SMT.denote, Option.bind_eq_bind] at hbody
+  match hD : ⟦Denc.abstract (Function.update Theta z (some W))
+      hcov_D_upd⟧ˢ with
+  | none => simp [hD] at hbody
+  | some ⟨F, .bool, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .int, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .unit, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .option a, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .pair a b, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .fun a b, hF⟩ =>
+      simp [W, hD] at hbody
+      split_ifs at hbody with ha hp hdom
+      · subst a
+        cases b with
+        | bool =>
+            refine ⟨⟨F, .fun sigma .bool, hF⟩, ?_, rfl⟩
+            calc
+              ⟦Denc.abstract Theta hcov_D⟧ˢ =
+                  ⟦Denc.abstract (Function.update Theta z (some W))
+                    hcov_D_upd⟧ˢ := by
+                exact SMT.RenamingContext.denote_update_of_notMem
+                  (h := hcov_D) z_not_fv_D
+              _ = some ⟨F, .fun sigma .bool, hF⟩ := hD
+        | int => simp at hbody
+        | unit => simp at hbody
+        | «fun» c d => simp at hbody
+        | option c => simp at hbody
+        | pair c d => simp at hbody
+      · simp at hbody
+      · simp at hbody
+      · simp at hbody
+
 open Classical in
 /-- Evaluate the encoded lambda body at a represented source-domain point.
 The body result is related at its arbitrary encoder-chosen target type, and
