@@ -1616,7 +1616,9 @@ theorem encodeTerm_rep_scoped.inter_case_from.{u}
     pair_helper_typing P_envelope U_trace typP typU U_specs_op
       P_sc_typing P_fv_dep P_specs_fv_dep
   mpure_intro
-  refine ⟨DltP ++ DltU, ?_, DeclarationContextTrace.append P_trace U_trace,
+  refine ⟨DltP ++ DltU, ?_,
+    DeclarationContextEnvelope.append P_trace
+      (DeclarationContextEnvelope.of_trace U_trace),
     (by simpa [List.append_assoc] using U_envelope), ?_, ?_, ?_, ?_⟩
   · simpa [P_decl_eq, St_decl_eq, List.append_assoc] using U_decl_eq
   · intro Δ_alt Δ_fv_alt Δ₀_alt related_alt wf_alt

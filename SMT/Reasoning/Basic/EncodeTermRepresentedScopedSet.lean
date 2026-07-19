@@ -986,7 +986,8 @@ theorem encodeTerm_rep_scoped.pow_case_from.{u}
       S_sc_typing Pow_fv_dep Pow_specs_fv_dep
   mpure_intro
   refine ⟨DltS ++ DltPow, ?_,
-    DeclarationContextTrace.append S_trace Pow_trace,
+    DeclarationContextEnvelope.append S_trace
+      (DeclarationContextEnvelope.of_trace Pow_trace),
     (by simpa [List.append_assoc] using Pow_envelope),
     ?_, ?_, ?_, ?_⟩
   · simpa [S_decl_eq, St_decl_eq, List.append_assoc] using Pow_decl_eq
