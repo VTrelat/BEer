@@ -913,7 +913,7 @@ theorem encodePowTail_direct_rep_spec.{u}
               SMTType.bool, hU, ?_, rfl, Pow_rel⟩
           · simpa [tpow, pred] using hden_pow
 
-private theorem encodePowTail_graph_eq
+theorem encodePowTail_graph_eq
     (alpha beta : BType) (S : SMT.Term) :
     encodePowTail S
         (SMTType.fun alpha.toSMTType
