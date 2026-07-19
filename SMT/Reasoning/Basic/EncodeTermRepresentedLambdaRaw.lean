@@ -8,7 +8,7 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
     (D_ih : EncodeTermRepIH.{u} D)
     (P_ih : EncodeTermRepIH.{u} P)
     (D_scoped : EncodeTermRepScopedIH.{u} D)
-    (P_scoped : EncodeTermRepScopedIH.{u} P)
+    (P_scoped : EncodeTermRepScopedFromIH.{u} P)
     (E : B.Env) {Lambda : SMT.TypeContext} {alpha : BType}
     (typ_t : E.context ⊢ᴮ B.Term.lambda vs D P : alpha)
     {Xi : B.RenamingContext.Context.{u}}
@@ -158,6 +158,7 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
         D_decl_not, D_delta_not_used⟩ := post_D
   obtain ⟨DltD, D_scoped_decl, D_op_envelope, D_root_envelope,
       D_scoped_total, D_guard, D_specs_op, D_sc_typing⟩ := D_scoped_post
+  obtain ⟨DCore, D_root_trace, DCore_sub_St1⟩ := D_root_envelope
   have DltD_eq_used : DltD = DltD_used := by
     rw [D_scoped_decl] at D_decl_used
     exact List.append_right_injective _ D_decl_used
@@ -268,6 +269,47 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
             rw [St2_types, St2_used]
             exact encodeTerm_state.keys_foldl_insert_subset_foldl_cons
               (vs.zip sigmas) St1_keys_sub
+
+          have vs_disj_DCore : ∀ v ∈ vs, v ∉ DCore := by
+            intro v hv hcore
+            exact vs_disj_St1 v hv (AList.mem_of_subset DCore_sub_St1 hcore)
+          obtain ⟨PInputCore, D_root_trace_body, PInputCore_perm⟩ :=
+            D_root_trace.update_fresh vs sigmas vs_sigmas_len
+              vs_disj_DCore
+          have PInputCore_sub_St2 : PInputCore.entries ⊆
+              St2.types.entries := by
+            intro e he
+            rw [St2_update]
+            exact SMT.TypeContext.update_mono DCore St1.types
+              vs_sigmas_len DCore_sub_St1 (PInputCore_perm.subset he)
+          have P_input_envelope : DeclarationContextEnvelope
+              (St0.types.update vs sigmas vs_sigmas_len) DltD
+              St2.types :=
+            ⟨PInputCore, D_root_trace_body, PInputCore_sub_St2⟩
+          have fv_P_in_body_base : ∀ v ∈ B.fv P,
+              v ∈ St0.types.update vs sigmas vs_sigmas_len := by
+            intro v hv
+            rw [SMT.TypeContext.mem_update_iff St0.types v vs sigmas
+              vs_sigmas_len]
+            by_cases hvs : v ∈ vs
+            · exact Or.inl hvs
+            · exact Or.inr <| fv_in_Lambda v <|
+                B.fv.mem_lambda (.inr ⟨hv, hvs⟩)
+          have D_specs_body_base : ScopedSpecsTyping
+              (St0.types.update vs sigmas vs_sigmas_len) DltD := by
+            intro GammaSup hscope hall_bv b hb
+            apply D_sc_typing.2 GammaSup
+            · intro e he
+              apply hscope
+              rw [List.mem_append] at he ⊢
+              rcases he with hSt0 | hdecl
+              · exact Or.inl <| entries_subset_update_of_fresh
+                  (fun v hv hSt0 => vs_disj_St1 v hv
+                    (AList.mem_of_subset St0_sub_St1 hSt0))
+                  vs_sigmas_len hSt0
+              · exact Or.inr hdecl
+            · exact hall_bv
+            · exact hb
 
           let Ebody : B.Env :=
             { E with context := vs.zipToAList alphas ∪ E.context }
@@ -544,6 +586,7 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
                     ThetaP_dom den_P vars_used_P_St2
                     St2_types_sub_Ebody_on_P_vars bv_P_nodup
                     respects_P fv_P_in_St2 wf_P
+                    P_input_envelope fv_P_in_body_base D_specs_body_base
                     (n := St2.env.freshvarsc)
                     (decl := St2.env.declarations)))
                 (encodeTerm_decl Ebody typ_P vars_used_P_St2
@@ -608,7 +651,7 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
             simpa [List.mem_union_iff] using h
           have typ_Penc_St2 : St2.types ⊢ˢ Penc : gamma := by
             apply P_scoped_typing.1 St2.types
-            · simp [ScopedContextExtends, declEntries]
+            · simpa using P_input_envelope.scoped_extends
             · intro v hv hvSt2
               exact SMT.Typing.bv_notMem_context typ_Penc v hv
                 (AList.mem_of_subset St2_sub_St3 hvSt2)
