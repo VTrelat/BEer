@@ -1,4 +1,6 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedSet
+import SMT.Reasoning.Basic.EncodeTermRepresentedBinaryExists
+import SMT.Reasoning.Basic.EncodeTermRepresentedLambda
 
 open Std.Do B SMT ZFSet Classical
 
@@ -140,16 +142,19 @@ private theorem encodeTerm_cprod_via_tail
   rfl
 
 abbrev EncodeCprodTailRepSpec.{u}
-    (alpha beta : BType) (A B : SMT.Term) : Prop :=
+    (alpha beta : BType) (rho sigma : SMTType)
+    (_hrho : BType.SupportedSMT alpha rho)
+    (_hsigma : BType.SupportedSMT beta sigma)
+    (A B : SMT.Term) : Prop :=
   ∀ {Lambda : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱},
-    Lambda ⊢ˢ A : (BType.set alpha).toSMTType →
-    Lambda ⊢ˢ B : (BType.set beta).toSMTType →
+    Lambda ⊢ˢ A : SMTType.fun rho SMTType.bool →
+    Lambda ⊢ˢ B : SMTType.fun sigma SMTType.bool →
     (∀ v ∈ SMT.bv A, v ∈ used) →
     (∀ v ∈ SMT.bv B, v ∈ used) →
     ⦃fun ⟨env, Lambda'⟩ =>
       ⌜Lambda' = Lambda ∧ env.freshvarsc = n ∧
         Lambda.keys ⊆ env.usedVars ∧ env.usedVars = used⌝⦄
-    encodeCprodTail A B alpha.toSMTType beta.toSMTType
+    encodeCprodTail A B rho sigma
     ⦃⇓? ⟨t, sigma⟩ ⟨env', Gamma'⟩ =>
       ⌜used ⊆ env'.usedVars ∧
         Lambda ⊆ Gamma' ∧
@@ -190,8 +195,11 @@ abbrev EncodeCprodTailRepSpec.{u}
 
 set_option maxHeartbeats 5000000 in
 theorem encodeCprodTail_rep_spec.{u}
-    (alpha beta : BType) (A B : SMT.Term) :
-    EncodeCprodTailRepSpec.{u} alpha beta A B := by
+    (alpha beta : BType) (rho sigma : SMTType)
+    (hrho : BType.SupportedSMT alpha rho)
+    (hsigma : BType.SupportedSMT beta sigma)
+    (A B : SMT.Term) :
+    EncodeCprodTailRepSpec.{u} alpha beta rho sigma hrho hsigma A B := by
   unfold EncodeCprodTailRepSpec
   intro Lambda n used typ_A typ_B bv_A_used bv_B_used
   unfold encodeCprodTail
@@ -237,12 +245,11 @@ theorem encodeCprodTail_rep_spec.{u}
         obtain ⟨StEb_types_eq, _, StEb_used_eq⟩ := postEb
 
         have a_fresh₀ : a ∉ St₀.types.insert p
-            (SMTType.pair alpha.toSMTType beta.toSMTType) := by
+            (SMTType.pair rho sigma) := by
           simpa [St₁_types_eq] using a_fresh
         have b_fresh₀ : b ∉
             (St₀.types.insert p
-              (SMTType.pair alpha.toSMTType beta.toSMTType)).insert a
-                alpha.toSMTType := by
+              (SMTType.pair rho sigma)).insert a rho := by
           simpa [St₂_types_eq, St₁_types_eq] using b_fresh
         have StEb_types_final : StEb.types = St₀.types := by
           rw [StEb_types_eq, StEa_types_eq, StEp_types_eq,
@@ -270,6 +277,18 @@ theorem encodeCprodTail_rep_spec.{u}
           fun h => p_not_used (bv_A_used p h)
         have hp_not_bv_B : p ∉ SMT.bv B :=
           fun h => p_not_used (bv_B_used p h)
+        have hp_not_fv_A : p ∉ SMT.fv A := by
+          exact funNotMemFvOfNotMemContext typ_A p_fresh
+        have hp_not_fv_B : p ∉ SMT.fv B := by
+          exact funNotMemFvOfNotMemContext typ_B p_fresh
+        have ha_not_fv_A : a ∉ SMT.fv A := by
+          exact funNotMemFvOfNotMemContext typ_A ha_not_ctx
+        have ha_not_fv_B : a ∉ SMT.fv B := by
+          exact funNotMemFvOfNotMemContext typ_B ha_not_ctx
+        have hb_not_fv_A : b ∉ SMT.fv A := by
+          exact funNotMemFvOfNotMemContext typ_A hb_not_ctx
+        have hb_not_fv_B : b ∉ SMT.fv B := by
+          exact funNotMemFvOfNotMemContext typ_B hb_not_ctx
         have ha_not_bv_A : a ∉ SMT.bv A := fun h => by
           apply a_not_used
           rw [St₁_used_eq]
@@ -295,28 +314,27 @@ theorem encodeCprodTail_rep_spec.{u}
             ((.app B (.var b)) ∧ˢ
               ((.var p) =ˢ (.pair (.var a) (.var b))))
         let tcprod : SMT.Term :=
-          .lambda [p] [SMTType.pair alpha.toSMTType beta.toSMTType]
-            (.exists [a, b] [alpha.toSMTType, beta.toSMTType] body)
+          .lambda [p] [SMTType.pair rho sigma]
+            (.exists [a, b] [rho, sigma] body)
 
         have typ_A_p : St₀.types.insert p
-            (SMTType.pair alpha.toSMTType beta.toSMTType) ⊢ˢ A :
-              (BType.set alpha).toSMTType :=
+            (SMTType.pair rho sigma) ⊢ˢ A :
+              SMTType.fun rho SMTType.bool :=
           SMT.Typing.weakening
             (SMT.TypeContext.entries_subset_insert_of_notMem p_fresh)
             typ_A
             (SMT.Typing.bv_notMem_insert_of_fresh typ_A hp_not_bv_A)
         have typ_B_p : St₀.types.insert p
-            (SMTType.pair alpha.toSMTType beta.toSMTType) ⊢ˢ B :
-              (BType.set beta).toSMTType :=
+            (SMTType.pair rho sigma) ⊢ˢ B :
+              SMTType.fun sigma SMTType.bool :=
           SMT.Typing.weakening
             (SMT.TypeContext.entries_subset_insert_of_notMem p_fresh)
             typ_B
             (SMT.Typing.bv_notMem_insert_of_fresh typ_B hp_not_bv_B)
         have typ_A_pab :
             ((St₀.types.insert p
-              (SMTType.pair alpha.toSMTType beta.toSMTType)).insert a
-                alpha.toSMTType).insert b beta.toSMTType ⊢ˢ A :
-              (BType.set alpha).toSMTType := by
+              (SMTType.pair rho sigma)).insert a rho).insert b sigma ⊢ˢ A :
+              SMTType.fun rho SMTType.bool := by
           apply SMT.Typing.weakening
             (SMT.TypeContext.entries_subset_insert_of_notMem b_fresh₀)
           · apply SMT.Typing.weakening
@@ -331,9 +349,8 @@ theorem encodeCprodTail_rep_spec.{u}
               hb_not_bv_A
         have typ_B_pab :
             ((St₀.types.insert p
-              (SMTType.pair alpha.toSMTType beta.toSMTType)).insert a
-                alpha.toSMTType).insert b beta.toSMTType ⊢ˢ B :
-              (BType.set beta).toSMTType := by
+              (SMTType.pair rho sigma)).insert a rho).insert b sigma ⊢ˢ B :
+              SMTType.fun sigma SMTType.bool := by
           apply SMT.Typing.weakening
             (SMT.TypeContext.entries_subset_insert_of_notMem b_fresh₀)
           · apply SMT.Typing.weakening
@@ -348,8 +365,7 @@ theorem encodeCprodTail_rep_spec.{u}
               hb_not_bv_B
         have typ_body :
             ((St₀.types.insert p
-              (SMTType.pair alpha.toSMTType beta.toSMTType)).insert a
-                alpha.toSMTType).insert b beta.toSMTType ⊢ˢ body :
+              (SMTType.pair rho sigma)).insert a rho).insert b sigma ⊢ˢ body :
               SMTType.bool := by
           dsimp [body]
           apply SMT.Typing.and
@@ -375,14 +391,14 @@ theorem encodeCprodTail_rep_spec.{u}
                 · exact SMT.Typing.var _ b _ (by
                     rw [AList.lookup_insert])
         have typ_exists : St₀.types.insert p
-            (SMTType.pair alpha.toSMTType beta.toSMTType) ⊢ˢ
-              .exists [a, b] [alpha.toSMTType, beta.toSMTType] body :
+            (SMTType.pair rho sigma) ⊢ˢ
+              .exists [a, b] [rho, sigma] body :
                 SMTType.bool := by
           let lenEq : [a, b].length =
-              [alpha.toSMTType, beta.toSMTType].length := by simp
+              [rho, sigma].length := by simp
           apply SMT.Typing.exists
               (vs := [a, b])
-              (τs := [alpha.toSMTType, beta.toSMTType])
+              (τs := [rho, sigma])
               (len_eq := lenEq)
           · intro v hv
             rw [List.mem_cons, List.mem_singleton] at hv
@@ -396,12 +412,11 @@ theorem encodeCprodTail_rep_spec.{u}
               rcases hv with rfl | rfl <;> simp)
           · simp
           · have hupdate : SMT.TypeContext.update
-                (St₀.types.insert p
-                  (SMTType.pair alpha.toSMTType beta.toSMTType))
-                [a, b] [alpha.toSMTType, beta.toSMTType] lenEq =
+              (St₀.types.insert p
+                  (SMTType.pair rho sigma))
+                [a, b] [rho, sigma] lenEq =
               ((St₀.types.insert p
-                (SMTType.pair alpha.toSMTType beta.toSMTType)).insert a
-                  alpha.toSMTType).insert b beta.toSMTType := by
+                (SMTType.pair rho sigma)).insert a rho).insert b sigma := by
               unfold SMT.TypeContext.update
               simp only [List.length_cons, List.length_nil, zero_add,
                 Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin]
@@ -410,12 +425,12 @@ theorem encodeCprodTail_rep_spec.{u}
             rw [hupdate]
             exact typ_body
         have typ_tcprod : St₀.types ⊢ˢ tcprod :
-            (BType.set (alpha ×ᴮ beta)).toSMTType := by
+            SMTType.fun (SMTType.pair rho sigma) SMTType.bool := by
           let lenEq : [p].length =
-              [SMTType.pair alpha.toSMTType beta.toSMTType].length := by
+              [SMTType.pair rho sigma].length := by
             simp
           apply SMT.Typing.lambda (vs := [p])
-              (τs := [SMTType.pair alpha.toSMTType beta.toSMTType])
+              (τs := [SMTType.pair rho sigma])
               (len_eq := lenEq)
           · simpa using p_fresh
           · intro v hv hbv
@@ -424,9 +439,9 @@ theorem encodeCprodTail_rep_spec.{u}
             exact SMT.Typing.bv_notMem_context typ_exists p hbv (by simp)
           · simp
           · have hupdate : SMT.TypeContext.update St₀.types [p]
-                [SMTType.pair alpha.toSMTType beta.toSMTType] lenEq =
+                [SMTType.pair rho sigma] lenEq =
               St₀.types.insert p
-                (SMTType.pair alpha.toSMTType beta.toSMTType) := by
+                (SMTType.pair rho sigma) := by
               unfold SMT.TypeContext.update
               simp only [List.length_cons, List.length_nil, zero_add,
                 Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin,
@@ -494,8 +509,8 @@ theorem encodeCprodTail_rep_spec.{u}
             St₃_used_eq, St₂_used_eq, St₁_used_eq]
           exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
             (List.mem_cons_of_mem _ (St₀_keys hv)))
-        · exact ⟨castPath.reflexive
-            (BType.set (alpha ×ᴮ beta)).toSMTType⟩
+        · exact (BType.SupportedSMT.setPred
+            (BType.SupportedSMT.prod hrho hsigma)).nonemptyCanonicalCastPath
         · simpa [StEb_types_final, tcprod, body] using typ_tcprod
         · intro v hv hv_not
           simpa [StEb_types_final] using hv_not
@@ -513,116 +528,11 @@ theorem encodeCprodTail_rep_spec.{u}
           dsimp at denA_type denB_type
           subst sigmaA
           subst sigmaB
-          have retract_A : retract (BType.set alpha) Aval = X :=
-            ((RDomCast.iff_RDom_of_type_eq
-              (α := BType.set alpha) rfl).mp A_rel.toRDomCast).2
-          have retract_B : retract (BType.set beta) Bval = Y :=
-            ((RDomCast.iff_RDom_of_type_eq
-              (α := BType.set beta) rfl).mp B_rel.toRDomCast).2
-          let keep := SMT.fv A ++ SMT.fv B
-          let ThetaFull :=
-            SMT.RenamingContext.completeOutside Theta St₀.types keep
-          have keep_respects : ∀ {v : SMT.𝒱} {sigma : SMTType},
-              v ∈ keep → St₀.types.lookup v = some sigma →
-                ∃ d : SMT.Dom.{u},
-                  Theta v = some d ∧ d.snd.fst = sigma := by
-            intro v sigma hv hlookup
-            rw [List.mem_append] at hv
-            exact hv.elim
-              (fun h => respects_A h hlookup)
-              (fun h => respects_B h hlookup)
-          have ThetaFull_wt :=
-            SMT.RenamingContext.completeOutside_wt keep_respects
-          have hcov_A_full : RenamingContext.CoversFV ThetaFull A := by
-            intro v hv
-            change (SMT.RenamingContext.completeOutside
-              Theta St₀.types keep v).isSome = true
-            rw [SMT.RenamingContext.completeOutside_eq_of_mem
-              (by simp [keep, hv])]
-            exact hcov_A v hv
-          have hcov_B_full : RenamingContext.CoversFV ThetaFull B := by
-            intro v hv
-            change (SMT.RenamingContext.completeOutside
-              Theta St₀.types keep v).isSome = true
-            rw [SMT.RenamingContext.completeOutside_eq_of_mem
-              (by simp [keep, hv])]
-            exact hcov_B v hv
-          have hden_A_full :
-              ⟦A.abstract ThetaFull hcov_A_full⟧ˢ =
-                some (⟨Aval, (BType.set alpha).toSMTType, hAval⟩ :
-                  SMT.Dom) := by
-            have hagree : RenamingContext.AgreesOnFV ThetaFull Theta A := by
-              intro v hv
-              change SMT.RenamingContext.completeOutside
-                Theta St₀.types keep v = Theta v
-              exact SMT.RenamingContext.completeOutside_eq_of_mem
-                (by simp [keep, hv])
-            have hcongr := RenamingContext.denote_congr_of_agreesOnFV
-              (t := A) (h1 := hcov_A_full) (h2 := hcov_A) hagree
-            simpa [RenamingContext.denote] using hcongr.trans hden_A
-          have hden_B_full :
-              ⟦B.abstract ThetaFull hcov_B_full⟧ˢ =
-                some (⟨Bval, (BType.set beta).toSMTType, hBval⟩ :
-                  SMT.Dom) := by
-            have hagree : RenamingContext.AgreesOnFV ThetaFull Theta B := by
-              intro v hv
-              change SMT.RenamingContext.completeOutside
-                Theta St₀.types keep v = Theta v
-              exact SMT.RenamingContext.completeOutside_eq_of_mem
-                (by simp [keep, hv])
-            have hcongr := RenamingContext.denote_congr_of_agreesOnFV
-              (t := B) (h1 := hcov_B_full) (h2 := hcov_B) hagree
-            simpa [RenamingContext.denote] using hcongr.trans hden_B
           have hcov_tcprod : RenamingContext.CoversFV Theta tcprod := by
             intro v hv
             have hv' := fv_tcprod_sub hv
             rw [List.mem_append] at hv'
             exact hv'.elim (hcov_A v) (hcov_B v)
-          have hcov_tcprod_full :
-              RenamingContext.CoversFV ThetaFull tcprod := by
-            intro v hv
-            have hvkeep : v ∈ keep := fv_tcprod_sub hv
-            change (SMT.RenamingContext.completeOutside
-              Theta St₀.types keep v).isSome = true
-            rw [SMT.RenamingContext.completeOutside_eq_of_mem hvkeep]
-            exact hcov_tcprod v hv
-          obtain ⟨denOut, hdenOut_full, Out_rel⟩ :=
-            cprod_case_denotation_aux
-              (αx := alpha) (βx := beta)
-              (X := X) (Y := Y) (hT := cprod_mem_btype hX hY)
-              (ctx := St₀.types) (S_enc := A) (T_enc := B)
-              (Δ'' := ThetaFull)
-              (typ_T_enc := typ_B) (typ_S_enc_T := typ_A)
-              (Δctx_wt := ThetaFull_wt)
-              (p := p) (a := a) (b := b)
-              (p_fresh := p_fresh) (a_fresh := a_fresh₀)
-              (b_fresh := b_fresh₀)
-              (hp_not_bv_S := hp_not_bv_A)
-              (hp_not_bv_T := hp_not_bv_B)
-              (ha_not_bv_S := ha_not_bv_A)
-              (ha_not_bv_T := ha_not_bv_B)
-              (hb_not_bv_S := hb_not_bv_A)
-              (hb_not_bv_T := hb_not_bv_B)
-              (hSenc := hAval) (hTenc := hBval)
-              (retract_Senc_eq_X := retract_A)
-              (retract_Tenc_eq_Y := retract_B)
-              (hΔ_S_final := hcov_A_full)
-              (Δ''_covers_T := hcov_B_full)
-              (den_S_enc_final := hden_A_full)
-              (den_T_enc := hden_B_full)
-              (hcov_tcprod_in := hcov_tcprod_full)
-          have hdenOut : ⟦tcprod.abstract Theta hcov_tcprod⟧ˢ =
-              some denOut := by
-            have hagree : RenamingContext.AgreesOnFV Theta ThetaFull tcprod := by
-              intro v hv
-              symm
-              exact SMT.RenamingContext.completeOutside_eq_of_mem
-                (fv_tcprod_sub hv)
-            have hcongr := RenamingContext.denote_congr_of_agreesOnFV
-              (t := tcprod) (h1 := hcov_tcprod)
-              (h2 := hcov_tcprod_full) hagree
-            simpa [RenamingContext.denote] using
-              hcongr.trans hdenOut_full
           have target_respects :
               SMT.RenamingContext.RespectsTypeContextOnFV
                 Theta St₀.types tcprod := by
@@ -632,6 +542,1235 @@ theorem encodeCprodTail_rep_spec.{u}
             exact hv'.elim
               (fun h => respects_A h hlookup)
               (fun h => respects_B h hlookup)
+          obtain ⟨denOut, hdenOut, hdenOut_type⟩ :=
+            SMT.RenamingContext.denote_exists_of_typing_fv
+              typ_tcprod target_respects hcov_tcprod
+          have hprod_sub : X.prod Y ⊆ ⟦alpha ×ᴮ beta⟧ᶻ := by
+            simpa [BType.toZFSet] using
+              ZFSet.mem_powerset.mp (cprod_mem_btype hX hY)
+          have fv_body_to_tcprod : ∀ {v : SMT.𝒱},
+              v ∈ SMT.fv body → v ≠ p → v ≠ a → v ≠ b →
+                v ∈ SMT.fv tcprod := by
+            intro v hv hvp hva hvb
+            dsimp [tcprod]
+            rw [SMT.fv, List.mem_removeAll_iff]
+            refine ⟨?_, by simpa using hvp⟩
+            rw [SMT.fv, List.mem_removeAll_iff]
+            exact ⟨hv, by simp [hva, hvb]⟩
+          have hcov_exists : ∀ Wp : SMT.Dom.{u},
+              RenamingContext.CoversFV
+                (Function.update Theta p (some Wp))
+                (SMT.Term.exists [a, b] [rho, sigma] body) := by
+            intro Wp v hv
+            by_cases hvp : v = p
+            · subst v
+              simp [Function.update_self]
+            · rw [Function.update_of_ne hvp]
+              apply hcov_tcprod
+              dsimp [tcprod]
+              rw [SMT.fv, List.mem_removeAll_iff]
+              exact ⟨hv, by simpa using hvp⟩
+          have respects_exists : ∀ (Wp : SMT.Dom.{u}),
+              Wp.snd.fst = SMTType.pair rho sigma →
+              SMT.RenamingContext.RespectsTypeContextOnFV
+                (Function.update Theta p (some Wp))
+                (St₀.types.insert p (SMTType.pair rho sigma))
+                (SMT.Term.exists [a, b] [rho, sigma] body) := by
+            intro Wp hWp_type v tau hv hlookup
+            by_cases hvp : v = p
+            · subst v
+              rw [AList.lookup_insert] at hlookup
+              cases hlookup
+              exact ⟨Wp, Function.update_self _ _ _, hWp_type⟩
+            · rw [AList.lookup_insert_ne hvp] at hlookup
+              have hv_tcprod : v ∈ SMT.fv tcprod := by
+                dsimp [tcprod]
+                rw [SMT.fv, List.mem_removeAll_iff]
+                exact ⟨hv, by simpa using hvp⟩
+              obtain ⟨d, hd, htype⟩ :=
+                target_respects hv_tcprod hlookup
+              refine ⟨d, ?_, htype⟩
+              simpa [Function.update_of_ne hvp] using hd
+          have hcov_body : ∀ Wp Wa Wb : SMT.Dom.{u},
+              RenamingContext.CoversFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb)) body := by
+            intro Wp Wa Wb v hv
+            by_cases hvb : v = b
+            · subst v
+              simp [Function.update_self]
+            · by_cases hva : v = a
+              · subst v
+                simp [Function.update_of_ne ha_ne_b,
+                  Function.update_self]
+              · by_cases hvp : v = p
+                · subst v
+                  simp [Function.update_of_ne hp_ne_b,
+                    Function.update_of_ne hp_ne_a,
+                    Function.update_self]
+                · rw [Function.update_of_ne hvb,
+                    Function.update_of_ne hva,
+                    Function.update_of_ne hvp]
+                  exact hcov_tcprod v
+                    (fv_body_to_tcprod hv hvp hva hvb)
+          have respects_body : ∀ (Wp Wa Wb : SMT.Dom.{u}),
+              Wp.snd.fst = SMTType.pair rho sigma →
+              Wa.snd.fst = rho → Wb.snd.fst = sigma →
+              SMT.RenamingContext.RespectsTypeContextOnFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb))
+                (((St₀.types.insert p (SMTType.pair rho sigma)).insert a rho).insert b sigma)
+                body := by
+            intro Wp Wa Wb hWp_type hWa_type hWb_type v tau hv hlookup
+            by_cases hvb : v = b
+            · subst v
+              rw [AList.lookup_insert] at hlookup
+              cases hlookup
+              exact ⟨Wb, Function.update_self _ _ _, hWb_type⟩
+            · rw [AList.lookup_insert_ne hvb] at hlookup
+              by_cases hva : v = a
+              · subst v
+                rw [AList.lookup_insert] at hlookup
+                cases hlookup
+                refine ⟨Wa, ?_, hWa_type⟩
+                rw [Function.update_of_ne ha_ne_b,
+                  Function.update_self]
+              · rw [AList.lookup_insert_ne hva] at hlookup
+                by_cases hvp : v = p
+                · subst v
+                  rw [AList.lookup_insert] at hlookup
+                  cases hlookup
+                  refine ⟨Wp, ?_, hWp_type⟩
+                  rw [Function.update_of_ne hp_ne_b,
+                    Function.update_of_ne hp_ne_a,
+                    Function.update_self]
+                · rw [AList.lookup_insert_ne hvp] at hlookup
+                  obtain ⟨d, hd, htype⟩ := target_respects
+                    (fv_body_to_tcprod hv hvp hva hvb) hlookup
+                  refine ⟨d, ?_, htype⟩
+                  simpa [Function.update_of_ne hvb,
+                    Function.update_of_ne hva,
+                    Function.update_of_ne hvp] using hd
+          have body_den : ∀ (Wp Wa Wb : SMT.Dom.{u}),
+              Wp.snd.fst = SMTType.pair rho sigma →
+              Wa.snd.fst = rho → Wb.snd.fst = sigma →
+              ∃ D : SMT.Dom.{u},
+                ⟦body.abstract
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb))
+                  (hcov_body Wp Wa Wb)⟧ˢ = some D ∧
+                D.snd.fst = SMTType.bool := by
+            intro Wp Wa Wb hWp_type hWa_type hWb_type
+            exact SMT.RenamingContext.denote_exists_of_typing_fv
+              typ_body
+              (respects_body Wp Wa Wb hWp_type hWa_type hWb_type)
+              (hcov_body Wp Wa Wb)
+          have body_total : ∀ (Wp Wa Wb : SMT.Dom.{u}),
+              Wp.snd.fst = SMTType.pair rho sigma →
+              Wa.snd.fst = rho → Wb.snd.fst = sigma →
+              (⟦body.abstract
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb))
+                (hcov_body Wp Wa Wb)⟧ˢ).isSome = true := by
+            intro Wp Wa Wb hWp_type hWa_type hWb_type
+            obtain ⟨D, hdenD, _⟩ :=
+              body_den Wp Wa Wb hWp_type hWa_type hWb_type
+            rw [hdenD]
+            rfl
+          have body_type : ∀ (Wp Wa Wb : SMT.Dom.{u}),
+              Wp.snd.fst = SMTType.pair rho sigma →
+              Wa.snd.fst = rho → Wb.snd.fst = sigma →
+              ∀ {D : SMT.Dom.{u}},
+                ⟦body.abstract
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb))
+                  (hcov_body Wp Wa Wb)⟧ˢ = some D →
+                D.snd.fst = SMTType.bool := by
+            intro Wp Wa Wb hWp_type hWa_type hWb_type D hdenD
+            exact SMT.RenamingContext.denote_type_of_typing_fv
+              typ_body
+              (respects_body Wp Wa Wb hWp_type hWa_type hWb_type)
+              (hcov_body Wp Wa Wb) hdenD
+          have hgo_body : ∀ (Wp : SMT.Dom.{u}) v,
+              v ∈ SMT.fv body → v ∉ [a, b] →
+                ((Function.update Theta p (some Wp)) v).isSome = true := by
+            intro Wp v hv hv_not_ab
+            have hva : v ≠ a := by
+              intro h
+              subst v
+              exact hv_not_ab (by simp)
+            have hvb : v ≠ b := by
+              intro h
+              subst v
+              exact hv_not_ab (by simp)
+            by_cases hvp : v = p
+            · subst v
+              simp [Function.update_self]
+            · rw [Function.update_of_ne hvp]
+              exact hcov_tcprod v
+                (fv_body_to_tcprod hv hvp hva hvb)
+          have Out_rel : RDomCastSupported
+              (⟨X.prod Y, BType.set (alpha ×ᴮ beta),
+                cprod_mem_btype hX hY⟩ : _root_.B.Dom) denOut := by
+            refine represented_setPred_lambda_of_pointwise
+              (alpha := alpha ×ᴮ beta)
+              (sigma := SMTType.pair rho sigma)
+              (S := X.prod Y) (Theta := Theta) (z := p)
+              (body := SMT.Term.exists [a, b] [rho, sigma] body)
+              (lamVal := denOut)
+              (BType.SupportedSMT.prod hrho hsigma) hprod_sub
+              ?_ ?_ ?_ ?_ ?_ ?_
+            · simpa [tcprod, body] using hcov_tcprod
+            · simpa [tcprod, body] using hdenOut
+            · simpa [tcprod, body] using hdenOut_type
+            · intro y hy
+              let Wp : SMT.Dom.{u} :=
+                ⟨y, SMTType.pair rho sigma, hy⟩
+              obtain ⟨bodyVal, hden_bodyVal, _⟩ :=
+                SMT.RenamingContext.denote_exists_of_typing_fv
+                  typ_exists (respects_exists Wp rfl) (hcov_exists Wp)
+              exact ⟨hcov_exists Wp, bodyVal, hden_bodyVal⟩
+            · intro y hy hcov_exists' bodyVal hden_exists hbody_true
+              let Wp : SMT.Dom.{u} :=
+                ⟨y, SMTType.pair rho sigma, hy⟩
+              obtain ⟨Wa, Wb, hWa_type, hWb_type, Dbody,
+                  hden_body, hDbody_true⟩ :=
+                funBinaryExistsTrueWitness
+                  hcov_exists' (hgo_body Wp)
+                  (fun Wa Wb => hcov_body Wp Wa Wb)
+                  (fun Wa Wb hWa hWb =>
+                    body_total Wp Wa Wb rfl hWa hWb)
+                  (fun Wa Wb hWa hWb =>
+                    body_type Wp Wa Wb rfl hWa hWb)
+                  hden_exists hbody_true
+              have hcov_Aapp : RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb))
+                  ((@ˢA) (SMT.Term.var a)) := by
+                intro v hv
+                apply hcov_body Wp Wa Wb v
+                simp only [body, SMT.fv, List.mem_append]
+                simp only [SMT.fv, List.mem_append] at hv
+                exact Or.inl hv
+              have hcov_right : RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb))
+                  ((@ˢB) (SMT.Term.var b) ∧ˢ
+                    (SMT.Term.var p =ˢ
+                      (SMT.Term.var a).pair (SMT.Term.var b))) := by
+                intro v hv
+                apply hcov_body Wp Wa Wb v
+                simp only [body, SMT.fv, List.mem_append]
+                simp only [SMT.fv, List.mem_append] at hv
+                exact Or.inr hv
+              obtain ⟨_, typ_Aapp, typ_right⟩ :=
+                SMT.Typing.andE typ_body
+              have respects_Aapp :
+                  SMT.RenamingContext.RespectsTypeContextOnFV
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb))
+                    (((St₀.types.insert p (SMTType.pair rho sigma)).insert
+                      a rho).insert b sigma)
+                    ((@ˢA) (SMT.Term.var a)) := by
+                apply SMT.RenamingContext.RespectsTypeContextOnFV.mono_fv
+                  (respects_body Wp Wa Wb rfl hWa_type hWb_type)
+                intro v hv
+                simp only [body, SMT.fv, List.mem_append]
+                simp only [SMT.fv, List.mem_append] at hv
+                exact Or.inl hv
+              have respects_right :
+                  SMT.RenamingContext.RespectsTypeContextOnFV
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb))
+                    (((St₀.types.insert p (SMTType.pair rho sigma)).insert
+                      a rho).insert b sigma)
+                    ((@ˢB) (SMT.Term.var b) ∧ˢ
+                      (SMT.Term.var p =ˢ
+                        (SMT.Term.var a).pair (SMT.Term.var b))) := by
+                apply SMT.RenamingContext.RespectsTypeContextOnFV.mono_fv
+                  (respects_body Wp Wa Wb rfl hWa_type hWb_type)
+                intro v hv
+                simp only [body, SMT.fv, List.mem_append]
+                simp only [SMT.fv, List.mem_append] at hv
+                exact Or.inr hv
+              have hden_outer :
+                  ⟦(((@ˢA) (SMT.Term.var a)).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_Aapp) ∧ˢ'
+                    (((@ˢB) (SMT.Term.var b) ∧ˢ
+                      (SMT.Term.var p =ˢ
+                        (SMT.Term.var a).pair (SMT.Term.var b))).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_right)⟧ˢ =
+                    some Dbody := by
+                simpa [body, SMT.Term.abstract, proof_irrel_heq] using
+                  hden_body
+              obtain ⟨DAapp, Dright, hden_Aapp, hDAapp_true,
+                  hden_right, hDright_true⟩ :=
+                denoteAndTrueComponents
+                  (typ_p_bool := by
+                    intro D hdenD
+                    exact SMT.RenamingContext.denote_type_of_typing_fv
+                      typ_Aapp respects_Aapp hcov_Aapp hdenD)
+                  (typ_q_bool := by
+                    intro D hdenD
+                    exact SMT.RenamingContext.denote_type_of_typing_fv
+                      typ_right respects_right hcov_right hdenD)
+                  hden_outer hDbody_true
+              have hcov_Bapp : RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb))
+                  ((@ˢB) (SMT.Term.var b)) := by
+                intro v hv
+                apply hcov_right v
+                simp only [SMT.fv, List.mem_append]
+                simp only [SMT.fv, List.mem_append] at hv
+                exact Or.inl hv
+              have hcov_eq : RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb))
+                  (SMT.Term.var p =ˢ
+                    (SMT.Term.var a).pair (SMT.Term.var b)) := by
+                intro v hv
+                apply hcov_right v
+                simp only [SMT.fv, List.mem_append]
+                simp only [SMT.fv, List.mem_append] at hv
+                exact Or.inr hv
+              obtain ⟨_, typ_Bapp, typ_eq⟩ :=
+                SMT.Typing.andE typ_right
+              have respects_Bapp :
+                  SMT.RenamingContext.RespectsTypeContextOnFV
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb))
+                    (((St₀.types.insert p (SMTType.pair rho sigma)).insert
+                      a rho).insert b sigma)
+                    ((@ˢB) (SMT.Term.var b)) := by
+                apply SMT.RenamingContext.RespectsTypeContextOnFV.mono_fv
+                  respects_right
+                intro v hv
+                simp only [SMT.fv, List.mem_append]
+                simp only [SMT.fv, List.mem_append] at hv
+                exact Or.inl hv
+              have respects_eq :
+                  SMT.RenamingContext.RespectsTypeContextOnFV
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb))
+                    (((St₀.types.insert p (SMTType.pair rho sigma)).insert
+                      a rho).insert b sigma)
+                    (SMT.Term.var p =ˢ
+                      (SMT.Term.var a).pair (SMT.Term.var b)) := by
+                apply SMT.RenamingContext.RespectsTypeContextOnFV.mono_fv
+                  respects_right
+                intro v hv
+                simp only [SMT.fv, List.mem_append]
+                simp only [SMT.fv, List.mem_append] at hv
+                exact Or.inr hv
+              have hden_right_split :
+                  ⟦(((@ˢB) (SMT.Term.var b)).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_Bapp) ∧ˢ'
+                    ((SMT.Term.var p =ˢ
+                      (SMT.Term.var a).pair (SMT.Term.var b)).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_eq)⟧ˢ =
+                    some Dright := by
+                simpa [SMT.Term.abstract, proof_irrel_heq] using hden_right
+              obtain ⟨DBapp, Deq, hden_Bapp, hDBapp_true,
+                  hden_eq, hDeq_true⟩ :=
+                denoteAndTrueComponents
+                  (typ_p_bool := by
+                    intro D hdenD
+                    exact SMT.RenamingContext.denote_type_of_typing_fv
+                      typ_Bapp respects_Bapp hcov_Bapp hdenD)
+                  (typ_q_bool := by
+                    intro D hdenD
+                    exact SMT.RenamingContext.denote_type_of_typing_fv
+                      typ_eq respects_eq hcov_eq hdenD)
+                  hden_right_split hDright_true
+              have hcov_A_p : RenamingContext.CoversFV
+                  (Function.update Theta p (some Wp)) A := by
+                exact SMT.RenamingContext.coversFV_update_of_notMem
+                  (x := p) (d := Wp) hp_not_fv_A hcov_A
+              have hcov_A_pa : RenamingContext.CoversFV
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) A := by
+                exact SMT.RenamingContext.coversFV_update_of_notMem
+                  (x := a) (d := Wa) ha_not_fv_A hcov_A_p
+              have hcov_A_pab : RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb)) A := by
+                exact SMT.RenamingContext.coversFV_update_of_notMem
+                  (x := b) (d := Wb) hb_not_fv_A hcov_A_pa
+              have hden_A_p_raw :
+                  ⟦A.abstract (Function.update Theta p (some Wp))
+                      hcov_A_p⟧ˢ =
+                    ⟦A.abstract Theta hcov_A⟧ˢ := by
+                simpa [SMT.RenamingContext.denote] using
+                  (SMT.RenamingContext.denote_update_of_notMem
+                    («Δ» := Theta) (t := A) (x := p) (d := Wp)
+                    (h := hcov_A) hp_not_fv_A).symm
+              have hden_A_pa_raw :
+                  ⟦A.abstract
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) hcov_A_pa⟧ˢ =
+                    ⟦A.abstract (Function.update Theta p (some Wp))
+                      hcov_A_p⟧ˢ := by
+                simpa [SMT.RenamingContext.denote] using
+                  (SMT.RenamingContext.denote_update_of_notMem
+                    («Δ» := Function.update Theta p (some Wp))
+                    (t := A) (x := a) (d := Wa)
+                    (h := hcov_A_p) ha_not_fv_A).symm
+              have hden_A_pab_raw :
+                  ⟦A.abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_A_pab⟧ˢ =
+                    ⟦A.abstract
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) hcov_A_pa⟧ˢ := by
+                simpa [SMT.RenamingContext.denote] using
+                  (SMT.RenamingContext.denote_update_of_notMem
+                    («Δ» := Function.update
+                      (Function.update Theta p (some Wp)) a (some Wa))
+                    (t := A) (x := b) (d := Wb)
+                    (h := hcov_A_pa) hb_not_fv_A).symm
+              have hden_A_pab :
+                  ⟦A.abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_A_pab⟧ˢ =
+                    some ⟨Aval, ⟨rho.fun SMTType.bool, hAval⟩⟩ := by
+                exact hden_A_pab_raw.trans
+                  (hden_A_pa_raw.trans (hden_A_p_raw.trans hden_A))
+              have hAval_func :
+                  ZFSet.IsFunc ⟦rho⟧ᶻ ⟦SMTType.bool⟧ᶻ Aval := by
+                simpa [SMTType.toZFSet] using hAval
+              have hWa_mem : Wa.fst ∈ ⟦rho⟧ᶻ := by
+                simpa [hWa_type] using Wa.snd.snd
+              have hcov_A_pab_a : ∀ Xarg : SMT.Dom,
+                  RenamingContext.CoversFV
+                    (Function.update
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) a (some Xarg)) A :=
+                fun Xarg =>
+                  SMT.RenamingContext.coversFV_update_of_notMem
+                    (x := a) (d := Xarg) ha_not_fv_A hcov_A_pab
+              have hden_A_pab_a_raw (Xarg : SMT.Dom) :
+                  ⟦A.abstract
+                      (Function.update
+                        (Function.update
+                          (Function.update
+                            (Function.update Theta p (some Wp)) a (some Wa))
+                          b (some Wb)) a (some Xarg))
+                      (hcov_A_pab_a Xarg)⟧ˢ =
+                    ⟦A.abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_A_pab⟧ˢ := by
+                simpa [SMT.RenamingContext.denote] using
+                  (SMT.RenamingContext.denote_update_of_notMem
+                    («Δ» := Function.update
+                      (Function.update
+                        (Function.update Theta p (some Wp)) a (some Wa))
+                      b (some Wb))
+                    (t := A) (x := a) (d := Xarg)
+                    (h := hcov_A_pab) ha_not_fv_A).symm
+              have hden_A_pab_a : ∀ Xarg : SMT.Dom,
+                  ⟦A.abstract
+                      (Function.update
+                        (Function.update
+                          (Function.update
+                            (Function.update Theta p (some Wp)) a (some Wa))
+                          b (some Wb)) a (some Xarg))
+                      (hcov_A_pab_a Xarg)⟧ˢ =
+                    some ⟨Aval, ⟨rho.fun SMTType.bool, hAval⟩⟩ :=
+                fun Xarg => (hden_A_pab_a_raw Xarg).trans hden_A_pab
+              obtain ⟨hcov_Aapp_eval, DAeval, hDAeval_type,
+                  hDAeval_value, hden_Aapp_eval⟩ :=
+                funDenoteAppAt
+                  (Δctx := Function.update
+                    (Function.update
+                      (Function.update Theta p (some Wp)) a (some Wa))
+                    b (some Wb))
+                  (t := A) (x := a)
+                  (α := rho) (β := SMTType.bool)
+                  (Y := (⟨Aval, ⟨rho.fun SMTType.bool, hAval⟩⟩ : SMT.Dom))
+                  hcov_A_pab_a hden_A_pab_a rfl hAval_func
+                  Wa hWa_type hWa_mem
+              have hctx_Aeval :
+                  Function.update
+                      (Function.update
+                        (Function.update
+                          (Function.update Theta p (some Wp)) a (some Wa))
+                        b (some Wb)) a (some Wa) =
+                    Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb) := by
+                funext v
+                by_cases hva : v = a
+                · subst v
+                  simp [Function.update, ha_ne_b]
+                · simp [Function.update, hva]
+              have hden_Aapp_eval_full :
+                  ⟦((@ˢA) (SMT.Term.var a)).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_Aapp⟧ˢ =
+                    some DAeval := by
+                simpa [hctx_Aeval, proof_irrel_heq] using hden_Aapp_eval
+              have hDAeval_eq_DAapp : DAeval = DAapp := by
+                exact Option.some.inj
+                  (hden_Aapp_eval_full.symm.trans hden_Aapp)
+              have hDAeval_true : DAeval.fst = ZFSet.zftrue := by
+                rw [hDAeval_eq_DAapp]
+                exact hDAapp_true
+              have hAval_app_true :
+                  (ZFSet.fapply Aval (ZFSet.is_func_is_pfunc hAval_func)
+                    ⟨Wa.fst, by
+                      rw [ZFSet.is_func_dom_eq hAval_func]
+                      exact hWa_mem⟩).val = ZFSet.zftrue := by
+                exact hDAeval_value.symm.trans hDAeval_true
+              obtain ⟨xa, hxa_X, Wa_rel⟩ :=
+                A_rel.setPred_target_of_true hWa_mem hAval_app_true
+              have hcov_B_p : RenamingContext.CoversFV
+                  (Function.update Theta p (some Wp)) B := by
+                exact SMT.RenamingContext.coversFV_update_of_notMem
+                  (x := p) (d := Wp) hp_not_fv_B hcov_B
+              have hcov_B_pa : RenamingContext.CoversFV
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) B := by
+                exact SMT.RenamingContext.coversFV_update_of_notMem
+                  (x := a) (d := Wa) ha_not_fv_B hcov_B_p
+              have hcov_B_pab : RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb)) B := by
+                exact SMT.RenamingContext.coversFV_update_of_notMem
+                  (x := b) (d := Wb) hb_not_fv_B hcov_B_pa
+              have hden_B_p_raw :
+                  ⟦B.abstract (Function.update Theta p (some Wp))
+                      hcov_B_p⟧ˢ =
+                    ⟦B.abstract Theta hcov_B⟧ˢ := by
+                simpa [SMT.RenamingContext.denote] using
+                  (SMT.RenamingContext.denote_update_of_notMem
+                    («Δ» := Theta) (t := B) (x := p) (d := Wp)
+                    (h := hcov_B) hp_not_fv_B).symm
+              have hden_B_pa_raw :
+                  ⟦B.abstract
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) hcov_B_pa⟧ˢ =
+                    ⟦B.abstract (Function.update Theta p (some Wp))
+                      hcov_B_p⟧ˢ := by
+                simpa [SMT.RenamingContext.denote] using
+                  (SMT.RenamingContext.denote_update_of_notMem
+                    («Δ» := Function.update Theta p (some Wp))
+                    (t := B) (x := a) (d := Wa)
+                    (h := hcov_B_p) ha_not_fv_B).symm
+              have hden_B_pab_raw :
+                  ⟦B.abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_B_pab⟧ˢ =
+                    ⟦B.abstract
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) hcov_B_pa⟧ˢ := by
+                simpa [SMT.RenamingContext.denote] using
+                  (SMT.RenamingContext.denote_update_of_notMem
+                    («Δ» := Function.update
+                      (Function.update Theta p (some Wp)) a (some Wa))
+                    (t := B) (x := b) (d := Wb)
+                    (h := hcov_B_pa) hb_not_fv_B).symm
+              have hden_B_pab :
+                  ⟦B.abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_B_pab⟧ˢ =
+                    some ⟨Bval, ⟨sigma.fun SMTType.bool, hBval⟩⟩ := by
+                exact hden_B_pab_raw.trans
+                  (hden_B_pa_raw.trans (hden_B_p_raw.trans hden_B))
+              have hBval_func :
+                  ZFSet.IsFunc ⟦sigma⟧ᶻ ⟦SMTType.bool⟧ᶻ Bval := by
+                simpa [SMTType.toZFSet] using hBval
+              have hWb_mem : Wb.fst ∈ ⟦sigma⟧ᶻ := by
+                simpa [hWb_type] using Wb.snd.snd
+              have hcov_B_pab_b : ∀ Xarg : SMT.Dom,
+                  RenamingContext.CoversFV
+                    (Function.update
+                      (Function.update
+                        (Function.update
+                          (Function.update Theta p (some Wp)) a (some Wa))
+                        b (some Wb)) b (some Xarg)) B :=
+                fun Xarg =>
+                  SMT.RenamingContext.coversFV_update_of_notMem
+                    (x := b) (d := Xarg) hb_not_fv_B hcov_B_pab
+              have hden_B_pab_b_raw (Xarg : SMT.Dom) :
+                  ⟦B.abstract
+                      (Function.update
+                        (Function.update
+                          (Function.update
+                            (Function.update Theta p (some Wp)) a (some Wa))
+                          b (some Wb)) b (some Xarg))
+                      (hcov_B_pab_b Xarg)⟧ˢ =
+                    ⟦B.abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_B_pab⟧ˢ := by
+                simpa [SMT.RenamingContext.denote] using
+                  (SMT.RenamingContext.denote_update_of_notMem
+                    («Δ» := Function.update
+                      (Function.update
+                        (Function.update Theta p (some Wp)) a (some Wa))
+                      b (some Wb))
+                    (t := B) (x := b) (d := Xarg)
+                    (h := hcov_B_pab) hb_not_fv_B).symm
+              have hden_B_pab_b : ∀ Xarg : SMT.Dom,
+                  ⟦B.abstract
+                      (Function.update
+                        (Function.update
+                          (Function.update
+                            (Function.update Theta p (some Wp)) a (some Wa))
+                          b (some Wb)) b (some Xarg))
+                      (hcov_B_pab_b Xarg)⟧ˢ =
+                    some ⟨Bval, ⟨sigma.fun SMTType.bool, hBval⟩⟩ :=
+                fun Xarg => (hden_B_pab_b_raw Xarg).trans hden_B_pab
+              obtain ⟨hcov_Bapp_eval, DBeval, hDBeval_type,
+                  hDBeval_value, hden_Bapp_eval⟩ :=
+                funDenoteAppAt
+                  (Δctx := Function.update
+                    (Function.update
+                      (Function.update Theta p (some Wp)) a (some Wa))
+                    b (some Wb))
+                  (t := B) (x := b)
+                  (α := sigma) (β := SMTType.bool)
+                  (Y := (⟨Bval, ⟨sigma.fun SMTType.bool, hBval⟩⟩ : SMT.Dom))
+                  hcov_B_pab_b hden_B_pab_b rfl hBval_func
+                  Wb hWb_type hWb_mem
+              have hctx_Beval :
+                  Function.update
+                      (Function.update
+                        (Function.update
+                          (Function.update Theta p (some Wp)) a (some Wa))
+                        b (some Wb)) b (some Wb) =
+                    Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb) := by
+                funext v
+                by_cases hvb : v = b
+                · subst v
+                  simp [Function.update]
+                · simp [Function.update, hvb]
+              have hden_Bapp_eval_full :
+                  ⟦((@ˢB) (SMT.Term.var b)).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_Bapp⟧ˢ =
+                    some DBeval := by
+                simpa [hctx_Beval, proof_irrel_heq] using hden_Bapp_eval
+              have hDBeval_eq_DBapp : DBeval = DBapp := by
+                exact Option.some.inj
+                  (hden_Bapp_eval_full.symm.trans hden_Bapp)
+              have hDBeval_true : DBeval.fst = ZFSet.zftrue := by
+                rw [hDBeval_eq_DBapp]
+                exact hDBapp_true
+              have hBval_app_true :
+                  (ZFSet.fapply Bval (ZFSet.is_func_is_pfunc hBval_func)
+                    ⟨Wb.fst, by
+                      rw [ZFSet.is_func_dom_eq hBval_func]
+                      exact hWb_mem⟩).val = ZFSet.zftrue := by
+                exact hDBeval_value.symm.trans hDBeval_true
+              obtain ⟨xb, hxb_Y, Wb_rel⟩ :=
+                B_rel.setPred_target_of_true hWb_mem hBval_app_true
+              have hcov_var_p : RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb)) (SMT.Term.var p) := by
+                intro v hv
+                rw [SMT.fv, List.mem_singleton] at hv
+                subst v
+                simp [Function.update, hp_ne_a, hp_ne_b]
+              have hden_var_p :
+                  ⟦(SMT.Term.var p).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_var_p⟧ˢ =
+                    some Wp := by
+                simp [SMT.Term.abstract.eq_def, SMT.denote,
+                  Option.pure_def, Function.update, hp_ne_a, hp_ne_b]
+              have hcov_var_a : RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb)) (SMT.Term.var a) := by
+                intro v hv
+                rw [SMT.fv, List.mem_singleton] at hv
+                subst v
+                simp [Function.update, ha_ne_b]
+              have hden_var_a :
+                  ⟦(SMT.Term.var a).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_var_a⟧ˢ =
+                    some Wa := by
+                simp [SMT.Term.abstract.eq_def, SMT.denote,
+                  Option.pure_def, Function.update, ha_ne_b]
+              have hcov_var_b : RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb)) (SMT.Term.var b) := by
+                intro v hv
+                rw [SMT.fv, List.mem_singleton] at hv
+                subst v
+                simp [Function.update]
+              have hden_var_b :
+                  ⟦(SMT.Term.var b).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_var_b⟧ˢ =
+                    some Wb := by
+                simp [SMT.Term.abstract.eq_def, SMT.denote,
+                  Option.pure_def, Function.update]
+              obtain ⟨Dpair, hden_pair_raw, hDpair_type⟩ :=
+                denote_pair_some_of_some hden_var_a hden_var_b
+              have hWp_Dpair_type : Wp.snd.fst = Dpair.snd.fst := by
+                simpa [Wp, hWa_type, hWb_type] using hDpair_type.symm
+              have hden_eq_split :
+                  ⟦(SMT.Term.var p).abstract
+                        (Function.update
+                          (Function.update (Function.update Theta p (some Wp))
+                            a (some Wa)) b (some Wb)) hcov_var_p =ˢ'
+                      ((SMT.Term.var a).abstract
+                        (Function.update
+                          (Function.update (Function.update Theta p (some Wp))
+                            a (some Wa)) b (some Wb)) hcov_var_a).pair
+                        ((SMT.Term.var b).abstract
+                          (Function.update
+                            (Function.update (Function.update Theta p (some Wp))
+                              a (some Wa)) b (some Wb)) hcov_var_b)⟧ˢ =
+                    some Deq := by
+                simpa [SMT.Term.abstract, proof_irrel_heq] using hden_eq
+              have hWp_eq_Dpair_fst : Wp.fst = Dpair.fst := by
+                exact denote_eq_true_implies_fst_eq
+                  hden_var_p hden_pair_raw hWp_Dpair_type hden_eq_split hDeq_true
+              have hDpair_fst : Dpair.fst = Wa.fst.pair Wb.fst := by
+                have hpair_eq_raw := hden_pair_raw
+                rw [SMT.denote, hden_var_a, hden_var_b] at hpair_eq_raw
+                simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_some,
+                  Option.some.injEq] at hpair_eq_raw
+                exact (congrArg (fun D : SMT.Dom => D.fst) hpair_eq_raw).symm
+              have hy_pair : y = Wa.fst.pair Wb.fst :=
+                hWp_eq_Dpair_fst.trans hDpair_fst
+              have pair_rel_y :
+                  RDomCastSupported
+                    (⟨xa.pair xb, ⟨alpha ×ᴮ beta,
+                      hprod_sub (ZFSet.pair_mem_prod.mpr
+                        ⟨hxa_X, hxb_Y⟩)⟩⟩ : _root_.B.Dom)
+                    (⟨y, ⟨rho.pair sigma, hy⟩⟩ : SMT.Dom) := by
+                subst y
+                exact RDomCastSupported.pair Wa_rel Wb_rel
+              exact ⟨xa.pair xb, ZFSet.pair_mem_prod.mpr
+                ⟨hxa_X, hxb_Y⟩, pair_rel_y⟩
+            intro x hx
+            obtain ⟨xa, hxa_X, xb, hxb_Y, rfl⟩ := ZFSet.mem_prod.mp hx
+            obtain ⟨ya, hya, ya_rel⟩ :=
+              A_rel.setPred_member_preimage hxa_X
+            obtain ⟨yb, hyb, yb_rel⟩ :=
+              B_rel.setPred_member_preimage hxb_Y
+            have hy_pair : ya.pair yb ∈ ⟦rho.pair sigma⟧ᶻ :=
+              ZFSet.pair_mem_prod.mpr ⟨hya, hyb⟩
+            refine ⟨ya.pair yb, hy_pair, ?_, ?_⟩
+            exact RDomCastSupported.pair ya_rel yb_rel
+            refine ⟨hcov_exists
+              (⟨ya.pair yb, ⟨rho.pair sigma, hy_pair⟩⟩ : SMT.Dom), ?_⟩
+            refine ⟨(⟨ZFSet.zftrue, SMTType.bool,
+              ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom), ?_, rfl⟩
+            let Wp : SMT.Dom :=
+              ⟨ya.pair yb, ⟨rho.pair sigma, hy_pair⟩⟩
+            let Wa : SMT.Dom := ⟨ya, ⟨rho, hya⟩⟩
+            let Wb : SMT.Dom := ⟨yb, ⟨sigma, hyb⟩⟩
+            have hAval_app_true :=
+              (RDomCastSupported.setPred_fapply_eq_zftrue_iff
+                ya_rel.toRDomCast A_rel).2 hxa_X
+            have hBval_app_true :=
+              (RDomCastSupported.setPred_fapply_eq_zftrue_iff
+                yb_rel.toRDomCast B_rel).2 hxb_Y
+            have hcov_A_p : RenamingContext.CoversFV
+                (Function.update Theta p (some Wp)) A :=
+              SMT.RenamingContext.coversFV_update_of_notMem
+                (x := p) (d := Wp) hp_not_fv_A hcov_A
+            have hcov_A_pa : RenamingContext.CoversFV
+                (Function.update (Function.update Theta p (some Wp))
+                  a (some Wa)) A :=
+              SMT.RenamingContext.coversFV_update_of_notMem
+                (x := a) (d := Wa) ha_not_fv_A hcov_A_p
+            have hcov_A_pab : RenamingContext.CoversFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb)) A :=
+              SMT.RenamingContext.coversFV_update_of_notMem
+                (x := b) (d := Wb) hb_not_fv_A hcov_A_pa
+            have hden_A_p_raw :
+                ⟦A.abstract (Function.update Theta p (some Wp))
+                    hcov_A_p⟧ˢ =
+                  ⟦A.abstract Theta hcov_A⟧ˢ := by
+              simpa [SMT.RenamingContext.denote] using
+                (SMT.RenamingContext.denote_update_of_notMem
+                  («Δ» := Theta) (t := A) (x := p) (d := Wp)
+                  (h := hcov_A) hp_not_fv_A).symm
+            have hden_A_pa_raw :
+                ⟦A.abstract
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) hcov_A_pa⟧ˢ =
+                  ⟦A.abstract (Function.update Theta p (some Wp))
+                    hcov_A_p⟧ˢ := by
+              simpa [SMT.RenamingContext.denote] using
+                (SMT.RenamingContext.denote_update_of_notMem
+                  («Δ» := Function.update Theta p (some Wp))
+                  (t := A) (x := a) (d := Wa)
+                  (h := hcov_A_p) ha_not_fv_A).symm
+            have hden_A_pab_raw :
+                ⟦A.abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_A_pab⟧ˢ =
+                  ⟦A.abstract
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) hcov_A_pa⟧ˢ := by
+              simpa [SMT.RenamingContext.denote] using
+                (SMT.RenamingContext.denote_update_of_notMem
+                  («Δ» := Function.update
+                    (Function.update Theta p (some Wp)) a (some Wa))
+                  (t := A) (x := b) (d := Wb)
+                  (h := hcov_A_pa) hb_not_fv_A).symm
+            have hden_A_pab :
+                ⟦A.abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_A_pab⟧ˢ =
+                  some ⟨Aval, ⟨rho.fun SMTType.bool, hAval⟩⟩ :=
+              hden_A_pab_raw.trans
+                (hden_A_pa_raw.trans (hden_A_p_raw.trans hden_A))
+            have hAval_func :
+                ZFSet.IsFunc ⟦rho⟧ᶻ ⟦SMTType.bool⟧ᶻ Aval := by
+              simpa [SMTType.toZFSet] using hAval
+            have hWa_mem : Wa.fst ∈ ⟦rho⟧ᶻ := by
+              simpa [Wa] using hya
+            have hcov_A_pab_a : ∀ Xarg : SMT.Dom,
+                RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update
+                      (Function.update
+                        (Function.update Theta p (some Wp)) a (some Wa))
+                      b (some Wb)) a (some Xarg)) A :=
+              fun Xarg =>
+                SMT.RenamingContext.coversFV_update_of_notMem
+                  (x := a) (d := Xarg) ha_not_fv_A hcov_A_pab
+            have hden_A_pab_a_raw (Xarg : SMT.Dom) :
+                ⟦A.abstract
+                    (Function.update
+                      (Function.update
+                        (Function.update
+                          (Function.update Theta p (some Wp)) a (some Wa))
+                        b (some Wb)) a (some Xarg))
+                    (hcov_A_pab_a Xarg)⟧ˢ =
+                  ⟦A.abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_A_pab⟧ˢ := by
+              simpa [SMT.RenamingContext.denote] using
+                (SMT.RenamingContext.denote_update_of_notMem
+                  («Δ» := Function.update
+                    (Function.update
+                      (Function.update Theta p (some Wp)) a (some Wa))
+                    b (some Wb))
+                  (t := A) (x := a) (d := Xarg)
+                  (h := hcov_A_pab) ha_not_fv_A).symm
+            have hden_A_pab_a : ∀ Xarg : SMT.Dom,
+                ⟦A.abstract
+                    (Function.update
+                      (Function.update
+                        (Function.update
+                          (Function.update Theta p (some Wp)) a (some Wa))
+                        b (some Wb)) a (some Xarg))
+                    (hcov_A_pab_a Xarg)⟧ˢ =
+                  some ⟨Aval, ⟨rho.fun SMTType.bool, hAval⟩⟩ :=
+              fun Xarg => (hden_A_pab_a_raw Xarg).trans hden_A_pab
+            obtain ⟨hcov_Aapp_eval, DAeval, hDAeval_type,
+                hDAeval_value, hden_Aapp_eval⟩ :=
+              funDenoteAppAt
+                (Δctx := Function.update
+                  (Function.update
+                    (Function.update Theta p (some Wp)) a (some Wa))
+                  b (some Wb))
+                (t := A) (x := a)
+                (α := rho) (β := SMTType.bool)
+                (Y := (⟨Aval, ⟨rho.fun SMTType.bool, hAval⟩⟩ : SMT.Dom))
+                hcov_A_pab_a hden_A_pab_a rfl hAval_func
+                Wa rfl hWa_mem
+            have hDAeval_true : DAeval.fst = ZFSet.zftrue := by
+              exact hDAeval_value.trans (by
+                simpa [Wa, proof_irrel_heq] using hAval_app_true)
+            have hDAeval_eq_true :
+                DAeval = (⟨ZFSet.zftrue, SMTType.bool,
+                  ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+              funDomEqOfTyEqAndFstEq hDAeval_type hDAeval_true
+            have hctx_Aeval :
+                Function.update
+                    (Function.update
+                      (Function.update
+                        (Function.update Theta p (some Wp)) a (some Wa))
+                      b (some Wb)) a (some Wa) =
+                  Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb) := by
+              funext v
+              by_cases hva : v = a
+              · subst v
+                simp [Function.update, ha_ne_b]
+              · simp [Function.update, hva]
+            have hcov_Aapp : RenamingContext.CoversFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb))
+                ((@ˢA) (SMT.Term.var a)) := by
+              intro v hv
+              apply hcov_body Wp Wa Wb v
+              simp only [body, SMT.fv, List.mem_append]
+              simp only [SMT.fv, List.mem_append] at hv
+              exact Or.inl hv
+            have hden_Aapp_eval_full :
+                ⟦((@ˢA) (SMT.Term.var a)).abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_Aapp⟧ˢ =
+                  some DAeval := by
+              simpa [hctx_Aeval, proof_irrel_heq] using hden_Aapp_eval
+            have hden_Aapp_true :
+                ⟦((@ˢA) (SMT.Term.var a)).abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_Aapp⟧ˢ =
+                  some (⟨ZFSet.zftrue, SMTType.bool,
+                    ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+              hden_Aapp_eval_full.trans (congrArg some hDAeval_eq_true)
+            have hcov_B_p : RenamingContext.CoversFV
+                (Function.update Theta p (some Wp)) B :=
+              SMT.RenamingContext.coversFV_update_of_notMem
+                (x := p) (d := Wp) hp_not_fv_B hcov_B
+            have hcov_B_pa : RenamingContext.CoversFV
+                (Function.update (Function.update Theta p (some Wp))
+                  a (some Wa)) B :=
+              SMT.RenamingContext.coversFV_update_of_notMem
+                (x := a) (d := Wa) ha_not_fv_B hcov_B_p
+            have hcov_B_pab : RenamingContext.CoversFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb)) B :=
+              SMT.RenamingContext.coversFV_update_of_notMem
+                (x := b) (d := Wb) hb_not_fv_B hcov_B_pa
+            have hden_B_p_raw :
+                ⟦B.abstract (Function.update Theta p (some Wp))
+                    hcov_B_p⟧ˢ =
+                  ⟦B.abstract Theta hcov_B⟧ˢ := by
+              simpa [SMT.RenamingContext.denote] using
+                (SMT.RenamingContext.denote_update_of_notMem
+                  («Δ» := Theta) (t := B) (x := p) (d := Wp)
+                  (h := hcov_B) hp_not_fv_B).symm
+            have hden_B_pa_raw :
+                ⟦B.abstract
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) hcov_B_pa⟧ˢ =
+                  ⟦B.abstract (Function.update Theta p (some Wp))
+                    hcov_B_p⟧ˢ := by
+              simpa [SMT.RenamingContext.denote] using
+                (SMT.RenamingContext.denote_update_of_notMem
+                  («Δ» := Function.update Theta p (some Wp))
+                  (t := B) (x := a) (d := Wa)
+                  (h := hcov_B_p) ha_not_fv_B).symm
+            have hden_B_pab_raw :
+                ⟦B.abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_B_pab⟧ˢ =
+                  ⟦B.abstract
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) hcov_B_pa⟧ˢ := by
+              simpa [SMT.RenamingContext.denote] using
+                (SMT.RenamingContext.denote_update_of_notMem
+                  («Δ» := Function.update
+                    (Function.update Theta p (some Wp)) a (some Wa))
+                  (t := B) (x := b) (d := Wb)
+                  (h := hcov_B_pa) hb_not_fv_B).symm
+            have hden_B_pab :
+                ⟦B.abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_B_pab⟧ˢ =
+                  some ⟨Bval, ⟨sigma.fun SMTType.bool, hBval⟩⟩ :=
+              hden_B_pab_raw.trans
+                (hden_B_pa_raw.trans (hden_B_p_raw.trans hden_B))
+            have hBval_func :
+                ZFSet.IsFunc ⟦sigma⟧ᶻ ⟦SMTType.bool⟧ᶻ Bval := by
+              simpa [SMTType.toZFSet] using hBval
+            have hWb_mem : Wb.fst ∈ ⟦sigma⟧ᶻ := by
+              simpa [Wb] using hyb
+            have hcov_B_pab_b : ∀ Xarg : SMT.Dom,
+                RenamingContext.CoversFV
+                  (Function.update
+                    (Function.update
+                      (Function.update
+                        (Function.update Theta p (some Wp)) a (some Wa))
+                      b (some Wb)) b (some Xarg)) B :=
+              fun Xarg =>
+                SMT.RenamingContext.coversFV_update_of_notMem
+                  (x := b) (d := Xarg) hb_not_fv_B hcov_B_pab
+            have hden_B_pab_b_raw (Xarg : SMT.Dom) :
+                ⟦B.abstract
+                    (Function.update
+                      (Function.update
+                        (Function.update
+                          (Function.update Theta p (some Wp)) a (some Wa))
+                        b (some Wb)) b (some Xarg))
+                    (hcov_B_pab_b Xarg)⟧ˢ =
+                  ⟦B.abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_B_pab⟧ˢ := by
+              simpa [SMT.RenamingContext.denote] using
+                (SMT.RenamingContext.denote_update_of_notMem
+                  («Δ» := Function.update
+                    (Function.update
+                      (Function.update Theta p (some Wp)) a (some Wa))
+                    b (some Wb))
+                  (t := B) (x := b) (d := Xarg)
+                  (h := hcov_B_pab) hb_not_fv_B).symm
+            have hden_B_pab_b : ∀ Xarg : SMT.Dom,
+                ⟦B.abstract
+                    (Function.update
+                      (Function.update
+                        (Function.update
+                          (Function.update Theta p (some Wp)) a (some Wa))
+                        b (some Wb)) b (some Xarg))
+                    (hcov_B_pab_b Xarg)⟧ˢ =
+                  some ⟨Bval, ⟨sigma.fun SMTType.bool, hBval⟩⟩ :=
+              fun Xarg => (hden_B_pab_b_raw Xarg).trans hden_B_pab
+            obtain ⟨hcov_Bapp_eval, DBeval, hDBeval_type,
+                hDBeval_value, hden_Bapp_eval⟩ :=
+              funDenoteAppAt
+                (Δctx := Function.update
+                  (Function.update
+                    (Function.update Theta p (some Wp)) a (some Wa))
+                  b (some Wb))
+                (t := B) (x := b)
+                (α := sigma) (β := SMTType.bool)
+                (Y := (⟨Bval, ⟨sigma.fun SMTType.bool, hBval⟩⟩ : SMT.Dom))
+                hcov_B_pab_b hden_B_pab_b rfl hBval_func
+                Wb rfl hWb_mem
+            have hDBeval_true : DBeval.fst = ZFSet.zftrue := by
+              exact hDBeval_value.trans (by
+                simpa [Wb, proof_irrel_heq] using hBval_app_true)
+            have hDBeval_eq_true :
+                DBeval = (⟨ZFSet.zftrue, SMTType.bool,
+                  ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+              funDomEqOfTyEqAndFstEq hDBeval_type hDBeval_true
+            have hctx_Beval :
+                Function.update
+                    (Function.update
+                      (Function.update
+                        (Function.update Theta p (some Wp)) a (some Wa))
+                      b (some Wb)) b (some Wb) =
+                  Function.update
+                    (Function.update (Function.update Theta p (some Wp))
+                      a (some Wa)) b (some Wb) := by
+              funext v
+              by_cases hvb : v = b
+              · subst v
+                simp [Function.update]
+              · simp [Function.update, hvb]
+            have hcov_Bapp : RenamingContext.CoversFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb))
+                ((@ˢB) (SMT.Term.var b)) := by
+              intro v hv
+              apply hcov_body Wp Wa Wb v
+              simp only [body, SMT.fv, List.mem_append]
+              simp only [SMT.fv, List.mem_append] at hv
+              exact Or.inr (Or.inl hv)
+            have hden_Bapp_eval_full :
+                ⟦((@ˢB) (SMT.Term.var b)).abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_Bapp⟧ˢ =
+                  some DBeval := by
+              simpa [hctx_Beval, proof_irrel_heq] using hden_Bapp_eval
+            have hden_Bapp_true :
+                ⟦((@ˢB) (SMT.Term.var b)).abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_Bapp⟧ˢ =
+                  some (⟨ZFSet.zftrue, SMTType.bool,
+                    ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+              hden_Bapp_eval_full.trans (congrArg some hDBeval_eq_true)
+            have hcov_var_p : RenamingContext.CoversFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb)) (SMT.Term.var p) := by
+              intro v hv
+              rw [SMT.fv, List.mem_singleton] at hv
+              subst v
+              simp [Function.update, hp_ne_a, hp_ne_b]
+            have hden_var_p :
+                ⟦(SMT.Term.var p).abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_var_p⟧ˢ =
+                  some Wp := by
+              simp [SMT.Term.abstract.eq_def, SMT.denote,
+                Option.pure_def, Function.update, hp_ne_a, hp_ne_b]
+            have hcov_var_a : RenamingContext.CoversFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb)) (SMT.Term.var a) := by
+              intro v hv
+              rw [SMT.fv, List.mem_singleton] at hv
+              subst v
+              simp [Function.update, ha_ne_b]
+            have hden_var_a :
+                ⟦(SMT.Term.var a).abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_var_a⟧ˢ =
+                  some Wa := by
+              simp [SMT.Term.abstract.eq_def, SMT.denote,
+                Option.pure_def, Function.update, ha_ne_b]
+            have hcov_var_b : RenamingContext.CoversFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb)) (SMT.Term.var b) := by
+              intro v hv
+              rw [SMT.fv, List.mem_singleton] at hv
+              subst v
+              simp [Function.update]
+            have hden_var_b :
+                ⟦(SMT.Term.var b).abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_var_b⟧ˢ =
+                  some Wb := by
+              simp [SMT.Term.abstract.eq_def, SMT.denote,
+                Option.pure_def, Function.update]
+            obtain ⟨Dpair, hden_pair_raw, hDpair_type⟩ :=
+              denote_pair_some_of_some hden_var_a hden_var_b
+            have hWp_Dpair_type : Wp.snd.fst = Dpair.snd.fst := by
+              simpa [Wp, Wa, Wb] using hDpair_type.symm
+            have hDpair_fst : Dpair.fst = Wa.fst.pair Wb.fst := by
+              have hpair_eq_raw := hden_pair_raw
+              rw [SMT.denote, hden_var_a, hden_var_b] at hpair_eq_raw
+              simp only [Option.pure_def, Option.bind_eq_bind,
+                Option.bind_some, Option.some.injEq] at hpair_eq_raw
+              exact (congrArg (fun D : SMT.Dom => D.fst) hpair_eq_raw).symm
+            have hWp_Dpair_fst : Wp.fst = Dpair.fst := by
+              simpa [Wp, Wa, Wb] using hDpair_fst.symm
+            have hden_eq_true_split :
+                ⟦(SMT.Term.var p).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_var_p =ˢ'
+                    ((SMT.Term.var a).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_var_a).pair
+                      ((SMT.Term.var b).abstract
+                        (Function.update
+                          (Function.update (Function.update Theta p (some Wp))
+                            a (some Wa)) b (some Wb)) hcov_var_b)⟧ˢ =
+                  some (⟨ZFSet.zftrue, SMTType.bool,
+                    ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+              denote_eq_eq_zftrue_of_fst_eq hden_var_p hden_pair_raw
+                hWp_Dpair_type hWp_Dpair_fst
+            have hcov_eq : RenamingContext.CoversFV
+                (Function.update
+                  (Function.update (Function.update Theta p (some Wp))
+                    a (some Wa)) b (some Wb))
+                ((SMT.Term.var p) =ˢ
+                  ((SMT.Term.var a).pair (SMT.Term.var b))) := by
+              intro v hv
+              apply hcov_body Wp Wa Wb v
+              simp only [body, SMT.fv, List.mem_append]
+              simp only [SMT.fv, List.mem_append] at hv
+              exact Or.inr (Or.inr hv)
+            have hden_eq_true :
+                ⟦((SMT.Term.var p) =ˢ
+                    ((SMT.Term.var a).pair (SMT.Term.var b))).abstract
+                    (Function.update
+                      (Function.update (Function.update Theta p (some Wp))
+                        a (some Wa)) b (some Wb)) hcov_eq⟧ˢ =
+                  some (⟨ZFSet.zftrue, SMTType.bool,
+                    ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) := by
+              simpa [SMT.Term.abstract, proof_irrel_heq] using
+                hden_eq_true_split
+            have hden_right_true_split :
+                ⟦((@ˢB) (SMT.Term.var b)).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_Bapp ∧ˢ'
+                    (((SMT.Term.var p) =ˢ
+                      ((SMT.Term.var a).pair (SMT.Term.var b))).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_eq)⟧ˢ =
+                  some (⟨ZFSet.zftrue, SMTType.bool,
+                    ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+              denote_and_eq_zftrue_of_some_zftrue
+                hden_Bapp_true rfl rfl hden_eq_true rfl rfl
+            have hden_body_true_split :
+                ⟦((@ˢA) (SMT.Term.var a)).abstract
+                      (Function.update
+                        (Function.update (Function.update Theta p (some Wp))
+                          a (some Wa)) b (some Wb)) hcov_Aapp ∧ˢ'
+                    (((@ˢB) (SMT.Term.var b)).abstract
+                        (Function.update
+                          (Function.update (Function.update Theta p (some Wp))
+                            a (some Wa)) b (some Wb)) hcov_Bapp ∧ˢ'
+                      (((SMT.Term.var p) =ˢ
+                        ((SMT.Term.var a).pair (SMT.Term.var b))).abstract
+                        (Function.update
+                          (Function.update (Function.update Theta p (some Wp))
+                            a (some Wa)) b (some Wb)) hcov_eq))⟧ˢ =
+                  some (⟨ZFSet.zftrue, SMTType.bool,
+                    ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+              denote_and_eq_zftrue_of_some_zftrue
+                hden_Aapp_true rfl rfl hden_right_true_split rfl rfl
+            refine funBinaryExistsEqZftrueAtWitness
+              (hcov_exists Wp) (hgo_body Wp)
+              (fun Wa Wb => hcov_body Wp Wa Wb)
+              (fun Wa Wb hWa hWb =>
+                body_total Wp Wa Wb rfl hWa hWb)
+              (fun Wa Wb hWa hWb D hden =>
+                body_type Wp Wa Wb rfl hWa hWb hden)
+              (D := (⟨ZFSet.zftrue, SMTType.bool,
+                ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom))
+              Wa Wb rfl rfl (by
+                simpa [body, SMT.Term.abstract, proof_irrel_heq] using
+                  hden_body_true_split) rfl
           refine ⟨Theta, (by simpa [tcprod, body] using hcov_tcprod),
             denOut, ?_⟩
           and_intros
@@ -649,9 +1788,10 @@ theorem encodeCprodTail_rep_spec.{u}
             rw [StEb_types_final]
             exact Theta_dom v hv
           · simpa [tcprod, body] using hdenOut
-          · exact Out_rel.1
-          · exact (RDom.toRDomCastSupported Out_rel).1
-          · exact (RDom.toRDomCastSupported Out_rel).2
+          · exact hdenOut_type
+          · exact Out_rel.1.1
+          · exact Out_rel.1.2
+          · exact Out_rel.2
 
 set_option maxHeartbeats 7000000 in
 theorem encodeTerm_rep_spec.cprod_case.{u}
@@ -756,7 +1896,7 @@ theorem encodeTerm_rep_spec.cprod_case.{u}
   cases S_rel.supported with
   | optionFun gamma delta =>
       exact wp_bind_throw _ _ _ _
-  | setPred =>
+  | @setPred _ rho hrho =>
     have related_T : RValuationCastSupportedOnFV Delta DeltaS T :=
       (related.mono_fv fv_T_sub).of_extends DeltaS_ext
     have respects_T : B.RenamingContext.RespectsTypeContextOnFV
@@ -812,7 +1952,7 @@ theorem encodeTerm_rep_spec.cprod_case.{u}
     cases T_rel.supported with
     | optionFun gamma delta =>
         exact wp_bind_throw _ _ _ _
-    | setPred =>
+    | @setPred _ sigma hsigma =>
       have bv_Senc_final : ∀ v ∈ SMT.bv Senc,
           v ∈ StT.env.usedVars :=
         fun v hv => used_sub_T (bv_Senc_used v hv)
@@ -836,14 +1976,14 @@ theorem encodeTerm_rep_spec.cprod_case.{u}
                   right
                   exact hbT)))
       have typ_Senc_final : StT.types ⊢ˢ Senc :
-          (BType.set alpha).toSMTType :=
+          SMTType.fun rho SMTType.bool :=
         SMT.Typing.weakening types_sub_T typ_Senc bv_Senc_not_final
       have hcov_Senc_final : RenamingContext.CoversFV DeltaT Senc :=
         RenamingContext.coversFV_of_extends_of_coversFV
           DeltaT_ext hcov_Senc
       have hden_Senc_final :
           ⟦Senc.abstract DeltaT hcov_Senc_final⟧ˢ =
-            some (⟨Sval, (BType.set alpha).toSMTType, hSval⟩ :
+            some (⟨Sval, SMTType.fun rho SMTType.bool, hSval⟩ :
               SMT.Dom) := by
         have hagree := RenamingContext.agreesOnFV_of_extends_of_coversFV
           DeltaT_ext hcov_Senc
@@ -857,7 +1997,8 @@ theorem encodeTerm_rep_spec.cprod_case.{u}
         target_respects_Senc.of_extends
           DeltaT_ext types_sub_T typ_Senc
 
-      mspec encodeCprodTail_rep_spec alpha beta Senc Tenc
+      mspec encodeCprodTail_rep_spec alpha beta rho sigma hrho hsigma
+        Senc Tenc
         typ_Senc_final typ_Tenc bv_Senc_final bv_Tenc_used
       rename_i out_prod
       obtain ⟨ProdEnc, sigmaProd⟩ := out_prod
@@ -872,8 +2013,8 @@ theorem encodeTerm_rep_spec.cprod_case.{u}
         semantic_prod DeltaT hcov_Senc_final hcov_Tenc DeltaT_none
           target_respects_Senc_final target_respects_Tenc DeltaT_dom
           X Y hX hY
-          (⟨Sval, (BType.set alpha).toSMTType, hSval⟩ : SMT.Dom)
-          (⟨Tval, (BType.set beta).toSMTType, hTval⟩ : SMT.Dom)
+          (⟨Sval, SMTType.fun rho SMTType.bool, hSval⟩ : SMT.Dom)
+          (⟨Tval, SMTType.fun sigma SMTType.bool, hTval⟩ : SMT.Dom)
           hden_Senc_final hden_Tenc S_rel T_rel
       have DeltaT_ext0 := RenamingContext.extends_trans DeltaT_ext DeltaS_ext
       have DeltaProd_ext0 :=
