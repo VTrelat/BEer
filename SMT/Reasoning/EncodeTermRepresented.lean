@@ -132,7 +132,8 @@ theorem encodeTerm_rep_spec.of_scoped.{u}
   | collect vs D P D_ih P_ih =>
       exact encodeTerm_rep_spec.collect_case vs D P
         (D_ih wd_t.1) (P_ih wd_t.2)
-        ((scoped_ih P).to_root.to_bool)
+        ((scoped_ih D).to_root)
+        ((scoped_ih P).to_bool)
   | pow S S_ih =>
       exact encodeTerm_rep_spec.pow_case S (S_ih wd_t)
   | cprod S T S_ih T_ih =>
