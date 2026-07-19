@@ -198,9 +198,186 @@ theorem RDomCastSupported.source_functional_of_selected_true.{u}
           cases htype
           exact B.Dom.RDomCastSupported.optionFunction_source_functional hrel
 
+/-- Membership in a partial-function space supplies the semantic
+functionality required by the option-function representation.  The relation
+is weakened from the denoted domain and range sets to their ambient B types. -/
+theorem isFunctional_of_mem_pfunSet.{u}
+    {d : B.Dom.{u}} {alpha beta : BType}
+    (htype : d.snd.fst = BType.set (alpha ×ᴮ beta))
+    {X Y : ZFSet.{u}}
+    (hX : X ∈ ⟦BType.set alpha⟧ᶻ)
+    (hY : Y ∈ ⟦BType.set beta⟧ᶻ)
+    (hmem : d.fst ∈ pfunSet X Y) :
+    d.IsFunctional := by
+  rcases d with ⟨F, tau, hF⟩
+  dsimp at htype
+  subst tau
+  simp only [B.Dom.IsFunctional]
+  apply ZFSet.pfunc_weaken (ZFSet.mem_sep.mp hmem).2
+  · exact ZFSet.mem_powerset.mp hX
+  · exact ZFSet.mem_powerset.mp hY
+
+/-- If an asserted source predicate `v ∈ S ⇸ T` evaluates to true, then the
+value assigned to `v` is genuinely functional.  This is the semantic step
+that turns a proof-obligation hypothesis, rather than a representation flag,
+into the witness consumed by `exists_selectedSMT_supported`. -/
+theorem isFunctional_of_true_pfun_membership.{u}
+    {E : B.Env} {Xi : B.RenamingContext.Context.{u}}
+    {v : B.𝒱} {S T : B.Term} {alpha beta : BType}
+    {d : B.Dom.{u}}
+    (hlookup : E.context.lookup v =
+      some (BType.set (alpha ×ᴮ beta)))
+    (typ_S : E.context ⊢ᴮ S : BType.set alpha)
+    (typ_T : E.context ⊢ᴮ T : BType.set beta)
+    (Xi_fv : ∀ w ∈ B.fv
+      (B.Term.var v ∈ᴮ (B.Term.pfun S T)), (Xi w).isSome = true)
+    (wf : B.RenWF E.context Xi)
+    (hXi : Xi v = some d)
+    (hden : ⟦(B.Term.var v ∈ᴮ (B.Term.pfun S T)).abstract
+        Xi Xi_fv⟧ᴮ =
+      some ⟨ZFSet.zftrue, BType.bool,
+        ZFSet.ZFBool.zftrue_mem_𝔹⟩) :
+    d.IsFunctional := by
+  let Xi_fv_pfun : ∀ w ∈ B.fv (B.Term.pfun S T),
+      (Xi w).isSome = true := fun w hw => Xi_fv w (by
+    rw [B.fv, List.mem_append]
+    exact Or.inr hw)
+  obtain ⟨F, hF, U, hU, hden_F, hden_U, htrue⟩ :=
+    B.denote_mem_inv
+      (E := E)
+      (B.Typing.var hlookup)
+      (B.Typing.pfun typ_S typ_T)
+      Xi_fv wf hden
+  have hXi_F : Xi v =
+      some (⟨F, BType.set (alpha ×ᴮ beta), hF⟩ : B.Dom) := by
+    rw [B.Term.abstract, B.denote] at hden_F
+    simp only [Option.pure_def, Option.some.injEq] at hden_F
+    have h_isSome : (Xi v).isSome = true := Xi_fv v (by simp [B.fv])
+    exact Option.some_get h_isSome ▸ congrArg some hden_F
+  have hd : d =
+      (⟨F, BType.set (alpha ×ᴮ beta), hF⟩ : B.Dom) :=
+    Option.some.inj (hXi.symm.trans hXi_F)
+  subst d
+  obtain ⟨X, Y, hX, hY, _hden_X, _hden_Y, hU_eq⟩ :=
+    B.denote_pfun_inv_rep Xi_fv_pfun hden_U
+  have hFU : F ∈ U := by
+    by_contra hnot
+    simp [overloadUnaryOp, hnot] at htrue
+    exact ZFSet.zftrue_ne_zffalse htrue
+  subst U
+  exact isFunctional_of_mem_pfunSet rfl hX hY hFU
+
+/-- The total-function encoding used by the POG decoder is a collection over
+a partial-function domain.  Truth of `v ∈ {f ∈ S ⇸ T | P}` therefore still
+implies that the represented value of `v` is functional: collection
+membership first descends to the `S ⇸ T` domain, then the direct partial-
+function argument applies. -/
+theorem isFunctional_of_true_collect_pfun_membership.{u}
+    {E : B.Env} {Xi : B.RenamingContext.Context.{u}}
+    {v : B.𝒱} {vs : List B.𝒱} {S T P : B.Term}
+    {alpha beta : BType} {d : B.Dom.{u}}
+    (hlookup : E.context.lookup v =
+      some (BType.set (alpha ×ᴮ beta)))
+    (typ_D : E.context ⊢ᴮ B.Term.pfun S T :
+      BType.set (BType.set (alpha ×ᴮ beta)))
+    (typ_collect : E.context ⊢ᴮ
+      B.Term.collect vs (B.Term.pfun S T) P :
+        BType.set (BType.set (alpha ×ᴮ beta)))
+    (tau_hasArity : (BType.set (alpha ×ᴮ beta)).hasArity vs.length)
+    (Xi_fv : ∀ w ∈ B.fv
+      (B.Term.var v ∈ᴮ
+        B.Term.collect vs (B.Term.pfun S T) P),
+        (Xi w).isSome = true)
+    (wf : B.RenWF E.context Xi)
+    (hXi : Xi v = some d)
+    (hden : ⟦(B.Term.var v ∈ᴮ
+        B.Term.collect vs (B.Term.pfun S T) P).abstract
+          Xi Xi_fv⟧ᴮ =
+      some ⟨ZFSet.zftrue, BType.bool,
+        ZFSet.ZFBool.zftrue_mem_𝔹⟩) :
+    d.IsFunctional := by
+  let Xi_fv_collect : ∀ w ∈ B.fv
+      (B.Term.collect vs (B.Term.pfun S T) P),
+      (Xi w).isSome = true := fun w hw => Xi_fv w (by
+    rw [B.fv, List.mem_append]
+    exact Or.inr hw)
+  let Xi_fv_D : ∀ w ∈ B.fv (B.Term.pfun S T),
+      (Xi w).isSome = true := fun w hw =>
+    Xi_fv_collect w (B.fv.mem_collect (.inl hw))
+  obtain ⟨F, hF, U, hU, hden_F, hden_collect, htrue⟩ :=
+    B.denote_mem_inv
+      (E := E)
+      (B.Typing.var hlookup)
+      typ_collect
+      Xi_fv wf hden
+  have hXi_F : Xi v =
+      some (⟨F, BType.set (alpha ×ᴮ beta), hF⟩ : B.Dom) := by
+    rw [B.Term.abstract, B.denote] at hden_F
+    simp only [Option.pure_def, Option.some.injEq] at hden_F
+    have h_isSome : (Xi v).isSome = true := Xi_fv v (by simp [B.fv])
+    exact Option.some_get h_isSome ▸ congrArg some hden_F
+  have hd : d =
+      (⟨F, BType.set (alpha ×ᴮ beta), hF⟩ : B.Dom) :=
+    Option.some.inj (hXi.symm.trans hXi_F)
+  subst d
+  have hFU : F ∈ U := by
+    by_contra hnot
+    simp [overloadUnaryOp, hnot] at htrue
+    exact ZFSet.zftrue_ne_zffalse htrue
+  obtain ⟨Dval, hDval, hden_D⟩ :=
+    B.denote_collect_domain_exists Xi_fv_collect typ_D wf hden_collect
+  have hFD : F ∈ Dval :=
+    B.denote_collect_mem_domain Xi_fv_collect tau_hasArity
+      hden_D hden_collect hFU
+  obtain ⟨X, Y, hX, hY, _hden_X, _hden_Y, hD_eq⟩ :=
+    B.denote_pfun_inv_rep Xi_fv_D hden_D
+  subst Dval
+  exact isFunctional_of_mem_pfunSet rfl hX hY hFD
+
 end B.Dom
 
+namespace B.Term
+
+/-- A source predicate evaluates to B truth under a valuation covering all of
+its free variables. -/
+def Holds.{u} (Xi : B.RenamingContext.Context.{u}) (t : B.Term) : Prop :=
+  ∃ Xi_fv : ∀ v ∈ B.fv t, (Xi v).isSome = true,
+    ⟦t.abstract Xi Xi_fv⟧ᴮ =
+      some ⟨ZFSet.zftrue, BType.bool,
+        ZFSet.ZFBool.zftrue_mem_𝔹⟩
+
+end B.Term
+
 namespace B.Env
+
+/-- Every name marked for option-function representation is also declared in
+the source type context.  This is the environment invariant that rules out an
+accidental collision between a fresh binder and an unrelated global flag. -/
+def FlagsInContext (E : B.Env) : Prop :=
+  ∀ v ∈ E.flags, v ∈ E.context
+
+/-- B typing requires the names bound by `all` to be fresh for the ambient
+source context.  In a flag-valid environment they are consequently unflagged,
+so the encoder leaves their domain-component representations unchanged. -/
+theorem FlagsInContext.all_binders_unflagged
+    {E : B.Env} (hflags : E.FlagsInContext)
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    (htyp : E.context ⊢ᴮ B.Term.all vs D P : tau) :
+    ∀ v ∈ vs, v ∉ E.flags := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, hdisjoint⟩ :=
+    B.Typing.allE htyp
+  intro v hv hflag
+  exact hdisjoint v hv (hflags v hflag)
+
+/-- Valid proof-obligation environments select the honest no-flag branch of
+the generalized quantified-case theorem. -/
+theorem FlagsInContext.all_binder_condition.{u}
+    {E : B.Env} (hflags : E.FlagsInContext)
+    {vs : List B.𝒱} {D P : B.Term} {tau : BType}
+    (htyp : E.context ⊢ᴮ B.Term.all vs D P : tau) :
+    EncodeTermAllBinderAdmissible.{u} ∨
+      ∀ v ∈ vs, v ∉ E.flags :=
+  .inr (hflags.all_binders_unflagged htyp)
 
 /-- Pointwise representation context built from a B environment.
 
@@ -269,6 +446,89 @@ the list of flagged names alone carries no such proof. -/
 def FlaggedValuesFunctional (E : B.Env)
     (Xi : B.RenamingContext.Context) : Prop :=
   ∀ v d, Xi v = some d → v ∈ E.flags → d.IsFunctional
+
+/-- Every *assigned* functional-representation flag has an asserted
+function-typing hypothesis in the supplied assumption list.  Restricting to
+assigned values is essential because decoded definitions may leave flags for
+bound helper names outside the current valuation's source scope.  The second
+shape is the collection-over-`pfun` encoding emitted for a total B function. -/
+def AssignedFlagsHaveFunctionHypotheses.{u} (E : B.Env)
+    (Xi : B.RenamingContext.Context.{u}) (hs : List B.Term) : Prop :=
+  ∀ v d, Xi v = some d → v ∈ E.flags →
+    (∃ S T, (B.Term.var v ∈ᴮ B.Term.pfun S T) ∈ hs) ∨
+    (∃ vs S T P,
+      (B.Term.var v ∈ᴮ
+        B.Term.collect vs (B.Term.pfun S T) P) ∈ hs)
+
+/-- All supplied source assumptions are well-typed predicates. -/
+def AssumptionsTyped (E : B.Env) (hs : List B.Term) : Prop :=
+  ∀ h ∈ hs, E.context ⊢ᴮ h : BType.bool
+
+/-- All supplied source assumptions hold under the source valuation. -/
+def AssumptionsHold.{u} (Xi : B.RenamingContext.Context.{u})
+    (hs : List B.Term) : Prop :=
+  ∀ h ∈ hs, h.Holds Xi
+
+/-- The functionality premise of the representation bridge follows from
+actual direct or total-function membership assumptions, their typing, and
+their truth.  No property is inferred from `E.flags` alone. -/
+theorem flaggedValuesFunctional_of_function_hypotheses.{u}
+    {E : B.Env} {Xi : B.RenamingContext.Context.{u}}
+    {hs : List B.Term}
+    (covers : E.AssignedFlagsHaveFunctionHypotheses Xi hs)
+    (typed : E.AssumptionsTyped hs)
+    (holds : AssumptionsHold Xi hs)
+    (wf : B.RenWF E.context Xi) :
+    E.FlaggedValuesFunctional Xi := by
+  intro v d hXi hflag
+  rcases covers v d hXi hflag with direct | collected
+  · obtain ⟨S, T, hmem⟩ := direct
+    have htyp := typed _ hmem
+    obtain ⟨_, alpha, typ_v, typ_pfun⟩ := B.Typing.memE htyp
+    obtain ⟨beta, gamma, htype, typ_S, typ_T⟩ :=
+      B.Typing.pfunE typ_pfun
+    have halpha : alpha = BType.set (beta ×ᴮ gamma) :=
+      BType.set.inj htype
+    subst alpha
+    obtain ⟨Xi_fv, hden⟩ := holds _ hmem
+    exact d.isFunctional_of_true_pfun_membership
+      (B.Typing.varE typ_v) typ_S typ_T Xi_fv wf hXi hden
+  · obtain ⟨vs, S, T, P, hmem⟩ := collected
+    have htyp := typed _ hmem
+    obtain ⟨_, tau, typ_v, typ_collect⟩ := B.Typing.memE htyp
+    obtain ⟨alphas, Ds, vs_nemp, vs_alphas_len, vs_Ds_len,
+        result_eq, _vs_nodup, D_eq, typ_Ds, _typ_P,
+        _vs_context_disj⟩ := B.Typing.collectE typ_collect
+    have alphas_nemp : alphas ≠ [] := by
+      simpa [vs_alphas_len, ← List.length_pos_iff] using vs_nemp
+    let rho := alphas.reduce (· ×ᴮ ·) alphas_nemp
+    have tau_eq : tau = rho := BType.set.inj result_eq
+    subst tau
+    have typ_D : E.context ⊢ᴮ B.Term.pfun S T : BType.set rho := by
+      rw [D_eq]
+      exact typing_reduce_cprod E.context _ _ typ_Ds
+        (by simpa [vs_Ds_len, ← List.length_pos_iff] using vs_nemp)
+        (by simpa [vs_alphas_len, ← List.length_pos_iff] using vs_nemp)
+    have rho_hasArity : rho.hasArity vs.length := by
+      dsimp [rho]
+      rw [List.reduce]
+      have hlen : alphas.tail.length + 1 = vs.length := by
+        rw [List.length_tail, vs_alphas_len]
+        have := List.length_pos_of_ne_nil alphas_nemp
+        omega
+      convert BType.hasArity_of_foldl
+        (α := alphas.head alphas_nemp) (αs := alphas.tail) using 1
+      exact hlen.symm
+    obtain ⟨alpha, beta, Dtype_eq, _typ_S, _typ_T⟩ :=
+      B.Typing.pfunE typ_D
+    have rho_eq : rho = BType.set (alpha ×ᴮ beta) :=
+      BType.set.inj Dtype_eq
+    rw [rho_eq] at typ_v typ_D typ_collect rho_hasArity
+    obtain ⟨Xi_fv, hden⟩ := holds _ hmem
+    exact d.isFunctional_of_true_collect_pfun_membership
+      (alpha := alpha) (beta := beta)
+      (B.Typing.varE typ_v) typ_D typ_collect rho_hasArity
+      Xi_fv wf hXi hden
 
 open Classical in
 /-- Construct one SMT valuation on an arbitrary finite source scope.  Values
@@ -488,6 +748,137 @@ theorem exists_sourceValuation_for_term.{u}
     exact fv_context v hv
 
 end B.Env
+
+namespace B.ProofObligation
+
+/-- Every option-function flag introduced while decoding one proof obligation
+also has a PO-local source type binding.  This condition is intentionally
+separate from global flag validity: builtins may use flagged bound helpers. -/
+def LocalFlagsInContext (po : B.ProofObligation) : Prop :=
+  ∀ v ∈ po.localFlags, v ∈ po.localContext
+
+private theorem keys_subset_foldl_insert
+    {alpha : Type} {beta : alpha → Type} [DecidableEq alpha]
+    (l : List (Sigma beta)) {Gamma : AList beta} :
+    AList.keys Gamma ⊆
+      AList.keys (l.foldl
+        (fun Gamma (p : Sigma beta) => Gamma.insert p.1 p.2) Gamma) := by
+  induction l generalizing Gamma with
+  | nil => exact fun _ h => h
+  | cons p ps ih =>
+    simp only [List.foldl_cons]
+    intro v hv
+    apply ih
+    exact AList.mem_keys.mp
+      ((AList.mem_insert _).mpr (.inr (AList.mem_keys.mpr hv)))
+
+private theorem mem_keys_foldl_insert_of_fst
+    {alpha : Type} {beta : alpha → Type} [DecidableEq alpha]
+    (l : List (Sigma beta)) {Gamma : AList beta} {v : alpha}
+    (hv : v ∈ l.map Sigma.fst) :
+    v ∈ AList.keys (l.foldl
+      (fun Gamma (p : Sigma beta) => Gamma.insert p.1 p.2) Gamma) := by
+  induction l generalizing Gamma with
+  | nil => simp at hv
+  | cons p ps ih =>
+    simp only [List.foldl_cons]
+    simp only [List.map_cons, List.mem_cons] at hv
+    rcases hv with rfl | hv
+    · exact keys_subset_foldl_insert ps
+        (by rw [AList.keys_insert]; exact List.mem_cons_self ..)
+    · exact ih hv
+
+/-- Combining a flag-valid global environment with flag-valid PO-local
+bindings gives the exact extended environment used by `encodeProofObligation`,
+and that environment is flag-valid as well. -/
+theorem extendEnv_flagsInContext
+    {po : B.ProofObligation} {E : B.Env}
+    (hglobal : E.FlagsInContext)
+    (hlocal : po.LocalFlagsInContext) :
+    (po.extendEnv E).FlagsInContext := by
+  intro v hv
+  rw [B.ProofObligation.extendEnv, List.mem_append] at hv
+  rcases hv with hvlocal | hvglobal
+  · change v ∈ AList.keys (po.localContext.entries.foldl
+      (fun acc ⟨k, tau⟩ => acc.insert k tau) E.context)
+    apply mem_keys_foldl_insert_of_fst
+    change v ∈ po.localContext.keys
+    exact AList.mem_keys.mpr (hlocal v hvlocal)
+  · change v ∈ AList.keys (po.localContext.entries.foldl
+      (fun acc ⟨k, tau⟩ => acc.insert k tau) E.context)
+    apply keys_subset_foldl_insert po.localContext.entries
+    exact AList.mem_keys.mpr (hglobal v hvglobal)
+
+/-- Exactly the source assumptions asserted before one simple goal by
+`encodeProofObligation`. -/
+def assumptionsFor (po : B.ProofObligation) (goal : B.SimpleGoal) :
+    List B.Term :=
+  po.defs ++ po.hyps ++ goal.hyps
+
+/-- Proof-obligation form of the semantic functionality discharge. -/
+theorem flaggedValuesFunctional_of_assumptions.{u}
+    {po : B.ProofObligation} {goal : B.SimpleGoal}
+    {E : B.Env} {Xi : B.RenamingContext.Context.{u}}
+    (covers : E.AssignedFlagsHaveFunctionHypotheses Xi
+      (po.assumptionsFor goal))
+    (typed : E.AssumptionsTyped (po.assumptionsFor goal))
+    (holds : B.Env.AssumptionsHold Xi (po.assumptionsFor goal))
+    (wf : B.RenWF E.context Xi) :
+    E.FlaggedValuesFunctional Xi :=
+  E.flaggedValuesFunctional_of_function_hypotheses covers typed holds wf
+
+end B.ProofObligation
+
+/-- Quantified representation soundness for one proof-obligation binder known
+to be unflagged.  The encoded domain relation then discharges binder
+admissibility for the current and every alternative valuation.  This
+term-local premise is strictly more accurate than requiring every decoder
+helper flag to be a global source binding. -/
+theorem encodeTerm_rep_spec.all_case_and_scoped_of_unflagged.{u}
+    (vs : List B.𝒱) (D P : B.Term)
+    (D_ih : EncodeTermRepIH.{u} D)
+    (D_scoped : EncodeTermRepScopedIH.{u} D)
+    (P_ih : EncodeTermRepIH.{u} P)
+    (P_scoped : EncodeTermRepScopedBoolFromIH.{u} P)
+    (wd_P : B.Term.WellDefined.{u} P)
+    (E : B.Env) (binders_unflagged : ∀ v ∈ vs, v ∉ E.flags)
+    {Lambda : SMT.TypeContext} {alpha : BType}
+    (typ_t : E.context ⊢ᴮ B.Term.all vs D P : alpha)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.all vs D P), (Xi v).isSome = true)
+    {Theta0 : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastSupportedOnFV Xi Theta0
+      (B.Term.all vs D P))
+    {used : List SMT.𝒱}
+    (Theta0_none : ∀ v ∉ used, Theta0 v = none)
+    (Theta0_dom : ∀ v, Theta0 v ≠ none → v ∈ Lambda)
+    {T : ZFSet.{u}} {hT : T ∈ ⟦alpha⟧ᶻ}
+    (den_t : ⟦(B.Term.all vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some ⟨T, ⟨alpha, hT⟩⟩)
+    (vars_used : ∀ v ∈ (B.Term.all vs D P).vars, v ∈ used)
+    (Lambda_inv : ∀ v ∈ (B.Term.all vs D P).vars,
+      v ∈ Lambda → v ∈ E.context)
+    (bv_nodup : (B.bv (B.Term.all vs D P)).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV Theta0 Lambda
+      (B.Term.all vs D P))
+    (fv_in_Lambda : ∀ v ∈ B.fv (B.Term.all vs D P), v ∈ Lambda)
+    (wf : B.RenWF E.context Xi)
+    {n : ℕ} {decl : SMT.Chunk} :
+    ⦃fun ⟨E0, Lambda'⟩ ↦
+      ⌜Lambda' = Lambda ∧ E0.freshvarsc = n ∧
+        Lambda.keys ⊆ E0.usedVars ∧ E0.usedVars = used ∧
+        E0.declarations = decl⌝⦄
+    encodeTerm (B.Term.all vs D P) E
+    ⦃⇓? (⟨t', sigma⟩ : SMT.Term × SMTType) ⟨E', Gamma'⟩ =>
+      ⌜EncodeTermRepPost (B.Term.all vs D P) alpha Lambda Xi Theta0
+          used T hT E t' sigma E' Gamma' ∧
+        EncodeTermRepScopedPost.{u} (B.Term.all vs D P) E alpha Lambda
+          decl t' sigma E' Gamma'⌝⦄ :=
+  encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged
+    vs D P D_ih D_scoped P_ih P_scoped wd_P E
+    (.inr binders_unflagged) typ_t Xi_fv related
+    Theta0_none Theta0_dom den_t vars_used Lambda_inv bv_nodup respects
+    fv_in_Lambda wf
 
 set_option mvcgen.warning false in
 @[spec]

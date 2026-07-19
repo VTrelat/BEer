@@ -1602,17 +1602,109 @@ theorem foldr_true_iff.{u}
 
 end SMT.ScopedForall
 
+/-- Package the two honest ways to justify a selected `all` binder.  The raw
+term theorem may use its explicit semantic oracle.  At proof-obligation level,
+well-formed environments make every fresh bound name unflagged; the selected
+tuple is then exactly the element representation already certified by the
+encoded domain value. -/
+private theorem all_binder_selection_contract.{u}
+    (E : B.Env) (vs : List B.𝒱) (D P : B.Term)
+    (alphas : List BType) (alphas_nemp : alphas ≠ [])
+    (vs_nemp : vs ≠ []) (vs_alphas_len : vs.length = alphas.length)
+    (tau : BType)
+    (tau_eq : tau = alphas.reduce (· ×ᴮ ·) alphas_nemp)
+    (tau_hasArity : tau.hasArity vs.length)
+    (typ_t : E.context ⊢ᴮ B.Term.all vs D P : BType.bool)
+    (typ_D : E.context ⊢ᴮ D : BType.set tau)
+    (binder_condition : EncodeTermAllBinderAdmissible.{u} ∨
+      ∀ v ∈ vs, v ∉ E.flags)
+    (Xi : B.RenamingContext.Context.{u})
+    (Xi_fv_D : ∀ v ∈ B.fv D, (Xi v).isSome = true)
+    (Dval : ZFSet.{u}) (hDval : Dval ∈ ⟦BType.set tau⟧ᶻ)
+    (den_D : ⟦D.abstract Xi Xi_fv_D⟧ᴮ =
+      some ⟨Dval, ⟨BType.set tau, hDval⟩⟩)
+    (rho : SMTType) (rho_supported : BType.SupportedSMT tau rho)
+    (sigmas : List SMTType)
+    (hlen_eq : vs.length = (rho.fromProdl (vs.length - 1)).length)
+    (sigmas_len : sigmas.length =
+      (rho.fromProdl (vs.length - 1)).length)
+    (flag_rel : ∀ i (hi : i < sigmas.length),
+      SMTFlagTypeRel (vs[i]'(by omega) ∈ E.flags)
+        ((rho.fromProdl (vs.length - 1))[i]'(sigmas_len ▸ hi))
+        (sigmas[i]'hi)) :
+    (∀ i (hi_alpha : i < alphas.length)
+      (hi_sigma : i < sigmas.length),
+      BType.SupportedSMT alphas[i] sigmas[i]) ∧
+    ∀ (Xi_alt : B.RenamingContext.Context)
+      (Xi_fv_D_alt : ∀ v ∈ B.fv D, (Xi_alt v).isSome = true)
+      (Dval_alt : ZFSet.{u})
+      (hDval_alt : Dval_alt ∈ ⟦BType.set tau⟧ᶻ)
+      (den_D_alt : ⟦D.abstract Xi_alt Xi_fv_D_alt⟧ᴮ =
+        some ⟨Dval_alt, ⟨BType.set tau, hDval_alt⟩⟩)
+      (denDenc_alt : SMT.Dom.{u})
+      (hdenDenc_alt_type : denDenc_alt.snd.fst =
+        SMTType.fun rho SMTType.bool)
+      (D_alt_rel : RDomCastSupported
+        (⟨Dval_alt, BType.set tau, hDval_alt⟩ : B.Dom) denDenc_alt)
+      (hcast : sigmas.toProdl ⊑ tau.toSMTType),
+      BinderCastAdmissible tau sigmas.toProdl hcast.toCastPath Dval_alt := by
+  have binder_selection :
+      EncodeTermAllBinderAdmissible.{u} ∨
+        sigmas = rho.fromProdl (vs.length - 1) := by
+    rcases binder_condition with binder_admissible | hnoflag
+    · exact .inl binder_admissible
+    · exact .inr <| SMTFlagTypeRel.list_eq_of_not_mem
+        hlen_eq sigmas_len
+        (fun i hi => hnoflag vs[i] (List.getElem_mem hi)) flag_rel
+  constructor
+  · intro i hi_alpha hi_sigma
+    have hi_vs : i < vs.length := vs_alphas_len ▸ hi_alpha
+    have hreduce : tau.get vs.length ⟨i, hi_vs⟩ = alphas[i] := by
+      rw [tau_eq]
+      simpa using _root_.BType.get_reduce alphas_nemp
+        vs_alphas_len ⟨i, hi_vs⟩
+    rcases binder_selection with binder_admissible | sigmas_eq
+    · have hcomponent := (binder_admissible E vs D P tau typ_t typ_D
+          Xi Xi_fv_D Dval hDval den_D rho rho_supported sigmas
+          hlen_eq sigmas_len flag_rel).1 i hi_sigma
+      simpa only [hreduce, List.get_eq_getElem] using hcomponent
+    · have hcomponent := rho_supported.get_fromProdl_of_hasArity
+          tau_hasArity hi_vs
+      have htarget : sigmas[i]'hi_sigma =
+          (rho.fromProdl (vs.length - 1))[i]'(sigmas_eq ▸ hi_sigma) :=
+        List.getElem_of_eq sigmas_eq hi_sigma
+      rw [htarget]
+      simpa only [hreduce, List.get_eq_getElem] using hcomponent
+  · intro Xi_alt Xi_fv_D_alt Dval_alt hDval_alt den_D_alt
+      denDenc_alt hdenDenc_alt_type D_alt_rel hcast
+    rcases binder_selection with binder_admissible | sigmas_eq
+    · exact (binder_admissible E vs D P tau typ_t typ_D Xi_alt
+        Xi_fv_D_alt Dval_alt hDval_alt den_D_alt rho rho_supported
+        sigmas hlen_eq sigmas_len flag_rel).2 hcast
+    · have sigmas_toProdl : sigmas.toProdl = rho := by
+        rw [sigmas_eq]
+        have h_arith :
+            (rho.fromProdl (vs.length - 1)).length =
+              vs.length - 1 + 1 := by
+          rw [← hlen_eq]
+          have := List.length_pos_of_ne_nil vs_nemp
+          omega
+        exact SMT.SMTType.fromProdl_toProdl_roundtrip _ _ h_arith
+      exact D_alt_rel.setPred_binder_admissible_of_type_eq
+        hdenDenc_alt_type sigmas_toProdl hcast
+
 set_option maxHeartbeats 20000000 in
 set_option maxRecDepth 2048 in
-theorem encodeTerm_rep_spec.all_case_and_scoped.{u}
+theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
     (vs : List B.𝒱) (D P : B.Term)
     (D_ih : EncodeTermRepIH.{u} D)
     (D_scoped : EncodeTermRepScopedIH.{u} D)
     (P_ih : EncodeTermRepIH.{u} P)
     (P_scoped : EncodeTermRepScopedBoolFromIH.{u} P)
-    (binder_admissible : EncodeTermAllBinderAdmissible.{u})
     (wd_P : B.Term.WellDefined.{u} P)
     (E : B.Env) {Lambda : SMT.TypeContext} {alpha : BType}
+    (binder_condition : EncodeTermAllBinderAdmissible.{u} ∨
+      ∀ v ∈ vs, v ∉ E.flags)
     (typ_t : E.context ⊢ᴮ B.Term.all vs D P : alpha)
     {Xi : B.RenamingContext.Context.{u}}
     (Xi_fv : ∀ v ∈ B.fv (B.Term.all vs D P), (Xi v).isSome = true)
@@ -1811,35 +1903,11 @@ theorem encodeTerm_rep_spec.all_case_and_scoped.{u}
       mpure pre
       obtain ⟨⟨St2_types, St2_fvc, St2_used, sigmas_len, flag_rel⟩,
         St2_decl⟩ := pre
-      have selected_contract := binder_admissible E vs D P tau typ_t typ_D
-        Xi Xi_fv_D Dval hDval den_D rho rho_supported sigmas
-        hlen_eq sigmas_len flag_rel
-      have component_supported : ∀ i (hi_alpha : i < alphas.length)
-          (hi_sigma : i < sigmas.length),
-          BType.SupportedSMT alphas[i] sigmas[i] := by
-        intro i hi_alpha hi_sigma
-        have hi_vs : i < vs.length := vs_alphas_len ▸ hi_alpha
-        have hcomponent := selected_contract.1 i hi_sigma
-        have hreduce : tau.get vs.length ⟨i, hi_vs⟩ =
-            alphas[i] := by
-          dsimp [tau]
-          simpa using _root_.BType.get_reduce alphas_nemp
-            vs_alphas_len ⟨i, hi_vs⟩
-        simpa only [hreduce, List.get_eq_getElem] using hcomponent
-      have selected_admissible :
-          ∀ (Xi_alt : B.RenamingContext.Context)
-            (Xi_fv_D_alt : ∀ v ∈ B.fv D, (Xi_alt v).isSome = true)
-            (Dval_alt : ZFSet.{u})
-            (hDval_alt : Dval_alt ∈ ⟦BType.set tau⟧ᶻ)
-            (den_D_alt : ⟦D.abstract Xi_alt Xi_fv_D_alt⟧ᴮ =
-              some ⟨Dval_alt, ⟨BType.set tau, hDval_alt⟩⟩)
-            (hcast : sigmas.toProdl ⊑ tau.toSMTType),
-            BinderCastAdmissible tau sigmas.toProdl
-              hcast.toCastPath Dval_alt := by
-        intro Xi_alt Xi_fv_D_alt Dval_alt hDval_alt den_D_alt hcast
-        exact (binder_admissible E vs D P tau typ_t typ_D Xi_alt
-          Xi_fv_D_alt Dval_alt hDval_alt den_D_alt rho rho_supported
-          sigmas hlen_eq sigmas_len flag_rel).2 hcast
+      obtain ⟨component_supported, selected_admissible⟩ :=
+        all_binder_selection_contract E vs D P alphas alphas_nemp
+          vs_nemp vs_alphas_len tau rfl tau_hasArity typ_t typ_D
+          binder_condition Xi Xi_fv_D Dval hDval den_D rho
+          rho_supported sigmas hlen_eq sigmas_len flag_rel
     | dsimp at hoption
       subst sigmaD
       simp only [BType.toSMTType] at *
@@ -1913,10 +1981,17 @@ theorem encodeTerm_rep_spec.all_case_and_scoped.{u}
             (hDval_alt : Dval_alt ∈ ⟦BType.set tau⟧ᶻ)
             (den_D_alt : ⟦D.abstract Xi_alt Xi_fv_D_alt⟧ᴮ =
               some ⟨Dval_alt, ⟨BType.set tau, hDval_alt⟩⟩)
+            (denDenc_alt : SMT.Dom.{u})
+            (_hdenDenc_alt_type : denDenc_alt.snd.fst =
+              SMTType.fun a.toSMTType (SMTType.option b.toSMTType))
+            (_D_alt_rel : RDomCastSupported
+              (⟨Dval_alt, BType.set tau, hDval_alt⟩ : B.Dom)
+              denDenc_alt)
             (hcast : sigmas.toProdl ⊑ tau.toSMTType),
             BinderCastAdmissible tau sigmas.toProdl
               hcast.toCastPath Dval_alt := by
-        intro _Xi_alt _Xi_fv_D_alt Dval_alt hDval_alt _den_D_alt hcast
+        intro _Xi_alt _Xi_fv_D_alt Dval_alt hDval_alt _den_D_alt
+          _denDenc_alt _hdenDenc_alt_type _D_alt_rel hcast
         exact BinderCastAdmissible.of_eq_canonical
           sigmas_toProdl hDval_alt hcast
   all_goals
@@ -5802,7 +5877,8 @@ theorem encodeTerm_rep_spec.all_case_and_scoped.{u}
         have admissible : BinderCastAdmissible tau sigmas.toProdl
             tuple_le.toCastPath Dval_alt :=
           selected_admissible Xi_alt Xi_fv_D_alt Dval_alt
-            hDval_alt den_D_alt tuple_le
+            hDval_alt den_D_alt denDenc_alt hdenDenc_alt_type
+            D_alt_rel tuple_le
         have hgo_cov : ∀ y ∈ SMT.fv scopedBody, y ∉ zs →
             (ThetaOuter_alt y).isSome = true := by
           intro y hy hyzs
@@ -7576,7 +7652,8 @@ theorem encodeTerm_rep_spec.all_case_and_scoped.{u}
         have admissible : BinderCastAdmissible tau sigmas.toProdl
             tuple_le.toCastPath Dval_alt :=
           selected_admissible Xi_alt Xi_fv_D_alt Dval_alt
-            hDval_alt den_D_alt tuple_le
+            hDval_alt den_D_alt denDenc_alt hdenDenc_alt_type
+            D_alt_rel tuple_le
         have hgo_cov : ∀ y ∈ SMT.fv scopedBody, y ∉ zs →
             (ThetaOuter_alt y).isSome = true := by
           intro y hy hyzs
@@ -7669,8 +7746,9 @@ theorem encodeTerm_rep_spec.all_case.{u}
   mintro pre ∀St
   mpure pre
   obtain ⟨rfl, rfl, St_keys, rfl⟩ := pre
-  mspec encodeTerm_rep_spec.all_case_and_scoped vs D P D_ih D_scoped
-    P_ih P_scoped binder_admissible wd_P E typ_t Xi_fv related
+  mspec encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged
+    vs D P D_ih D_scoped P_ih P_scoped wd_P E
+    (.inl binder_admissible) typ_t Xi_fv related
     Theta0_none Theta0_dom den_t vars_used Lambda_inv bv_nodup respects
     fv_in_Lambda wf (n := St.env.freshvarsc)
     (decl := St.env.declarations)
@@ -7700,8 +7778,9 @@ theorem encodeTerm_rep_scoped.all_case.{u}
   mintro pre ∀St
   mpure pre
   obtain ⟨rfl, rfl, St_keys, rfl, rfl⟩ := pre
-  mspec encodeTerm_rep_spec.all_case_and_scoped vs D P D_ih D_scoped
-    P_ih P_scoped binder_admissible wd_P E typ_t Xi_fv related
+  mspec encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged
+    vs D P D_ih D_scoped P_ih P_scoped wd_P E
+    (.inl binder_admissible) typ_t Xi_fv related
     Theta0_none Theta0_dom den_t vars_used Lambda_inv bv_nodup respects
     fv_in_Lambda wf (n := St.env.freshvarsc)
     (decl := St.env.declarations)

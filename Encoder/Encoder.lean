@@ -482,10 +482,7 @@ def encodeProofObligation (φ : B.ProofObligation) (E : B.Env) : Encoder Stages 
     localDecls := localDecls.concat (Instr.declare_const v smtτ)
   -- Augment the B environment with PO-local context/flags so `encodeTerm`'s
   -- B-side lookups succeed for the duration of this PO.
-  let E_local : B.Env :=
-    { E with
-      context := φ.localContext.entries.foldl (fun acc ⟨k, τ⟩ => acc.insert k τ) E.context
-      flags := φ.localFlags ++ E.flags }
+  let E_local : B.Env := φ.extendEnv E
   let defs ← (φ.defs.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
   let globalHyps : Chunk ← (φ.hyps.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
   let goals : List Stages ← φ.negateGoals.goals.mapM (encodeSimpleGoal · E_local)

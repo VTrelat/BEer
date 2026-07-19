@@ -57,6 +57,15 @@ structure Env where
   distinct : List (List Term) := []
   finite : List Term := []
 
+/-- Add the bindings and representation flags that are local to one proof
+obligation.  Keeping this constructor shared prevents the encoder and the
+proof-obligation soundness layer from drifting apart. -/
+def ProofObligation.extendEnv (po : ProofObligation) (E : Env) : Env :=
+  { E with
+    context := po.localContext.entries.foldl
+      (fun acc ⟨k, tau⟩ => acc.insert k tau) E.context
+    flags := po.localFlags ++ E.flags }
+
 instance : Inhabited Env := ⟨{}⟩
 instance : EmptyCollection Env where
   emptyCollection :=

@@ -358,6 +358,27 @@ theorem SMTFlagTypeRel.toProdl_subtype
   List.toProdl_subtype τs tmp_τs hτs_len hne fun i hi =>
     SMTFlagTypeRel.le (hall i hi)
 
+/-- If every binder name is unflagged, the pointwise flag transformation is
+the identity on the whole type list.  This is the bridge from the
+proof-obligation environment invariant to the raw `all` encoder branch. -/
+theorem SMTFlagTypeRel.list_eq_of_not_mem
+    {vs flags : List SMT.𝒱} {tauIn tauOut : List SMTType}
+    (hvs : vs.length = tauIn.length)
+    (hlen : tauOut.length = tauIn.length)
+    (hnoflag : ∀ i (hi : i < vs.length), vs[i]'hi ∉ flags)
+    (hrel : ∀ i (hi : i < tauOut.length),
+      SMTFlagTypeRel (vs[i]'(by omega) ∈ flags)
+        (tauIn[i]'(hlen ▸ hi)) (tauOut[i]'hi)) :
+    tauOut = tauIn := by
+  apply List.ext_getElem hlen
+  intro i hiOut hiIn
+  have hiVs : i < vs.length := hvs ▸ hiIn
+  have hnot := hnoflag i hiVs
+  have h := hrel i hiOut
+  simp only [SMTFlagTypeRel, hnot, decide_false, if_false,
+    Bool.false_eq_true] at h
+  exact h.symm
+
 /-- Helper: pair-injectivity at the same index between `xs.toProdl.aux` and
 `ys.toProdl.aux` for nonempty equi-length lists. -/
 private theorem List.toProdl_aux_inj_at_idx :

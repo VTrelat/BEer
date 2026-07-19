@@ -817,6 +817,32 @@ theorem RDomCastAdmissible.valueCastAdmissible.{u}
     (h : RDomCastAdmissible d d') :
     ValueCastAdmissible d.snd.fst d'.snd.fst d.fst := h.2
 
+/-- A represented characteristic predicate supplies binder preimages at its
+element representation.  The externally selected binder type may be only
+propositionally equal to that representation; uniqueness of structural cast
+paths transports the stored admissibility witness to the requested path. -/
+theorem RDomCastSupported.setPred_binder_admissible_of_type_eq.{u}
+    {tau : BType} {rho sigma : SMTType}
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    {d' : SMT.Dom.{u}}
+    (hrel : RDomCastSupported
+      (⟨Dval, BType.set tau, hDval⟩ : B.Dom) d')
+    (htype : d'.snd.fst = SMTType.fun rho SMTType.bool)
+    (hsigma : sigma = rho)
+    (hcast : sigma ⊑ tau.toSMTType) :
+    BinderCastAdmissible tau sigma hcast.toCastPath Dval := by
+  subst sigma
+  rcases d' with ⟨Y, target, hY⟩
+  dsimp at htype
+  subst target
+  have hadmissible := hrel.toRDomCastAdmissible.valueCastAdmissible
+  change SetCastAdmissible tau Dval
+      (SMTType.fun rho SMTType.bool) ∧
+    (∀ x ∈ Dval, ValueCastAdmissible tau rho x) at hadmissible
+  obtain ⟨⟨c, hc⟩, _⟩ := hadmissible
+  have hpath : hcast.toCastPath = c := castPath.eq_of_endpoints _ _
+  rwa [hpath]
+
 /-- A representation witness supplies both type correctness of the cast value
 and the defining retraction equation. -/
 theorem RDomCast.exists_cast.{u}
