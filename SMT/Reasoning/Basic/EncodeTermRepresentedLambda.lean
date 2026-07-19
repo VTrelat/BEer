@@ -1127,6 +1127,155 @@ theorem lambda_subst_of_total_body_toDestPair.{u}
     (hts_fv_disj_xs := hts_fv_disj_xs) (hts_den := hts_den)
 
 open Classical in
+/-- Transport a represented body result through the tuple projections used by
+`lambda`, under an arbitrary valuation satisfying the body's scoped helper
+contract.  Unlike the existential-totality bridge above, this statement keeps
+the supplied valuation fixed. -/
+theorem lambda_subst_of_guarded_body_toDestPair.{u}
+    {Penc : SMT.Term}
+    {vs : List SMT.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {z : SMT.𝒱}
+    {DeltaCtx : SMT.RenamingContext.Context.{u}} {W : SMT.Dom.{u}}
+    {ss : Fin vs.length → SMT.Dom.{u}}
+    (hcomponents : ∀ i : Fin vs.length,
+      ∃ hcov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W))
+          ((toDestPair vs (.fst (.var z)))[i.val]'(by
+            rw [toDestPair_length_gen vs (.fst (.var z))
+              (.fst (.var z)) [] vs_nemp]
+            exact i.isLt)),
+        ⟦((toDestPair vs (.fst (.var z)))[i.val]'(by
+          rw [toDestPair_length_gen vs (.fst (.var z))
+            (.fst (.var z)) [] vs_nemp]
+          exact i.isLt)).abstract (Function.update DeltaCtx z (some W))
+            hcov⟧ˢ = some (ss i))
+    (hcov_sub : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W))
+      (SMT.substList vs (toDestPair vs (.fst (.var z))) Penc))
+    (hcov_upd : SMT.RenamingContext.CoversFV
+      (Function.updates (Function.update DeltaCtx z (some W)) vs
+        ((List.ofFn ss).map Option.some)) Penc)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc)
+    (hz_not_vs : z ∉ vs)
+    (hz_not_fv : z ∉ SMT.fv Penc)
+    {Pterm : B.Term} {E : B.Env} {alpha : BType}
+    {Base Gamma : SMT.TypeContext} {Dlt : SMT.Chunk}
+    {sigma : SMTType}
+    (P_guard : EncodeTermRepGuardedSound.{u}
+      Pterm E alpha Penc sigma Base Dlt)
+    (P_scope : ScopedContextExtends Base Dlt Gamma)
+    (typ_Penc : Gamma ⊢ˢ Penc : sigma)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv Pterm, (Xi v).isSome = true)
+    (related : RValuationCastSupportedOnFV Xi
+      (Function.updates DeltaCtx vs
+        ((List.ofFn ss).map Option.some)) Pterm)
+    (wf : B.RenWF E.context Xi)
+    (source_respects : B.RenamingContext.RespectsTypeContextOnFV
+      (Function.updates DeltaCtx vs
+        ((List.ofFn ss).map Option.some)) Gamma Pterm)
+    (target_respects : SMT.RenamingContext.RespectsTypeContextOnFV
+      (Function.updates DeltaCtx vs
+        ((List.ofFn ss).map Option.some)) Gamma Penc)
+    (specs_true : SpecBodiesTrue
+      (Function.updates DeltaCtx vs
+        ((List.ofFn ss).map Option.some)) Gamma Dlt)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦alpha⟧ᶻ}
+    (den_P : ⟦Pterm.abstract Xi Xi_fv⟧ᴮ =
+      some (⟨Pval, alpha, hPval⟩ : B.Dom)) :
+    ∃ dP : SMT.Dom.{u},
+      ⟦(SMT.substList vs (toDestPair vs (.fst (.var z))) Penc).abstract
+        (Function.update DeltaCtx z (some W)) hcov_sub⟧ˢ = some dP ∧
+      dP.snd.fst = sigma ∧
+      RDomCastSupported (⟨Pval, alpha, hPval⟩ : B.Dom) dP := by
+  let ThetaBody : SMT.RenamingContext.Context.{u} :=
+    Function.updates DeltaCtx vs ((List.ofFn ss).map Option.some)
+  have hcov_P : SMT.RenamingContext.CoversFV ThetaBody Penc := by
+    intro v hv
+    obtain ⟨tau, hlookup⟩ := Option.isSome_iff_exists.mp <|
+      AList.lookup_isSome.mpr <| SMT.Typing.mem_context_of_mem_fv
+        typ_Penc hv
+    obtain ⟨d, hd, _⟩ := target_respects hv hlookup
+    exact Option.isSome_of_eq_some hd
+  obtain ⟨dP, hden_Penc, hdP_type⟩ :=
+    SMT.RenamingContext.denote_exists_of_typing_fv typ_Penc
+      target_respects hcov_P
+  have hrel_P : RDomCastSupported
+      (⟨Pval, alpha, hPval⟩ : B.Dom) dP :=
+    P_guard Gamma P_scope Xi Xi_fv ThetaBody related wf source_respects
+      target_respects specs_true Pval hPval den_P hcov_P dP hden_Penc
+      hdP_type
+  have hcov_P_upd : SMT.RenamingContext.CoversFV
+      (Function.update ThetaBody z (some W)) Penc :=
+    SMT.RenamingContext.coversFV_update_of_notMem hz_not_fv hcov_P
+  have hden_P_upd :
+      ⟦Penc.abstract (Function.update ThetaBody z (some W))
+        hcov_P_upd⟧ˢ = some dP := by
+    calc
+      ⟦Penc.abstract (Function.update ThetaBody z (some W))
+          hcov_P_upd⟧ˢ = ⟦Penc.abstract ThetaBody hcov_P⟧ˢ := by
+        exact (SMT.RenamingContext.denote_update_of_notMem
+          (h := hcov_P) hz_not_fv).symm
+      _ = some dP := hden_Penc
+  have hlen_xt :
+      vs.length = (toDestPair vs (.fst (.var z))).length := by
+    rw [toDestPair_length_gen vs (.fst (.var z))
+      (.fst (.var z)) [] vs_nemp]
+    simp
+  have hlen_xd : vs.length = (List.ofFn ss).length := by simp
+  have hbase_fv : ∀ w ∈ SMT.fv (.fst (.var z)), w = z := by
+    intro w hw
+    simpa [SMT.fv] using hw
+  have hts_fv_not_bv : ∀ t ∈ toDestPair vs (.fst (.var z)),
+      ∀ w ∈ SMT.fv t, w ∉ SMT.bv Penc := by
+    intro t ht w hw
+    rw [SMT_fv_toDestPair_subset_base hbase_fv ht hw]
+    exact hz_not_bv
+  have hts_fv_disj_vs : ∀ t ∈ toDestPair vs (.fst (.var z)),
+      ∀ w ∈ SMT.fv t, w ∉ vs := by
+    intro t ht w hw
+    rw [SMT_fv_toDestPair_subset_base hbase_fv ht hw]
+    exact hz_not_vs
+  have hts_den : ∀ (i : ℕ) (_hi_x : i < vs.length)
+      (hi_t : i < (toDestPair vs (.fst (.var z))).length)
+      (hi_d : i < (List.ofFn ss).length),
+      ∃ (ht_cov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W))
+          (toDestPair vs (.fst (.var z)))[i]),
+        ⟦(toDestPair vs (.fst (.var z)))[i].abstract
+          (Function.update DeltaCtx z (some W)) ht_cov⟧ˢ =
+            some (List.ofFn ss)[i] := by
+    intro i hi_x _hi_t _hi_d
+    let j : Fin vs.length := ⟨i, hi_x⟩
+    obtain ⟨hcov, hden⟩ := hcomponents j
+    exact ⟨hcov, by simpa [j] using hden⟩
+  have hagrees : SMT.RenamingContext.AgreesOnFV
+      (Function.updates (Function.update DeltaCtx z (some W)) vs
+        ((List.ofFn ss).map Option.some))
+      (Function.update ThetaBody z (some W)) Penc := by
+    intro v hv
+    dsimp [ThetaBody]
+    by_cases hvs : v ∈ vs
+    · have hvz : v ≠ z := fun hvz => hz_not_vs (hvz ▸ hvs)
+      rw [Function.update_of_ne hvz,
+        Function.updates_eq_if (by simp) vs_nodup,
+        Function.updates_eq_if (by simp) vs_nodup,
+        dif_pos hvs, dif_pos hvs]
+    · have hvz : v ≠ z := fun hvz => hz_not_fv (hvz ▸ hv)
+      rw [Function.updates_of_not_mem _ vs _ v hvs,
+        Function.update_of_ne hvz, Function.update_of_ne hvz,
+        Function.updates_of_not_mem _ vs _ v hvs]
+  have hden_sub :=
+    SMT.RenamingContext.denote_substList_eq_of_denote_and_agrees
+      Penc vs (toDestPair vs (.fst (.var z))) (List.ofFn ss)
+      hlen_xt hlen_xd vs_nodup hvs_not_bv
+      (toDestPair_bv_nil_base (by simp [SMT.bv])) hts_fv_not_bv
+      (lambda_toDestPair_ne_none (by simp)) hts_fv_disj_vs hts_den
+      hcov_sub hcov_upd hcov_P_upd hagrees hden_P_upd
+  exact ⟨dP, hden_sub, hdP_type, hrel_P⟩
+
+open Classical in
 /-- Evaluate the encoded lambda body at a represented source-domain point.
 The body result is related at its arbitrary encoder-chosen target type, and
 the emitted Boolean conjunction is true exactly when the lambda's second
