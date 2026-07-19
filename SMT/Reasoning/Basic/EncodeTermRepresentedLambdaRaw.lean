@@ -1217,7 +1217,8 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
               target_respects_lambda_out, ThetaBody_dom_out,
               lamVal, hden_lambda, hlam_type, ?_, ?_⟩
             · simpa only [tau, proof_irrel_heq] using hrel_lambda
-            · intro Xi_alt Xi_fv_alt Theta0_alt related_alt wf_alt
+            · apply EncodeTermRepScopedTotal.to_total (Dlt := DltD)
+              intro Xi_alt Xi_fv_alt Theta0_alt related_alt wf_alt
                 Theta0_alt_none respects_alt Theta0_alt_dom
                 T_alt hT_alt den_alt
               have hT_alt_lambda :
@@ -1256,9 +1257,9 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
               obtain ⟨ThetaD_alt, hcov_D_alt, DencVal_alt,
                   ThetaD_alt_ext, related_D_alt_out, ThetaD_alt_none,
                   respects_D_alt_out, target_respects_D_alt,
-                  ThetaD_alt_dom, hden_Denc_alt, hDenc_type_alt,
-                  D_rel_alt⟩ :=
-                D_total Xi_alt Xi_fv_D_alt Theta0_alt related_D_alt
+                  ThetaD_alt_dom, D_specs_true_alt, hden_Denc_alt,
+                  hDenc_type_alt, D_rel_alt⟩ :=
+                D_scoped_total Xi_alt Xi_fv_D_alt Theta0_alt related_D_alt
                   wf_alt Theta0_alt_none_D respects_D_alt
                   Theta0_alt_dom Dval_alt hDval_alt den_D_alt
               let DencVal_alt' : SMT.Dom.{u} :=
@@ -1505,6 +1506,12 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
                 intro v hv
                 rw [St6_types_eq]
                 exact ThetaBody_alt_dom v hv
+              have D_specs_true_out_alt :
+                  SpecBodiesTrue ThetaBody_alt St6.types DltD := by
+                apply D_specs_true_alt.of_extends ThetaBody_alt_ext_D
+                · rw [St6_types_eq]
+                  exact St1_sub_St3_types
+                · exact ThetaD_alt_dom
               have hcov_D_body_alt : SMT.RenamingContext.CoversFV
                   ThetaBody_alt Denc :=
                 SMT.RenamingContext.coversFV_of_extends_of_coversFV
@@ -1754,7 +1761,7 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
                 ThetaBody_alt_ext0, related_out_alt,
                 ThetaBody_alt_none_out, respects_out_alt,
                 target_respects_lambda_out_alt, ThetaBody_alt_dom_out,
-                hden_lambda_alt, hlam_type_alt, ?_⟩
+                D_specs_true_out_alt, hden_lambda_alt, hlam_type_alt, ?_⟩
               simpa only [tau, proof_irrel_heq] using hrel_lambda_alt
       | int =>
           simp only [Prod.snd]
