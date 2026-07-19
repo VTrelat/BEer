@@ -141,6 +141,215 @@ private theorem encodeTerm_cprod_via_tail
       encodeCprodTail Senc Tenc alpha beta) := by
   rfl
 
+private theorem encodeCprodTail_shape_decls
+    (A B : SMT.Term) (alpha beta : SMTType)
+    {Lambda : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱}
+    {decl : SMT.Chunk} :
+    ⦃fun ⟨env, Lambda'⟩ =>
+      ⌜Lambda' = Lambda ∧ env.freshvarsc = n ∧
+        Lambda.keys ⊆ env.usedVars ∧ env.usedVars = used ∧
+        env.declarations = decl⌝⦄
+    encodeCprodTail A B alpha beta
+    ⦃⇓? ⟨out, sigmaOut⟩ ⟨env', Gamma'⟩ =>
+      ⌜∃ p a b : SMT.𝒱,
+        out = .lambda [p] [.pair alpha beta]
+          (.exists [a, b] [alpha, beta]
+            (.and (.app A (.var a))
+              (.and (.app B (.var b))
+                (.eq (.var p) (.pair (.var a) (.var b)))))) ∧
+        sigmaOut = .fun (.pair alpha beta) .bool ∧
+        Gamma' = Lambda ∧ env'.declarations = decl ∧
+        p ∉ Lambda ∧ a ∉ Lambda ∧ b ∉ Lambda ∧
+        p ≠ a ∧ p ≠ b ∧ a ≠ b⌝⦄ := by
+  unfold encodeCprodTail
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, rfl, rfl⟩ := pre
+  mspec (Std.Do.Triple.and _
+    (SMT.freshVar_spec (Γ := St.types)
+      (τ := SMTType.pair alpha beta)
+      (n := St.env.freshvarsc) (used := St.env.usedVars))
+    (SMT.freshVar_decls
+      (τ := SMTType.pair alpha beta)
+      (decl := St.env.declarations)))
+  next p =>
+    mrename_i postP
+    mintro ∀StP
+    mpure postP
+    dsimp at postP
+    obtain ⟨⟨StP_types, p_fresh, StP_fresh, StP_used,
+      p_not_used⟩, StP_decl⟩ := postP
+    mspec (Std.Do.Triple.and _
+      (SMT.freshVar_spec (Γ := StP.types) (τ := alpha)
+        (n := StP.env.freshvarsc) (used := StP.env.usedVars))
+      (SMT.freshVar_decls (τ := alpha)
+        (decl := StP.env.declarations)))
+    next a =>
+      mrename_i postA
+      mintro ∀StA
+      mpure postA
+      dsimp at postA
+      obtain ⟨⟨StA_types, a_fresh, StA_fresh, StA_used,
+        a_not_used⟩, StA_decl⟩ := postA
+      mspec (Std.Do.Triple.and _
+        (SMT.freshVar_spec (Γ := StA.types) (τ := beta)
+          (n := StA.env.freshvarsc) (used := StA.env.usedVars))
+        (SMT.freshVar_decls (τ := beta)
+          (decl := StA.env.declarations)))
+      next b =>
+        mrename_i postB
+        mintro ∀StB
+        mpure postB
+        dsimp at postB
+        obtain ⟨⟨StB_types, b_fresh, StB_fresh, StB_used,
+          b_not_used⟩, StB_decl⟩ := postB
+        mspec (Std.Do.Triple.and _ SMT.eraseFromContext_spec
+          (SMT.eraseFromContext_decls
+            (decl := StB.env.declarations)))
+        mrename_i postEP
+        mintro ∀StEP
+        mpure postEP
+        dsimp at postEP
+        obtain ⟨⟨StEP_types, StEP_fresh, StEP_used⟩,
+          StEP_decl⟩ := postEP
+        mspec (Std.Do.Triple.and _ SMT.eraseFromContext_spec
+          (SMT.eraseFromContext_decls
+            (decl := StEP.env.declarations)))
+        mrename_i postEA
+        mintro ∀StEA
+        mpure postEA
+        dsimp at postEA
+        obtain ⟨⟨StEA_types, StEA_fresh, StEA_used⟩,
+          StEA_decl⟩ := postEA
+        mspec (Std.Do.Triple.and _ SMT.eraseFromContext_spec
+          (SMT.eraseFromContext_decls
+            (decl := StEA.env.declarations)))
+        mrename_i postEB
+        mintro ∀StEB
+        mpure postEB
+        dsimp at postEB
+        obtain ⟨⟨StEB_types, StEB_fresh, StEB_used⟩,
+          StEB_decl⟩ := postEB
+        have a_fresh0 : a ∉ St.types.insert p
+            (SMTType.pair alpha beta) := by
+          simpa [StP_types] using a_fresh
+        have b_fresh0 : b ∉
+            (St.types.insert p (SMTType.pair alpha beta)).insert
+              a alpha := by
+          simpa [StA_types, StP_types] using b_fresh
+        have StEB_types_final : StEB.types = St.types := by
+          rw [StEB_types, StEA_types, StEP_types,
+            StB_types, StA_types, StP_types]
+          exact erase_three_rep_cprod p_fresh a_fresh0 b_fresh0
+        have StEB_decl_final :
+            StEB.env.declarations = St.env.declarations := by
+          rw [StEB_decl, StEA_decl, StEP_decl,
+            StB_decl, StA_decl, StP_decl]
+        have hp_ne_a : p ≠ a := by
+          intro h
+          subst a
+          exact a_fresh0 (by simp)
+        have hp_ne_b : p ≠ b := by
+          intro h
+          subst b
+          exact b_fresh0 (by simp)
+        have ha_ne_b : a ≠ b := by
+          intro h
+          subst b
+          exact b_fresh0 (by simp)
+        have a_fresh_ctx : a ∉ St.types := by
+          intro h
+          exact a_fresh0 (by simp [h])
+        have b_fresh_ctx : b ∉ St.types := by
+          intro h
+          exact b_fresh0 (by simp [h])
+        mspec Std.Do.Spec.pure
+        mpure_intro
+        exact ⟨p, a, b, rfl, trivial, StEB_types_final,
+          StEB_decl_final, p_fresh, a_fresh_ctx, b_fresh_ctx,
+          hp_ne_a, hp_ne_b, ha_ne_b⟩
+
+private theorem cprod_lambda_fv_subset
+    (A B : SMT.Term) (p a b : SMT.𝒱)
+    (alpha beta : SMTType) :
+    SMT.fv (.lambda [p] [.pair alpha beta]
+      (.exists [a, b] [alpha, beta]
+        (.and (.app A (.var a))
+          (.and (.app B (.var b))
+            (.eq (.var p) (.pair (.var a) (.var b))))))) ⊆
+      SMT.fv A ++ SMT.fv B := by
+  intro v hv
+  simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append,
+    List.mem_cons, List.mem_nil_iff,
+    or_false] at hv ⊢
+  aesop
+
+private abbrev EncodeCprodTailRepTotalSemantics.{u}
+    (alpha beta : BType) (A B out : SMT.Term)
+    (sigmaOut : SMTType) (Lambda Gamma : SMT.TypeContext)
+    (used usedOut : List SMT.𝒱) : Prop :=
+  ∀ (Theta : SMT.RenamingContext.Context.{u})
+    (hA : RenamingContext.CoversFV Theta A)
+    (hB : RenamingContext.CoversFV Theta B),
+    (∀ v ∉ used, Theta v = none) →
+    SMT.RenamingContext.RespectsTypeContextOnFV Theta Lambda A →
+    SMT.RenamingContext.RespectsTypeContextOnFV Theta Lambda B →
+    (∀ v, Theta v ≠ none → v ∈ Lambda) →
+    ∀ (X Y : ZFSet.{u})
+      (hX : X ∈ ⟦BType.set alpha⟧ᶻ)
+      (hY : Y ∈ ⟦BType.set beta⟧ᶻ)
+      (denA denB : SMT.Dom.{u}),
+      ⟦A.abstract Theta hA⟧ˢ = some denA →
+      ⟦B.abstract Theta hB⟧ˢ = some denB →
+      RDomCastSupported
+        (⟨X, BType.set alpha, hX⟩ : _root_.B.Dom) denA →
+      RDomCastSupported
+        (⟨Y, BType.set beta, hY⟩ : _root_.B.Dom) denB →
+      ∃ (Theta' : SMT.RenamingContext.Context.{u})
+        (hcov : RenamingContext.CoversFV Theta' out)
+        (denOut : SMT.Dom.{u}),
+        RenamingContext.Extends Theta' Theta ∧
+        (∀ v ∉ usedOut, Theta' v = none) ∧
+        SMT.RenamingContext.RespectsTypeContextOnFV
+          Theta' Gamma out ∧
+        (∀ v, Theta' v ≠ none → v ∈ Gamma) ∧
+        ⟦out.abstract Theta' hcov⟧ˢ = some denOut ∧
+        denOut.snd.fst = sigmaOut ∧
+        RDomCastSupported
+          (⟨X.prod Y, BType.set (alpha ×ᴮ beta),
+            cprod_mem_btype hX hY⟩ : _root_.B.Dom) denOut
+
+private abbrev EncodeCprodTailRepGuardedSemantics.{u}
+    (alpha beta : BType) (A B out : SMT.Term)
+    (rho sigma sigmaOut : SMTType)
+    (Lambda : SMT.TypeContext) (used : List SMT.𝒱) : Prop :=
+  ∀ (Core : SMT.TypeContext), Core ⊆ Lambda → Core.keys ⊆ used →
+    Core ⊢ˢ A : SMTType.fun rho SMTType.bool →
+    Core ⊢ˢ B : SMTType.fun sigma SMTType.bool →
+    ∀ (Theta : SMT.RenamingContext.Context.{u})
+      (hcovA : RenamingContext.CoversFV Theta A)
+      (hcovB : RenamingContext.CoversFV Theta B),
+      SMT.RenamingContext.RespectsTypeContextOnFV Theta Core A →
+      SMT.RenamingContext.RespectsTypeContextOnFV Theta Core B →
+      ∀ (X Y : ZFSet.{u})
+        (hX : X ∈ ⟦BType.set alpha⟧ᶻ)
+        (hY : Y ∈ ⟦BType.set beta⟧ᶻ)
+        (denA denB : SMT.Dom.{u}),
+        ⟦A.abstract Theta hcovA⟧ˢ = some denA →
+        ⟦B.abstract Theta hcovB⟧ˢ = some denB →
+        RDomCastSupported
+          (⟨X, BType.set alpha, hX⟩ : _root_.B.Dom) denA →
+        RDomCastSupported
+          (⟨Y, BType.set beta, hY⟩ : _root_.B.Dom) denB →
+        ∀ (hcovOut : RenamingContext.CoversFV Theta out)
+          (denOut : SMT.Dom.{u}),
+          ⟦out.abstract Theta hcovOut⟧ˢ = some denOut →
+          denOut.snd.fst = sigmaOut →
+          RDomCastSupported
+            (⟨X.prod Y, BType.set (alpha ×ᴮ beta),
+              cprod_mem_btype hX hY⟩ : _root_.B.Dom) denOut
+
 abbrev EncodeCprodTailRepSpec.{u}
     (alpha beta : BType) (rho sigma : SMTType)
     (_hrho : BType.SupportedSMT alpha rho)
@@ -1793,6 +2002,250 @@ theorem encodeCprodTail_rep_spec.{u}
           · exact Out_rel.1.2
           · exact Out_rel.2
 
+private abbrev EncodeCprodTailRepScopedSpec.{u}
+    (alpha beta : BType) (rho sigma : SMTType)
+    (_hrho : BType.SupportedSMT alpha rho)
+    (_hsigma : BType.SupportedSMT beta sigma)
+    (A B : SMT.Term) : Prop :=
+  ∀ {Lambda : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱}
+    {decl : SMT.Chunk},
+    Lambda ⊢ˢ A : SMTType.fun rho SMTType.bool →
+    Lambda ⊢ˢ B : SMTType.fun sigma SMTType.bool →
+    (∀ v ∈ SMT.bv A, v ∈ used) →
+    (∀ v ∈ SMT.bv B, v ∈ used) →
+    ⦃fun ⟨env, Lambda'⟩ =>
+      ⌜Lambda' = Lambda ∧ env.freshvarsc = n ∧
+        Lambda.keys ⊆ env.usedVars ∧ env.usedVars = used ∧
+        env.declarations = decl⌝⦄
+    encodeCprodTail A B rho sigma
+    ⦃⇓? ⟨out, sigmaOut⟩ ⟨env', Gamma'⟩ =>
+      ⌜used ⊆ env'.usedVars ∧
+        Lambda ⊆ Gamma' ∧
+        Gamma'.keys ⊆ env'.usedVars ∧
+        Nonempty (sigmaOut ~>
+          (BType.set (alpha ×ᴮ beta)).toSMTType) ∧
+        Gamma' ⊢ˢ out : sigmaOut ∧
+        (∀ v ∈ used, v ∉ Lambda → v ∉ Gamma') ∧
+        EncodeCprodTailRepTotalSemantics.{u}
+          alpha beta A B out sigmaOut Lambda Gamma'
+          used env'.usedVars ∧
+        Gamma' = Lambda ∧ env'.declarations = decl ∧
+        (∀ v ∈ SMT.fv A, v ∈ SMT.fv out) ∧
+        (∀ v ∈ SMT.fv B, v ∈ SMT.fv out) ∧
+        SMT.fv out ⊆ SMT.fv A ++ SMT.fv B ∧
+        EncodeCprodTailRepGuardedSemantics.{u}
+          alpha beta A B out rho sigma sigmaOut
+          Lambda used⌝⦄
+
+set_option maxHeartbeats 7000000 in
+private theorem encodeCprodTail_rep_scoped_spec.{u}
+    (alpha beta : BType) (rho sigma : SMTType)
+    (hrho : BType.SupportedSMT alpha rho)
+    (hsigma : BType.SupportedSMT beta sigma)
+    (A B : SMT.Term) :
+    EncodeCprodTailRepScopedSpec.{u}
+      alpha beta rho sigma hrho hsigma A B := by
+  unfold EncodeCprodTailRepScopedSpec
+  intro Lambda n used decl typA typB bvA_used bvB_used
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, rfl, rfl⟩ := pre
+  mspec (Std.Do.Triple.and _
+    (encodeCprodTail_rep_spec alpha beta rho sigma hrho hsigma A B
+      typA typB bvA_used bvB_used)
+    (encodeCprodTail_shape_decls A B rho sigma
+      (n := St.env.freshvarsc) (used := St.env.usedVars)
+      (decl := St.env.declarations)))
+  rename_i outPair
+  obtain ⟨out, sigmaOut⟩ := outPair
+  mrename_i post
+  mintro ∀StOut
+  mpure post
+  obtain ⟨opPost, shape⟩ := post
+  obtain ⟨usedSub, typesSub, keysSub, path, typOut,
+    preserves, total⟩ := opPost
+  obtain ⟨p, a, b, outEq, sigmaEq, typesEq, declEq,
+    pFresh, aFresh, bFresh, hp_ne_a, hp_ne_b, ha_ne_b⟩ := shape
+  dsimp at outEq sigmaEq
+  subst out
+  subst sigmaOut
+  have p_not_fv_A : p ∉ SMT.fv A :=
+    funNotMemFvOfNotMemContext typA pFresh
+  have p_not_fv_B : p ∉ SMT.fv B :=
+    funNotMemFvOfNotMemContext typB pFresh
+  have a_not_fv_A : a ∉ SMT.fv A :=
+    funNotMemFvOfNotMemContext typA aFresh
+  have a_not_fv_B : a ∉ SMT.fv B :=
+    funNotMemFvOfNotMemContext typB aFresh
+  have b_not_fv_A : b ∉ SMT.fv A :=
+    funNotMemFvOfNotMemContext typA bFresh
+  have b_not_fv_B : b ∉ SMT.fv B :=
+    funNotMemFvOfNotMemContext typB bFresh
+  have observesA : ∀ v ∈ SMT.fv A,
+      v ∈ SMT.fv (.lambda [p] [.pair rho sigma]
+        (.exists [a, b] [rho, sigma]
+          (.and (.app A (.var a))
+            (.and (.app B (.var b))
+              (.eq (.var p) (.pair (.var a) (.var b))))))) := by
+    intro v hv
+    apply SMT.fv.mem_lambda
+    constructor
+    · apply SMT.fv.mem_exists
+      constructor
+      · exact SMT.fv.mem_and (.inl (SMT.fv.mem_app (.inl hv)))
+      · intro h
+        simp only [List.mem_cons, List.mem_nil_iff, or_false] at h
+        rcases h with rfl | rfl
+        · exact a_not_fv_A hv
+        · exact b_not_fv_A hv
+    · intro h
+      rw [List.mem_singleton] at h
+      subst v
+      exact p_not_fv_A hv
+  have observesB : ∀ v ∈ SMT.fv B,
+      v ∈ SMT.fv (.lambda [p] [.pair rho sigma]
+        (.exists [a, b] [rho, sigma]
+          (.and (.app A (.var a))
+            (.and (.app B (.var b))
+              (.eq (.var p) (.pair (.var a) (.var b))))))) := by
+    intro v hv
+    apply SMT.fv.mem_lambda
+    constructor
+    · apply SMT.fv.mem_exists
+      constructor
+      · apply SMT.fv.mem_and
+        right
+        exact SMT.fv.mem_and (.inl (SMT.fv.mem_app (.inl hv)))
+      · intro h
+        simp only [List.mem_cons, List.mem_nil_iff, or_false] at h
+        rcases h with rfl | rfl
+        · exact a_not_fv_B hv
+        · exact b_not_fv_B hv
+    · intro h
+      rw [List.mem_singleton] at h
+      subst v
+      exact p_not_fv_B hv
+  have fvSubset := cprod_lambda_fv_subset A B p a b rho sigma
+  mpure_intro
+  refine ⟨usedSub, typesSub, keysSub, path, typOut, preserves,
+    total, typesEq, declEq, observesA, observesB, fvSubset, ?_⟩
+  intro Core Core_sub Core_keys typA_Core typB_Core Theta
+    hcovA hcovB respectsA respectsB X Y hX hY denA denB
+    hdenA hdenB Xrel Yrel hcovOut denOut hdenOut hdenOutType
+  let ThetaR : SMT.RenamingContext.Context.{u} := fun v =>
+    if v ∈ Core then Theta v else none
+  have A_fv_Core : ∀ v ∈ SMT.fv A, v ∈ Core :=
+    fun v hv => SMT.Typing.mem_context_of_mem_fv typA_Core hv
+  have B_fv_Core : ∀ v ∈ SMT.fv B, v ∈ Core :=
+    fun v hv => SMT.Typing.mem_context_of_mem_fv typB_Core hv
+  have hcovA_R : RenamingContext.CoversFV ThetaR A := by
+    intro v hv
+    simp [ThetaR, A_fv_Core v hv, hcovA v hv]
+  have hcovB_R : RenamingContext.CoversFV ThetaR B := by
+    intro v hv
+    simp [ThetaR, B_fv_Core v hv, hcovB v hv]
+  have agreesA : RenamingContext.AgreesOnFV ThetaR Theta A := by
+    intro v hv
+    simp [ThetaR, A_fv_Core v hv]
+  have agreesB : RenamingContext.AgreesOnFV ThetaR Theta B := by
+    intro v hv
+    simp [ThetaR, B_fv_Core v hv]
+  have hdenA_R : ⟦A.abstract ThetaR hcovA_R⟧ˢ = some denA :=
+    (RenamingContext.denote_congr_of_agreesOnFV
+      (h1 := hcovA_R) (h2 := hcovA) agreesA).trans hdenA
+  have hdenB_R : ⟦B.abstract ThetaR hcovB_R⟧ˢ = some denB :=
+    (RenamingContext.denote_congr_of_agreesOnFV
+      (h1 := hcovB_R) (h2 := hcovB) agreesB).trans hdenB
+  have ThetaR_none : ∀ v ∉ St.env.usedVars, ThetaR v = none := by
+    intro v hv
+    by_cases hvCore : v ∈ Core
+    · exact absurd (Core_keys ((AList.mem_keys).mp hvCore)) hv
+    · simp [ThetaR, hvCore]
+  have ThetaR_dom : ∀ v, ThetaR v ≠ none → v ∈ St.types := by
+    intro v hv
+    by_cases hvCore : v ∈ Core
+    · exact AList.mem_of_subset Core_sub hvCore
+    · simp [ThetaR, hvCore] at hv
+  have respectsA_R :
+      SMT.RenamingContext.RespectsTypeContextOnFV
+        ThetaR St.types A := by
+    intro v tau hv hlookup
+    have hvCore := A_fv_Core v hv
+    obtain ⟨tauCore, hlookupCore⟩ := Option.isSome_iff_exists.mp
+      (AList.lookup_isSome.mpr hvCore)
+    have hlookup' := AList.lookup_of_subset Core_sub hlookupCore
+    rw [hlookup'] at hlookup
+    cases hlookup
+    obtain ⟨d, hd, hdType⟩ := respectsA hv hlookupCore
+    exact ⟨d, by simpa [ThetaR, hvCore] using hd, hdType⟩
+  have respectsB_R :
+      SMT.RenamingContext.RespectsTypeContextOnFV
+        ThetaR St.types B := by
+    intro v tau hv hlookup
+    have hvCore := B_fv_Core v hv
+    obtain ⟨tauCore, hlookupCore⟩ := Option.isSome_iff_exists.mp
+      (AList.lookup_isSome.mpr hvCore)
+    have hlookup' := AList.lookup_of_subset Core_sub hlookupCore
+    rw [hlookup'] at hlookup
+    cases hlookup
+    obtain ⟨d, hd, hdType⟩ := respectsB hv hlookupCore
+    exact ⟨d, by simpa [ThetaR, hvCore] using hd, hdType⟩
+  obtain ⟨ThetaOut, hcovOutR, denOutR, ThetaOut_ext,
+      _ThetaOut_none, _respectsOut, _ThetaOut_dom,
+      hdenOutR, _hdenOutRType, OutRel⟩ :=
+    total ThetaR hcovA_R hcovB_R ThetaR_none
+      respectsA_R respectsB_R ThetaR_dom X Y hX hY denA denB
+      hdenA_R hdenB_R Xrel Yrel
+  have output_fv_Core : ∀ v ∈ SMT.fv
+      (.lambda [p] [.pair rho sigma]
+        (.exists [a, b] [rho, sigma]
+          (.and (.app A (.var a))
+            (.and (.app B (.var b))
+              (.eq (.var p) (.pair (.var a) (.var b))))))),
+      v ∈ Core := by
+    intro v hv
+    rcases List.mem_append.mp (fvSubset hv) with hvA | hvB
+    · exact A_fv_Core v hvA
+    · exact B_fv_Core v hvB
+  have hcovOut_R0 : RenamingContext.CoversFV ThetaR
+      (.lambda [p] [.pair rho sigma]
+        (.exists [a, b] [rho, sigma]
+          (.and (.app A (.var a))
+            (.and (.app B (.var b))
+              (.eq (.var p) (.pair (.var a) (.var b))))))) := by
+    intro v hv
+    simp [ThetaR, output_fv_Core v hv, hcovOut v hv]
+  have agreesOutR : RenamingContext.AgreesOnFV ThetaOut ThetaR
+      (.lambda [p] [.pair rho sigma]
+        (.exists [a, b] [rho, sigma]
+          (.and (.app A (.var a))
+            (.and (.app B (.var b))
+              (.eq (.var p) (.pair (.var a) (.var b))))))) :=
+    RenamingContext.agreesOnFV_of_extends_of_coversFV
+      ThetaOut_ext hcovOut_R0
+  have agreesRTheta : RenamingContext.AgreesOnFV ThetaR Theta
+      (.lambda [p] [.pair rho sigma]
+        (.exists [a, b] [rho, sigma]
+          (.and (.app A (.var a))
+            (.and (.app B (.var b))
+              (.eq (.var p) (.pair (.var a) (.var b))))))) := by
+    intro v hv
+    simp [ThetaR, output_fv_Core v hv]
+  have agreesOut : RenamingContext.AgreesOnFV ThetaOut Theta
+      (.lambda [p] [.pair rho sigma]
+        (.exists [a, b] [rho, sigma]
+          (.and (.app A (.var a))
+            (.and (.app B (.var b))
+              (.eq (.var p) (.pair (.var a) (.var b))))))) :=
+    RenamingContext.agreesOnFV_trans agreesOutR agreesRTheta
+  have hden_congr := RenamingContext.denote_congr_of_agreesOnFV
+    (h1 := hcovOutR) (h2 := hcovOut) agreesOut
+  have denOutEq : denOutR = denOut :=
+    Option.some.inj (hdenOutR.symm.trans (hden_congr.trans hdenOut))
+  subst denOutR
+  simpa only [proof_irrel_heq] using OutRel
+
 set_option maxHeartbeats 7000000 in
 theorem encodeTerm_rep_spec.cprod_case.{u}
     (S T : B.Term)
@@ -2142,3 +2595,539 @@ theorem encodeTerm_rep_spec.cprod_case.{u}
           · exact respects_alt.of_extends DeltaProd_alt_ext0 types_sub0
               (fun _ h => h) fv_in_Lambda
           · simpa only [proof_irrel_heq] using Prod_alt_rel
+
+set_option maxHeartbeats 12000000 in
+theorem encodeTerm_rep_scoped.cprod_case_from.{u}
+    (S T : B.Term)
+    (S_ih : EncodeTermRepIH.{u} S)
+    (T_ih : EncodeTermRepIH.{u} T)
+    (S_scoped : EncodeTermRepScopedFromIH.{u} S)
+    (T_scoped : EncodeTermRepScopedFromIH.{u} T)
+    (E : B.Env) {Lambda : SMT.TypeContext} {tau : BType}
+    (typ_t : E.context ⊢ᴮ B.Term.cprod S T : tau)
+    {Delta : B.RenamingContext.Context}
+    (Delta_fv : ∀ v ∈ B.fv (B.Term.cprod S T),
+      (Delta v).isSome = true)
+    {Delta0 : SMT.RenamingContext.Context.{u}}
+    (related : RValuationCastSupportedOnFV Delta Delta0
+      (B.Term.cprod S T))
+    {used : List SMT.𝒱}
+    (Delta0_none : ∀ v ∉ used, Delta0 v = none)
+    (Delta0_dom : ∀ v, Delta0 v ≠ none → v ∈ Lambda)
+    {U : ZFSet.{u}} {hU : U ∈ ⟦tau⟧ᶻ}
+    (den_t : ⟦(B.Term.cprod S T).abstract Delta Delta_fv⟧ᴮ =
+      some ⟨U, tau, hU⟩)
+    (vars_used : ∀ v ∈ (B.Term.cprod S T).vars, v ∈ used)
+    (Lambda_inv : ∀ v ∈ (B.Term.cprod S T).vars,
+      v ∈ Lambda → v ∈ E.context)
+    (bv_nodup : (B.bv (B.Term.cprod S T)).Nodup)
+    (respects : B.RenamingContext.RespectsTypeContextOnFV
+      Delta0 Lambda (B.Term.cprod S T))
+    (fv_in_Lambda : ∀ v ∈ B.fv (B.Term.cprod S T), v ∈ Lambda)
+    (wf : B.RenWF E.context Delta)
+    {Base : SMT.TypeContext} {Dpre : SMT.Chunk}
+    (input_envelope : DeclarationContextEnvelope Base Dpre Lambda)
+    (fv_in_Base : ∀ v ∈ B.fv (B.Term.cprod S T), v ∈ Base)
+    (Dpre_typing : ScopedSpecsTyping Base Dpre)
+    {n : ℕ} {decl : SMT.Chunk} :
+    ⦃fun ⟨E0, Lambda'⟩ =>
+      ⌜Lambda' = Lambda ∧ E0.freshvarsc = n ∧
+        Lambda.keys ⊆ E0.usedVars ∧ E0.usedVars = used ∧
+        E0.declarations = decl⌝⦄
+    encodeTerm (B.Term.cprod S T) E
+    ⦃⇓? (⟨t', sigma⟩ : SMT.Term × SMTType) ⟨E', Gamma'⟩ =>
+      ⌜EncodeTermRepScopedPostFrom.{u} (B.Term.cprod S T) E tau
+        Base Dpre Lambda decl t' sigma E' Gamma'⌝⦄ := by
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, St_used_eq, St_decl_eq⟩ := pre
+  rw [encodeTerm_cprod_via_tail]
+  obtain ⟨alpha, beta, rfl, typ_S, typ_T⟩ := B.Typing.cprodE typ_t
+  obtain ⟨X, Y, hX, hY, den_S, den_T, rfl⟩ :=
+    B.denote_cprod_inv_rep Delta_fv den_t
+  have fv_S_sub : B.fv S ⊆ B.fv (B.Term.cprod S T) := by
+    intro v hv
+    simpa [B.fv] using (Or.inl hv : v ∈ B.fv S ∨ v ∈ B.fv T)
+  have fv_T_sub : B.fv T ⊆ B.fv (B.Term.cprod S T) := by
+    intro v hv
+    simpa [B.fv] using (Or.inr hv : v ∈ B.fv S ∨ v ∈ B.fv T)
+  have S_bv_nodup : (B.bv S).Nodup := by
+    have h := bv_nodup
+    simp only [B.bv, List.nodup_append] at h
+    exact h.1
+  have T_bv_nodup : (B.bv T).Nodup := by
+    have h := bv_nodup
+    simp only [B.bv, List.nodup_append] at h
+    exact h.2.1
+  have ST_bv_disj : ∀ a ∈ B.bv S, ∀ b ∈ B.bv T, a ≠ b := by
+    have h := bv_nodup
+    simp only [B.bv, List.nodup_append] at h
+    exact h.2.2
+
+  mspec (Std.Do.Triple.and _
+    (Std.Do.Triple.and _
+      (Std.Do.Triple.and _
+        (S_ih E typ_S
+          (fun v hv => Delta_fv v (fv_S_sub hv))
+          (related.mono_fv fv_S_sub)
+          Delta0_none Delta0_dom den_S
+          (fun v hv => vars_used v (by
+            simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+              List.mem_append] at hv ⊢
+            rcases hv with h | h <;> [left; right] <;> exact .inl h))
+          (fun v hv => Lambda_inv v (by
+            simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+              List.mem_append] at hv ⊢
+            rcases hv with h | h <;> [left; right] <;> exact .inl h))
+          S_bv_nodup (respects.mono_fv fv_S_sub)
+          (fun v hv => fv_in_Lambda v (fv_S_sub hv)) wf
+          (n := St.env.freshvarsc))
+        (S_scoped E typ_S
+          (fun v hv => Delta_fv v (fv_S_sub hv))
+          (related.mono_fv fv_S_sub)
+          Delta0_none Delta0_dom den_S
+          (fun v hv => vars_used v (by
+            simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+              List.mem_append] at hv ⊢
+            rcases hv with h | h <;> [left; right] <;> exact .inl h))
+          (fun v hv => Lambda_inv v (by
+            simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+              List.mem_append] at hv ⊢
+            rcases hv with h | h <;> [left; right] <;> exact .inl h))
+          S_bv_nodup (respects.mono_fv fv_S_sub)
+          (fun v hv => fv_in_Lambda v (fv_S_sub hv)) wf
+          input_envelope (fun v hv => fv_in_Base v (fv_S_sub hv))
+          Dpre_typing (n := St.env.freshvarsc)
+          (decl := St.env.declarations)))
+      (encodeTerm_bv_used E (t := S) (used := St.env.usedVars)
+        (n := St.env.freshvarsc) (decl := St.env.declarations)))
+    (encodeTerm_bv_notMem_used E (t := S) (used := St.env.usedVars)
+      (n := St.env.freshvarsc) (decl := St.env.declarations)))
+  clear S_ih S_scoped
+  rename_i out_S
+  obtain ⟨Senc, sigmaS⟩ := out_S
+  mrename_i post_S
+  mintro ∀StS
+  mpure post_S
+  dsimp at post_S
+  obtain ⟨⟨⟨S_post, S_scoped_post⟩,
+      bv_Senc_used, _S_used_sub_struct, DltS_struct,
+      S_decl_struct, S_delta_ok⟩,
+    bv_Senc_not_used, _S_used_sub_struct', _DltS_struct',
+      _S_decl_struct', _S_delta_not_used⟩ := post_S
+  obtain ⟨DltS, S_decl_eq, S_trace, S_envelope, S_sc_total,
+    S_guard, S_specs_op, S_sc_typing⟩ := S_scoped_post
+  have DltS_eq : DltS = DltS_struct := by
+    rw [S_decl_eq, St_decl_eq] at S_decl_struct
+    exact (List.append_right_inj decl).mp S_decl_struct
+  subst DltS_struct
+  obtain ⟨used_sub_S, types_sub_S, keys_sub_S, covers_S,
+    _path_S, typ_Senc, _shape_S, preserves_S,
+    DeltaS, hcov_Senc, DeltaS_ext, _related_S, DeltaS_none,
+    _respects_S, target_respects_Senc, DeltaS_dom,
+    denSenc, hden_Senc, hdenSenc_type, S_rel, S_total⟩ := S_post
+  rcases denSenc with ⟨Sval, sigmaSden, hSval⟩
+  dsimp at hdenSenc_type
+  subst sigmaSden
+  cases S_rel.supported with
+  | optionFun gamma delta =>
+      exact wp_bind_throw _ _ _ _
+  | @setPred _ rho hrho =>
+    have related_T : RValuationCastSupportedOnFV Delta DeltaS T :=
+      (related.mono_fv fv_T_sub).of_extends DeltaS_ext
+    have respects_T : B.RenamingContext.RespectsTypeContextOnFV
+        DeltaS StS.types T :=
+      respects.of_extends DeltaS_ext types_sub_S fv_T_sub fv_in_Lambda
+    have vars_used_T : ∀ v ∈ T.vars, v ∈ StS.env.usedVars := by
+      intro v hv
+      apply used_sub_S
+      apply vars_used v
+      simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+        List.mem_append]
+      rcases B.Term.mem_vars_iff.mp hv with h | h
+      · exact .inl (.inr h)
+      · exact .inr (.inr h)
+    have Lambda_inv_T : ∀ v ∈ T.vars,
+        v ∈ StS.types → v ∈ E.context := by
+      intro v hv hGamma
+      have hv_cprod : v ∈ (B.Term.cprod S T).vars := by
+        simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+          List.mem_append]
+        rcases B.Term.mem_vars_iff.mp hv with h | h
+        · exact .inl (.inr h)
+        · exact .inr (.inr h)
+      by_cases hv_Lambda : v ∈ St.types
+      · exact Lambda_inv v hv_cprod hv_Lambda
+      · have hv_vars_S : v ∈ B.Term.vars S := by
+          by_contra hnot
+          exact absurd hGamma
+            (preserves_S v (vars_used v hv_cprod) hv_Lambda hnot)
+        rcases B.Term.mem_vars_iff.mp hv_vars_S with hSfv | hSbv
+        · exact B.Typing.typed_by_fv typ_S hSfv
+        · rcases B.Term.mem_vars_iff.mp hv with hTfv | hTbv
+          · exact absurd (B.Typing.typed_by_fv typ_T hTfv)
+              (B.Typing.bv_notMem_context typ_S v hSbv)
+          · exact absurd rfl (ST_bv_disj v hSbv v hTbv)
+
+    mspec (Std.Do.Triple.and _
+      (Std.Do.Triple.and _
+        (Std.Do.Triple.and _
+          (T_ih E typ_T
+            (fun v hv => Delta_fv v (fv_T_sub hv)) related_T
+            DeltaS_none DeltaS_dom den_T vars_used_T Lambda_inv_T
+            T_bv_nodup respects_T
+            (fun v hv => AList.mem_of_subset types_sub_S
+              (fv_in_Lambda v (fv_T_sub hv))) wf
+            (n := StS.env.freshvarsc))
+          (T_scoped E typ_T
+            (fun v hv => Delta_fv v (fv_T_sub hv)) related_T
+            DeltaS_none DeltaS_dom den_T vars_used_T Lambda_inv_T
+            T_bv_nodup respects_T
+            (fun v hv => AList.mem_of_subset types_sub_S
+              (fv_in_Lambda v (fv_T_sub hv))) wf
+            S_envelope (fun v hv => fv_in_Base v (fv_T_sub hv))
+            S_sc_typing.2
+            (n := StS.env.freshvarsc)
+            (decl := StS.env.declarations)))
+        (encodeTerm_bv_used E (t := T) (used := StS.env.usedVars)
+          (n := StS.env.freshvarsc) (decl := StS.env.declarations)))
+      (encodeTerm_bv_notMem_used E (t := T)
+        (used := StS.env.usedVars) (n := StS.env.freshvarsc)
+        (decl := StS.env.declarations)))
+    clear T_ih T_scoped
+    rename_i out_T
+    obtain ⟨Tenc, sigmaT⟩ := out_T
+    mrename_i post_T
+    mintro ∀StT
+    mpure post_T
+    dsimp at post_T
+    obtain ⟨⟨⟨T_post, T_scoped_post⟩,
+        bv_Tenc_used, _T_used_sub_struct, DltT_struct,
+        T_decl_struct, T_delta_ok⟩,
+      bv_Tenc_not_used, _T_used_sub_struct', _DltT_struct',
+        _T_decl_struct', T_delta_not_used⟩ := post_T
+    obtain ⟨DltT, T_decl_eq, T_trace, T_envelope, T_sc_total,
+      T_guard, T_specs_op, T_sc_typing⟩ := T_scoped_post
+    have DltT_eq : DltT = DltT_struct := by
+      rw [T_decl_eq] at T_decl_struct
+      exact (List.append_right_inj StS.env.declarations).mp T_decl_struct
+    subst DltT_struct
+    have DltT_eq' : DltT = _DltT_struct' := by
+      rw [T_decl_eq] at _T_decl_struct'
+      exact (List.append_right_inj StS.env.declarations).mp
+        _T_decl_struct'
+    subst _DltT_struct'
+    obtain ⟨used_sub_T, types_sub_T, keys_sub_T, covers_T,
+      _path_T, typ_Tenc, _shape_T, preserves_T,
+      DeltaT, hcov_Tenc, DeltaT_ext, _related_T, DeltaT_none,
+      _respects_T, target_respects_Tenc, DeltaT_dom,
+      denTenc, hden_Tenc, hdenTenc_type, T_rel, T_total⟩ := T_post
+    rcases denTenc with ⟨Tval, sigmaTden, hTval⟩
+    dsimp at hdenTenc_type
+    subst sigmaTden
+    cases T_rel.supported with
+    | optionFun gamma delta =>
+        exact wp_bind_throw _ _ _ _
+    | @setPred _ sigma hsigma =>
+      have bv_Senc_final : ∀ v ∈ SMT.bv Senc,
+          v ∈ StT.env.usedVars :=
+        fun v hv => used_sub_T (bv_Senc_used v hv)
+      have bv_Senc_not_final : ∀ v ∈ SMT.bv Senc,
+          v ∉ StT.types :=
+        fun v hv => preserves_T v (bv_Senc_used v hv)
+          (SMT.Typing.bv_notMem_context typ_Senc v hv)
+          (by
+            rw [B.Term.notMem_vars_iff]
+            refine ⟨?_, ?_⟩
+            · intro hfvT
+              exact SMT.Typing.bv_notMem_context typ_Senc v hv
+                (AList.mem_of_subset types_sub_S
+                  (fv_in_Lambda v (fv_T_sub hfvT)))
+            · intro hbT
+              exact bv_Senc_not_used v hv
+                (St_used_eq ▸ vars_used v (by
+                  simp only [B.Term.vars, List.mem_union_iff, B.fv, B.bv,
+                    List.mem_append]
+                  right
+                  right
+                  exact hbT)))
+      have typ_Senc_final : StT.types ⊢ˢ Senc :
+          SMTType.fun rho SMTType.bool :=
+        SMT.Typing.weakening types_sub_T typ_Senc bv_Senc_not_final
+      have hcov_Senc_final : RenamingContext.CoversFV DeltaT Senc :=
+        RenamingContext.coversFV_of_extends_of_coversFV
+          DeltaT_ext hcov_Senc
+      have hden_Senc_final :
+          ⟦Senc.abstract DeltaT hcov_Senc_final⟧ˢ =
+            some (⟨Sval, SMTType.fun rho SMTType.bool, hSval⟩ :
+              SMT.Dom) := by
+        have hagree := RenamingContext.agreesOnFV_of_extends_of_coversFV
+          DeltaT_ext hcov_Senc
+        have hcongr := RenamingContext.denote_congr_of_agreesOnFV
+          (t := Senc) (h1 := hcov_Senc_final)
+          (h2 := hcov_Senc) hagree
+        simpa [RenamingContext.denote] using hcongr.trans hden_Senc
+      have target_respects_Senc_final :
+          SMT.RenamingContext.RespectsTypeContextOnFV
+            DeltaT StT.types Senc :=
+        target_respects_Senc.of_extends
+          DeltaT_ext types_sub_T typ_Senc
+      mspec encodeCprodTail_rep_scoped_spec
+        alpha beta rho sigma hrho hsigma Senc Tenc
+        typ_Senc_final typ_Tenc bv_Senc_final bv_Tenc_used
+      rename_i out_cprod
+      obtain ⟨CprodEnc, sigmaCprod⟩ := out_cprod
+      mrename_i post_cprod
+      mintro ∀StCprod
+      mpure post_cprod
+      obtain ⟨used_sub_Cprod, types_sub_Cprod, keys_sub_Cprod, path_Cprod,
+        typ_CprodEnc, preserves_Cprod, tail_total,
+        tail_types_eq, tail_decl_eq, tail_obs_S, tail_obs_T,
+        tail_fv_dep, tail_guard⟩ := post_cprod
+      dsimp at path_Cprod typ_CprodEnc tail_total tail_obs_S tail_obs_T tail_fv_dep tail_guard
+      mpure_intro
+      refine ⟨DltS ++ DltT, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+      · simp [tail_decl_eq, T_decl_eq, S_decl_eq, St_decl_eq,
+          List.append_assoc]
+      · simpa [tail_types_eq] using
+          DeclarationContextTrace.append S_trace T_trace
+      · simpa [tail_types_eq, List.append_assoc] using T_envelope
+      · intro Delta_alt Delta_fv_alt Delta0_alt related_alt wf_alt
+          Delta0_alt_none respects_alt Delta0_alt_dom
+          U_alt hU_alt den_t_alt
+        obtain ⟨X_alt, Y_alt, hX_alt, hY_alt,
+            den_S_alt, den_T_alt, rfl⟩ :=
+          B.denote_cprod_inv_rep Delta_fv_alt den_t_alt
+        have Delta0_alt_none_S : ∀ v ∉ StS.env.usedVars,
+            Delta0_alt v = none := by
+          intro v hv
+          by_contra hne
+          have hv_St := Delta0_alt_dom v hne
+          have hv_used : v ∈ used := by
+            rw [← St_used_eq]
+            exact St_keys hv_St
+          exact hv (used_sub_S hv_used)
+        obtain ⟨DeltaS_alt, hcov_Senc_alt, denSenc_alt,
+            DeltaS_alt_ext, _related_S_alt, DeltaS_alt_none,
+            _respects_S_alt, target_respects_Senc_alt,
+            DeltaS_alt_dom, specsS_alt, hden_Senc_alt,
+            hdenSenc_alt_type, S_alt_rel⟩ :=
+          S_sc_total Delta_alt
+            (fun v hv => Delta_fv_alt v (fv_S_sub hv))
+            Delta0_alt (related_alt.mono_fv fv_S_sub) wf_alt
+            Delta0_alt_none_S (respects_alt.mono_fv fv_S_sub)
+            Delta0_alt_dom X_alt hX_alt den_S_alt
+        have DeltaS_alt_none_T : ∀ v ∉ StT.env.usedVars,
+            DeltaS_alt v = none := by
+          intro v hv
+          apply DeltaS_alt_none v
+          intro hvS
+          exact hv (used_sub_T hvS)
+        have related_alt_T : RValuationCastSupportedOnFV
+            Delta_alt DeltaS_alt T :=
+          (related_alt.mono_fv fv_T_sub).of_extends DeltaS_alt_ext
+        have respects_alt_T : B.RenamingContext.RespectsTypeContextOnFV
+            DeltaS_alt StS.types T :=
+          respects_alt.of_extends DeltaS_alt_ext types_sub_S
+            fv_T_sub fv_in_Lambda
+        obtain ⟨DeltaT_alt, hcov_Tenc_alt, denTenc_alt,
+            DeltaT_alt_ext, _related_T_alt, DeltaT_alt_none,
+            _respects_T_alt, target_respects_Tenc_alt,
+            DeltaT_alt_dom, specsT_alt, hden_Tenc_alt,
+            hdenTenc_alt_type, T_alt_rel⟩ :=
+          T_sc_total Delta_alt
+            (fun v hv => Delta_fv_alt v (fv_T_sub hv))
+            DeltaS_alt related_alt_T wf_alt DeltaS_alt_none_T
+            respects_alt_T DeltaS_alt_dom Y_alt hY_alt den_T_alt
+        have hcov_Senc_alt_final : RenamingContext.CoversFV
+            DeltaT_alt Senc :=
+          RenamingContext.coversFV_of_extends_of_coversFV
+            DeltaT_alt_ext hcov_Senc_alt
+        have hden_Senc_alt_final :
+            ⟦Senc.abstract DeltaT_alt hcov_Senc_alt_final⟧ˢ =
+              some denSenc_alt := by
+          have hagree :=
+            RenamingContext.agreesOnFV_of_extends_of_coversFV
+              DeltaT_alt_ext hcov_Senc_alt
+          have hcongr := RenamingContext.denote_congr_of_agreesOnFV
+            (t := Senc) (h1 := hcov_Senc_alt_final)
+            (h2 := hcov_Senc_alt) hagree
+          simpa [RenamingContext.denote] using
+            hcongr.trans hden_Senc_alt
+        have target_respects_Senc_alt_final :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              DeltaT_alt StT.types Senc :=
+          target_respects_Senc_alt.of_extends
+            DeltaT_alt_ext types_sub_T typ_Senc
+        obtain ⟨DeltaCprod_alt, hcov_CprodEnc_alt, denCprod_alt,
+            DeltaCprod_alt_ext, DeltaCprod_alt_none,
+            target_respects_CprodEnc_alt, DeltaCprod_alt_dom,
+            hden_CprodEnc_alt, hdenCprod_alt_type, Cprod_alt_rel⟩ :=
+          tail_total DeltaT_alt hcov_Senc_alt_final hcov_Tenc_alt
+            DeltaT_alt_none target_respects_Senc_alt_final
+            target_respects_Tenc_alt DeltaT_alt_dom
+            X_alt Y_alt hX_alt hY_alt denSenc_alt denTenc_alt
+            hden_Senc_alt_final hden_Tenc_alt S_alt_rel T_alt_rel
+        have DeltaT_alt_ext0 :=
+          RenamingContext.extends_trans DeltaT_alt_ext DeltaS_alt_ext
+        have DeltaCprod_alt_ext0 :=
+          RenamingContext.extends_trans DeltaCprod_alt_ext DeltaT_alt_ext0
+        have types_sub0 : St.types ⊆ StCprod.types :=
+          fun _ h => types_sub_Cprod (types_sub_T (types_sub_S h))
+        have DeltaCprod_alt_extS :=
+          RenamingContext.extends_trans DeltaCprod_alt_ext DeltaT_alt_ext
+        have specsS_final : SpecBodiesTrue
+            DeltaCprod_alt StCprod.types DltS :=
+          specsS_alt.of_extends DeltaCprod_alt_extS
+            (fun _ h => types_sub_Cprod (types_sub_T h)) DeltaS_alt_dom
+        have specsT_final : SpecBodiesTrue
+            DeltaCprod_alt StCprod.types DltT :=
+          specsT_alt.of_extends DeltaCprod_alt_ext
+            types_sub_Cprod DeltaT_alt_dom
+        refine ⟨DeltaCprod_alt, hcov_CprodEnc_alt, denCprod_alt,
+          DeltaCprod_alt_ext0,
+          related_alt.of_extends DeltaCprod_alt_ext0,
+          DeltaCprod_alt_none, ?_, target_respects_CprodEnc_alt,
+          DeltaCprod_alt_dom, specsS_final.append specsT_final,
+          hden_CprodEnc_alt, hdenCprod_alt_type, ?_⟩
+        · exact respects_alt.of_extends DeltaCprod_alt_ext0 types_sub0
+            (fun _ h => h) fv_in_Lambda
+        · simpa only [proof_irrel_heq] using Cprod_alt_rel
+      · intro GammaSup GammaScope Delta_alt Delta_fv_alt Theta
+          related_alt wf_alt respectsB respectsSMT specsTrue
+          U_alt hU_alt den_alt hcovOut denOut hdenOut hdenOut_type
+        have full_scope : ScopedContextExtends Base
+            ((Dpre ++ DltS) ++ DltT) GammaSup := by
+          simpa [List.append_assoc] using GammaScope
+        have full_specs : SpecBodiesTrue Theta GammaSup
+            ((Dpre ++ DltS) ++ DltT) := by
+          simpa [List.append_assoc] using specsTrue
+        have S_scope : ScopedContextExtends Base
+            (Dpre ++ DltS) GammaSup := full_scope.left_of_append
+        have S_specs_true : SpecBodiesTrue Theta GammaSup
+            (Dpre ++ DltS) := full_specs.left_of_append
+        obtain ⟨X_target, Y_target, hX_target, hY_target,
+            den_S_target, den_T_target, rfl⟩ :=
+          B.denote_cprod_inv_rep Delta_fv_alt den_alt
+        have hcov_S_target : RenamingContext.CoversFV Theta Senc :=
+          fun v hv => hcovOut v (tail_obs_S v hv)
+        have hcov_T_target : RenamingContext.CoversFV Theta Tenc :=
+          fun v hv => hcovOut v (tail_obs_T v hv)
+        have respects_S_target :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Theta GammaSup Senc := by
+          intro v xi hv hlookup
+          exact respectsSMT (tail_obs_S v hv) hlookup
+        have respects_T_target :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Theta GammaSup Tenc := by
+          intro v xi hv hlookup
+          exact respectsSMT (tail_obs_T v hv) hlookup
+        obtain ⟨Core, core_trace, Core_sub_StT⟩ := T_envelope
+        have Core_sub_sup : Core ⊆ GammaSup := by
+          intro e he
+          exact full_scope (core_trace.context_generated he)
+        have S_scope_Core : ScopedContextExtends Base
+            (Dpre ++ DltS) Core :=
+          core_trace.scoped_extends.left_of_append
+        have S_bv_fresh_Core : ∀ v ∈ SMT.bv Senc, v ∉ Core := by
+          intro v hv hvCore
+          exact SMT.Typing.bv_notMem_context typ_Senc_final v hv
+            (AList.mem_of_subset Core_sub_StT hvCore)
+        have T_bv_fresh_Core : ∀ v ∈ SMT.bv Tenc, v ∉ Core := by
+          intro v hv hvCore
+          exact SMT.Typing.bv_notMem_context typ_Tenc v hv
+            (AList.mem_of_subset Core_sub_StT hvCore)
+        have typ_S_Core : Core ⊢ˢ Senc : rho.fun SMTType.bool :=
+          S_sc_typing.1 Core S_scope_Core S_bv_fresh_Core
+        have typ_T_Core : Core ⊢ˢ Tenc : sigma.fun SMTType.bool :=
+          T_sc_typing.1 Core core_trace.scoped_extends T_bv_fresh_Core
+        have respects_S_Core :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Theta Core Senc :=
+          respects_S_target.of_super Core_sub_sup
+        have respects_T_Core :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Theta Core Tenc :=
+          respects_T_target.of_super Core_sub_sup
+        obtain ⟨denS_target, hdenS_target, hdenS_target_type⟩ :=
+          SMT.RenamingContext.denote_exists_of_typing_fv
+            typ_S_Core respects_S_Core hcov_S_target
+        obtain ⟨denT_target, hdenT_target, hdenT_target_type⟩ :=
+          SMT.RenamingContext.denote_exists_of_typing_fv
+            typ_T_Core respects_T_Core hcov_T_target
+        have S_target_rel := S_guard GammaSup S_scope Delta_alt
+          (fun v hv => Delta_fv_alt v (fv_S_sub hv)) Theta
+          (related_alt.mono_fv fv_S_sub) wf_alt
+          (respectsB.mono_fv fv_S_sub) respects_S_target
+          S_specs_true X_target hX_target den_S_target
+          hcov_S_target denS_target hdenS_target hdenS_target_type
+        have T_target_rel := T_guard GammaSup full_scope Delta_alt
+          (fun v hv => Delta_fv_alt v (fv_T_sub hv)) Theta
+          (related_alt.mono_fv fv_T_sub) wf_alt
+          (respectsB.mono_fv fv_T_sub) respects_T_target
+          full_specs Y_target hY_target den_T_target
+          hcov_T_target denT_target hdenT_target hdenT_target_type
+        have Core_keys_used : Core.keys ⊆ StT.env.usedVars := by
+          intro v hv
+          apply keys_sub_T
+          apply (AList.mem_keys).mp
+          apply AList.mem_of_subset Core_sub_StT
+          exact (AList.mem_keys).mpr hv
+        have result_rel := tail_guard Core Core_sub_StT Core_keys_used
+          typ_S_Core typ_T_Core Theta hcov_S_target hcov_T_target
+          respects_S_Core respects_T_Core
+          X_target Y_target hX_target hY_target denS_target denT_target
+          hdenS_target hdenT_target S_target_rel T_target_rel
+          hcovOut denOut hdenOut hdenOut_type
+        simpa only [proof_irrel_heq] using result_rel
+      · intro body hbody
+        rw [specBodies_append, List.mem_append] at hbody
+        rcases hbody with hSbody | hTbody
+        · have typ_at_T : StT.types ⊢ˢ body : SMTType.bool :=
+            typing_weakening_generated types_sub_T
+              T_trace.context_generated T_delta_not_used.1
+              (S_specs_op body hSbody)
+              (fun v hv => S_delta_ok.2 body hSbody v hv)
+          simpa [tail_types_eq] using typ_at_T
+        · simpa [tail_types_eq] using T_specs_op body hTbody
+      · constructor
+        · intro GammaSup GammaScope result_bv_fresh
+          have full_scope : ScopedContextExtends Base
+              ((Dpre ++ DltS) ++ DltT) GammaSup := by
+            simpa [List.append_assoc] using GammaScope
+          obtain ⟨Core, core_trace, Core_sub_StT⟩ := T_envelope
+          have Core_sub_sup : Core ⊆ GammaSup := by
+            intro e he
+            exact full_scope (core_trace.context_generated he)
+          have S_scope_Core : ScopedContextExtends Base
+              (Dpre ++ DltS) Core :=
+            core_trace.scoped_extends.left_of_append
+          have S_bv_fresh_Core : ∀ v ∈ SMT.bv Senc, v ∉ Core := by
+            intro v hv hvCore
+            exact SMT.Typing.bv_notMem_context typ_Senc_final v hv
+              (AList.mem_of_subset Core_sub_StT hvCore)
+          have T_bv_fresh_Core : ∀ v ∈ SMT.bv Tenc, v ∉ Core := by
+            intro v hv hvCore
+            exact SMT.Typing.bv_notMem_context typ_Tenc v hv
+              (AList.mem_of_subset Core_sub_StT hvCore)
+          have typ_S_Core : Core ⊢ˢ Senc : rho.fun SMTType.bool :=
+            S_sc_typing.1 Core S_scope_Core S_bv_fresh_Core
+          have typ_T_Core : Core ⊢ˢ Tenc : sigma.fun SMTType.bool :=
+            T_sc_typing.1 Core core_trace.scoped_extends T_bv_fresh_Core
+          have Core_sub_StCprod : Core ⊆ StCprod.types := by
+            simpa [tail_types_eq] using Core_sub_StT
+          have output_fv_Core : ∀ v ∈ SMT.fv CprodEnc, v ∈ Core := by
+            intro v hv
+            have hv_children := tail_fv_dep hv
+            rw [List.mem_append] at hv_children
+            rcases hv_children with hvS | hvT
+            · exact SMT.Typing.mem_context_of_mem_fv typ_S_Core hvS
+            · exact SMT.Typing.mem_context_of_mem_fv typ_T_Core hvT
+          have typ_Cprod_Core : Core ⊢ˢ CprodEnc : sigmaCprod :=
+            SMT.Typing.strengthening_of_fv_subset
+              Core_sub_StCprod typ_CprodEnc output_fv_Core
+          exact SMT.Typing.weakening Core_sub_sup typ_Cprod_Core
+            result_bv_fresh
+        · simpa [List.append_assoc] using T_sc_typing.2
