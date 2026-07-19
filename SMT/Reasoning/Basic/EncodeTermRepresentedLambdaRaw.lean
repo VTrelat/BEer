@@ -2355,3 +2355,58 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
       | pair sigma gamma =>
           simp only [Prod.snd]
           mvcgen
+
+/-- Ordinary lambda case recovered by forgetting the declaration-aware half
+of the joint operational proof. -/
+theorem encodeTerm_rep_spec.lambda_case.{u}
+    (vs : List B.𝒱) (D P : B.Term)
+    (D_ih : EncodeTermRepIH.{u} D)
+    (P_ih : EncodeTermRepIH.{u} P)
+    (D_scoped : EncodeTermRepScopedIH.{u} D)
+    (P_scoped : EncodeTermRepScopedFromIH.{u} P) :
+    EncodeTermRepIH.{u} (B.Term.lambda vs D P) := by
+  intro E Lambda alpha typ_t Xi Xi_fv Theta0 related used
+    Theta0_none Theta0_dom T hT den_t vars_used Lambda_inv bv_nodup
+    respects fv_in_Lambda wf n
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, rfl⟩ := pre
+  mspec encodeTerm_rep_spec.lambda_case_and_scoped vs D P D_ih P_ih
+    D_scoped P_scoped E typ_t Xi_fv related Theta0_none Theta0_dom
+    den_t vars_used Lambda_inv bv_nodup respects fv_in_Lambda wf
+    (n := St.env.freshvarsc) (decl := St.env.declarations)
+  rename_i out
+  obtain ⟨t', sigma⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  mpure_intro
+  exact post.1
+
+/-- Root declaration-aware lambda case recovered from the same joint proof. -/
+theorem encodeTerm_rep_scoped.lambda_case.{u}
+    (vs : List B.𝒱) (D P : B.Term)
+    (D_ih : EncodeTermRepIH.{u} D)
+    (P_ih : EncodeTermRepIH.{u} P)
+    (D_scoped : EncodeTermRepScopedIH.{u} D)
+    (P_scoped : EncodeTermRepScopedFromIH.{u} P) :
+    EncodeTermRepScopedIH.{u} (B.Term.lambda vs D P) := by
+  intro E Lambda alpha typ_t Xi Xi_fv Theta0 related used
+    Theta0_none Theta0_dom T hT den_t vars_used Lambda_inv bv_nodup
+    respects fv_in_Lambda wf n decl
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, rfl, rfl⟩ := pre
+  mspec encodeTerm_rep_spec.lambda_case_and_scoped vs D P D_ih P_ih
+    D_scoped P_scoped E typ_t Xi_fv related Theta0_none Theta0_dom
+    den_t vars_used Lambda_inv bv_nodup respects fv_in_Lambda wf
+    (n := St.env.freshvarsc) (decl := St.env.declarations)
+  rename_i out
+  obtain ⟨t', sigma⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  mpure_intro
+  exact post.2
