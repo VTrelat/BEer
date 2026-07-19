@@ -837,7 +837,7 @@ theorem lambda_subst_of_total_body_source_fv_fresh.{u}
     (Xi_fv : ∀ v ∈ B.fv Pterm, (Xi v).isSome = true)
     (related : RValuationCastSupportedOnFV Xi ThetaBase Pterm)
     (wf : B.RenWF E.context Xi)
-    (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
+    (Lambda_keys_used : Lambda.keys ⊆ used)
     (source_respects : B.RenamingContext.RespectsTypeContextOnFV
       ThetaBase Lambda Pterm)
     (source_fv_in_Lambda : ∀ v ∈ B.fv Pterm, v ∈ Lambda)
@@ -867,7 +867,7 @@ theorem lambda_subst_of_total_body_source_fv_fresh.{u}
   have ThetaCore_none : ∀ v ∉ used, ThetaCore v = none := by
     intro v hv
     by_cases hvLambda : v ∈ Lambda
-    · simpa [ThetaCore, hvLambda] using ThetaBase_none v hv
+    · exact (hv (Lambda_keys_used hvLambda)).elim
     · simp [ThetaCore, hvLambda]
   have source_respects_core :
       B.RenamingContext.RespectsTypeContextOnFV
@@ -1040,7 +1040,7 @@ theorem lambda_subst_of_total_body_toDestPair.{u}
     (Xi_fv : ∀ v ∈ B.fv Pterm, (Xi v).isSome = true)
     (related : RValuationCastSupportedOnFV Xi ThetaBase Pterm)
     (wf : B.RenWF E.context Xi)
-    (ThetaBase_none : ∀ v ∉ used, ThetaBase v = none)
+    (Lambda_keys_used : Lambda.keys ⊆ used)
     (source_respects : B.RenamingContext.RespectsTypeContextOnFV
       ThetaBase Lambda Pterm)
     (source_fv_in_Lambda : ∀ v ∈ B.fv Pterm, v ∈ Lambda)
@@ -1109,7 +1109,8 @@ theorem lambda_subst_of_total_body_toDestPair.{u}
     (z := z) (W := W) (Pterm := Pterm) (E := E) (alpha := alpha)
     (Lambda := Lambda) (Gamma := Gamma) (sigma := sigma) (used := used)
     (P_total := P_total) (Xi := Xi) (Xi_fv := Xi_fv)
-    (related := related) (wf := wf) (ThetaBase_none := ThetaBase_none)
+    (related := related) (wf := wf)
+    (Lambda_keys_used := Lambda_keys_used)
     (source_respects := source_respects)
     (source_fv_in_Lambda := source_fv_in_Lambda)
     (bound_in_Lambda := bound_in_Lambda)
@@ -1358,8 +1359,7 @@ theorem represented_lambda_body_at_domain.{u}
           ((List.ofFn ss).map Option.some)) LambdaP P)
     (source_fv_in_LambdaP : ∀ v ∈ B.fv P, v ∈ LambdaP)
     (Penc_fv_in_LambdaP : ∀ v ∈ SMT.fv Penc, v ∈ LambdaP)
-    (ThetaD_none : ∀ v ∉ usedP, ThetaD v = none)
-    (vs_used : ∀ v ∈ vs, v ∈ usedP)
+    (LambdaP_keys_used : LambdaP.keys ⊆ usedP)
     (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars P)
     (z_not_vars_P : z ∉ B.Term.vars P)
     {x : ZFSet.{u}} (hx : x ∈ ⟦tau⟧ᶻ) (hxD : x ∈ Dval)
@@ -1462,13 +1462,6 @@ theorem represented_lambda_body_at_domain.{u}
       (Option.isSome_of_eq_some (bound_expected i))
   let ThetaBase : SMT.RenamingContext.Context.{u} :=
     Function.updates ThetaD vs ((List.ofFn ss).map Option.some)
-  have ThetaBase_none : ∀ v ∉ usedP, ThetaBase v = none := by
-    intro v hv
-    by_cases hvs : v ∈ vs
-    · exact (hv (vs_used v hvs)).elim
-    · dsimp [ThetaBase]
-      rw [Function.updates_of_not_mem ThetaD vs _ v hvs]
-      exact ThetaD_none v hv
   have bound_values : ∀ (i : ℕ) (hi_x : i < vs.length)
       (_hi_d : i < (List.ofFn ss).length),
       ThetaBase vs[i] = some (ss ⟨i, hi_x⟩) := by
@@ -1494,7 +1487,7 @@ theorem represented_lambda_body_at_domain.{u}
       (hcov_upd := hcov_P_upd Wxy ss)
       hvs_not_bv hz_not_bv hz_not_vs P_total XiP_fv
       (by simpa [ThetaBase, x_fin] using related_P')
-      (wf_bound x hx hxD) ThetaBase_none (source_respects ss hss_type)
+      (wf_bound x hx hxD) LambdaP_keys_used (source_respects ss hss_type)
       source_fv_in_LambdaP vs_in_LambdaP Penc_fv_in_LambdaP den_P
       bound_values hPenc_fv z_not_vars_P hctx_source
   obtain ⟨hcov_Dapp, Dapp, hDapp_type, hDapp_value, hden_Dapp⟩ :=
@@ -1957,8 +1950,7 @@ theorem represented_lambda_of_total_body.{u}
           ((List.ofFn ss).map Option.some)) LambdaP P)
     (source_fv_in_LambdaP : ∀ v ∈ B.fv P, v ∈ LambdaP)
     (Penc_fv_in_LambdaP : ∀ v ∈ SMT.fv Penc, v ∈ LambdaP)
-    (ThetaD_none : ∀ v ∉ usedP, ThetaD v = none)
-    (vs_used : ∀ v ∈ vs, v ∈ usedP)
+    (LambdaP_keys_used : LambdaP.keys ⊆ usedP)
     (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars P)
     (z_not_vars_P : z ∉ B.Term.vars P) :
     RDomCastSupported
@@ -2053,7 +2045,7 @@ theorem represented_lambda_of_total_body.{u}
         hDenc_func D_rel hcov_body_upd hcov_sub_upd hcov_P_upd
         hvs_not_bv hz_not_bv hz_not_vs typ_P P_total ambient wf_bound
         bound_expected source_respects source_fv_in_LambdaP
-        Penc_fv_in_LambdaP ThetaD_none vs_used hPenc_fv z_not_vars_P
+        Penc_fv_in_LambdaP LambdaP_keys_used hPenc_fv z_not_vars_P
         hx hxD hWy_type hWy_mem hrel_x
         hWp_type hWp_mem
     let x_fin : Fin vs.length → B.Dom.{u} := fun i =>

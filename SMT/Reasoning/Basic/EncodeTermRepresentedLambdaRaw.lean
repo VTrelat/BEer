@@ -1178,6 +1178,9 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
             have vs_used_St3 : ∀ v ∈ vs,
                 v ∈ St3.env.usedVars :=
               fun v hv => used_sub_St3 (vs_used_St2 v hv)
+            have St2_keys_used_St3 : St2.types.keys ⊆
+                St3.env.usedVars :=
+              fun v hv => used_sub_St3 (St2_keys_sub hv)
             have z_not_vs : z ∉ vs := by
               intro hz
               exact z_not_used (vs_used_St3 z hz)
@@ -1237,7 +1240,7 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
                 hcov_P_upd hvs_not_bv z_not_bv_Penc z_not_vs typ_P
                 P_total ambient_P_final wf_bound bound_expected
                 source_respects_upd fv_P_in_St2 Penc_fv_in_St2
-                ThetaBody_none vs_used_St3 Penc_fv_vars z_not_vars_P
+                St2_keys_used_St3 Penc_fv_vars z_not_vars_P
             refine ⟨ThetaBody, hcov_lambda, ThetaBody_ext0, related_out,
               ThetaBody_none_out, respects_out,
               target_respects_lambda_out, ThetaBody_dom_out,
@@ -1782,7 +1785,7 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
                   hvs_not_bv z_not_bv_Penc z_not_vs typ_P P_total
                   ambient_P_final_alt wf_bound_alt bound_expected
                   source_respects_upd_alt fv_P_in_St2 Penc_fv_in_St2
-                  ThetaBody_alt_none vs_used_St3 Penc_fv_vars z_not_vars_P
+                  St2_keys_used_St3 Penc_fv_vars z_not_vars_P
               refine ⟨ThetaBody_alt, hcov_lambda_alt, lamVal_alt,
                 ThetaBody_alt_ext0, related_out_alt,
                 ThetaBody_alt_none_out, respects_out_alt,
