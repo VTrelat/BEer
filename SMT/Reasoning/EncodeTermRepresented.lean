@@ -400,3 +400,132 @@ theorem encodeTerm_rep_scoped_spec.{u}
     {t : B.Term} (wd_t : B.Term.WellDefined.{u} t) :
     EncodeTermRepScopedFromIH.{u} t :=
   (encodeTerm_rep_spec_and_scoped binder_admissible t wd_t).2
+
+/-- A representation-aware result whose emitted type is canonical satisfies
+the legacy equality-based denotation relation. -/
+theorem EncodeTermRepPost.rdom_of_result_type_eq.{u}
+    {t : B.Term} {alpha : BType} {Lambda : SMT.TypeContext}
+    {Xi : B.RenamingContext.Context}
+    {Theta0 : SMT.RenamingContext.Context.{u}}
+    {used : List SMT.𝒱} {T : ZFSet.{u}} {hT : T ∈ ⟦alpha⟧ᶻ}
+    {E : B.Env} {t' : SMT.Term} {sigma : SMTType}
+    {E' : SMT.Env} {Gamma' : SMT.TypeContext}
+    (post : EncodeTermRepPost t alpha Lambda Xi Theta0 used T hT
+      E t' sigma E' Gamma')
+    (sigma_eq : sigma = alpha.toSMTType) :
+    ∃ (Theta' : SMT.RenamingContext.Context.{u})
+      (covers : SMT.RenamingContext.CoversFV Theta' t')
+      (denT' : SMT.Dom.{u}),
+      ⟦t'.abstract Theta' covers⟧ˢ = some denT' ∧
+      RDom (⟨T, alpha, hT⟩ : B.Dom) denT' := by
+  obtain ⟨_, _, _, _, _, _, _, _, Theta', covers,
+    _, _, _, _, _, _, denT', hdenT', denT'_type, rel, _⟩ := post
+  refine ⟨Theta', covers, denT', hdenT', ?_⟩
+  apply (RDomCast.iff_RDom_of_type_eq
+    (denT'_type.trans sigma_eq)).mp
+  exact rel.toRDomCast
+
+/-- A represented Boolean result necessarily has the exact SMT Boolean type. -/
+theorem EncodeTermRepPost.result_type_eq_bool.{u}
+    {t : B.Term} {Lambda : SMT.TypeContext}
+    {Xi : B.RenamingContext.Context}
+    {Theta0 : SMT.RenamingContext.Context.{u}}
+    {used : List SMT.𝒱} {T : ZFSet.{u}}
+    {hT : T ∈ ⟦BType.bool⟧ᶻ}
+    {E : B.Env} {t' : SMT.Term} {sigma : SMTType}
+    {E' : SMT.Env} {Gamma' : SMT.TypeContext}
+    (post : EncodeTermRepPost t BType.bool Lambda Xi Theta0 used T hT
+      E t' sigma E' Gamma') :
+    sigma = SMTType.bool := by
+  obtain ⟨_, _, _, _, ⟨c⟩, _, _, _, _⟩ := post
+  exact castPath.source_eq_bool c
+
+/-- Boolean specialization of the canonical-result corollary. -/
+theorem EncodeTermRepPost.bool_canonical.{u}
+    {t : B.Term} {Lambda : SMT.TypeContext}
+    {Xi : B.RenamingContext.Context}
+    {Theta0 : SMT.RenamingContext.Context.{u}}
+    {used : List SMT.𝒱} {T : ZFSet.{u}}
+    {hT : T ∈ ⟦BType.bool⟧ᶻ}
+    {E : B.Env} {t' : SMT.Term} {sigma : SMTType}
+    {E' : SMT.Env} {Gamma' : SMT.TypeContext}
+    (post : EncodeTermRepPost t BType.bool Lambda Xi Theta0 used T hT
+      E t' sigma E' Gamma') :
+    sigma = SMTType.bool ∧
+    ∃ (Theta' : SMT.RenamingContext.Context.{u})
+      (covers : SMT.RenamingContext.CoversFV Theta' t')
+      (denT' : SMT.Dom.{u}),
+      ⟦t'.abstract Theta' covers⟧ˢ = some denT' ∧
+      RDom (⟨T, BType.bool, hT⟩ : B.Dom) denT' := by
+  let sigma_eq := post.result_type_eq_bool
+  exact ⟨sigma_eq, post.rdom_of_result_type_eq sigma_eq⟩
+
+/-- Successful Boolean encoding postcondition with the exact target type and
+the legacy canonical denotation relation exposed for clients. -/
+abbrev EncodeTermRepBoolPost.{u}
+    (t : B.Term) (Lambda : SMT.TypeContext)
+    (Xi : B.RenamingContext.Context)
+    (Theta0 : SMT.RenamingContext.Context.{u})
+    (used : List SMT.𝒱) (T : ZFSet.{u})
+    (hT : T ∈ ⟦BType.bool⟧ᶻ)
+    (E : B.Env) (t' : SMT.Term) (sigma : SMTType)
+    (E' : SMT.Env) (Gamma' : SMT.TypeContext) : Prop :=
+  EncodeTermRepPost t BType.bool Lambda Xi Theta0 used T hT
+      E t' sigma E' Gamma' ∧
+    sigma = SMTType.bool ∧
+    ∃ (Theta' : SMT.RenamingContext.Context.{u})
+      (covers : SMT.RenamingContext.CoversFV Theta' t')
+      (denT' : SMT.Dom.{u}),
+      ⟦t'.abstract Theta' covers⟧ˢ = some denT' ∧
+      RDom (⟨T, BType.bool, hT⟩ : B.Dom) denT'
+
+/-- Boolean-specialized induction-hypothesis shape. -/
+abbrev EncodeTermRepBoolIH.{u} (t : B.Term) : Prop :=
+  ∀ (E : B.Env) {Lambda : SMT.TypeContext},
+    E.context ⊢ᴮ t : BType.bool →
+    ∀ {Xi : B.RenamingContext.Context},
+      (Xi_fv : ∀ v ∈ B.fv t, (Xi v).isSome = true) →
+    ∀ {Theta0 : SMT.RenamingContext.Context.{u}},
+      RValuationCastSupportedOnFV Xi Theta0 t →
+    ∀ {used : List SMT.𝒱},
+      (∀ v ∉ used, Theta0 v = none) →
+      (∀ v, Theta0 v ≠ none → v ∈ Lambda) →
+    ∀ {T : ZFSet.{u}} {hT : T ∈ ⟦BType.bool⟧ᶻ},
+      ⟦t.abstract Xi Xi_fv⟧ᴮ = some ⟨T, ⟨BType.bool, hT⟩⟩ →
+      (∀ v ∈ t.vars, v ∈ used) →
+      (∀ v ∈ t.vars, v ∈ Lambda → v ∈ E.context) →
+      (B.bv t).Nodup →
+      B.RenamingContext.RespectsTypeContextOnFV Theta0 Lambda t →
+      (∀ v ∈ B.fv t, v ∈ Lambda) →
+      B.RenWF E.context Xi →
+    ∀ {n : ℕ},
+      (⦃fun ⟨E0, Lambda'⟩ ↦
+        ⌜Lambda' = Lambda ∧ E0.freshvarsc = n ∧
+          Lambda.keys ⊆ E0.usedVars ∧ E0.usedVars = used⌝ ⦄
+      encodeTerm t E
+      ⦃⇓? (⟨t', sigma⟩ : SMT.Term × SMTType) ⟨E', Gamma'⟩ =>
+        ⌜EncodeTermRepBoolPost t Lambda Xi Theta0 used T hT
+          E t' sigma E' Gamma'⌝ ⦄)
+
+/-- Public Boolean corollary of representation-aware term soundness. -/
+theorem encodeTerm_rep_bool_spec.{u}
+    (binder_admissible : EncodeTermAllBinderAdmissible.{u})
+    {t : B.Term} (wd_t : B.Term.WellDefined.{u} t) :
+    EncodeTermRepBoolIH.{u} t := by
+  intro E Lambda typ_t Xi Xi_fv Theta0 related used
+    Theta0_none Theta0_dom T hT den_t vars_used Lambda_inv bv_nodup
+    respects fv_in_Lambda wf n
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, rfl⟩ := pre
+  mspec encodeTerm_rep_spec binder_admissible wd_t E typ_t Xi_fv related
+    Theta0_none Theta0_dom den_t vars_used Lambda_inv bv_nodup respects
+    fv_in_Lambda wf (n := St.env.freshvarsc)
+  rename_i out
+  obtain ⟨t', sigma⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  mpure_intro
+  exact ⟨post, post.bool_canonical⟩
