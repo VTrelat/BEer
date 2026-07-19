@@ -151,6 +151,31 @@ theorem denote_and_both_zftrue_of_zftrue
       rw [← congrArg (·.fst) this] at handTrue; exact ZFSet.zftrue_ne_zffalse handTrue.symm
     · exact hDq_true
 
+theorem denote_and_iff_zftrue.{u}
+    {p q : SMT.PHOAS.Term SMT.Dom} {Dp Dq : SMT.Dom.{u}}
+    (hp : ⟦p⟧ˢ = some Dp) (hpType : Dp.snd.fst = SMTType.bool)
+    (hq : ⟦q⟧ˢ = some Dq) (hqType : Dq.snd.fst = SMTType.bool) :
+    ∃ D : SMT.Dom.{u},
+      ⟦p ∧ˢ' q⟧ˢ = some D ∧
+      D.snd.fst = SMTType.bool ∧
+      (D.fst = ZFSet.zftrue ↔
+        Dp.fst = ZFSet.zftrue ∧ Dq.fst = ZFSet.zftrue) := by
+  obtain ⟨D, hD, hDType⟩ :=
+    denote_and_some_bool_of_some_bool hp hpType hq hqType
+  refine ⟨D, hD, hDType, ?_⟩
+  constructor
+  · intro htrue
+    exact denote_and_both_zftrue_of_zftrue
+      hp hpType hq hqType hD htrue
+  · intro hparts
+    have htrueDen := denote_and_eq_zftrue_of_some_zftrue
+      hp hpType hparts.1 hq hqType hparts.2
+    have hEq : D =
+        (⟨ZFSet.zftrue, SMTType.bool,
+          ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+      Option.some.inj (hD.symm.trans htrueDen)
+    exact congrArg (fun d : SMT.Dom => d.fst) hEq
+
 private theorem denote_eq_some_bool
     {t₁ t₂ : SMT.PHOAS.Term SMT.Dom} {D₁ D₂ : SMT.Dom}
     (h₁ : ⟦t₁⟧ˢ = some D₁) (h₂ : ⟦t₂⟧ˢ = some D₂) (hty : D₁.2.1 = D₂.2.1) :
@@ -175,6 +200,49 @@ private theorem pair_hasArity_get_mem'
     rcases hi with hi | hi
     · have hi' : i = ⟨0, by simp⟩ := Fin.ext hi; rw [hi']; simpa [ZFSet.get] using hx₁
     · have hi' : i = ⟨1, by simp⟩ := Fin.ext hi; rw [hi']; simpa [ZFSet.get] using hx₂
+
+theorem funBinaryForallTotal.{u}
+    {Delta : SMT.RenamingContext.Context.{u}} {body : SMT.Term}
+    {a b : SMT.𝒱} {rho sigma : SMTType}
+    (hcovForall : SMT.RenamingContext.CoversFV Delta
+      (SMT.Term.forall [a, b] [rho, sigma] body))
+    (hgo : ∀ v, v ∈ SMT.fv body → v ∉ [a, b] →
+      (Delta v).isSome = true)
+    (hcovBody : ∀ A B : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update (Function.update Delta a (some A)) b (some B))
+        body)
+    (total : ∀ A B : SMT.Dom.{u}, A.snd.fst = rho →
+      B.snd.fst = sigma →
+      (⟦body.abstract
+        (Function.update (Function.update Delta a (some A)) b (some B))
+        (hcovBody A B)⟧ˢ).isSome = true) :
+    (⟦(SMT.Term.forall [a, b] [rho, sigma] body).abstract
+      Delta hcovForall⟧ˢ).isSome = true := by
+  rw [SMT.Term.abstract, dif_pos (by rfl), SMT.denote]
+  have hlen : [a, b].length > 0 := by simp
+  rw [dif_pos hlen]
+  split_ifs with hsome
+  · rfl
+  · exfalso
+    apply hsome
+    intro w hw
+    have hgoPair := funAbstractGoPair hgo hcovBody w (by
+      intro i
+      have hi : i.1 = 0 ∨ i.1 = 1 := by
+        have hiLt : i.1 < 2 := i.2
+        omega
+      rcases hi with hi | hi
+      · have hi' : i = ⟨0, by simp⟩ := Fin.ext hi
+        cases hi'
+        simpa using hw ⟨0, by simp⟩
+      · have hi' : i = ⟨1, by simp⟩ := Fin.ext hi
+        cases hi'
+        simpa using hw ⟨1, by simp⟩)
+    rw [hgoPair]
+    exact total (w ⟨0, by simp⟩) (w ⟨1, by simp⟩)
+      (by simpa using (hw ⟨0, by simp⟩).1)
+      (by simpa using (hw ⟨1, by simp⟩).1)
 
 set_option maxHeartbeats 8000000 in
 theorem funBinaryForallEqZftrue.{u}
@@ -405,6 +473,67 @@ theorem funBinaryForallTrueAt.{u}
     nomatch ZFSet.zftrue_ne_zffalse htrue
   · exact hD_true
 
+theorem funBinaryForallIffZftrue.{u}
+    {Delta : SMT.RenamingContext.Context.{u}} {body : SMT.Term}
+    {a b : SMT.𝒱} {rho sigma : SMTType}
+    (Q : SMT.Dom.{u} → SMT.Dom.{u} → Prop)
+    (hcovForall : SMT.RenamingContext.CoversFV Delta
+      (SMT.Term.forall [a, b] [rho, sigma] body))
+    (hgo : ∀ v, v ∈ SMT.fv body → v ∉ [a, b] →
+      (Delta v).isSome = true)
+    (hcovBody : ∀ A B : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update (Function.update Delta a (some A)) b (some B))
+        body)
+    (bodyTotal : ∀ A B : SMT.Dom.{u}, A.snd.fst = rho →
+      B.snd.fst = sigma →
+      (⟦body.abstract
+        (Function.update (Function.update Delta a (some A)) b (some B))
+        (hcovBody A B)⟧ˢ).isSome = true)
+    (bodyType : ∀ A B : SMT.Dom.{u}, A.snd.fst = rho →
+      B.snd.fst = sigma → ∀ {D : SMT.Dom.{u}},
+      ⟦body.abstract
+        (Function.update (Function.update Delta a (some A)) b (some B))
+        (hcovBody A B)⟧ˢ = some D → D.snd.fst = SMTType.bool)
+    (bodyIff : ∀ A B : SMT.Dom.{u}, A.snd.fst = rho →
+      B.snd.fst = sigma → ∀ {D : SMT.Dom.{u}},
+      ⟦body.abstract
+        (Function.update (Function.update Delta a (some A)) b (some B))
+        (hcovBody A B)⟧ˢ = some D →
+      (D.fst = ZFSet.zftrue ↔ Q A B)) :
+    ∃ D : SMT.Dom.{u},
+      ⟦(SMT.Term.forall [a, b] [rho, sigma] body).abstract
+        Delta hcovForall⟧ˢ = some D ∧
+      D.snd.fst = SMTType.bool ∧
+      (D.fst = ZFSet.zftrue ↔
+        ∀ A B : SMT.Dom.{u}, A.snd.fst = rho →
+          B.snd.fst = sigma → Q A B) := by
+  obtain ⟨D, hD⟩ := Option.isSome_iff_exists.mp
+    (funBinaryForallTotal hcovForall hgo hcovBody bodyTotal)
+  refine ⟨D, hD, ?_, ?_⟩
+  · have hD' := hD
+    rw [SMT.Term.abstract, dif_pos (by rfl)] at hD'
+    exact denote_forall_ty hD'
+  · constructor
+    · intro htrue A B hA hB
+      obtain ⟨Db, hDb, hDbTrue⟩ := funBinaryForallTrueAt
+        hcovForall hgo hcovBody bodyTotal bodyType
+        hD htrue A B hA hB
+      exact (bodyIff A B hA hB hDb).mp hDbTrue
+    · intro hall
+      have htrueDen := funBinaryForallEqZftrue
+        hcovForall hgo hcovBody bodyTotal bodyType (by
+          intro A B hA hB
+          obtain ⟨Db, hDb⟩ := Option.isSome_iff_exists.mp
+            (bodyTotal A B hA hB)
+          exact ⟨Db, hDb,
+            (bodyIff A B hA hB hDb).mpr (hall A B hA hB)⟩)
+      have hEq : D =
+          (⟨ZFSet.zftrue, SMTType.bool,
+            ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+        Option.some.inj (hD.symm.trans htrueDen)
+      exact congrArg (fun d : SMT.Dom => d.fst) hEq
+
 private theorem triple_hasArity_get_mem'
     {τ₁ τ₂ τ₃ : SMTType} {x₁ x₂ x₃ : ZFSet}
     (hx₁ : x₁ ∈ ⟦τ₁⟧ᶻ) (hx₂ : x₂ ∈ ⟦τ₂⟧ᶻ) (hx₃ : x₃ ∈ ⟦τ₃⟧ᶻ) :
@@ -462,8 +591,64 @@ private theorem funAbstractGoTriple.{u}
     exact List.getElem_ofFn (f := w) (h := by simpa [h_ofFn_list] using hj)
   simpa [h_ofFn, Function.updates] using hgo
 
+theorem funTernaryForallTotal.{u}
+    {Delta : SMT.RenamingContext.Context.{u}} {body : SMT.Term}
+    {a b c : SMT.𝒱} {rho sigma tau : SMTType}
+    (hcovForall : SMT.RenamingContext.CoversFV Delta
+      (SMT.Term.forall [a, b, c] [rho, sigma, tau] body))
+    (hgo : ∀ v, v ∈ SMT.fv body → v ∉ [a, b, c] →
+      (Delta v).isSome = true)
+    (hcovBody : ∀ A B C : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update
+          (Function.update
+            (Function.update Delta a (some A)) b (some B))
+          c (some C))
+        body)
+    (total : ∀ A B C : SMT.Dom.{u}, A.snd.fst = rho →
+      B.snd.fst = sigma → C.snd.fst = tau →
+      (⟦body.abstract
+        (Function.update
+          (Function.update
+            (Function.update Delta a (some A)) b (some B))
+          c (some C))
+        (hcovBody A B C)⟧ˢ).isSome = true) :
+    (⟦(SMT.Term.forall [a, b, c] [rho, sigma, tau] body).abstract
+      Delta hcovForall⟧ˢ).isSome = true := by
+  rw [SMT.Term.abstract, dif_pos (by rfl), SMT.denote]
+  have hlen : [a, b, c].length > 0 := by simp
+  rw [dif_pos hlen]
+  split_ifs with hsome
+  · rfl
+  · exfalso
+    apply hsome
+    intro w hw
+    have hgoTriple := funAbstractGoTriple
+      (Δctx := Delta) (P := body) (v₁ := a) (v₂ := b) (v₃ := c)
+      (τ₁ := rho) (τ₂ := sigma) (τ₃ := tau)
+      hgo hcovBody w (by
+        intro i
+        have hi : i.1 = 0 ∨ i.1 = 1 ∨ i.1 = 2 := by
+          have hiLt : i.1 < 3 := i.2
+          omega
+        rcases hi with hi | hi | hi
+        · have hi' : i = ⟨0, by simp⟩ := Fin.ext hi
+          cases hi'
+          simpa using hw ⟨0, by simp⟩
+        · have hi' : i = ⟨1, by simp⟩ := Fin.ext hi
+          cases hi'
+          simpa using hw ⟨1, by simp⟩
+        · have hi' : i = ⟨2, by simp⟩ := Fin.ext hi
+          cases hi'
+          simpa using hw ⟨2, by simp⟩)
+    rw [hgoTriple]
+    exact total (w ⟨0, by simp⟩) (w ⟨1, by simp⟩) (w ⟨2, by simp⟩)
+      (by simpa using (hw ⟨0, by simp⟩).1)
+      (by simpa using (hw ⟨1, by simp⟩).1)
+      (by simpa using (hw ⟨2, by simp⟩).1)
+
 set_option maxHeartbeats 8000000 in
-private theorem funTernaryForallEqZftrue.{u}
+theorem funTernaryForallEqZftrue.{u}
     {Δctx : SMT.RenamingContext.Context.{u}} {a : SMT.Term} {v₁ v₂ v₃ : SMT.𝒱} {τ₁ τ₂ τ₃ : SMTType}
     (hφ_forall : RenamingContext.CoversFV Δctx (SMT.Term.forall [v₁, v₂, v₃] [τ₁, τ₂, τ₃] a))
     (hgo_cov : ∀ x ∈ SMT.fv a, x ∉ [v₁, v₂, v₃] → (Δctx x).isSome = true)
@@ -589,7 +774,7 @@ private theorem funTernaryForallEqZftrue.{u}
 -- Inversion of funTernaryForallEqZftrue: if the ternary forall denotes to zftrue,
 -- then each body value is zftrue.
 set_option maxHeartbeats 8000000 in
-private theorem funTernaryForallTrueAt.{u}
+theorem funTernaryForallTrueAt.{u}
     {Δctx : SMT.RenamingContext.Context.{u}} {a : SMT.Term} {v₁ v₂ v₃ : SMT.𝒱} {τ₁ τ₂ τ₃ : SMTType}
     (hφ_forall : RenamingContext.CoversFV Δctx (SMT.Term.forall [v₁, v₂, v₃] [τ₁, τ₂, τ₃] a))
     (hgo_cov : ∀ x ∈ SMT.fv a, x ∉ [v₁, v₂, v₃] → (Δctx x).isSome = true)
@@ -703,6 +888,82 @@ private theorem funTernaryForallTrueAt.{u}
     symm at htrue
     nomatch ZFSet.zftrue_ne_zffalse htrue
   · exact hD_true
+
+theorem funTernaryForallIffZftrue.{u}
+    {Delta : SMT.RenamingContext.Context.{u}} {body : SMT.Term}
+    {a b c : SMT.𝒱} {rho sigma tau : SMTType}
+    (Q : SMT.Dom.{u} → SMT.Dom.{u} → SMT.Dom.{u} → Prop)
+    (hcovForall : SMT.RenamingContext.CoversFV Delta
+      (SMT.Term.forall [a, b, c] [rho, sigma, tau] body))
+    (hgo : ∀ v, v ∈ SMT.fv body → v ∉ [a, b, c] →
+      (Delta v).isSome = true)
+    (hcovBody : ∀ A B C : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update
+          (Function.update
+            (Function.update Delta a (some A)) b (some B))
+          c (some C))
+        body)
+    (bodyTotal : ∀ A B C : SMT.Dom.{u}, A.snd.fst = rho →
+      B.snd.fst = sigma → C.snd.fst = tau →
+      (⟦body.abstract
+        (Function.update
+          (Function.update
+            (Function.update Delta a (some A)) b (some B))
+          c (some C))
+        (hcovBody A B C)⟧ˢ).isSome = true)
+    (bodyType : ∀ A B C : SMT.Dom.{u}, A.snd.fst = rho →
+      B.snd.fst = sigma → C.snd.fst = tau →
+      ∀ {D : SMT.Dom.{u}},
+      ⟦body.abstract
+        (Function.update
+          (Function.update
+            (Function.update Delta a (some A)) b (some B))
+          c (some C))
+        (hcovBody A B C)⟧ˢ = some D → D.snd.fst = SMTType.bool)
+    (bodyIff : ∀ A B C : SMT.Dom.{u}, A.snd.fst = rho →
+      B.snd.fst = sigma → C.snd.fst = tau →
+      ∀ {D : SMT.Dom.{u}},
+      ⟦body.abstract
+        (Function.update
+          (Function.update
+            (Function.update Delta a (some A)) b (some B))
+          c (some C))
+        (hcovBody A B C)⟧ˢ = some D →
+      (D.fst = ZFSet.zftrue ↔ Q A B C)) :
+    ∃ D : SMT.Dom.{u},
+      ⟦(SMT.Term.forall [a, b, c] [rho, sigma, tau] body).abstract
+        Delta hcovForall⟧ˢ = some D ∧
+      D.snd.fst = SMTType.bool ∧
+      (D.fst = ZFSet.zftrue ↔
+        ∀ A B C : SMT.Dom.{u}, A.snd.fst = rho →
+          B.snd.fst = sigma → C.snd.fst = tau → Q A B C) := by
+  obtain ⟨D, hD⟩ := Option.isSome_iff_exists.mp
+    (funTernaryForallTotal hcovForall hgo hcovBody bodyTotal)
+  refine ⟨D, hD, ?_, ?_⟩
+  · have hD' := hD
+    rw [SMT.Term.abstract, dif_pos (by rfl)] at hD'
+    exact denote_forall_ty hD'
+  · constructor
+    · intro htrue A B C hA hB hC
+      obtain ⟨Db, hDb, hDbTrue⟩ := funTernaryForallTrueAt
+        hcovForall hgo hcovBody bodyTotal bodyType
+        hD htrue A B C hA hB hC
+      exact (bodyIff A B C hA hB hC hDb).mp hDbTrue
+    · intro hall
+      have htrueDen := funTernaryForallEqZftrue
+        hcovForall hgo hcovBody bodyTotal bodyType (by
+          intro A B C hA hB hC
+          obtain ⟨Db, hDb⟩ := Option.isSome_iff_exists.mp
+            (bodyTotal A B C hA hB hC)
+          exact ⟨Db, hDb,
+            (bodyIff A B C hA hB hC hDb).mpr
+              (hall A B C hA hB hC)⟩)
+      have hEq : D =
+          (⟨ZFSet.zftrue, SMTType.bool,
+            ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+        Option.some.inj (hD.symm.trans htrueDen)
+      exact congrArg (fun d : SMT.Dom => d.fst) hEq
 
 private theorem denote_and_extract_left
     {p q : SMT.PHOAS.Term SMT.Dom} {D : SMT.Dom}

@@ -1,6 +1,6 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedLambda
 
-open Std.Do B SMT ZFSet
+open Std.Do B SMT ZFSet Classical
 
 /-! # Supported collection-predicate semantics
 
@@ -12,7 +12,6 @@ fixed the concrete represented tuple type emitted by the domain encoder.
 
 /-- A true collection body cannot have taken the generated `false` fallback,
 so its encoded domain test was true. -/
-open Classical in
 theorem collect_ite_true_implies_domain_true.{u}
     {Dapp Psub body : SMT.Term}
     {Theta : SMT.RenamingContext.Context.{u}}
@@ -58,7 +57,6 @@ theorem collect_ite_true_implies_domain_true.{u}
 
 /-- Applying a represented domain predicate to a supported representative of
 a source member produces SMT `true`. -/
-open Classical in
 theorem represented_set_app_true_of_mem_supported.{u}
     {tau : BType} {rho : SMTType}
     {S : ZFSet.{u}} {hS : S ∈ ⟦BType.set tau⟧ᶻ}
@@ -103,7 +101,6 @@ theorem represented_set_app_true_of_mem_supported.{u}
 
 /-- Transfer one represented collection-body evaluation back to the source
 predicate while preserving the actual tuple representation `rho`. -/
-open Classical in
 theorem represented_collect_pointwise_body_bridge_supported.{u}
     {vs : List B.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
     {D P : B.Term} {tau : BType} {rho : SMTType}
@@ -186,9 +183,9 @@ theorem represented_collect_pointwise_body_bridge_supported.{u}
         (Function.updates ThetaD vs
           ((List.ofFn ss).map Option.some)) GammaP DltP)
     (z_not_fv_Penc : z ∉ SMT.fv Penc) :
-    ∀ (x : ZFSet.{u}) (hx_mem : x ∈ ⟦tau⟧ᶻ) (hx_D : x ∈ Dval)
+    ∀ (x : ZFSet.{u}) (hx_mem : x ∈ ⟦tau⟧ᶻ) (_hx_D : x ∈ Dval)
       (y : ZFSet.{u}) (hy : y ∈ ⟦rho⟧ᶻ)
-      (X_rel : RDomCastSupported
+      (_X_rel : RDomCastSupported
         (⟨x, tau, hx_mem⟩ : B.Dom) (⟨y, rho, hy⟩ : SMT.Dom))
       (body_val : SMT.Dom),
       ⟦ite_body.abstract
@@ -289,7 +286,6 @@ theorem represented_collect_pointwise_body_bridge_supported.{u}
 
 /-- The Boolean lambda emitted for a set-valued collection represents the
 source collection at every supported tuple representation. -/
-open Classical in
 theorem represented_collect_set_denote_supported.{u}
     {vs : List B.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
     {D P : B.Term} {tau : BType} {rho : SMTType}
