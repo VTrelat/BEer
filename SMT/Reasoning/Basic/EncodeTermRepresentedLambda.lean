@@ -1277,6 +1277,84 @@ theorem lambda_subst_of_guarded_body_toDestPair.{u}
   exact ⟨dP, hden_sub, hdP_type, hrel_P⟩
 
 open Classical in
+/-- A successful denotation of a unary SMT lambda already witnesses totality
+of its body at every well-typed bound argument.  This inversion is independent
+of any ambient typing context, which is essential for guarded soundness under
+an arbitrary declaration super-context. -/
+theorem lambda_body_total_of_denote.{u}
+    {Theta : SMT.RenamingContext.Context.{u}}
+    {z : SMT.𝒱} {sigma : SMTType} {body : SMT.Term}
+    {lamVal : SMT.Dom.{u}}
+    (hcov_lambda : SMT.RenamingContext.CoversFV Theta
+      ((λˢ [z]) [sigma] body))
+    (hden_lambda :
+      ⟦((λˢ [z]) [sigma] body).abstract Theta hcov_lambda⟧ˢ =
+        some lamVal)
+    (hcov_body_upd : ∀ W : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update Theta z (some W)) body) :
+    ∀ W : SMT.Dom.{u}, W.snd.fst = sigma →
+      ∃ bodyVal : SMT.Dom.{u},
+        ⟦body.abstract (Function.update Theta z (some W))
+          (hcov_body_upd W)⟧ˢ = some bodyVal := by
+  intro W hW
+  have hWmem : W.fst ∈ ⟦sigma⟧ᶻ := by
+    rw [← hW]
+    exact W.snd.snd
+  have hden := hden_lambda
+  simp only [SMT.Term.abstract] at hden
+  rw [dif_pos (by simp)] at hden
+  unfold SMT.denote at hden
+  rw [dif_pos (by simp)] at hden
+  split_ifs at hden with hbody_some hbody_type
+  · let xs : Fin [z].length → SMT.Dom.{u} := fun _ => W
+    have hxs : ∀ i,
+        (xs i).snd.fst = (fun j => [sigma][j]) i ∧
+        (xs i).fst ∈ ⟦(fun j => [sigma][j]) i⟧ᶻ := by
+      intro i
+      rcases i with ⟨i, hi⟩
+      have hi' : i < 1 := by simpa using hi
+      have hi0 : i = 0 := by omega
+      subst i
+      simpa [xs] using And.intro hW hWmem
+    have hsome := hbody_some hxs
+    obtain ⟨bodyVal, hbodyVal⟩ := Option.isSome_iff_exists.mp hsome
+    refine ⟨bodyVal, ?_⟩
+    have hbase : ∀ v ∈ SMT.fv body, v ∉ [z] →
+        (Theta v).isSome = true := by
+      intro v hv hvz
+      apply hcov_lambda v
+      simp only [SMT.fv, List.mem_removeAll_iff]
+      exact ⟨hv, hvz⟩
+    have htmp : ∀ v ∈ SMT.fv body,
+        (Function.updates Theta [z] [some W] v).isSome = true := by
+      intro v hv
+      simpa [Function.updates] using hcov_body_upd W v hv
+    have hbridge := SMT.Term.abstract.go.alt_def₂ [z] body [W]
+      (by simp) hbase htmp
+    have hxs_eq : xs = fun i => [W][i] := by
+      funext i
+      rcases i with ⟨i, hi⟩
+      have hi' : i < 1 := by simpa using hi
+      have hi0 : i = 0 := by omega
+      subst i
+      simp [xs]
+    rw [hxs_eq] at hbodyVal
+    have hbodyVal' :
+        ⟦(SMT.Term.abstract.go body [z] Theta hbase).uncurry
+          (fun i => [W][i])⟧ˢ = some bodyVal := by
+      simpa only [proof_irrel_heq] using hbodyVal
+    have hbridge' :
+        (SMT.Term.abstract.go body [z] Theta hbase).uncurry
+            (fun i => [W][i]) =
+          body.abstract
+            (Function.updates Theta [z] (List.map Option.some [W]))
+            htmp := by
+      simpa only [proof_irrel_heq] using hbridge
+    rw [hbridge'] at hbodyVal'
+    simpa [Function.updates, proof_irrel_heq] using hbodyVal'
+
+open Classical in
 /-- Evaluate the encoded lambda body at a represented source-domain point.
 The body result is related at its arbitrary encoder-chosen target type, and
 the emitted Boolean conjunction is true exactly when the lambda's second
