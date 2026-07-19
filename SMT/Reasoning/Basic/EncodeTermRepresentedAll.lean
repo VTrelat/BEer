@@ -7650,3 +7650,65 @@ theorem encodeTerm_rep_spec.all_case_and_scoped.{u}
         D_op_envelope.mono St1_sub_St8_types, ?_, all_scoped_total,
         all_guard, D_specs_final, all_scoped_typing⟩
       exact ⟨DCore, by simpa using D_root_trace, DCore_sub_St8⟩
+
+/-- Ordinary universal-quantifier case recovered by forgetting the
+declaration-aware half of the joint operational proof. -/
+theorem encodeTerm_rep_spec.all_case.{u}
+    (vs : List B.𝒱) (D P : B.Term)
+    (D_ih : EncodeTermRepIH.{u} D)
+    (D_scoped : EncodeTermRepScopedIH.{u} D)
+    (P_ih : EncodeTermRepIH.{u} P)
+    (P_scoped : EncodeTermRepScopedBoolFromIH.{u} P)
+    (binder_admissible : EncodeTermAllBinderAdmissible.{u})
+    (wd_P : B.Term.WellDefined.{u} P) :
+    EncodeTermRepIH.{u} (B.Term.all vs D P) := by
+  intro E Lambda alpha typ_t Xi Xi_fv Theta0 related used
+    Theta0_none Theta0_dom T hT den_t vars_used Lambda_inv bv_nodup
+    respects fv_in_Lambda wf n
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, rfl⟩ := pre
+  mspec encodeTerm_rep_spec.all_case_and_scoped vs D P D_ih D_scoped
+    P_ih P_scoped binder_admissible wd_P E typ_t Xi_fv related
+    Theta0_none Theta0_dom den_t vars_used Lambda_inv bv_nodup respects
+    fv_in_Lambda wf (n := St.env.freshvarsc)
+    (decl := St.env.declarations)
+  rename_i out
+  obtain ⟨t', sigma⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  mpure_intro
+  exact post.1
+
+/-- Root declaration-aware universal-quantifier case recovered from the same
+joint proof. -/
+theorem encodeTerm_rep_scoped.all_case.{u}
+    (vs : List B.𝒱) (D P : B.Term)
+    (D_ih : EncodeTermRepIH.{u} D)
+    (D_scoped : EncodeTermRepScopedIH.{u} D)
+    (P_ih : EncodeTermRepIH.{u} P)
+    (P_scoped : EncodeTermRepScopedBoolFromIH.{u} P)
+    (binder_admissible : EncodeTermAllBinderAdmissible.{u})
+    (wd_P : B.Term.WellDefined.{u} P) :
+    EncodeTermRepScopedIH.{u} (B.Term.all vs D P) := by
+  intro E Lambda alpha typ_t Xi Xi_fv Theta0 related used
+    Theta0_none Theta0_dom T hT den_t vars_used Lambda_inv bv_nodup
+    respects fv_in_Lambda wf n decl
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, rfl, rfl⟩ := pre
+  mspec encodeTerm_rep_spec.all_case_and_scoped vs D P D_ih D_scoped
+    P_ih P_scoped binder_admissible wd_P E typ_t Xi_fv related
+    Theta0_none Theta0_dom den_t vars_used Lambda_inv bv_nodup respects
+    fv_in_Lambda wf (n := St.env.freshvarsc)
+    (decl := St.env.declarations)
+  rename_i out
+  obtain ⟨t', sigma⟩ := out
+  mrename_i post
+  mintro ∀St'
+  mpure post
+  mpure_intro
+  exact post.2
