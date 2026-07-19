@@ -216,11 +216,14 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
               have := List.length_pos_of_ne_nil vs_nemp
               omega
             exact SMT.SMTType.fromProdl_toProdl_roundtrip _ _ h_arith
-          mspec SMT.addToContext_forIn_spec (pairs := vs.zip sigmas)
+          mspec (Std.Do.Triple.and _
+            (SMT.addToContext_forIn_spec (pairs := vs.zip sigmas))
+            (SMT.addToContext_forIn_decls (vs.zip sigmas)
+              (decl := St1.env.declarations)))
           mrename_i post_ctx
           mintro ∀St2
           mpure post_ctx
-          obtain ⟨St2_types, St2_fvc, St2_used⟩ := post_ctx
+          obtain ⟨⟨St2_types, St2_fvc, St2_used⟩, St2_decl⟩ := post_ctx
           have vs_not_D_fv : ∀ v ∈ vs, v ∉ B.fv D := by
             intro v hv hv_fv
             exact vs_context_disj v hv <| AList.lookup_isSome.mp <|
@@ -643,22 +646,25 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
             intro v hv
             exact SMT.Typing.mem_context_of_mem_fv typ_Penc_St2 hv
 
-          mspec SMT.freshVar_spec
+          mspec (Std.Do.Triple.and _ SMT.freshVar_spec
+            (SMT.freshVar_decls (decl := St3.env.declarations)))
           rename_i z
           mrename_i post_fresh
           mintro ∀St4
           mpure post_fresh
-          obtain ⟨St4_types, z_fresh, St4_fvc, St4_used,
-              z_not_used⟩ := post_fresh
+          obtain ⟨⟨St4_types, z_fresh, St4_fvc, St4_used,
+              z_not_used⟩, St4_decl⟩ := post_fresh
           let St5 : EncoderState := St4
           have St5_types : St5.types = St4.types := rfl
           have St5_fvc : St5.env.freshvarsc = St4.env.freshvarsc := rfl
           have St5_used : St5.env.usedVars = St4.env.usedVars := rfl
-          mspec SMT.eraseFromContext_spec
+          mspec (Std.Do.Triple.and _ SMT.eraseFromContext_spec
+            (SMT.eraseFromContext_decls (decl := St4.env.declarations)))
           mrename_i post_erase
           mintro ∀St6
           mpure post_erase
-          obtain ⟨St6_types, St6_fvc, St6_used⟩ := post_erase
+          obtain ⟨⟨St6_types, St6_fvc, St6_used⟩, St6_decl⟩ :=
+            post_erase
           mspec Std.Do.Spec.pure
           mpure_intro
           have St6_used_chain : St6.env.usedVars =
