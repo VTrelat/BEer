@@ -134,6 +134,70 @@ theorem exists_selectedSMT_supported.{u}
               exact RDomCastSupported.functionalGraph_as_optionFunction
                 alpha beta hX d.canonicalSMT.snd.snd htargetfun hcanonical.2
 
+/-- Graphing an option-valued target representative exposes that its source
+relation is semantically functional. -/
+theorem RDomCastSupported.optionFunction_source_functional.{u}
+    {alpha beta : BType} {X F : ZFSet.{u}}
+    {hX : X ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ}
+    {hF : F ∈
+      ⟦SMTType.fun alpha.toSMTType (SMTType.option beta.toSMTType)⟧ᶻ}
+    (hrel : RDomCastSupported
+      (⟨X, BType.set (alpha ×ᴮ beta), hX⟩ : B.Dom)
+      (⟨F, SMTType.fun alpha.toSMTType
+        (SMTType.option beta.toSMTType), hF⟩ : SMT.Dom)) :
+    B.Dom.IsFunctional
+      (⟨X, BType.set (alpha ×ᴮ beta), hX⟩ : B.Dom) := by
+  have hGraph := optionGraph_mem alpha.toSMTType beta.toSMTType hF
+  let hs : BType.SupportedSMT (BType.set (alpha ×ᴮ beta))
+      (SMTType.fun (SMTType.pair alpha.toSMTType beta.toSMTType)
+        SMTType.bool) :=
+    .setPred (.prod (.canonical alpha) (.canonical beta))
+  have bare : RDomCast
+      (⟨X, BType.set (alpha ×ᴮ beta), hX⟩ : B.Dom)
+      (⟨optionGraph alpha.toSMTType beta.toSMTType F,
+        SMTType.fun (SMTType.pair alpha.toSMTType beta.toSMTType)
+          SMTType.bool, hGraph⟩ : SMT.Dom) := by
+    refine ⟨castPath.reflexive
+      (BType.set (alpha ×ᴮ beta)).toSMTType, ?_⟩
+    rw [castZF_apply_self _ hGraph]
+    exact hrel.toRDomCast.optionFunction_graph_retract
+  have graphRel : RDomCastSupported
+      (⟨X, BType.set (alpha ×ᴮ beta), hX⟩ : B.Dom)
+      (⟨optionGraph alpha.toSMTType beta.toSMTType F,
+        SMTType.fun (SMTType.pair alpha.toSMTType beta.toSMTType)
+          SMTType.bool, hGraph⟩ : SMT.Dom) :=
+    ⟨bare.toRDomCastAdmissible_of_supported hs, hs⟩
+  have htarget := predGraph_optionGraph_isPFunc
+    alpha.toSMTType beta.toSMTType F hF
+  simpa [B.Dom.IsFunctional] using
+    RDomCastSupported.setPred_isPFunc_to_source graphRel htarget
+
+/-- A selected option-function target type transfers semantic functionhood
+back to the represented source value. -/
+theorem RDomCastSupported.source_functional_of_selected_true.{u}
+    {d : B.Dom.{u}} {d' : SMT.Dom.{u}} {sigma : SMTType}
+    (hselected : BType.selectedSMTType? true d.snd.fst = some sigma)
+    (htype : d'.snd.fst = sigma)
+    (hrel : RDomCastSupported d d') :
+    B.Dom.IsFunctional d := by
+  rcases d with ⟨X, tau, hX⟩
+  rcases d' with ⟨F, rho, hF⟩
+  simp only [BType.selectedSMTType?, if_true] at hselected
+  cases tau with
+  | int => contradiction
+  | bool => contradiction
+  | prod => contradiction
+  | set gamma =>
+      cases gamma with
+      | int => contradiction
+      | bool => contradiction
+      | set => contradiction
+      | prod alpha beta =>
+          simp only [Option.some.injEq] at hselected
+          cases hselected
+          cases htype
+          exact B.Dom.RDomCastSupported.optionFunction_source_functional hrel
+
 end B.Dom
 
 namespace B.Env
@@ -306,6 +370,122 @@ theorem exists_selectedValuation_for_term.{u}
     obtain ⟨d, d', sigma, _hXi, _hTheta, hGamma, _hd'type, _hrelated⟩ :=
       hpoint v hv
     exact AList.lookup_isSome.mp (by rw [hGamma]; simp)
+
+open Classical in
+/-- Reconstruct one source valuation from a target valuation on a finite
+source scope.  The selected type equation is retained pointwise so the
+flagged branch can recover semantic functionhood from the target option
+function rather than treating the flag itself as evidence. -/
+theorem exists_sourceValuationOn.{u}
+    {E : B.Env} {Gamma : SMT.TypeContext}
+    {Theta : SMT.RenamingContext.Context.{u}} {scope : List B.𝒱}
+    (representation : E.RepresentationContext Gamma)
+    (target_respects : SMT.RenamingContext.RespectsTypeContext Theta Gamma)
+    (scope_context : ∀ v ∈ scope, v ∈ E.context) :
+    ∃ Xi : B.RenamingContext.Context.{u},
+      (∀ v ∈ scope, ∃ d d' tau sigma,
+        Xi v = some d ∧ Theta v = some d' ∧
+          E.context.lookup v = some tau ∧
+          BType.selectedSMTType? (v ∈ E.flags) tau = some sigma ∧
+          Gamma.lookup v = some sigma ∧
+          d.snd.fst = tau ∧ d'.snd.fst = sigma ∧
+          RDomCastSupported d d') ∧
+      ∀ v ∉ scope, Xi v = none := by
+  have witness : ∀ v ∈ scope, ∃ d d' tau sigma,
+      Theta v = some d' ∧ E.context.lookup v = some tau ∧
+        BType.selectedSMTType? (v ∈ E.flags) tau = some sigma ∧
+        Gamma.lookup v = some sigma ∧ d.snd.fst = tau ∧
+        d'.snd.fst = sigma ∧ RDomCastSupported d d' := by
+    intro v hv
+    have hv_context := scope_context v hv
+    obtain ⟨tau, hE⟩ := Option.isSome_iff_exists.mp
+      (AList.lookup_isSome.mpr hv_context)
+    obtain ⟨sigma, hselected, hGamma⟩ := representation.of_lookup hE
+    obtain ⟨d', hTheta, hd'type⟩ := target_respects hGamma
+    have hsupported := BType.SupportedSMT.of_selectedSMTType? hselected
+    rcases d' with ⟨Y, rho, hY⟩
+    change rho = sigma at hd'type
+    cases hd'type
+    obtain ⟨X, hX, hrelated⟩ :=
+      supported_target_preimage hsupported Y hY
+    exact ⟨⟨X, tau, hX⟩, ⟨Y, sigma, hY⟩, tau, sigma,
+      hTheta, hE, hselected, hGamma, rfl, rfl, hrelated⟩
+  let Xi : B.RenamingContext.Context.{u} := fun v =>
+    if hv : v ∈ scope then
+      some (Classical.choose (witness v hv))
+    else none
+  refine ⟨Xi, ?_, ?_⟩
+  · intro v hv
+    obtain ⟨d', tau, sigma, hTheta, hE, hselected, hGamma,
+        hdtype, hd'type, hrelated⟩ :=
+      Classical.choose_spec (witness v hv)
+    exact ⟨Classical.choose (witness v hv), d', tau, sigma,
+      by simp [Xi, hv], hTheta, hE, hselected, hGamma, hdtype,
+      hd'type, hrelated⟩
+  · intro v hv
+    simp [Xi, hv]
+
+open Classical in
+/-- Term-scoped converse reconstruction, including all source-side invariants
+required by the represented term theorem. -/
+theorem exists_sourceValuation_for_term.{u}
+    {E : B.Env} {Gamma : SMT.TypeContext}
+    {Theta : SMT.RenamingContext.Context.{u}} {t : B.Term}
+    (representation : E.RepresentationContext Gamma)
+    (target_respects : SMT.RenamingContext.RespectsTypeContext Theta Gamma)
+    (fv_context : ∀ v ∈ B.fv t, v ∈ E.context) :
+    ∃ Xi : B.RenamingContext.Context.{u},
+      RValuationCastSupportedOnFV Xi Theta t ∧
+      (∀ v ∈ B.fv t, (Xi v).isSome = true) ∧
+      B.RenWF E.context Xi ∧
+      E.FlaggedValuesFunctional Xi ∧
+      (∀ v ∉ B.fv t, Xi v = none) ∧
+      ∀ v, Xi v ≠ none → v ∈ E.context := by
+  obtain ⟨Xi, hpoint, hnone⟩ :=
+    E.exists_sourceValuationOn representation target_respects fv_context
+  refine ⟨Xi, ?_, ?_, ?_, ?_, hnone, ?_⟩
+  · intro v hv
+    obtain ⟨d, d', tau, sigma, hXi, hTheta, hE, hselected,
+        hGamma, hdtype, hd'type, hrelated⟩ := hpoint v hv
+    rw [hXi, hTheta]
+    exact hrelated
+  · intro v hv
+    obtain ⟨d, d', tau, sigma, hXi, _⟩ := hpoint v hv
+    rw [hXi]
+    rfl
+  · intro v d hXi _hv_context
+    have hv : v ∈ B.fv t := by
+      by_contra hnot
+      rw [hnone v hnot] at hXi
+      contradiction
+    obtain ⟨d0, d', tau, sigma, hXi0, hTheta, hE, hselected,
+        hGamma, hdtype, hd'type, hrelated⟩ := hpoint v hv
+    have hdd : d = d0 := Option.some.inj (hXi.symm.trans hXi0)
+    rw [hdd, hdtype]
+    exact hE
+  · intro v d hXi hflag
+    have hv : v ∈ B.fv t := by
+      by_contra hnot
+      rw [hnone v hnot] at hXi
+      contradiction
+    obtain ⟨d0, d', tau, sigma, hXi0, hTheta, hE, hselected,
+        hGamma, hdtype, hd'type, hrelated⟩ := hpoint v hv
+    have hdd : d = d0 := Option.some.inj (hXi.symm.trans hXi0)
+    have hselected0 :
+        BType.selectedSMTType? true tau = some sigma := by
+      simpa [hflag] using hselected
+    have hselected' :
+        BType.selectedSMTType? true d0.snd.fst = some sigma := by
+      rw [hdtype]
+      exact hselected0
+    rw [hdd]
+    exact B.Dom.RDomCastSupported.source_functional_of_selected_true
+      hselected' hd'type hrelated
+  · intro v hXi
+    have hv : v ∈ B.fv t := by
+      by_contra hnot
+      exact hXi (hnone v hnot)
+    exact fv_context v hv
 
 end B.Env
 
