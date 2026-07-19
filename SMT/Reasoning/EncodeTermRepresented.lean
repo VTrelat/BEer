@@ -151,7 +151,8 @@ theorem encodeTerm_rep_spec.of_scoped.{u}
         (f_ih wd_t.1) (x_ih wd_t.2.1)
   | lambda vs D P D_ih P_ih =>
       exact encodeTerm_rep_spec.lambda_case vs D P
-        (D_ih wd_t.1) (P_ih wd_t.2) (scoped_ih P).to_root
+        (D_ih wd_t.1) (P_ih wd_t.2)
+        (scoped_ih D).to_root (scoped_ih P).to_root
   | pfun A B A_ih B_ih =>
       exact encodeTerm_rep_spec.pfun_case A B
         (A_ih wd_t.1) (B_ih wd_t.2)

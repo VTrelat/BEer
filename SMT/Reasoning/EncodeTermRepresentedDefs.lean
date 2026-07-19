@@ -673,6 +673,16 @@ theorem DeclarationContextEnvelope.of_trace
     DeclarationContextEnvelope Lambda Dlt Gamma :=
   ⟨Gamma, h, fun _ he => he⟩
 
+/-- An operational envelope remains valid when the actual encoder context is
+extended with entries that are irrelevant to the generated declaration core. -/
+theorem DeclarationContextEnvelope.mono
+    {Lambda GammaOp GammaSup : SMT.TypeContext} {Dlt : SMT.Chunk}
+    (h : DeclarationContextEnvelope Lambda Dlt GammaOp)
+    (hsub : GammaOp ⊆ GammaSup) :
+    DeclarationContextEnvelope Lambda Dlt GammaSup := by
+  obtain ⟨GammaCore, htrace, hcore⟩ := h
+  exact ⟨GammaCore, htrace, AList.subset_trans hcore hsub⟩
+
 /-- Envelopes compose even when the first operational result contains local
 residue: replay the second declaration trace from the first clean core, then
 append the two exact traces. -/
@@ -1058,6 +1068,23 @@ abbrev EncodeTermRepScopedTotal.{u}
         ⟦t'.abstract Δ'_alt hcov_alt⟧ˢ = some denT_alt ∧
         denT_alt.snd.fst = σ ∧
         RDomCastSupported (⟨T_alt, α, hT_alt⟩ : B.Dom) denT_alt
+
+/-- Forget the generated-specification witness from scoped totality. -/
+theorem EncodeTermRepScopedTotal.to_total.{u}
+    {t : B.Term} {E : B.Env} {α : BType}
+    {Λ : SMT.TypeContext} {t' : SMT.Term} {σ : SMTType}
+    {Γ' : SMT.TypeContext} {used' : List SMT.𝒱} {Dlt : SMT.Chunk}
+    (h : EncodeTermRepScopedTotal.{u}
+      t E α Λ t' σ Γ' used' Dlt) :
+    EncodeTermRepTotal.{u} t E α Λ t' σ Γ' used' := by
+  intro Δ_alt Δ_fv_alt Δ₀_alt related wf Δ₀_none respects
+    Δ₀_dom T_alt hT_alt den_t
+  obtain ⟨Δ'_alt, hcov_alt, denT_alt, h_extends, related', none',
+      respects_B, respects_SMT, dom, _specs, den, den_type, cast⟩ :=
+    h Δ_alt Δ_fv_alt Δ₀_alt related wf Δ₀_none respects
+      Δ₀_dom T_alt hT_alt den_t
+  exact ⟨Δ'_alt, hcov_alt, denT_alt, h_extends, related', none',
+    respects_B, respects_SMT, dom, den, den_type, cast⟩
 
 /-- Guarded partial correctness under an arbitrary assignment to generated
 helpers.  When all generated specifications hold, any target denotation is the

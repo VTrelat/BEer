@@ -7,6 +7,7 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
     (vs : List B.𝒱) (D P : B.Term)
     (D_ih : EncodeTermRepIH.{u} D)
     (P_ih : EncodeTermRepIH.{u} P)
+    (D_scoped : EncodeTermRepScopedIH.{u} D)
     (P_scoped : EncodeTermRepScopedIH.{u} P)
     (E : B.Env) {Lambda : SMT.TypeContext} {alpha : BType}
     (typ_t : E.context ⊢ᴮ B.Term.lambda vs D P : alpha)
@@ -130,9 +131,14 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
   rw [encodeTerm]
   mspec (Std.Do.Triple.and _
     (Std.Do.Triple.and _
-      (D_ih E typ_D Xi_fv_D related_D Theta0_none Theta0_dom den_D
+      (Std.Do.Triple.and _
+        (D_ih E typ_D Xi_fv_D related_D Theta0_none Theta0_dom den_D
         vars_used_D Lambda_inv_D bv_D_nodup respects_D fv_D_in wf
         (n := St0.env.freshvarsc))
+        (D_scoped E typ_D Xi_fv_D related_D Theta0_none Theta0_dom den_D
+          vars_used_D Lambda_inv_D bv_D_nodup respects_D fv_D_in wf
+          (n := St0.env.freshvarsc)
+          (decl := St0.env.declarations)))
       (SMT.encodeTerm_bv_used E (t := D)
         (used := St0.env.usedVars) (n := St0.env.freshvarsc)
         (decl := St0.env.declarations)))
@@ -145,8 +151,21 @@ theorem encodeTerm_rep_spec.lambda_case.{u}
   mintro ∀St1
   mpure post_D
   dsimp at post_D
-  obtain ⟨⟨D_post, bv_Denc_used, _, _⟩,
-      bv_Denc_not_used, _, _⟩ := post_D
+  obtain ⟨⟨⟨D_post, D_scoped_post⟩,
+        bv_Denc_used, _D_used_sub, DltD_used,
+        D_decl_used, D_delta_used⟩,
+      bv_Denc_not_used, _D_not_sub, DltD_not,
+        D_decl_not, D_delta_not_used⟩ := post_D
+  obtain ⟨DltD, D_scoped_decl, D_op_envelope, D_root_envelope,
+      D_scoped_total, D_guard, D_specs_op, D_sc_typing⟩ := D_scoped_post
+  have DltD_eq_used : DltD = DltD_used := by
+    rw [D_scoped_decl] at D_decl_used
+    exact List.append_right_injective _ D_decl_used
+  subst DltD_used
+  have DltD_eq_not : DltD = DltD_not := by
+    rw [D_scoped_decl] at D_decl_not
+    exact List.append_right_injective _ D_decl_not
+  subst DltD_not
   obtain ⟨used_sub_St1, St0_sub_St1, St1_keys_sub, covers_D,
       D_path, typ_Denc, D_shape, D_preserves,
       ThetaD, hcov_Denc, ThetaD_ext, related_D_final, ThetaD_none,
