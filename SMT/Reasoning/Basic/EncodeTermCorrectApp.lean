@@ -407,25 +407,29 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
         St₁_sub, preserves_St₁, typ_var_f!_insert, typ_f!_spec_insert,
         typ_var_f!, typ_f!_spec, fv_f!_spec_sub, f!_den_adequacy⟩ := pre
 
-      -- Step 2: declareConst f!
-      mspec SMT.declareConst_spec (v := «f!») (τ := (γ.toSMTType.pair α.toSMTType).fun .bool)
+      -- Step 2: declare f! together with its defining specification.
+      mspec SMT.declareConst_addSpec_spec (x! := «f!»)
+        (x!_spec := f!_spec)
+        (τ := (γ.toSMTType.pair α.toSMTType).fun .bool)
         (decl := St₁.env.declarations) (as := St₁.env.asserts)
-        (Γ := St₁.types) (n := St₁.env.freshvarsc) (used := St₁.env.usedVars)
-      mrename_i pre
-      mintro ∀St₂
-      mpure pre
-      obtain ⟨_, _, St₂_fvc_eq, St₂_used_eq, St₂_types_eq⟩ := pre
-
-      -- Step 3: addSpec f!
-      mspec SMT.addSpec_spec (x! := «f!») (x!_spec := f!_spec)
-        (decl := St₂.env.declarations) (as := St₂.env.asserts)
-        (Γ := St₂.types) (n := St₂.env.freshvarsc) (used := St₂.env.usedVars)
+        (Γ := St₁.types) (n := St₁.env.freshvarsc)
+        (used := St₁.env.usedVars)
       mrename_i pre
       mintro ∀St₃
       mpure pre
-      obtain ⟨_, _, St₃_fvc_eq, St₃_used_eq, St₃_types_eq⟩ := pre
+      obtain ⟨_, _, St₃_fvc_base, St₃_used_base,
+        St₃_types_base⟩ := pre
+      let St₂ : EncoderState := St₃
+      have St₂_fvc_eq : St₂.env.freshvarsc = St₁.env.freshvarsc :=
+        St₃_fvc_base
+      have St₂_used_eq : St₂.env.usedVars = St₁.env.usedVars :=
+        St₃_used_base
+      have St₂_types_eq : St₂.types = St₁.types := St₃_types_base
+      have St₃_fvc_eq : St₃.env.freshvarsc = St₂.env.freshvarsc := rfl
+      have St₃_used_eq : St₃.env.usedVars = St₂.env.usedVars := rfl
+      have St₃_types_eq : St₃.types = St₂.types := rfl
 
-      -- Step 4: freshVar f!! : γ.toSMTType.fun α.toSMTType.option
+      -- Step 3: freshVar f!! : γ.toSMTType.fun α.toSMTType.option
       mspec freshVar_spec
         (Γ := St₃.types) (τ := γ.toSMTType.fun α.toSMTType.option)
         (n := St₃.env.freshvarsc) (used := St₃.env.usedVars)
@@ -464,16 +468,35 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
             mpure pre
             obtain ⟨St₇_types_eq, v_fresh, St₇_fvc_eq, St₇_used_eq, v_not_used⟩ := pre
 
-            -- Step 8: addSpec f!!
+            -- Step 6: remove the specification binders from the context.
+            mspec SMT.eraseFromContext_spec (v := u)
+              (Γ := St₇.types) (n := St₇.env.freshvarsc)
+              (used := St₇.env.usedVars)
+            mrename_i pre
+            mintro ∀St₇u
+            mpure pre
+            obtain ⟨St₇u_types_eq, St₇u_fvc_eq,
+              St₇u_used_eq⟩ := pre
+            mspec SMT.eraseFromContext_spec (v := v)
+              (Γ := St₇u.types) (n := St₇u.env.freshvarsc)
+              (used := St₇u.env.usedVars)
+            mrename_i pre
+            mintro ∀St₇v
+            mpure pre
+            obtain ⟨St₇v_types_eq, St₇v_fvc_eq,
+              St₇v_used_eq⟩ := pre
+
+            -- Step 7: addSpec f!!
             mspec SMT.addSpec_spec (x! := f!!)
-              (decl := St₇.env.declarations) (as := St₇.env.asserts)
-              (Γ := St₇.types) (n := St₇.env.freshvarsc) (used := St₇.env.usedVars)
+              (decl := St₇v.env.declarations) (as := St₇v.env.asserts)
+              (Γ := St₇v.types) (n := St₇v.env.freshvarsc)
+              (used := St₇v.env.usedVars)
             mrename_i pre
             mintro ∀St₈
             mpure pre
             obtain ⟨_, _, St₈_fvc_eq, St₈_used_eq, St₈_types_eq⟩ := pre
 
-            -- Step 9: pure
+            -- Step 8: pure
             mspec Std.Do.Spec.pure
             mpure_intro
 
@@ -484,53 +507,53 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
               rw [← St₂_types_eq, ← St₃_types_eq]; exact f!!_fresh
             have u_fresh_St₄ : u ∉ St₄.types := by
               rw [← St₅_types_eq]; exact u_fresh
+            have u_ne_v : u ≠ v := by
+              intro h
+              subst v
+              apply v_fresh
+              rw [St₆_types_eq, AList.mem_insert]
+              exact Or.inl rfl
+            have v_fresh_St₄ : v ∉ St₄.types := by
+              intro hv
+              apply v_fresh
+              rw [St₆_types_eq, St₅_types_eq, AList.mem_insert]
+              exact Or.inr hv
+            have St₈_types_base : St₈.types = St₄.types := by
+              rw [St₈_types_eq, St₇v_types_eq, St₇u_types_eq,
+                St₇_types_eq, St₆_types_eq, St₅_types_eq,
+                encodeTerm_state.erase_insert_ne u_ne_v,
+                encodeTerm_state.erase_insert_self u_fresh_St₄,
+                encodeTerm_state.erase_insert_self v_fresh_St₄]
             have St₁_sub_St₈ : St₁.types ⊆ St₈.types := by
               intro w hw
-              have h4 : w ∈ St₄.types.entries := by
-                rw [St₄_types_eq, St₃_types_eq, St₂_types_eq]
-                exact SMT.TypeContext.entries_subset_insert_of_notMem f!!_fresh_St₁ hw
-              have h6 : w ∈ St₆.types.entries := by
-                rw [St₆_types_eq, St₅_types_eq]
-                exact SMT.TypeContext.entries_subset_insert_of_notMem u_fresh_St₄ h4
-              rw [St₈_types_eq, St₇_types_eq]
-              exact SMT.TypeContext.entries_subset_insert_of_notMem v_fresh h6
+              rw [St₈_types_base, St₄_types_eq, St₃_types_eq,
+                St₂_types_eq]
+              exact SMT.TypeContext.entries_subset_insert_of_notMem
+                f!!_fresh_St₁ hw
             have ctx_sub_St₈ : ctx ⊆ St₈.types := fun _ h => St₁_sub_St₈ (ctx_sub_St₁ h)
 
             -- Bound variables of `x_enc` avoid `St₈.types`.
             -- Each lies in `Stx.env.usedVars` (`bv_x_enc_used`) and is not in `ctx = Stx.types`
-            -- (`bv_notMem_context typ_x_enc`).  The keys `St₈.types` adds on top of `ctx`
-            -- are the freshly-created constants `f!`, `f!!`, `u`, `v`, none of which is in
-            -- `Stx.env.usedVars`, so no bound variable of `x_enc` can equal them.
+            -- (`bv_notMem_context typ_x_enc`).  After the specification binders are erased,
+            -- the only fresh key retained above `ctx` is `f!!`, which is not in
+            -- `Stx.env.usedVars`.
             have f!!_notMem_Stx_used : f!! ∉ Stx.env.usedVars := fun h =>
               f!!_not_used (St₃_used_eq ▸ St₂_used_eq ▸ used_sub_St₁ h)
-            have u_notMem_Stx_used : u ∉ Stx.env.usedVars := fun h =>
-              u_not_used (St₅_used_eq ▸ St₄_used_eq ▸ List.mem_cons_of_mem _
-                (St₃_used_eq ▸ St₂_used_eq ▸ used_sub_St₁ h))
-            have v_notMem_Stx_used : v ∉ Stx.env.usedVars := fun h =>
-              v_not_used (St₆_used_eq ▸ List.mem_cons_of_mem _
-                (St₅_used_eq ▸ St₄_used_eq ▸ List.mem_cons_of_mem _
-                  (St₃_used_eq ▸ St₂_used_eq ▸ used_sub_St₁ h)))
             have hbv_x_enc_notMem_St₈ : ∀ w ∈ SMT.bv x_enc, w ∉ St₈.types := by
               intro w hw hmem
               have hw_used : w ∈ Stx.env.usedVars := bv_x_enc_used w hw
               have hw_not_ctx : w ∉ ctx := SMT.Typing.bv_notMem_context typ_x_enc w hw
-              rw [St₈_types_eq, St₇_types_eq, AList.mem_insert] at hmem
+              rw [St₈_types_base, St₄_types_eq, AList.mem_insert] at hmem
               rcases hmem with rfl | hmem
-              · exact v_notMem_Stx_used hw_used
-              · rw [St₆_types_eq, AList.mem_insert] at hmem
-                rcases hmem with rfl | hmem
-                · exact u_notMem_Stx_used hw_used
-                · rw [St₅_types_eq, St₄_types_eq, AList.mem_insert] at hmem
-                  rcases hmem with rfl | hmem
-                  · exact f!!_notMem_Stx_used hw_used
-                  · rw [St₃_types_eq, St₂_types_eq] at hmem
-                    exact preserves_St₁ w hw_used hw_not_ctx hmem
+              · exact f!!_notMem_Stx_used hw_used
+              · rw [St₃_types_eq, St₂_types_eq] at hmem
+                exact preserves_St₁ w hw_used hw_not_ctx hmem
 
             -- usedVars chain
             have Stx_used_sub_St₈ : Stx.env.usedVars ⊆ St₈.env.usedVars := by
               intro w hw
-              rw [St₈_used_eq, St₇_used_eq, St₆_used_eq, St₅_used_eq, St₄_used_eq,
-                St₃_used_eq, St₂_used_eq]
+              rw [St₈_used_eq, St₇v_used_eq, St₇u_used_eq, St₇_used_eq,
+                St₆_used_eq, St₅_used_eq, St₄_used_eq, St₃_used_eq, St₂_used_eq]
               exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
                 (List.mem_cons_of_mem _ (used_sub_St₁ hw)))
 
@@ -542,24 +565,15 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
               exact fun _ hw => ctx_sub_St₈ (Stf_eq_Stx (St_eq_Stf hw))
             · -- 3. AList.keys St₈.types ⊆ St₈.env.usedVars
               intro w hw
-              rw [St₈_used_eq, St₇_used_eq, St₆_used_eq, St₅_used_eq, St₄_used_eq,
-                St₃_used_eq, St₂_used_eq]
+              rw [St₈_used_eq, St₇v_used_eq, St₇u_used_eq, St₇_used_eq,
+                St₆_used_eq, St₅_used_eq, St₄_used_eq, St₃_used_eq, St₂_used_eq]
               have hw' : w ∈ St₈.types := (AList.mem_keys).mpr hw
-              rw [St₈_types_eq, St₇_types_eq] at hw'
-              rw [AList.mem_insert] at hw'
+              rw [St₈_types_base, St₄_types_eq, AList.mem_insert] at hw'
               rcases hw' with rfl | hw'
-              · exact List.mem_cons_self
-              · rw [St₆_types_eq] at hw'
-                rw [AList.mem_insert] at hw'
-                rcases hw' with rfl | hw'
-                · exact List.mem_cons_of_mem _ List.mem_cons_self
-                · rw [St₅_types_eq, St₄_types_eq] at hw'
-                  rw [AList.mem_insert] at hw'
-                  rcases hw' with rfl | hw'
-                  · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)
-                  · rw [St₃_types_eq, St₂_types_eq] at hw'
-                    exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
-                      (List.mem_cons_of_mem _ (St₁_sub ((AList.mem_keys).mp hw'))))
+              · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)
+              · rw [St₃_types_eq, St₂_types_eq] at hw'
+                exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+                  (List.mem_cons_of_mem _ (St₁_sub ((AList.mem_keys).mp hw'))))
             · -- 4. CoversUsedVars
               intro w hw
               rw [B.fv, List.mem_append] at hw
@@ -572,17 +586,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
               apply SMT.Typing.the
               apply SMT.Typing.app
               · apply SMT.Typing.var
-                rw [St₈_types_eq, St₇_types_eq]
-                have hf_ne_v : f!! ≠ v := by
-                  intro h; subst h
-                  exact v_not_used (St₆_used_eq ▸ List.mem_cons_of_mem _
-                    (St₅_used_eq ▸ St₄_used_eq ▸ List.mem_cons_self))
-                have hf_ne_u : f!! ≠ u := by
-                  intro h; subst h
-                  exact u_not_used (St₅_used_eq ▸ St₄_used_eq ▸ List.mem_cons_self)
-                rw [AList.lookup_insert_ne hf_ne_v, St₆_types_eq,
-                  AList.lookup_insert_ne hf_ne_u, St₅_types_eq, St₄_types_eq,
-                  AList.lookup_insert]
+                rw [St₈_types_base, St₄_types_eq, AList.lookup_insert]
               · exact SMT.Typing.weakening ctx_sub_St₈ typ_x_enc hbv_x_enc_notMem_St₈
             · -- 7. preserves_types
               intro w hw h1 h2
@@ -594,24 +598,14 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
               have hw_not_ctx : w ∉ ctx := x_preserves w hw_Stf hw_not_Stf h2_x
               have hw_Stx : w ∈ Stx.env.usedVars := Stf_used_sub_Stx hw_Stf
               have hw_not_St₁ : w ∉ St₁.types := preserves_St₁ w hw_Stx hw_not_ctx
-              rw [St₈_types_eq, St₇_types_eq]
+              rw [St₈_types_base, St₄_types_eq]
               intro hw_in
               rw [AList.mem_insert] at hw_in
               rcases hw_in with rfl | hw_in
-              · exact v_not_used (St₆_used_eq ▸ List.mem_cons_of_mem _
-                  (St₅_used_eq ▸ St₄_used_eq ▸ List.mem_cons_of_mem _
-                  (St₃_used_eq ▸ St₂_used_eq ▸ used_sub_St₁ hw_Stx)))
-              · rw [St₆_types_eq, AList.mem_insert] at hw_in
-                rcases hw_in with rfl | hw_in
-                · exact u_not_used (St₅_used_eq ▸ St₄_used_eq ▸
-                    List.mem_cons_of_mem _
-                    (St₃_used_eq ▸ St₂_used_eq ▸ used_sub_St₁ hw_Stx))
-                · rw [St₅_types_eq, St₄_types_eq, AList.mem_insert] at hw_in
-                  rcases hw_in with rfl | hw_in
-                  · exact f!!_not_used
-                      (St₃_used_eq ▸ St₂_used_eq ▸ used_sub_St₁ hw_Stx)
-                  · rw [St₃_types_eq, St₂_types_eq] at hw_in
-                    exact hw_not_St₁ hw_in
+              · exact f!!_not_used
+                  (St₃_used_eq ▸ St₂_used_eq ▸ used_sub_St₁ hw_Stx)
+              · rw [St₃_types_eq, St₂_types_eq] at hw_in
+                exact hw_not_St₁ hw_in
             · -- 8. ∃ Δ', ...  (denotation + totality)
               -- === Freshness ===
               have f!!_not_Stx : f!! ∉ Stx.env.usedVars := by
@@ -625,7 +619,8 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
               have f!!_not_fv_f : f!! ∉ SMT.fv f_enc := by
                 intro h; exact absurd (Δ'x_covers_f f!! h) (by simp [Δ'x_f!!_none])
               have f!!_in_St₈ : f!! ∈ St₈.env.usedVars := by
-                rw [St₈_used_eq, St₇_used_eq, St₆_used_eq, St₅_used_eq, St₄_used_eq]
+                rw [St₈_used_eq, St₇v_used_eq, St₇u_used_eq, St₇_used_eq,
+                  St₆_used_eq, St₅_used_eq, St₄_used_eq]
                 exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)
               -- === Construct Tenc via canonical iso ===
               have ζ_α_isfunc : ZFSet.IsFunc ⟦α⟧ᶻ ⟦α.toSMTType⟧ᶻ (BType.canonicalIsoSMTType α) :=
@@ -1106,17 +1101,8 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                           -- where τ is from St₈.types.lookup f!! = some (γ.toSMTType.fun α.toSMTType.option)
                           simp only [Option.some.injEq] at hv_eq; subst hv_eq
                           simp only [g_alt_dom, h_eq]
-                          rw [St₈_types_eq, St₇_types_eq] at hτ
-                          have hf_ne_v : w ≠ v := by
-                            rw [h_eq]; intro heq
-                            exact v_not_used (heq ▸ St₆_used_eq ▸ List.mem_cons_of_mem _
-                              (St₅_used_eq ▸ St₄_used_eq ▸ List.mem_cons_self))
-                          have hf_ne_u : w ≠ u := by
-                            rw [h_eq]; intro heq
-                            exact u_not_used (heq ▸ St₅_used_eq ▸ St₄_used_eq ▸ List.mem_cons_self)
-                          rw [AList.lookup_insert_ne hf_ne_v, St₆_types_eq,
-                            AList.lookup_insert_ne hf_ne_u, St₅_types_eq, St₄_types_eq] at hτ
-                          rw [h_eq, AList.lookup_insert] at hτ
+                          rw [St₈_types_base, St₄_types_eq, h_eq,
+                            AList.lookup_insert] at hτ
                           exact Option.some.inj hτ
                         · -- w ≠ f!!; d = Δ'_alt_x w; use axiom for wt at St₈
                           -- Δ₀_alt_x satisfies ExtendsOnSourceFV x, Δ'_alt_x extends it
@@ -1167,11 +1153,7 @@ theorem encodeTerm_spec.app_case.{u} (fv_sub_typings : B.FvSubTypings) (f x : B.
                         simp only [hΔ] at hw
                         split_ifs at hw with h_eq
                         · -- w = f!!; show w ∈ St₈.types
-                          rw [h_eq, St₈_types_eq, St₇_types_eq]
-                          refine (AList.mem_insert _).mpr (Or.inr ?_)
-                          rw [St₆_types_eq]
-                          refine (AList.mem_insert _).mpr (Or.inr ?_)
-                          rw [St₅_types_eq, St₄_types_eq]
+                          rw [h_eq, St₈_types_base, St₄_types_eq]
                           exact (AList.mem_insert _).mpr (Or.inl rfl)
                         · -- w ≠ f!!: use Δ'_alt_x_dom_out
                           have h_x := Δ'_alt_x_dom_out w hw
