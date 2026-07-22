@@ -1600,7 +1600,8 @@ theorem castInter_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {
         mpure_intro
         refine ⟨?_, ?_⟩
         · intro v hv
-          simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append, List.mem_cons,
+          simp only [noneCast, SMT.bv, List.nil_append, List.append_nil,
+            List.mem_append, List.mem_cons,
             List.not_mem_nil, false_or, or_false, or_self] at hv
           rcases hv with rfl | hvT
           · rw [StE_used_eq, St₂_used_eq]; exact List.mem_cons_self
@@ -1674,14 +1675,6 @@ theorem castInter_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {
       obtain ⟨rfl, rfl⟩ := pre
       unfold castInterAux castInter.refl
       mvcgen
-  have IOption (γ δ : SMTType) :
-      ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
-      castInter.fun S T (by simp) (castPath.reflexive γ)
-        (castPath.reflexive (.option δ))
-      ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
-          ⌜(∀ v ∈ SMT.bv t', v ∈ E'.usedVars) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
-    simpa [castInterAux, castPath.reflexive] using
-      IAux (castPath.reflexive (.fun γ (.option δ))) S T hbvS hbvT
   mintro pre ∀St
   mpure pre
   obtain ⟨rfl, rfl⟩ := pre
@@ -1715,7 +1708,28 @@ theorem castInter_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {
       · rw [St₂_used_eq]; exact List.mem_cons_self
       · rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbvS v hvS)
       · rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbvT v hvT)
-    · mspec (IOption _ _)
+    · mspec SMT.freshVar_spec
+      mrename_i pre2
+      mintro ∀St₂
+      mpure pre2
+      obtain ⟨_, _, _, St₂_used_eq, _⟩ := pre2
+      mspec SMT.eraseFromContext_spec
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨_, _, StE_used_eq⟩ := preE
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      rw [StE_used_eq]
+      refine ⟨?_, fun v hv => by rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv⟩
+      intro v hv
+      simp only [noneCast, SMT.bv, List.append_nil, List.mem_append, List.mem_cons,
+        List.not_mem_nil, or_false] at hv
+      rcases hv with rfl | (hvS | hvT) | hvS
+      · rw [St₂_used_eq]; exact List.mem_cons_self
+      · rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbvS v hvS)
+      · rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbvT v hvT)
+      · rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbvS v hvS)
     · mvcgen
   · mspec (IAux _ S T hbvS hbvT)
   · mspec (IAux _ T S hbvT hbvS)
@@ -2533,7 +2547,22 @@ theorem castInter_decls_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.�
       refine ⟨[], ?_, DeltaBvOk_nil, fun v hv => ?_⟩
       · rw [St₃_decl, St₂_decl, List.append_nil]
       · rw [St₃_used_eq, St₂_used_eq]; exact List.mem_cons_of_mem _ hv
-    · mspec (castInter_optionFun_decls_bv S T _ _ hbvS)
+    · mspec SMT.freshVar_spec_decls
+      mrename_i pre2
+      mintro ∀St₂
+      mpure pre2
+      obtain ⟨St₂_used_eq, St₂_decl⟩ := pre2
+      mspec (Std.Do.Triple.and _ SMT.eraseFromContext_spec
+        (SMT.eraseFromContext_decls (decl := St₂.env.declarations)))
+      mrename_i preE
+      mintro ∀St₃
+      mpure preE
+      obtain ⟨⟨_, _, St₃_used_eq⟩, St₃_decl⟩ := preE
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      refine ⟨[], ?_, DeltaBvOk_nil, fun v hv => ?_⟩
+      · rw [St₃_decl, St₂_decl, List.append_nil]
+      · rw [St₃_used_eq, St₂_used_eq]; exact List.mem_cons_of_mem _ hv
     · mvcgen
   · mspec (castInterAux_decls_bv _ S T hbvS)
   · mspec (castInterAux_decls_bv _ T S hbvT)
@@ -5570,7 +5599,8 @@ theorem castInter_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
         mpure_intro
         refine ⟨?_, ?_⟩
         · intro v hv
-          simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append, List.mem_cons,
+          simp only [noneCast, SMT.bv, List.nil_append, List.append_nil,
+            List.mem_append, List.mem_cons,
             List.not_mem_nil, false_or, or_false, or_self] at hv
           rcases hv with rfl | hvT
           · exact fun h => x_notMem (havsub₁s h)
@@ -5644,14 +5674,6 @@ theorem castInter_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
       obtain ⟨rfl, rfl⟩ := pre
       unfold castInterAux castInter.refl
       mvcgen
-  have IOption (γ δ : SMTType) :
-      ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
-      castInter.fun S T (by simp) (castPath.reflexive γ)
-        (castPath.reflexive (.option δ))
-      ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
-          ⌜(∀ v ∈ SMT.bv t', v ∉ avoid) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
-    simpa [castInterAux, castPath.reflexive] using
-      IAux (castPath.reflexive (.fun γ (.option δ))) S T hbvS hbvT
   mintro pre ∀St
   mpure pre
   obtain ⟨rfl, rfl⟩ := pre
@@ -5685,7 +5707,28 @@ theorem castInter_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
       · exact fun h => x_notMem (havsub h)
       · exact hbvS v hvS
       · exact hbvT v hvT
-    · mspec (IOption _ _)
+    · mspec SMT.freshVar_spec
+      mrename_i pre2
+      mintro ∀St₂
+      mpure pre2
+      obtain ⟨_, _, _, St₂_used_eq, x_notMem⟩ := pre2
+      mspec SMT.eraseFromContext_spec
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨_, _, StE_used_eq⟩ := preE
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      rw [StE_used_eq]
+      refine ⟨?_, fun v hv => by rw [St₂_used_eq]; exact List.mem_cons_of_mem _ hv⟩
+      intro v hv
+      simp only [noneCast, SMT.bv, List.append_nil, List.mem_append, List.mem_cons,
+        List.not_mem_nil, or_false] at hv
+      rcases hv with rfl | (hvS | hvT) | hvS
+      · exact fun h => x_notMem (havsub h)
+      · exact hbvS v hvS
+      · exact hbvT v hvT
+      · exact hbvS v hvS
     · mvcgen
   · mspec (IAux _ S T hbvS hbvT)
   · mspec (IAux _ T S hbvT hbvS)
@@ -6797,7 +6840,22 @@ theorem castInter_decls_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
       refine ⟨[], ?_, DeltaBvNotMem_nil, fun v hv => ?_⟩
       · rw [St₃_decl, St₂_decl, List.append_nil]
       · rw [St₃_used_eq, St₂_used_eq]; exact List.mem_cons_of_mem _ hv
-    · mspec (castInter_optionFun_decls_bv_notMem S T _ _ havsub hbvS)
+    · mspec SMT.freshVar_spec_decls
+      mrename_i pre2
+      mintro ∀St₂
+      mpure pre2
+      obtain ⟨St₂_used_eq, St₂_decl⟩ := pre2
+      mspec (Std.Do.Triple.and _ SMT.eraseFromContext_spec
+        (SMT.eraseFromContext_decls (decl := St₂.env.declarations)))
+      mrename_i preE
+      mintro ∀St₃
+      mpure preE
+      obtain ⟨⟨_, _, St₃_used_eq⟩, St₃_decl⟩ := preE
+      mspec Std.Do.Spec.pure
+      mpure_intro
+      refine ⟨[], ?_, DeltaBvNotMem_nil, fun v hv => ?_⟩
+      · rw [St₃_decl, St₂_decl, List.append_nil]
+      · rw [St₃_used_eq, St₂_used_eq]; exact List.mem_cons_of_mem _ hv
     · mvcgen
   · mspec (castInterAux_decls_bv_notMem _ S T havsub hbvS)
   · mspec (castInterAux_decls_bv_notMem _ T S havsub hbvT)

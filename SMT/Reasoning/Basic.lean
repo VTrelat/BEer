@@ -9,7 +9,6 @@ import SMT.Reasoning.Basic.EncodeTermCorrectMem
 import SMT.Reasoning.Basic.EncodeTermCorrectSet
 import SMT.Reasoning.Basic.EncodeTermCorrectEq
 import SMT.Reasoning.Basic.EncodeTermCorrectUnion
-import SMT.Reasoning.Basic.EncodeTermCorrectInter
 import SMT.Reasoning.Basic.AbstractSubstDenote
 import SMT.Reasoning.Basic.DenotationTotality
 import SMT.Reasoning.Basic.EncodeTermCorrectCollect

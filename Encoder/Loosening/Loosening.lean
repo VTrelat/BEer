@@ -282,14 +282,13 @@ def castInter.fun (S T : Term) {α β α' β' : SMTType}
   addSpec S! S!_spec
   match β' with
   | .option σ =>
-    let p ← freshVar (.pair α' σ) "inter!"
-    eraseFromContext p
-    return (.lambda [p] [.pair α' σ]
-      (.and (.eq (.app (.var S!) (.fst (.var p)))
-              (.some (.snd (.var p))))
-            (.eq (.app T (.fst (.var p)))
-              (.some (.snd (.var p))))),
-      .fun (.pair α' σ) .bool)
+    let x ← freshVar α' "inter!"
+    eraseFromContext x
+    return (.lambda [x] [α']
+      (.ite (.eq (.app (.var S!) (.var x)) (.app T (.var x)))
+        (.app (.var S!) (.var x))
+        (noneCast σ)),
+      .fun α' (.option σ))
   | _ => throw s!"castInterAux.fun: Unexpected codomain type {β'}"
 
 def castInter.chpred (S T : Term) {α α' : SMTType}
@@ -337,9 +336,19 @@ def castInter : Term × SMTType → Term × SMTType → Encoder (Term × SMTType
       let x ← freshVar γ "inter!"
       SMT.eraseFromContext x
       return (.lambda [x] [γ] (.and (.app S (.var x)) (.app T (.var x))), .fun γ .bool)
-    | .fun γ (.option δ), _, rfl =>
-      castInter.fun S T (by simp) (castPath.reflexive γ)
-        (castPath.reflexive (.option δ))
+    | .fun γ (.option δ), _, rfl => do
+      /-
+        S : γ → Option δ    T : γ → Option δ
+        -----------------------------------------------------
+        S ∩ T    ↪    λ x : γ. if S(x) = T(x) then S(x) else none
+      -/
+      let x ← freshVar γ "inter!"
+      SMT.eraseFromContext x
+      return (.lambda [x] [γ]
+        (.ite (.eq (.app S (.var x)) (.app T (.var x)))
+          (.app S (.var x))
+          (noneCast δ)),
+        .fun γ (.option δ))
     | _, _, rfl => throw s!"castInter: direct path requires function-to-bool type, got {α}"
   else if h : α ⊑ β then castInterAux S T h.toCastPath
   else if h : β ⊑ α then castInterAux T S h.toCastPath

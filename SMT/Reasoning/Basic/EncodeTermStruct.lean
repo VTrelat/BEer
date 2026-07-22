@@ -1767,21 +1767,23 @@ theorem castInterAux_state
       · rw [St₃_types_base, St₃_used_eq, St₂_used_eq]
         exact List.subset_cons_of_subset x S!_keys_sub
       · intro v hv
-        simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
-          List.not_mem_nil, or_false] at hv
+        simp only [noneCast, SMT.fv, List.mem_removeAll_iff, List.mem_append,
+          List.mem_cons, List.not_mem_nil, or_false] at hv
         obtain ⟨hv_body, hv_ne_x⟩ := hv
         rw [St₃_types_base]
-        rcases hv_body with ((hvS! | hvxa) | hvxa') | ((hvT | hvxb) | hvxb')
+        rcases hv_body with
+          (((hvS! | hvx) | (hvT | hvx')) | (hvS!' | hvx''))
         · exact List.mem_union_iff.mpr (Or.inl (hvS! ▸ AList.mem_keys.mpr S!_in))
-        · exact absurd hvxa hv_ne_x
-        · exact absurd hvxa' hv_ne_x
+        · exact absurd hvx hv_ne_x
         · rcases List.mem_union_iff.mp (hT_fv hvT) with hΛ | hX
           · exact List.mem_union_iff.mpr (Or.inl (AList.mem_keys.mpr
               (AList.mem_of_subset S!_Λ_sub
                 (AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mpr hΛ))))))
           · exact List.mem_union_iff.mpr (Or.inr hX)
-        · exact absurd hvxb hv_ne_x
-        · exact absurd hvxb' hv_ne_x
+        · exact absurd hvx' hv_ne_x
+        · exact List.mem_union_iff.mpr
+            (Or.inl (hvS!' ▸ AList.mem_keys.mpr S!_in))
+        · exact absurd hvx'' hv_ne_x
       · intro v hv hΛ
         rw [St₃_types_base]
         exact S!_preserves v hv hΛ
@@ -1877,6 +1879,82 @@ theorem castInterAux_state
     obtain ⟨rfl, rfl, sub, rfl, hS_fv, hT_fv⟩ := pre
     unfold castInterAux
     mvcgen
+
+/-- The equal option-function intersection is a direct lambda: it allocates
+one local binder, erases it from the global context, and emits no helper. -/
+theorem castInter_option_state
+    (S T : SMT.Term) (γ δ : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} {X : List SMT.𝒱} :
+    ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
+        ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧
+          E.usedVars = used ∧ SMT.fv S ⊆ AList.keys Λ ∪ X ∧
+          SMT.fv T ⊆ AList.keys Λ ∪ X⌝ ⦄
+    castInter (S, SMTType.fun γ (SMTType.option δ))
+      (T, SMTType.fun γ (SMTType.option δ))
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType)
+        (⟨E', Γ'⟩ : EncoderState) => ⌜
+      n ≤ E'.freshvarsc ∧
+      Λ ⊆ Γ' ∧
+      used ⊆ E'.usedVars ∧
+      AList.keys Γ' ⊆ E'.usedVars ∧
+      SMT.fv t' ⊆ AList.keys Γ' ∪ X ∧
+      (∀ v ∈ used, v ∉ Λ → v ∉ Γ') ⌝⦄ := by
+  have hrun :
+      castInter (S, SMTType.fun γ (SMTType.option δ))
+          (T, SMTType.fun γ (SMTType.option δ)) = do
+        let x ← SMT.freshVar γ "inter!"
+        SMT.eraseFromContext x
+        return (.lambda [x] [γ]
+          (.ite (.eq (.app S (.var x)) (.app T (.var x)))
+            (.app S (.var x)) (noneCast δ)),
+          SMTType.fun γ (SMTType.option δ)) := by
+    simp [castInter]
+  rw [hrun]
+  mintro pre ∀St₀
+  mpure pre
+  obtain ⟨rfl, rfl, keys_sub, rfl, hS_fv, hT_fv⟩ := pre
+  mspec SMT.freshVar_spec
+  next x =>
+    mrename_i pre
+    mintro ∀St₁
+    mpure pre
+    obtain ⟨St₁_types_eq, x_fresh, St₁_fvc, St₁_used_eq,
+      x_not_used⟩ := pre
+    mspec SMT.eraseFromContext_spec
+    mrename_i pre
+    mintro ∀StE
+    mpure pre
+    obtain ⟨StE_types_eq, StE_fvc, StE_used_eq⟩ := pre
+    have StE_types_base : StE.types = St₀.types := by
+      rw [StE_types_eq, St₁_types_eq,
+        castUnion_state.erase_insert_self x_fresh]
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    and_intros
+    · rw [StE_fvc, St₁_fvc]
+      omega
+    · rw [StE_types_base]
+    · intro v hv
+      rw [StE_used_eq, St₁_used_eq]
+      exact List.mem_cons_of_mem x hv
+    · rw [StE_types_base, StE_used_eq, St₁_used_eq]
+      exact List.subset_cons_of_subset x keys_sub
+    · intro v hv
+      simp only [noneCast, SMT.fv, List.mem_removeAll_iff, List.mem_append,
+        List.mem_cons, List.not_mem_nil, or_false] at hv
+      obtain ⟨hv_body, hv_ne_x⟩ := hv
+      rw [StE_types_base]
+      rcases hv_body with
+        (((hvS | hvx) | (hvT | hvx')) | (hvS' | hvx''))
+      · exact hS_fv hvS
+      · exact absurd hvx hv_ne_x
+      · exact hT_fv hvT
+      · exact absurd hvx' hv_ne_x
+      · exact hS_fv hvS'
+      · exact absurd hvx'' hv_ne_x
+    · intro v hv hΛ
+      rw [StE_types_base]
+      exact hΛ
 
 set_option maxHeartbeats 4000000 in
 /-- Purely structural specification of `castApp` (no `B`-typing, no `respects`,
@@ -4057,17 +4135,18 @@ theorem castInterAux_decl
           · exact Or.inl (Or.inl hm)
           · exact Or.inr (List.mem_singleton.mp hm)
         · intro v hv
-          simp only [SMT.fv, List.mem_removeAll_iff, List.mem_append, List.mem_cons,
-            List.not_mem_nil, or_false, declVars, List.filterMap_cons, List.filterMap_nil,
-            List.mem_union_iff] at hv ⊢
+          simp only [noneCast, SMT.fv, List.mem_removeAll_iff, List.mem_append,
+            List.mem_cons, List.not_mem_nil, or_false, declVars,
+            List.filterMap_cons, List.filterMap_nil, List.mem_union_iff] at hv ⊢
           obtain ⟨hv_body, hv_ne_p⟩ := hv
-          rcases hv_body with ((hvS! | hvpa) | hvpa') | ((hvT | hvpb) | hvpb')
+          rcases hv_body with
+            (((hvS! | hvp) | (hvT | hvp')) | (hvS!' | hvp''))
           · exact Or.inr hvS!
-          · exact absurd hvpa hv_ne_p
-          · exact absurd hvpa' hv_ne_p
+          · exact absurd hvp hv_ne_p
           · exact Or.inl (Or.inr hvT)
-          · exact absurd hvpb hv_ne_p
-          · exact absurd hvpb' hv_ne_p
+          · exact absurd hvp' hv_ne_p
+          · exact Or.inr hvS!'
+          · exact absurd hvp'' hv_ne_p
     · mvcgen
   | @chpred α α' c_α =>
     mintro pre ∀St
@@ -4148,6 +4227,66 @@ theorem castInterAux_decl
     obtain ⟨rfl, rfl, sub, rfl, rfl⟩ := pre
     unfold castInterAux
     mvcgen
+
+/-- The direct equal option-function branch preserves the declaration stream;
+its only fresh name is local to the returned lambda. -/
+theorem castInter_option_decl
+    (S T : SMT.Term) (γ δ : SMTType) {Λ : SMT.TypeContext} {n : ℕ}
+    {used : List SMT.𝒱} {decl : SMT.Chunk} :
+    ⦃ fun (⟨E, Λ'⟩ : EncoderState) ↦
+        ⌜Λ' = Λ ∧ E.freshvarsc = n ∧ AList.keys Λ ⊆ E.usedVars ∧
+          E.usedVars = used ∧ E.declarations = decl⌝ ⦄
+    castInter (S, SMTType.fun γ (SMTType.option δ))
+      (T, SMTType.fun γ (SMTType.option δ))
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType)
+        (⟨E', _Γ'⟩ : EncoderState) => ⌜
+      ∃ Dlt : SMT.Chunk,
+        E'.declarations = decl ++ Dlt ∧
+        (∀ b ∈ specBodies Dlt,
+          SMT.fv b ⊆ SMT.fv S ∪ SMT.fv T ∪ declVars Dlt) ∧
+        SMT.fv t' ⊆ SMT.fv S ∪ SMT.fv T ∪ declVars Dlt ⌝⦄ := by
+  have hrun :
+      castInter (S, SMTType.fun γ (SMTType.option δ))
+          (T, SMTType.fun γ (SMTType.option δ)) = do
+        let x ← SMT.freshVar γ "inter!"
+        SMT.eraseFromContext x
+        return (.lambda [x] [γ]
+          (.ite (.eq (.app S (.var x)) (.app T (.var x)))
+            (.app S (.var x)) (noneCast δ)),
+          SMTType.fun γ (SMTType.option δ)) := by
+    simp [castInter]
+  rw [hrun]
+  mintro pre ∀St₀
+  mpure pre
+  obtain ⟨rfl, rfl, keys_sub, rfl, rfl⟩ := pre
+  mspec SMT.freshVar_decls
+  next x =>
+    mrename_i pref
+    mintro ∀St₁
+    mpure pref
+    mspec SMT.eraseFromContext_decls
+    mrename_i pree
+    mintro ∀StE
+    mpure pree
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨[], ?_, ?_, ?_⟩
+    · simp [pree, pref]
+    · intro b hb
+      simp at hb
+    · intro v hv
+      simp only [noneCast, SMT.fv, List.mem_removeAll_iff, List.mem_append,
+        List.mem_cons, List.not_mem_nil, or_false, declVars,
+        List.filterMap_nil, List.mem_union_iff] at hv ⊢
+      obtain ⟨hv_body, hv_ne_x⟩ := hv
+      rcases hv_body with
+        (((hvS | hvx) | (hvT | hvx')) | (hvS' | hvx''))
+      · exact Or.inl hvS
+      · exact absurd hvx hv_ne_x
+      · exact Or.inr hvT
+      · exact absurd hvx' hv_ne_x
+      · exact Or.inl hvS'
+      · exact absurd hvx'' hv_ne_x
 
 set_option maxHeartbeats 4000000 in
 /-- `castApp`'s `declarations` delta `Dlt`: the encoded application term's free
@@ -7631,93 +7770,107 @@ theorem encodeTerm_combined
       obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqA
       obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqC
       mspec (Std.Do.Triple.and
-        (castInterAux A_enc C_enc
-          (castPath.reflexive (gamma.fun (.option delta))))
-        (castInterAux_state
-          (castPath.reflexive (gamma.fun (.option delta)))
-          A_enc C_enc (Λ := σ_C.types) (n := σ_C.env.freshvarsc)
-          (used := σ_C.env.usedVars) (X := B.Term.vars (A ∩ᴮ C)))
-        (castInterAux_decl
-          (castPath.reflexive (gamma.fun (.option delta)))
-          A_enc C_enc (Λ := σ_C.types) (n := σ_C.env.freshvarsc)
-          (used := σ_C.env.usedVars) (decl := σ.env.declarations ++ ΔA ++ ΔC)))
-      case pre =>
-        mpure_intro
-        refine ⟨⟨rfl, rfl, C_keys_sub, rfl, ?_, ?_⟩, rfl, rfl, C_keys_sub, rfl, C_decl_eq⟩
-        · intro v hv
-          rcases List.mem_union_iff.mp (A_fv_sub hv) with hk | hb
-          · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr
-              (AList.mem_of_subset C_Λ_sub (AList.mem_keys.mp hk))))
-          · exact List.mem_union_iff.mpr (.inr (hvars_A_sub hb))
-        · intro v hv
-          rcases List.mem_union_iff.mp (C_fv_sub hv) with hk | hb
-          · exact List.mem_union_iff.mpr (.inl hk)
-          · exact List.mem_union_iff.mpr (.inr (hvars_C_sub hb))
-      case post.success =>
-        rename_i out_cu
-        obtain ⟨cu_enc, σcu⟩ := out_cu
+        (SMT.freshVar gamma "inter!")
+        (SMT.freshVar_spec (Γ := σ_C.types) (τ := gamma) (n := σ_C.env.freshvarsc)
+          (used := σ_C.env.usedVars))
+        (SMT.freshVar_decls (τ := gamma) (decl := σ_C.env.declarations)))
+      case post.success x =>
         mrename_i pre
-        mintro ∀σ'
+        mintro ∀St₁
         mpure pre
-        obtain ⟨⟨h_le, h_Λ_sub, h_used_sub, h_keys_sub, h_fv_sub, h_preserves⟩,
-          Dcu, cu_decl_eq, cu_specb, cu_fv_decl_sub⟩ := pre
+        obtain ⟨⟨St₁_types_eq, x_fresh, St₁_fvc, St₁_used_eq, x_not_used⟩, St₁_decl⟩ := pre
+        mspec (Std.Do.Triple.and (SMT.eraseFromContext x)
+          (SMT.eraseFromContext_spec (v := x) (Γ := St₁.types) (n := St₁.env.freshvarsc)
+            (used := St₁.env.usedVars))
+          (SMT.eraseFromContext_decls (v := x) (decl := St₁.env.declarations)))
+        mrename_i preE
+        mintro ∀StE
+        mpure preE
+        obtain ⟨⟨StE_types_eq, StE_fvc, StE_used_eq⟩, StE_decl⟩ := preE
+        have x_notσ : x ∉ σ.types := fun h =>
+          x_fresh (AList.mem_of_subset (AList.subset_trans A_Λ_sub C_Λ_sub) h)
+        mspec Std.Do.Spec.pure
         mpure_intro
-        refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, ΔA ++ ΔC ++ Dcu, ?_, ?_, ?_⟩
-        · exact fun v hv => h_used_sub (C_used_sub (A_used_sub hv))
-        · exact AList.subset_trans (AList.subset_trans A_Λ_sub C_Λ_sub) h_Λ_sub
-        · exact h_keys_sub
+        refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, ΔA ++ ΔC, ?_, ?_, ?_⟩
+        · intro v hv
+          rw [StE_used_eq, St₁_used_eq]
+          exact List.mem_cons_of_mem _ (C_used_sub (A_used_sub hv))
+        · rw [StE_types_eq]
+          apply SMT.TypeContext.entries_subset_erase_of_notMem _ x_notσ
+          rw [St₁_types_eq]
+          exact AList.subset_trans (AList.subset_trans A_Λ_sub C_Λ_sub)
+            (SMT.TypeContext.entries_subset_insert_of_notMem x_fresh)
+        · rw [StE_used_eq, St₁_used_eq]
+          intro v hv
+          rw [StE_types_eq] at hv
+          have hv' : v ∈ AList.keys St₁.types := SMT.TypeContext.keys_erase_subset hv
+          rw [St₁_types_eq] at hv'
+          exact keys_insert_subset_cons C_keys_sub hv'
         · intro v hv
           rw [B.fv, List.mem_append] at hv
+          rw [StE_used_eq, St₁_used_eq]
           rcases hv with hv | hv
-          · exact h_used_sub (C_used_sub (A_cov v hv))
-          · exact h_used_sub (C_cov v hv)
-        · exact h_fv_sub
+          · exact List.mem_cons_of_mem _ (C_used_sub (A_cov v hv))
+          · exact List.mem_cons_of_mem _ (C_cov v hv)
+        · intro v hv
+          simp only [noneCast, SMT.fv, List.mem_removeAll_iff, List.mem_append,
+            List.mem_cons, List.not_mem_nil, or_false] at hv
+          obtain ⟨hv_body, hv_ne_x⟩ := hv
+          rw [StE_types_eq, St₁_types_eq]
+          rcases hv_body with (((hvA | hvx) | (hvC | hvx')) | (hvA' | hvx''))
+          · rcases List.mem_union_iff.mp (A_fv_sub hvA) with hk | hb
+            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_erase.mpr
+                ⟨hv_ne_x, AList.mem_insert _ |>.mpr
+                  (Or.inr (AList.mem_of_subset C_Λ_sub (AList.mem_keys.mp hk)))⟩)))
+            · exact List.mem_union_iff.mpr (.inr (hvars_A_sub hb))
+          · exact absurd hvx hv_ne_x
+          · rcases List.mem_union_iff.mp (C_fv_sub hvC) with hk | hb
+            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_erase.mpr
+                ⟨hv_ne_x, AList.mem_insert _ |>.mpr (Or.inr (AList.mem_keys.mp hk))⟩)))
+            · exact List.mem_union_iff.mpr (.inr (hvars_C_sub hb))
+          · exact absurd hvx' hv_ne_x
+          · rcases List.mem_union_iff.mp (A_fv_sub hvA') with hk | hb
+            · exact List.mem_union_iff.mpr (.inl (AList.mem_keys.mpr (AList.mem_erase.mpr
+                ⟨hv_ne_x, AList.mem_insert _ |>.mpr
+                  (Or.inr (AList.mem_of_subset C_Λ_sub (AList.mem_keys.mp hk)))⟩)))
+            · exact List.mem_union_iff.mpr (.inr (hvars_A_sub hb))
+          · exact absurd hvx'' hv_ne_x
         · intro v hv hΛ hvars
-          exact h_preserves v (C_used_sub (A_used_sub hv)) (hpres v hv hΛ hvars)
-        · rw [cu_decl_eq]; simp only [List.append_assoc]
+          have hv_not_σC := hpres v hv hΛ hvars
+          rw [StE_types_eq]
+          apply SMT.TypeContext.notMem_erase
+          rw [St₁_types_eq]
+          intro hv_in
+          rw [AList.mem_insert] at hv_in
+          rcases hv_in with rfl | hv_in
+          · exact x_not_used (C_used_sub (A_used_sub hv))
+          · exact hv_not_σC hv_in
+        · rw [StE_decl, St₁_decl, C_decl_eq, List.append_assoc]
         · intro b hb
           rw [specBodies_append, List.mem_append] at hb
           rcases hb with hb | hb
-          · rw [specBodies_append, List.mem_append] at hb
-            rcases hb with hb | hb
-            · exact specBody_mono hvars_A_sub
-                (by rw [declVars_append, declVars_append]
-                    exact List.Subset.trans (List.subset_append_left ..)
-                      (List.subset_append_left ..))
-                (A_specb b hb)
-            · exact specBody_mono hvars_C_sub
-                (by rw [declVars_append, declVars_append]
-                    exact List.Subset.trans (List.subset_append_right ..)
-                      (List.subset_append_left ..))
-                (C_specb b hb)
-          · intro w hw
-            have hw' := cu_specb b hb hw
-            rw [declVars_append, declVars_append]
-            rcases List.mem_union_iff.mp hw' with h | h
-            · rcases List.mem_union_iff.mp h with h | h
-              · rcases List.mem_union_iff.mp (A_enc_fv_sub h) with h | h
-                · exact List.mem_union_iff.mpr (.inl (hvars_A_sub h))
-                · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
-                    (List.mem_append_left _ h)))
-              · rcases List.mem_union_iff.mp (C_enc_fv_sub h) with h | h
-                · exact List.mem_union_iff.mpr (.inl (hvars_C_sub h))
-                · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
-                    (List.mem_append_right _ h)))
-            · exact List.mem_union_iff.mpr (.inr (List.mem_append_right _ h))
+          · exact specBody_mono hvars_A_sub (declVars_append .. ▸ List.subset_append_left ..)
+              (A_specb b hb)
+          · exact specBody_mono hvars_C_sub (declVars_append .. ▸ List.subset_append_right ..)
+              (C_specb b hb)
         · intro v hv
-          have hv' := cu_fv_decl_sub hv
-          rw [declVars_append, declVars_append]
-          rcases List.mem_union_iff.mp hv' with h | h
-          · rcases List.mem_union_iff.mp h with h | h
-            · rcases List.mem_union_iff.mp (A_enc_fv_sub h) with h | h
-              · exact List.mem_union_iff.mpr (.inl (hvars_A_sub h))
-              · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
-                  (List.mem_append_left _ h)))
-            · rcases List.mem_union_iff.mp (C_enc_fv_sub h) with h | h
-              · exact List.mem_union_iff.mpr (.inl (hvars_C_sub h))
-              · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _
-                  (List.mem_append_right _ h)))
-          · exact List.mem_union_iff.mpr (.inr (List.mem_append_right _ h))
+          simp only [noneCast, SMT.fv, List.mem_removeAll_iff, List.mem_append,
+            List.mem_cons, List.not_mem_nil, or_false] at hv
+          obtain ⟨hv_body, hv_ne_x⟩ := hv
+          rw [declVars_append]
+          rcases hv_body with (((hvA | hvx) | (hvC | hvx')) | (hvA' | hvx''))
+          · rcases List.mem_union_iff.mp (A_enc_fv_sub hvA) with h | h
+            · exact List.mem_union_iff.mpr (.inl (hvars_A_sub h))
+            · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _ h))
+          · exact absurd hvx hv_ne_x
+          · rcases List.mem_union_iff.mp (C_enc_fv_sub hvC) with h | h
+            · exact List.mem_union_iff.mpr (.inl (hvars_C_sub h))
+            · exact List.mem_union_iff.mpr (.inr (List.mem_append_right _ h))
+          · exact absurd hvx' hv_ne_x
+          · rcases List.mem_union_iff.mp (A_enc_fv_sub hvA') with h | h
+            · exact List.mem_union_iff.mpr (.inl (hvars_A_sub h))
+            · exact List.mem_union_iff.mpr (.inr (List.mem_append_left _ h))
+          · exact absurd hvx'' hv_ne_x
     · mvcgen
     · rename_i _ Senc1 _ heqA _ Senc2 _ heqC _ _
       obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. |>.mp heqA
