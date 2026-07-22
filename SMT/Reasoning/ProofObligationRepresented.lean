@@ -65,7 +65,7 @@ theorem SupportedSMT.of_selectedSMTType?
           | prod alpha beta =>
               simp only [Option.some.injEq] at h
               subst sigma
-              exact .optionFun alpha beta
+              exact .optionFun (.canonical alpha) (.canonical beta)
 
 end BType
 

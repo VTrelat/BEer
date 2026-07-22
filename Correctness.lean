@@ -1,2 +1,2 @@
-import SMT.Reasoning.EncodeTermCorrect
+import SMT.Reasoning.EncodeTermRepresented
 import SMT.Reasoning.ProofObligationUnion

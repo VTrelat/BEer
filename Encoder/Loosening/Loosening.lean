@@ -83,6 +83,31 @@ def castApp : Term × SMTType → Term × SMTType → Encoder (Term × SMTType)
     else throw s!"encodeTerm:app: Failed to unify {τ} with {ξ}"
   | (_, τ), _ => throw s!"encodeTerm:app: Expected a function, got {τ}"
 
+/-- Membership in an option-valued relation after casting the pair argument to
+the function's endpoint representation. -/
+def castMembership.optionForward (x S : Term)
+    {α β ρ τ : SMTType} (cα : α ~> ρ) (cβ : β ~> τ) :
+    Encoder (Term × SMTType) := do
+  let ⟨x!, x!_spec⟩ ← loosenAux_prf "mem!" (.pair cα cβ) x
+  declareConstWithSpec x! (.pair ρ τ) x!_spec
+  return (x!_spec ∧ˢ
+    (.app S (.fst (.var x!)) =ˢ .some (.snd (.var x!))), .bool)
+
+/-- Normalize an option-valued relation to a common endpoint representation,
+then use the forward option-membership encoding. -/
+def castMembership.optionCommon (x S : Term)
+    {α β α' β' ρ τ : SMTType}
+    (cxα : α ~> ρ) (cxβ : β ~> τ)
+    (cSα : α' ~> ρ) (cSβ : β' ~> τ) :
+    Encoder (Term × SMTType) := do
+  let cS : SMTType.fun α' (.option β') ~>
+      SMTType.fun ρ (.option τ) :=
+    .fun (by simp) cSα (.opt cSβ)
+  let ⟨S!, S!_spec⟩ ← loosenAux_prf "mem!" cS S
+  declareConstWithSpec S! (.fun ρ (.option τ)) S!_spec
+  let ⟨t, σ⟩ ← castMembership.optionForward x (.var S!) cxα cxβ
+  return (S!_spec ∧ˢ t, σ)
+
 def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SMTType) := λ ⟨x, α⟩ ⟨S, τ⟩ =>
   match τ with
   | .fun α' .bool => do
@@ -122,20 +147,16 @@ def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SM
           ----------------------------------------------------
           x ∈ S    ↪    x!_spec ⇒ S (fst x!) = some (snd x!)
         -/
-          let ⟨x!, x!_spec⟩ ← loosenAux_prf "mem!" (α := .pair α β) (β := .pair α' β') (.pair hα.toCastPath hβ.toCastPath) x
-          declareConstWithSpec x! (.pair α' β') x!_spec
-          return (x!_spec ∧ˢ (.app S (.fst (.var x!)) =ˢ .some (.snd (.var x!))), .bool)
+          castMembership.optionForward x S hα.toCastPath hβ.toCastPath
         else if hβ : β' ⊑ β then
         /-
           x : α × β    S : α' -> Option β'    α ⊑ α'    β' ⊑ β
           ------------------------------------------------------
           x ∈ S    ↪    x!_spec ∧ S!_spec ⇒ S! (fst x!) = some (snd x)
         -/
-          let ⟨x!, x!_spec⟩ ← loosenAux_prf "mem!" hα.toCastPath (.fst x)
-          declareConstWithSpec x! α' x!_spec
-          let ⟨S!, S!_spec⟩ ← loosenAux_prf "mem!" (β := .fun α' (.option β)) (.fun (not_eq_of_beq_eq_false rfl) (castPath.reflexive α') (.opt hβ.toCastPath)) S
-          declareConstWithSpec S! (.fun α' (.option β)) S!_spec
-          return (x!_spec ∧ˢ S!_spec ∧ˢ (.app (.var S!) (.var x!) =ˢ .some (.snd x)), .bool)
+          castMembership.optionCommon x S
+            hα.toCastPath (castPath.reflexive β)
+            (castPath.reflexive α') hβ.toCastPath
         else throw s!"castMembership:3: Failed to unify {β} with {β'}"
       else if hα : α' ⊑ α then
         if hβ : β ⊑ β' then
@@ -144,24 +165,18 @@ def castMembership : Term × SMTType → Term × SMTType → Encoder (Term × SM
           ------------------------------------------------------
           x ∈ S    ↪    y!_spec ∧ S!_spec ⇒ S! (fst x) = some y!
         -/
-          let ⟨y!, y!_spec⟩ ← loosenAux_prf "mem!" hβ.toCastPath (.snd x)
-          declareConstWithSpec y! β' y!_spec
-          let ⟨S!, S!_spec⟩ ← loosenAux_prf "mem!"
-            (β := .fun α (.option β'))
-            (.fun (not_eq_of_beq_eq_false rfl) hα.toCastPath (castPath.reflexive (.option β'))) S
-          declareConstWithSpec S! (.fun α (.option β')) S!_spec
-          return (y!_spec ∧ˢ S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.var y!)), .bool)
+          castMembership.optionCommon x S
+            (castPath.reflexive α) hβ.toCastPath
+            hα.toCastPath (castPath.reflexive β')
         else if hβ : β' ⊑ β then
         /-
           x : α × β    S : α' -> Option β'    α' ⊑ α    β' ⊑ β
           ------------------------------------------------------
           x ∈ S    ↪    S!_spec ⇒ S! (fst x) = some (snd x)
         -/
-          let ⟨S!, S!_spec⟩ ← loosenAux_prf "mem!"
-            (β := .fun α (.option β))
-            (.fun (not_eq_of_beq_eq_false rfl) hα.toCastPath (.opt hβ.toCastPath)) S
-          declareConstWithSpec S! (.fun α (.option β)) S!_spec
-          return (S!_spec ∧ˢ (.app (.var S!) (.fst x) =ˢ .some (.snd x)), .bool)
+          castMembership.optionCommon x S
+            (castPath.reflexive α) (castPath.reflexive β)
+            hα.toCastPath hβ.toCastPath
         else throw s!"castMembership:4: Failed to unify {β} with {β'}"
       else throw s!"castMembership:5: Failed to unify {α} with {α'}"
     | _ => throw s!"castMembership: Expected a pair type, got {α}"
@@ -189,6 +204,7 @@ def castUnion.fun (S T : Term) {α β α' β' : SMTType} (hβ : β ≠ .bool) (c
   match β' with
   | .option σ =>
     let p ← freshVar (.pair α' σ) "union!"
+    eraseFromContext p
     return (.lambda [p] [.pair α' σ]
       (.or (.eq (.app (.var S!) (.fst (.var p))) (.some (.snd (.var p))))
            (.eq (.app T (.fst (.var p))) (.some (.snd (.var p))))),
@@ -237,6 +253,9 @@ def castUnion : Term × SMTType → Term × SMTType → Encoder (Term × SMTType
       let x ← freshVar γ "union!"
       SMT.eraseFromContext x
       return (.lambda [x] [γ] (.or (.app S (.var x)) (.app T (.var x))), .fun γ .bool)
+    | .fun γ (.option δ), _, rfl =>
+      castUnion.fun S T (by simp) (castPath.reflexive γ)
+        (castPath.reflexive (.option δ))
     | _, _, rfl => throw s!"castUnion: direct path requires function-to-bool type, got {α}"
   else if h : α ⊑ β then castUnionAux S T h.toCastPath
   else if h : β ⊑ α then castUnionAux T S h.toCastPath
@@ -264,6 +283,7 @@ def castInter.fun (S T : Term) {α β α' β' : SMTType}
   match β' with
   | .option σ =>
     let p ← freshVar (.pair α' σ) "inter!"
+    eraseFromContext p
     return (.lambda [p] [.pair α' σ]
       (.and (.eq (.app (.var S!) (.fst (.var p)))
               (.some (.snd (.var p))))
@@ -317,6 +337,9 @@ def castInter : Term × SMTType → Term × SMTType → Encoder (Term × SMTType
       let x ← freshVar γ "inter!"
       SMT.eraseFromContext x
       return (.lambda [x] [γ] (.and (.app S (.var x)) (.app T (.var x))), .fun γ .bool)
+    | .fun γ (.option δ), _, rfl =>
+      castInter.fun S T (by simp) (castPath.reflexive γ)
+        (castPath.reflexive (.option δ))
     | _, _, rfl => throw s!"castInter: direct path requires function-to-bool type, got {α}"
   else if h : α ⊑ β then castInterAux S T h.toCastPath
   else if h : β ⊑ α then castInterAux T S h.toCastPath

@@ -272,10 +272,10 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       return (.lambda [z] [τ] (.ite (.app D' (.var z)) P' (.bool false)), .fun τ .bool)
     | _ => throw s!"encodeTerm:collect: Expected a set or a function, got {τD}"
   | .lambda vs D P, E => do
-    /- Encode `λ vs ∈ D. P` (B type `(τ ×ᴮ β).set`) as the SMT relation
-       `{xy : τ × β | xy.π₁ ∈ D ∧ xy.π₂ = P[xy.π₁/vs]}`, i.e. the graph of the
-       partial function. The resulting SMT type is `.fun (.pair τ β) .bool`,
-       matching `(τ ×ᴮ β).set.toSMTType`.
+    /- Encode `λ vs ∈ D. P` (B type `(τ ×ᴮ β).set`) as the option-valued SMT
+       function `fun x => if x ∈ D then some P[x/vs] else none`. Its graph is
+       the source set of pairs, while the emitted SMT representation preserves
+       the fact that the relation is functional.
 
        `D` must have SMT type `.fun τ .bool` (a set / characteristic function),
        guaranteed by `B.Typing.lambda`'s requirement that `D : .set τ`. -/
@@ -288,15 +288,13 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let decls_snap := (← get).env.declarations
       let ⟨P', γ⟩ ← encodeTerm P E
       ensureDeclarationsUnchanged decls_snap.length "encodeTerm:lambda"
-      -- Single bound variable `xy : τ × γ` representing the input-output pair
-      let xy ← freshVar (.pair τ γ)
-      -- Destructure `xy.fst` (type `τ`) into the individual vs components
-      let Px := substList vs (toDestPair vs (.fst (.var xy))) P'
-      let x_mem_D' := .app D' (.fst (.var xy))
-      SMT.eraseFromContext xy
-      return (.lambda [xy] [.pair τ γ]
-        (.and x_mem_D' (.eq (.snd (.var xy)) Px)),
-        .fun (.pair τ γ) .bool)
+      let x ← freshVar τ
+      let Px := substList vs (toDestPair vs (.var x)) P'
+      let x_mem_D' := .app D' (.var x)
+      SMT.eraseFromContext x
+      return (.lambda [x] [τ]
+        (.ite x_mem_D' (.some Px) (none$ γ)),
+        .fun τ (.option γ))
     | _ => throw s!"encodeTerm:lambda: Expected a set (.fun τ .bool), got {τD}"
   | .pfun A B, E => do
     /-

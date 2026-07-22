@@ -364,20 +364,21 @@ set_option maxHeartbeats 9000000 in
 /-- The option-function powerset branch records the generated graph helper
 and then reuses the direct characteristic-predicate continuation. -/
 theorem graph_scoped_contract.{u}
-    (alpha beta : BType) (S : SMT.Term) :
+    (alpha beta : BType) (sigma tau : SMTType)
+    (hsigma : BType.SupportedSMT alpha sigma)
+    (htau : BType.SupportedSMT beta tau) (S : SMT.Term) :
     EncodePowTailRepScopedSpec.{u} (alpha ×ᴮ beta) S
-      (SMTType.fun alpha.toSMTType
-        (SMTType.option beta.toSMTType)) := by
+      (SMTType.fun sigma (SMTType.option tau)) := by
   unfold EncodePowTailRepScopedSpec
   intro Lambda n used decl typS _supported bvS_used
-  rw [encodePowTail_graph_eq]
+  rw [encodePowTail_graph_eq sigma tau S]
   mstart
   mintro pre ∀St
   mpure pre
   obtain ⟨rfl, rfl, St_keys, rfl, rfl⟩ := pre
   let graphPath := castPath.graph
-    (castPath.reflexive alpha.toSMTType)
-    (castPath.reflexive beta.toSMTType)
+    (castPath.reflexive sigma)
+    (castPath.reflexive tau)
   mspec (Std.Do.Triple.and _
     (Std.Do.Triple.and _
       (Std.Do.Triple.and _
@@ -408,8 +409,7 @@ theorem graph_scoped_contract.{u}
       ⟨helper_used1, spec_bv_used1, _used_sub_bv⟩⟩ := pre
   mspec SMT.declareConst_addSpec_spec (x! := helper)
     (x!_spec := spec)
-    (τ := SMTType.fun
-      (SMTType.pair alpha.toSMTType beta.toSMTType) SMTType.bool)
+    (τ := SMTType.fun (SMTType.pair sigma tau) SMTType.bool)
     (decl := St1.env.declarations) (as := St1.env.asserts)
     (n := St1.env.freshvarsc) (Γ := St1.types)
     (used := St1.env.usedVars)
@@ -419,8 +419,7 @@ theorem graph_scoped_contract.{u}
   obtain ⟨St2_decl_eq, St2_asserts, _St2_fvc, St2_used, St2_types⟩ := pre
   clear St2_asserts
   have typHelper2 : St2.types ⊢ˢ SMT.Term.var helper :
-      SMTType.fun
-        (SMTType.pair alpha.toSMTType beta.toSMTType) SMTType.bool := by
+      SMTType.fun (SMTType.pair sigma tau) SMTType.bool := by
     rw [St2_types]
     exact typ_helper
   have keys2 : St2.types.keys ⊆ St2.env.usedVars := by
@@ -428,10 +427,10 @@ theorem graph_scoped_contract.{u}
     exact keys_sub1
   mspec direct_scoped_contract
     (alpha ×ᴮ beta)
-    (SMTType.pair alpha.toSMTType beta.toSMTType)
-    (BType.SupportedSMT.canonical (alpha ×ᴮ beta))
+    (SMTType.pair sigma tau)
+    (.prod hsigma htau)
     (SMT.Term.var helper) typHelper2
-    (.setPred (BType.SupportedSMT.canonical (alpha ×ᴮ beta)))
+    (.setPred (.prod hsigma htau))
     (by simp [SMT.bv])
   rename_i outPair
   obtain ⟨out, sigmaOut⟩ := outPair
@@ -443,8 +442,7 @@ theorem graph_scoped_contract.{u}
       tail_trace, tail_fresh, tail_source_obs, tail_out_fv,
       tail_spec_fv, tail_semantics, tail_specs_typing,
       tail_scoped_typing⟩ := post
-  let helperTy := SMTType.fun
-    (SMTType.pair alpha.toSMTType beta.toSMTType) SMTType.bool
+  let helperTy := SMTType.fun (SMTType.pair sigma tau) SMTType.bool
   let DltHelper := helperSpecChunk helper helperTy spec
   have St_sub1 : St.types ⊆ St1.types := fun v hv =>
     St1_types_sub
@@ -686,7 +684,7 @@ theorem graph_scoped_contract.{u}
           (⟨X, BType.set (alpha ×ᴮ beta), hX⟩ : B.Dom)
           (⟨Hval, helperTy, hHval⟩ : SMT.Dom) :=
         RDomCastSupported.of_cast_to_supported X_rel
-          (.setPred (BType.SupportedSMT.canonical (alpha ×ᴮ beta)))
+          (.setPred (.prod hsigma htau))
           graphPath castPair
       obtain ⟨ThetaOut, hcovOut, denOut, ThetaOut_ext,
           ThetaOut_none, respectsOut, ThetaOut_dom, specsTail,
@@ -829,7 +827,7 @@ theorem graph_scoped_contract.{u}
           (⟨X, BType.set (alpha ×ᴮ beta), hX⟩ : B.Dom)
           (⟨Hval, helperTy, hHval⟩ : SMT.Dom) :=
         RDomCastSupported.of_cast_to_supported X_rel
-          (.setPred (BType.SupportedSMT.canonical (alpha ×ᴮ beta)))
+          (.setPred (.prod hsigma htau))
           graphPath castPair
       exact tail_semantics.2 GammaSup tail_scope2 Theta hcovHelper
         respectsHelper specsTail X hX
@@ -846,8 +844,8 @@ theorem supported_scoped_contract.{u}
   cases supported with
   | @setPred _ rho hrho =>
       exact direct_scoped_contract beta rho hrho S
-  | optionFun alpha gamma =>
-      exact graph_scoped_contract alpha gamma S
+  | @optionFun alpha gamma sigma tau hsigma htau =>
+      exact graph_scoped_contract alpha gamma sigma tau hsigma htau S
 
 private theorem encodeTerm_pow_via_tail_scoped
     (S : B.Term) (E : B.Env) :

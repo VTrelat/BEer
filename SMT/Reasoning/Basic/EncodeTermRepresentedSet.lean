@@ -914,39 +914,36 @@ theorem encodePowTail_direct_rep_spec.{u}
           · simpa [tpow, pred] using hden_pow
 
 theorem encodePowTail_graph_eq
-    (alpha beta : BType) (S : SMT.Term) :
+    (sigma tau : SMTType) (S : SMT.Term) :
     encodePowTail S
-        (SMTType.fun alpha.toSMTType
-          (SMTType.option beta.toSMTType)) = (do
+        (SMTType.fun sigma (SMTType.option tau)) = (do
       let ⟨helper, helperSpec⟩ ← loosenAux_prf "pow!"
-        (castPath.graph (castPath.reflexive alpha.toSMTType)
-          (castPath.reflexive beta.toSMTType)) S
+        (castPath.graph (castPath.reflexive sigma)
+          (castPath.reflexive tau)) S
       declareConstWithSpec helper
-        (SMTType.fun
-          (SMTType.pair alpha.toSMTType beta.toSMTType) SMTType.bool)
+        (SMTType.fun (SMTType.pair sigma tau) SMTType.bool)
         helperSpec
       encodePowTail (SMT.Term.var helper)
-        (SMTType.fun
-          (SMTType.pair alpha.toSMTType beta.toSMTType)
-          SMTType.bool)) := by
+        (SMTType.fun (SMTType.pair sigma tau) SMTType.bool)) := by
   rfl
 
 set_option maxHeartbeats 2400000 in
 theorem encodePowTail_graph_rep_spec.{u}
-    (alpha beta : BType) (S : SMT.Term) :
+    (alpha beta : BType) (sigma tau : SMTType)
+    (hsigma : BType.SupportedSMT alpha sigma)
+    (htau : BType.SupportedSMT beta tau) (S : SMT.Term) :
     EncodePowTailRepSpec.{u} (alpha ×ᴮ beta) S
-      (SMTType.fun alpha.toSMTType
-        (SMTType.option beta.toSMTType)) := by
+      (SMTType.fun sigma (SMTType.option tau)) := by
   unfold EncodePowTailRepSpec
   intro Lambda n used typ_S _supported bv_S_used
-  rw [encodePowTail_graph_eq alpha beta S]
+  rw [encodePowTail_graph_eq sigma tau S]
   mstart
   mintro pre ∀St₀
   mpure pre
   obtain ⟨rfl, rfl, St₀_sub, rfl⟩ := pre
   let graphPath := castPath.graph
-    (castPath.reflexive alpha.toSMTType)
-    (castPath.reflexive beta.toSMTType)
+    (castPath.reflexive sigma)
+    (castPath.reflexive tau)
   mspec loosenAux_prf_spec_univ (Λ := St₀.types)
     (n := St₀.env.freshvarsc) (used := St₀.env.usedVars)
     typ_S bv_S_used graphPath
@@ -960,8 +957,7 @@ theorem encodePowTail_graph_rep_spec.{u}
       typ_helper_St₁, _, _, adequacy⟩ := post₁
     mspec SMT.declareConst_addSpec_spec (x! := helper)
       (x!_spec := helperSpec)
-      (τ := SMTType.fun
-        (SMTType.pair alpha.toSMTType beta.toSMTType) SMTType.bool)
+      (τ := SMTType.fun (SMTType.pair sigma tau) SMTType.bool)
       (decl := St₁.env.declarations) (as := St₁.env.asserts)
       (n := St₁.env.freshvarsc) (Γ := St₁.types)
       (used := St₁.env.usedVars)
@@ -970,8 +966,7 @@ theorem encodePowTail_graph_rep_spec.{u}
     mpure post₂
     obtain ⟨_, _, _, St₂_used_eq, St₂_types_eq⟩ := post₂
     have typ_helper_St₂ : St₂.types ⊢ˢ SMT.Term.var helper :
-        SMTType.fun (SMTType.pair alpha.toSMTType beta.toSMTType)
-          SMTType.bool := by
+        SMTType.fun (SMTType.pair sigma tau) SMTType.bool := by
       rwa [St₂_types_eq]
     have St₂_keys_sub : St₂.types.keys ⊆ St₂.env.usedVars := by
       intro v hv
@@ -979,16 +974,16 @@ theorem encodePowTail_graph_rep_spec.{u}
       rw [St₂_used_eq]
       exact St₁_keys_sub hv
     have helper_lookup_St₁ : St₁.types.lookup helper = some
-        (SMTType.fun (SMTType.pair alpha.toSMTType beta.toSMTType)
-          SMTType.bool) := SMT.Typing.varE typ_helper_St₁
+        (SMTType.fun (SMTType.pair sigma tau) SMTType.bool) :=
+      SMT.Typing.varE typ_helper_St₁
     have helper_used_St₁ : helper ∈ St₁.env.usedVars :=
       St₁_keys_sub (AList.lookup_isSome.mp
         (Option.isSome_of_eq_some helper_lookup_St₁))
     mspec encodePowTail_direct_rep_spec (alpha ×ᴮ beta)
-      (alpha ×ᴮ beta).toSMTType
-      (BType.SupportedSMT.canonical (alpha ×ᴮ beta))
+      (SMTType.pair sigma tau)
+      (.prod hsigma htau)
       (SMT.Term.var helper) typ_helper_St₂
-      (.setPred (BType.SupportedSMT.canonical (alpha ×ᴮ beta)))
+      (.setPred (.prod hsigma htau))
       (by simp [SMT.bv])
     rename_i outPow
     obtain ⟨tPow, sigmaPow⟩ := outPow
@@ -1037,16 +1032,15 @@ theorem encodePowTail_graph_rep_spec.{u}
           _helper_total⟩ :=
         adequacy Theta hcov_S respects_S pf
           (⟨Sval,
-            SMTType.fun alpha.toSMTType
-              (SMTType.option beta.toSMTType), hSval⟩ : SMT.Dom)
+            SMTType.fun sigma (SMTType.option tau), hSval⟩ : SMT.Dom)
           hden_S
       rcases denHelper with ⟨Hval, Hsigma, hHval⟩
       dsimp at denHelper_type
       subst Hsigma
       let ThetaH := Function.update Theta helper
         (some (⟨Hval,
-          SMTType.fun (SMTType.pair alpha.toSMTType beta.toSMTType)
-            SMTType.bool, hHval⟩ : SMT.Dom))
+          SMTType.fun (SMTType.pair sigma tau) SMTType.bool,
+            hHval⟩ : SMT.Dom))
       have helper_none : Theta helper = none :=
         Theta_none helper helper_not_used
       have ThetaH_ext : RenamingContext.Extends ThetaH Theta :=
@@ -1060,26 +1054,23 @@ theorem encodePowTail_graph_rep_spec.{u}
       have hden_helper :
           ⟦(SMT.Term.var helper).abstract ThetaH hcov_helper⟧ˢ =
             some (⟨Hval,
-              SMTType.fun
-                (SMTType.pair alpha.toSMTType beta.toSMTType)
-                SMTType.bool, hHval⟩ : SMT.Dom) := by
+              SMTType.fun (SMTType.pair sigma tau) SMTType.bool,
+                hHval⟩ : SMT.Dom) := by
         simpa only [ThetaH, proof_irrel_heq] using hden_var
       have respects_helper :
           SMT.RenamingContext.RespectsTypeContextOnFV
             ThetaH St₂.types (SMT.Term.var helper) := by
-        intro v sigma hv hlookup
+        intro v sigma_v hv hlookup
         rw [SMT.fv, List.mem_singleton] at hv
         subst v
         have helper_lookup_St₂ : St₂.types.lookup helper = some
-            (SMTType.fun
-              (SMTType.pair alpha.toSMTType beta.toSMTType)
-              SMTType.bool) := SMT.Typing.varE typ_helper_St₂
+            (SMTType.fun (SMTType.pair sigma tau) SMTType.bool) :=
+          SMT.Typing.varE typ_helper_St₂
         rw [helper_lookup_St₂] at hlookup
         cases hlookup
         refine ⟨(⟨Hval,
-          SMTType.fun
-            (SMTType.pair alpha.toSMTType beta.toSMTType)
-            SMTType.bool, hHval⟩ : SMT.Dom), ?_, rfl⟩
+          SMTType.fun (SMTType.pair sigma tau) SMTType.bool,
+            hHval⟩ : SMT.Dom), ?_, rfl⟩
         simp [ThetaH, Function.update_self]
       have ThetaH_none : ∀ v ∉ St₂.env.usedVars,
           ThetaH v = none := by
@@ -1113,24 +1104,23 @@ theorem encodePowTail_graph_rep_spec.{u}
             (AList.lookup_isSome.mpr hv₀)
           exact AList.lookup_isSome.mp (Option.isSome_of_eq_some
             (AList.lookup_of_subset Lambda_sub_St₂ hlookup))
-      have X_rel_canonical :
+      have X_rel_graph :
           RDomCastSupported
             (⟨X, BType.set (alpha ×ᴮ beta), hX⟩ : B.Dom)
             (⟨Hval,
-              SMTType.fun
-                (SMTType.pair alpha.toSMTType beta.toSMTType)
-                SMTType.bool, hHval⟩ : SMT.Dom) :=
-        RDomCastSupported.of_cast_to_canonical X_rel graphPath cast_pair
+              SMTType.fun (SMTType.pair sigma tau) SMTType.bool,
+                hHval⟩ : SMT.Dom) :=
+        RDomCastSupported.of_cast_to_supported X_rel
+          (.setPred (.prod hsigma htau)) graphPath cast_pair
       obtain ⟨ThetaPow, hcovPow, denPow, ThetaPow_ext,
           ThetaPow_none, respectsPow, ThetaPow_dom, hdenPow,
           denPow_type, Pow_rel⟩ :=
         semanticPow ThetaH hcov_helper ThetaH_none respects_helper
           ThetaH_dom X hX
           (⟨Hval,
-            SMTType.fun
-              (SMTType.pair alpha.toSMTType beta.toSMTType)
-              SMTType.bool, hHval⟩ : SMT.Dom)
-          hden_helper X_rel_canonical
+            SMTType.fun (SMTType.pair sigma tau) SMTType.bool,
+              hHval⟩ : SMT.Dom)
+          hden_helper X_rel_graph
       exact ⟨ThetaPow, hcovPow, denPow,
         RenamingContext.extends_trans ThetaPow_ext ThetaH_ext,
         ThetaPow_none, respectsPow, ThetaPow_dom, hdenPow,
@@ -1143,8 +1133,9 @@ theorem encodePowTail_supported_rep_spec.{u}
   cases supported with
   | @setPred _ rho hrho =>
       exact encodePowTail_direct_rep_spec beta rho hrho S
-  | optionFun alpha gamma =>
-      exact encodePowTail_graph_rep_spec alpha gamma S
+  | @optionFun alpha gamma sigma tau hsigma htau =>
+      exact encodePowTail_graph_rep_spec alpha gamma sigma tau
+        hsigma htau S
 
 private theorem encodeTerm_pow_via_tail (S : B.Term) (E : B.Env) :
     encodeTerm (B.Term.pow S) E = (do

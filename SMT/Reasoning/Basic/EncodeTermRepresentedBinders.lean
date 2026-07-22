@@ -602,6 +602,372 @@ theorem single_lambda_fapply_eq_body.{u}
     rw [Subtype.ext_iff] at h_fapply
     exact h_fapply
 
+open Classical in
+/-- Package one emitted Boolean lambda as a represented source set once its
+body has an exact pointwise source correspondence. -/
+theorem represented_setPred_lambda_of_pointwise.{u}
+    {alpha : BType} {sigma : SMTType}
+    (hsigma : BType.SupportedSMT alpha sigma)
+    {S : ZFSet.{u}} (hSsub : S ⊆ ⟦alpha⟧ᶻ)
+    {Theta : SMT.RenamingContext.Context.{u}} {z : SMT.𝒱}
+    {body : SMT.Term} {lamVal : SMT.Dom.{u}}
+    (hcov_lambda : SMT.RenamingContext.CoversFV Theta
+      ((λˢ [z]) [sigma] body))
+    (hden_lambda : ⟦((λˢ [z]) [sigma] body).abstract
+      Theta hcov_lambda⟧ˢ = some lamVal)
+    (hlam_type : lamVal.snd.fst =
+      SMTType.fun sigma SMTType.bool)
+    (hbody_total : ∀ (y : ZFSet.{u}) (hy : y ∈ ⟦sigma⟧ᶻ),
+      ∃ (hcov_body : SMT.RenamingContext.CoversFV
+          (Function.update Theta z
+            (some (⟨y, sigma, hy⟩ : SMT.Dom))) body)
+        (bodyVal : SMT.Dom.{u}),
+        ⟦body.abstract (Function.update Theta z
+          (some (⟨y, sigma, hy⟩ : SMT.Dom))) hcov_body⟧ˢ =
+            some bodyVal)
+    (hforward : ∀ (y : ZFSet.{u}) (hy : y ∈ ⟦sigma⟧ᶻ)
+      (hcov_body : SMT.RenamingContext.CoversFV
+        (Function.update Theta z
+          (some (⟨y, sigma, hy⟩ : SMT.Dom))) body)
+      (bodyVal : SMT.Dom.{u}),
+      ⟦body.abstract (Function.update Theta z
+        (some (⟨y, sigma, hy⟩ : SMT.Dom))) hcov_body⟧ˢ =
+          some bodyVal →
+      bodyVal.fst = ZFSet.zftrue →
+      ∃ (x : ZFSet.{u}) (hx : x ∈ S),
+        RDomCastSupported
+          (⟨x, alpha, hSsub hx⟩ : B.Dom)
+          (⟨y, sigma, hy⟩ : SMT.Dom))
+    (hbackward : ∀ (x : ZFSet.{u}) (hx : x ∈ S),
+      ∃ (y : ZFSet.{u}) (hy : y ∈ ⟦sigma⟧ᶻ)
+        (_hrel : RDomCastSupported
+          (⟨x, alpha, hSsub hx⟩ : B.Dom)
+          (⟨y, sigma, hy⟩ : SMT.Dom))
+        (hcov_body : SMT.RenamingContext.CoversFV
+          (Function.update Theta z
+            (some (⟨y, sigma, hy⟩ : SMT.Dom))) body)
+        (bodyVal : SMT.Dom.{u}),
+        ⟦body.abstract (Function.update Theta z
+          (some (⟨y, sigma, hy⟩ : SMT.Dom))) hcov_body⟧ˢ =
+            some bodyVal ∧
+        bodyVal.fst = ZFSet.zftrue) :
+    RDomCastSupported
+      (⟨S, BType.set alpha, ZFSet.mem_powerset.mpr hSsub⟩ : B.Dom)
+      lamVal := by
+  rcases lamVal with ⟨F, rho, hF⟩
+  dsimp at hlam_type hden_lambda ⊢
+  subst rho
+  have hFfunc : ⟦sigma⟧ᶻ.IsFunc ZFSet.𝔹 F := by
+    simpa [SMTType.toZFSet] using hF
+  apply RDomCastSupported.setPred_of_pointwise
+    hsigma hSsub hF hFfunc
+  · intro y hy htrue
+    obtain ⟨hcov_body, bodyVal, hden_body⟩ :=
+      hbody_total y hy
+    have happly := single_lambda_fapply_eq_body
+      (beta := SMTType.bool) hcov_lambda hden_lambda hFfunc rfl hy
+      hcov_body hden_body
+    exact hforward y hy hcov_body bodyVal hden_body
+      (happly.symm.trans htrue)
+  · intro x hx
+    obtain ⟨y, hy, hrel, hcov_body, bodyVal, hden_body,
+      hbody_true⟩ := hbackward x hx
+    refine ⟨y, hy, hrel, ?_⟩
+    have happly := single_lambda_fapply_eq_body
+      (beta := SMTType.bool) hcov_lambda hden_lambda hFfunc rfl hy
+      hcov_body hden_body
+    exact happly.trans hbody_true
+
+/-- An SMT equality is true exactly when its equally typed denotations have
+the same underlying ZF value. -/
+theorem denote_eq_true_iff_fst_eq.{u}
+    {t₁ t₂ : SMT.PHOAS.Term SMT.Dom.{u}}
+    {D₁ D₂ Deq : SMT.Dom.{u}}
+    (h₁ : ⟦t₁⟧ˢ = some D₁) (h₂ : ⟦t₂⟧ˢ = some D₂)
+    (hty : D₁.snd.fst = D₂.snd.fst)
+    (heq : ⟦t₁ =ˢ' t₂⟧ˢ = some Deq) :
+    Deq.fst = ZFSet.zftrue ↔ D₁.fst = D₂.fst := by
+  constructor
+  · exact denote_eq_true_implies_fst_eq h₁ h₂ hty heq
+  · intro hfst
+    have htrue := denote_eq_eq_zftrue_of_fst_eq h₁ h₂ hty hfst
+    rw [heq] at htrue
+    exact congrArg (fun d : SMT.Dom => d.fst)
+      (Option.some.inj htrue)
+
+/-- Conjunction of two total Boolean denotations is total and is true exactly
+when both inputs are true. -/
+theorem denote_and_true_iff.{u}
+    {p q : SMT.PHOAS.Term SMT.Dom.{u}} {Dp Dq : SMT.Dom.{u}}
+    (hp : ⟦p⟧ˢ = some Dp) (hpType : Dp.snd.fst = SMTType.bool)
+    (hq : ⟦q⟧ˢ = some Dq) (hqType : Dq.snd.fst = SMTType.bool) :
+    ∃ D : SMT.Dom.{u},
+      ⟦p ∧ˢ' q⟧ˢ = some D ∧
+      D.snd.fst = SMTType.bool ∧
+      (D.fst = ZFSet.zftrue ↔
+        Dp.fst = ZFSet.zftrue ∧ Dq.fst = ZFSet.zftrue) := by
+  obtain ⟨D, hD, hDType⟩ :=
+    denote_and_some_bool_of_some_bool hp hpType hq hqType
+  refine ⟨D, hD, hDType, ?_⟩
+  constructor
+  · intro htrue
+    have hpBool : Dp.fst ∈ ZFSet.𝔹 := by
+      have h := Dp.snd.snd
+      rwa [hpType] at h
+    have hqBool : Dq.fst ∈ ZFSet.𝔹 := by
+      have h := Dq.snd.snd
+      rwa [hqType] at h
+    constructor
+    · rcases ZFSet.ZFBool.mem_𝔹_iff _ |>.mp hpBool with
+        hpFalse | hpTrue
+      · exfalso
+        have hfalse := denote_and_eq_zffalse_of_some_zffalse_left
+          hp hpType hpFalse hq hqType
+        rw [hfalse] at hD
+        have heq := Option.some_injective _ hD
+        rw [← congrArg (fun d : SMT.Dom => d.fst) heq] at htrue
+        exact ZFSet.zftrue_ne_zffalse htrue.symm
+      · exact hpTrue
+    · rcases ZFSet.ZFBool.mem_𝔹_iff _ |>.mp hqBool with
+        hqFalse | hqTrue
+      · exfalso
+        have hfalse := denote_and_eq_zffalse_of_some_zffalse_right
+          hp hpType hq hqType hqFalse
+        rw [hfalse] at hD
+        have heq := Option.some_injective _ hD
+        rw [← congrArg (fun d : SMT.Dom => d.fst) heq] at htrue
+        exact ZFSet.zftrue_ne_zffalse htrue.symm
+      · exact hqTrue
+  · rintro ⟨hpTrue, hqTrue⟩
+    have htrue := denote_and_eq_zftrue_of_some_zftrue
+      hp hpType hpTrue hq hqType hqTrue
+    have hEq : D =
+        (⟨ZFSet.zftrue, SMTType.bool,
+          ZFSet.ZFBool.zftrue_mem_𝔹⟩ : SMT.Dom) :=
+      Option.some.inj (hD.symm.trans htrue)
+    exact congrArg (fun d : SMT.Dom => d.fst) hEq
+
+/-- Disjunction of two total Boolean denotations is total and is true exactly
+when at least one input is true. -/
+theorem denote_or_true_iff.{u}
+    {p q : SMT.PHOAS.Term SMT.Dom.{u}} {Dp Dq : SMT.Dom.{u}}
+    (hp : ⟦p⟧ˢ = some Dp) (hpType : Dp.snd.fst = SMTType.bool)
+    (hq : ⟦q⟧ˢ = some Dq) (hqType : Dq.snd.fst = SMTType.bool) :
+    ∃ D : SMT.Dom.{u},
+      ⟦p ∨ˢ' q⟧ˢ = some D ∧
+      D.snd.fst = SMTType.bool ∧
+      (D.fst = ZFSet.zftrue ↔
+        Dp.fst = ZFSet.zftrue ∨ Dq.fst = ZFSet.zftrue) := by
+  have hpBool : Dp.fst ∈ ZFSet.𝔹 := by
+    have h := Dp.snd.snd
+    rwa [hpType] at h
+  have hqBool : Dq.fst ∈ ZFSet.𝔹 := by
+    have h := Dq.snd.snd
+    rwa [hqType] at h
+  rw [ZFSet.ZFBool.mem_𝔹_iff] at hpBool hqBool
+  rcases hpBool with hpFalse | hpTrue <;>
+    rcases hqBool with hqFalse | hqTrue
+  · have hnp := denote_not_eq_zftrue_of_some_zffalse
+      hp hpType hpFalse
+    have hnq := denote_not_eq_zftrue_of_some_zffalse
+      hq hqType hqFalse
+    have hand := denote_and_eq_zftrue_of_some_zftrue
+      hnp rfl rfl hnq rfl rfl
+    have hor := denote_not_eq_zffalse_of_some_zftrue hand rfl rfl
+    refine ⟨⟨ZFSet.zffalse, SMTType.bool,
+      ZFSet.ZFBool.zffalse_mem_𝔹⟩, hor, rfl, ?_⟩
+    constructor
+    · intro h
+      exact (ZFSet.zftrue_ne_zffalse h.symm).elim
+    · rintro (hpTrue | hqTrue)
+      · exact (ZFSet.zftrue_ne_zffalse
+          (hpTrue.symm.trans hpFalse)).elim
+      · exact (ZFSet.zftrue_ne_zffalse
+          (hqTrue.symm.trans hqFalse)).elim
+  · have hnp := denote_not_eq_zftrue_of_some_zffalse
+      hp hpType hpFalse
+    have hnq := denote_not_eq_zffalse_of_some_zftrue
+      hq hqType hqTrue
+    have hand := denote_and_eq_zffalse_of_some_zffalse_right
+      hnp rfl hnq rfl rfl
+    have hor := denote_not_eq_zftrue_of_some_zffalse hand rfl rfl
+    exact ⟨⟨ZFSet.zftrue, SMTType.bool,
+      ZFSet.ZFBool.zftrue_mem_𝔹⟩, hor, rfl,
+      fun _ => Or.inr hqTrue, fun _ => rfl⟩
+  · have hnp := denote_not_eq_zffalse_of_some_zftrue
+      hp hpType hpTrue
+    have hnq := denote_not_eq_zftrue_of_some_zffalse
+      hq hqType hqFalse
+    have hand := denote_and_eq_zffalse_of_some_zffalse_left
+      hnp rfl rfl hnq rfl
+    have hor := denote_not_eq_zftrue_of_some_zffalse hand rfl rfl
+    exact ⟨⟨ZFSet.zftrue, SMTType.bool,
+      ZFSet.ZFBool.zftrue_mem_𝔹⟩, hor, rfl,
+      fun _ => Or.inl hpTrue, fun _ => rfl⟩
+  · have hnp := denote_not_eq_zffalse_of_some_zftrue
+      hp hpType hpTrue
+    have hnq := denote_not_eq_zffalse_of_some_zftrue
+      hq hqType hqTrue
+    have hand := denote_and_eq_zffalse_of_some_zffalse_left
+      hnp rfl rfl hnq rfl
+    have hor := denote_not_eq_zftrue_of_some_zffalse hand rfl rfl
+    exact ⟨⟨ZFSet.zftrue, SMTType.bool,
+      ZFSet.ZFBool.zftrue_mem_𝔹⟩, hor, rfl,
+      fun _ => Or.inl hpTrue, fun _ => rfl⟩
+
+/-- At a represented pair `(a,b)`, the Boolean guard `f(a) = some b`
+denotes true exactly when the pair/true point belongs to the characteristic
+graph of the option-valued function denoted by `f`. -/
+theorem option_pair_guard_denotation.{u}
+    {sigma tau : SMTType} {f : SMT.Term} {p : SMT.𝒱}
+    {Delta : SMT.RenamingContext.Context.{u}} {denF : SMT.Dom.{u}}
+    (hcov_f : SMT.RenamingContext.CoversFV Delta f)
+    (hden_f : ⟦f.abstract Delta hcov_f⟧ˢ = some denF)
+    (hF_type : denF.snd.fst =
+      SMTType.fun sigma (SMTType.option tau))
+    (p_not_fv : p ∉ SMT.fv f)
+    (a b : ZFSet.{u}) (ha : a ∈ ⟦sigma⟧ᶻ)
+    (hb : b ∈ ⟦tau⟧ᶻ) :
+    let W : SMT.Dom.{u} := ⟨a.pair b, SMTType.pair sigma tau,
+      ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩⟩
+    let DeltaP := Function.update Delta p (some W)
+    let guard := SMT.Term.eq
+      (.app f (.fst (.var p))) (.some (.snd (.var p)))
+    ∃ (hcov_guard : SMT.RenamingContext.CoversFV DeltaP guard)
+      (denGuard : SMT.Dom.{u}),
+      ⟦guard.abstract DeltaP hcov_guard⟧ˢ = some denGuard ∧
+      denGuard.snd.fst = SMTType.bool ∧
+      (denGuard.fst = ZFSet.zftrue ↔
+        (a.pair b).pair ZFSet.zftrue ∈
+          optionGraph sigma tau denF.fst) := by
+  dsimp only
+  rcases denF with ⟨F, rho, hF⟩
+  dsimp at hF_type hden_f ⊢
+  subst rho
+  let denFun : SMT.Dom.{u} :=
+    ⟨F, SMTType.fun sigma (SMTType.option tau), hF⟩
+  let W : SMT.Dom.{u} := ⟨a.pair b, SMTType.pair sigma tau,
+    ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩⟩
+  let DeltaP := Function.update Delta p (some W)
+  have hcov_var : SMT.RenamingContext.CoversFV DeltaP (.var p) := by
+    intro v hv
+    rw [SMT.fv, List.mem_singleton] at hv
+    subst v
+    simp [DeltaP, Function.update_self]
+  have hden_var : ⟦(SMT.Term.var p).abstract DeltaP hcov_var⟧ˢ =
+      some W := by
+    simp [SMT.Term.abstract, SMT.denote, DeltaP,
+      Function.update_self]
+  have hcov_f_upd : SMT.RenamingContext.CoversFV DeltaP f :=
+    SMT.RenamingContext.coversFV_update_of_notMem p_not_fv hcov_f
+  have hden_f_upd : ⟦f.abstract DeltaP hcov_f_upd⟧ˢ = some denFun := by
+    have heq : ⟦f.abstract Delta hcov_f⟧ˢ =
+        ⟦f.abstract DeltaP hcov_f_upd⟧ˢ := by
+      rw [← SMT.RenamingContext.denote,
+        ← SMT.RenamingContext.denote]
+      exact SMT.RenamingContext.denote_update_of_notMem p_not_fv
+    rw [← heq]
+    simpa only [denFun] using hden_f
+  let denFst : SMT.Dom.{u} := ⟨a, sigma, ha⟩
+  let denSnd : SMT.Dom.{u} := ⟨b, tau, hb⟩
+  have hcov_fst : SMT.RenamingContext.CoversFV DeltaP
+      (.fst (.var p)) := by
+    intro v hv
+    exact hcov_var v (by simpa only [SMT.fv] using hv)
+  have hcov_snd : SMT.RenamingContext.CoversFV DeltaP
+      (.snd (.var p)) := by
+    intro v hv
+    exact hcov_var v (by simpa only [SMT.fv] using hv)
+  have hden_fst : ⟦(SMT.Term.fst (.var p)).abstract
+      DeltaP hcov_fst⟧ˢ = some denFst := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind, hden_var]
+    simp only [W, denFst, Option.bind_some]
+    exact congrArg Option.some
+      (SMTDom_eq_of_type_value rfl (ZFSet.π₁_pair a b))
+  have hden_snd : ⟦(SMT.Term.snd (.var p)).abstract
+      DeltaP hcov_snd⟧ˢ = some denSnd := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind, hden_var]
+    simp only [W, denSnd, Option.bind_some]
+    exact congrArg Option.some
+      (SMTDom_eq_of_type_value rfl (ZFSet.π₂_pair a b))
+  have hF_mem : F ∈
+      ⟦SMTType.fun sigma (SMTType.option tau)⟧ᶻ := hF
+  have hF_func : ⟦sigma⟧ᶻ.IsFunc ⟦SMTType.option tau⟧ᶻ
+      F := by
+    simpa [SMTType.toZFSet] using hF_mem
+  have ha_dom : a ∈ F.Dom (ZFSet.is_rel_of_is_func hF_func) := by
+    rw [ZFSet.is_func_dom_eq hF_func]
+    exact ha
+  let denApp : SMT.Dom.{u} :=
+    ⟨(ZFSet.fapply F (ZFSet.is_func_is_pfunc hF_func)
+        ⟨a, ha_dom⟩).val,
+      SMTType.option tau, ZFSet.fapply_mem_range _ _⟩
+  let someB := ZFSet.Option.some (S := ⟦tau⟧ᶻ) ⟨b, hb⟩
+  let denSome : SMT.Dom.{u} :=
+    ⟨someB.val, SMTType.option tau, someB.property⟩
+  have hcov_app : SMT.RenamingContext.CoversFV DeltaP
+      (.app f (.fst (.var p))) := by
+    intro v hv
+    rw [SMT.fv, List.mem_append] at hv
+    exact hv.elim (hcov_f_upd v) (hcov_fst v)
+  have hden_app : ⟦(SMT.Term.app f (.fst (.var p))).abstract
+      DeltaP hcov_app⟧ˢ = some denApp := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind, Option.bind_eq_some_iff]
+    refine ⟨denFun, ?_, ?_⟩
+    · simpa only [proof_irrel_heq] using hden_f_upd
+    · rw [Option.bind_eq_some_iff]
+      refine ⟨denFst, ?_, ?_⟩
+      · simpa only [proof_irrel_heq] using hden_fst
+      · simp only [dif_pos True.intro,
+          dif_pos (ZFSet.is_func_is_pfunc hF_func), dif_pos ha_dom,
+          denFst, denApp]
+  have hcov_some : SMT.RenamingContext.CoversFV DeltaP
+      (.some (.snd (.var p))) := by
+    intro v hv
+    exact hcov_snd v (by simpa only [SMT.fv] using hv)
+  have hden_some : ⟦(SMT.Term.some (.snd (.var p))).abstract
+      DeltaP hcov_some⟧ˢ = some denSome := by
+    rw [SMT.Term.abstract, SMT.denote, Option.pure_def,
+      Option.bind_eq_bind, hden_snd]
+    rfl
+  let guard := SMT.Term.eq
+    (.app f (.fst (.var p))) (.some (.snd (.var p)))
+  have hcov_guard : SMT.RenamingContext.CoversFV DeltaP guard := by
+    intro v hv
+    simp only [guard, SMT.fv, List.mem_append] at hv
+    rcases hv with (hvf | hvp) | hvp
+    · exact hcov_f_upd v hvf
+    · exact hcov_var v (by simpa only [SMT.fv] using hvp)
+    · exact hcov_var v (by simpa only [SMT.fv] using hvp)
+  obtain ⟨denGuard, hden_guard_raw, hdenGuard_type⟩ :=
+    denote_eq_some_of_some hden_app hden_some rfl
+  have hden_guard : ⟦guard.abstract DeltaP hcov_guard⟧ˢ =
+      some denGuard := by
+    dsimp only [guard]
+    rw [SMT.Term.abstract]
+    simpa only [proof_irrel_heq] using hden_guard_raw
+  have hvalue : denGuard.fst = ZFSet.zftrue ↔
+      denApp.fst = denSome.fst :=
+    denote_eq_true_iff_fst_eq hden_app hden_some rfl
+      hden_guard_raw
+  let graph := optionGraph sigma tau F
+  have hgraph_mem : graph ∈
+      ⟦SMTType.fun (SMTType.pair sigma tau) SMTType.bool⟧ᶻ := by
+    simpa only [graph] using optionGraph_mem sigma tau hF_mem
+  have hgraph_func : ⟦SMTType.pair sigma tau⟧ᶻ.IsFunc
+      ZFSet.𝔹 graph := by
+    simpa [SMTType.toZFSet] using hgraph_mem
+  have hab : a.pair b ∈ ⟦SMTType.pair sigma tau⟧ᶻ :=
+    ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩
+  have hpair := ZFSet.fapply_eq_zftrue_iff_pair hgraph_func hab
+  have hoption := optionGraph_fapply_eq_zftrue_iff hF_mem ha hb
+  refine ⟨hcov_guard, denGuard, hden_guard, hdenGuard_type, ?_⟩
+  simpa only [denApp, denSome, someB, graph, proof_irrel_heq] using
+    hvalue.trans (hoption.symm.trans hpair)
+
 private theorem denote_imp_eq_zffalse_of_true_false.{u}
     {p q : SMT.PHOAS.Term SMT.Dom.{u}} {Dp Dq : SMT.Dom.{u}}
     (hp : ⟦p⟧ˢ = some Dp) (hpTy : Dp.snd.fst = SMTType.bool)

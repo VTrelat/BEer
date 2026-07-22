@@ -36,20 +36,16 @@ private abbrev CollectScopedSemanticPost.{u}
 /-- The functional collection arm decomposes the input product into every
 left component followed by the final right component. -/
 private theorem option_collect_fromProdl
-    {alpha beta : SMTType} {a b : BType} {n : ℕ}
-    (halpha : alpha = a.toSMTType) (hbeta : beta = b.toSMTType)
-    (hn : 2 ≤ n) :
+    {alpha beta : SMTType} {n : ℕ} (hn : 2 ≤ n) :
     (alpha.fromProdl (n - 2)).concat beta =
-      ((a ×ᴮ b).toSMTType.fromProdl (n - 1)) := by
-  subst alpha
-  subst beta
+      ((SMTType.pair alpha beta).fromProdl (n - 1)) := by
   cases n with
   | zero => omega
   | succ n =>
     cases n with
     | zero => omega
     | succ n =>
-      simp [SMT.SMTType.fromProdl, BType.toSMTType]
+      cases alpha <;> simp [SMT.SMTType.fromProdl]
 
 set_option maxHeartbeats 8000000 in
 theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
@@ -347,14 +343,9 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
       obtain ⟨a, b, htau, halpha, hbeta⟩ :=
         RDomCastSupported.optionFunctionE D_rel
       have hraw_types : alphas'.concat beta' =
-          tau.toSMTType.fromProdl (vs.length - 1) := by
-        calc
-          alphas'.concat beta' =
-              (a ×ᴮ b).toSMTType.fromProdl (vs.length - 1) := by
-                rw [alphas'_def]
-                exact option_collect_fromProdl halpha hbeta vs_len_ge_two
-          _ = tau.toSMTType.fromProdl (vs.length - 1) := by
-                rw [htau]
+          (SMTType.pair alpha' beta').fromProdl (vs.length - 1) := by
+        rw [alphas'_def]
+        exact option_collect_fromProdl vs_len_ge_two
       have vs_target_len : vs.length = (alphas'.concat beta').length := by
         simp only [List.length_concat, alphas'_len]
         omega
@@ -393,29 +384,61 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
         intro i
         dsimp [xs]
         exact BType.get_reduce alphas_nemp vs_alphas_len i
+      have htarget_toProdl : (alphas'.concat beta').toProdl =
+          SMTType.pair alpha' beta' := by
+        rw [hraw_types]
+        exact SMT.SMTType.fromProdl_toProdl_roundtrip _ _ (by
+          rw [← hraw_types, List.length_concat, alphas'_len])
+      have pair_supported : BType.SupportedSMT (a ×ᴮ b)
+          (SMTType.pair alpha' beta') := .prod halpha hbeta
+      let Yrun : ZFSet := (SMTType.pair alpha' beta').defaultZFSet
+      have hYrun : Yrun ∈ ⟦SMTType.pair alpha' beta'⟧ᶻ :=
+        SMTType.mem_toZFSet_of_defaultZFSet
+      have hYrun_prodl : Yrun ∈ ⟦(alphas'.concat beta').toProdl⟧ᶻ := by
+        rw [htarget_toProdl]
+        exact hYrun
+      have run_rel : RDomCastSupported
+          (⟨tau.defaultZFSet, tau,
+            BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom)
+          (⟨Yrun, SMTType.pair alpha' beta', hYrun⟩ : SMT.Dom) := by
+        rw [htau]
+        simpa only [Yrun, proof_irrel_heq] using
+          RDomCastSupported.default_of_supported pair_supported
+      have alphas_target_len : alphas.length =
+          (alphas'.concat beta').length :=
+        vs_alphas_len.symm.trans vs_target_len
+      have run_rel_prodl : RDomCastSupported
+          (⟨tau.defaultZFSet, alphas.reduce (· ×ᴮ ·) alphas_nemp,
+            BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom)
+          (⟨Yrun, (alphas'.concat beta').toProdl,
+            hYrun_prodl⟩ : SMT.Dom) := by
+        simpa only [tau, htarget_toProdl, proof_irrel_heq] using run_rel
+      let ss : Fin vs.length → SMT.Dom := fun i =>
+        let j : Fin (alphas'.concat beta').length :=
+          Fin.cast vs_target_len i
+        ⟨Yrun.get (alphas'.concat beta').length j,
+          (alphas'.concat beta')[j],
+          SMTType.mem_get_of_mem_toProdl
+            (fun hs => by simpa [List.concat_eq_append] using hs)
+            hYrun_prodl⟩
       have hbound_type : ∀ i : Fin vs.length,
-          St2.types.lookup vs[i] = some (xs i).canonicalSMT.snd.fst := by
+          St2.types.lookup vs[i] = some (ss i).snd.fst := by
         intro i
-        have hi_tau : i.val <
-            (tau.toSMTType.fromProdl (vs.length - 1)).length := by
-          rw [fromProdl_length_of_hasArity tau_hasArity]
-          exact i.isLt
+        have hi_target : i.val < (alphas'.concat beta').length :=
+          i.isLt.trans_eq vs_target_len
         have hlookup : St2.types.lookup vs[i] =
-            some ((tau.toSMTType.fromProdl (vs.length - 1))[i.val]'hi_tau) := by
-          rw [St2_types, hraw_types]
-          exact foldl_insert_lookup_zip vs_nodup i.isLt hi_tau
-        have hget := toSMTType_get_eq_fromProdl_getElem
-          tau_hasArity i.isLt
-        rw [← hget] at hlookup
-        simpa [xs, B.Dom.canonicalSMT_type] using hlookup
+            some ((alphas'.concat beta')[i.val]'hi_target) := by
+          rw [St2_types]
+          exact foldl_insert_lookup_zip vs_nodup i.isLt hi_target
+        simpa [ss] using hlookup
       let XiP : B.RenamingContext.Context :=
         Function.updates Xi vs (List.ofFn fun i => some (xs i))
       let ThetaP0 : SMT.RenamingContext.Context :=
         Function.updates ThetaD vs
-          ((List.ofFn fun i => (xs i).canonicalSMT).map Option.some)
+          ((List.ofFn ss).map Option.some)
       have hThetaP0_map :
-          (List.ofFn fun i => (xs i).canonicalSMT).map Option.some =
-            List.ofFn (fun i => some (xs i).canonicalSMT) := by
+          (List.ofFn ss).map Option.some =
+            List.ofFn (fun i => some (ss i)) := by
         rw [List.map_ofFn]
         rfl
       have wf_P : B.RenWF Ebody.context XiP := by
@@ -434,11 +457,25 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
       have related_P : RValuationCastSupportedOnFV XiP ThetaP0 P := by
         dsimp [XiP, ThetaP0]
         rw [hThetaP0_map]
-        apply RValuationCastSupportedOnFV.updates_of_collect_default
-          vs_nodup tau_hasArity
-        intro v hv hv_not_vs
-        exact related_collect_out v
-          (B.fv.mem_collect (.inr ⟨hv, hv_not_vs⟩))
+        apply RValuationCastSupportedOnFV.updates vs_nodup xs ss
+        · intro v hv hv_not_vs
+          exact related_collect_out v
+            (B.fv.mem_collect (.inr ⟨hv, hv_not_vs⟩))
+        · intro i
+          let jalpha : Fin alphas.length := Fin.cast vs_alphas_len i
+          have hcomp := RDomCastSupported.get_of_reduce_toProdl
+            alphas_nemp alphas_target_len
+            BType.mem_toZFSet_of_defaultZFSet hYrun_prodl
+            run_rel_prodl jalpha
+          have hsource : xs i =
+              (⟨tau.defaultZFSet.get alphas.length jalpha, alphas[jalpha],
+                BType.mem_get_of_mem_reduce_toZFSet alphas_nemp
+                  BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom) := by
+            exact B.Dom.ext_type_value
+              (BType.get_reduce alphas_nemp vs_alphas_len i)
+              (ZFSet.get_cast vs_alphas_len i)
+          rw [hsource]
+          simpa [ss, jalpha] using hcomp
       have ThetaP0_none : ∀ v ∉ St2.env.usedVars, ThetaP0 v = none := by
         intro v hv
         dsimp [ThetaP0]
@@ -719,54 +756,6 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
               intro v hv heq
               subst z
               exact z_not_used (vs_in_St3_used v hv)
-            have prefix_component : ∀ (i : ℕ) (hi : i < vs.dropLast.length),
-                (xs ⟨i, by
-                  have hlt := dropLast_lt hi
-                  omega⟩).canonicalSMT.snd.fst =
-                    alphas'[i]'(by
-                      have hlt := dropLast_lt hi
-                      simpa only [alphas'_len] using hlt) := by
-              intro i hi
-              let j : Fin vs.length := ⟨i, by
-                have hlt := dropLast_lt hi
-                omega⟩
-              have hi_alpha : i < alphas'.length := by
-                have hlt := dropLast_lt hi
-                simpa only [alphas'_len] using hlt
-              have hraw_i : i <
-                  (tau.toSMTType.fromProdl (vs.length - 1)).length := by
-                rw [← hraw_types]
-                simp only [List.length_concat]
-                rw [alphas'_len]
-                have hlt := dropLast_lt hi
-                omega
-              have hconcat_i : i < (alphas'.concat beta').length := by
-                simp only [List.length_concat]
-                rw [alphas'_len]
-                have hlt := dropLast_lt hi
-                omega
-              have hraw_i_eq :
-                  (tau.toSMTType.fromProdl (vs.length - 1))[i]'hraw_i =
-                    (alphas'.concat beta')[i]'hconcat_i := by
-                have hopt := congrArg (fun l : List SMTType => l[i]?)
-                  hraw_types.symm
-                simpa only [List.getElem?_eq_getElem hraw_i,
-                  List.getElem?_eq_getElem hconcat_i, Option.some.injEq] using hopt
-              have hget := toSMTType_get_eq_fromProdl_getElem
-                tau_hasArity j.isLt
-              calc
-                (xs j).canonicalSMT.snd.fst =
-                    (tau.get vs.length j).toSMTType := by
-                      exact B.Dom.canonicalSMT_type _
-                _ = (tau.toSMTType.fromProdl (vs.length - 1))[i]'hraw_i := by
-                      simpa [j] using hget
-                _ = (alphas'.concat beta')[i]'hconcat_i := hraw_i_eq
-                _ = alphas'[i]'hi_alpha := by
-                      have hconcat_i' : i < (alphas' ++ [beta']).length := by
-                        simpa only [List.concat_eq_append] using hconcat_i
-                      simpa only [List.concat_eq_append] using
-                        (List.getElem_append_left (as := alphas') (bs := [beta']) hi_alpha :
-                          (alphas' ++ [beta'])[i]'hconcat_i' = alphas'[i]'hi_alpha)
             have prefix_lookup : ∀ (i : ℕ) (hi : i < vs.dropLast.length),
                 (St3.types.insert z alpha').lookup (vs.dropLast[i]'hi) =
                   some (alphas'[i]'(by
@@ -778,53 +767,34 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
                 omega⟩
               have hz : (vs[i]'(j.isLt)) ≠ z := z_ne_vs (vs[i]'(j.isLt))
                 (List.getElem_mem j.isLt)
+              have hi_alpha : i < alphas'.length := by
+                have hlt := dropLast_lt hi
+                simpa only [alphas'_len] using hlt
+              have hi_target : i < (alphas'.concat beta').length := by
+                simp only [List.length_concat, alphas'_len]
+                have hlt := dropLast_lt hi
+                omega
+              have hlookup : St2.types.lookup (vs[i]'j.isLt) =
+                  some ((alphas'.concat beta')[i]'hi_target) := by
+                rw [St2_types]
+                exact foldl_insert_lookup_zip vs_nodup j.isLt hi_target
+              have htarget : (alphas'.concat beta')[i]'hi_target =
+                  alphas'[i]'hi_alpha := by
+                have hi_append : i < (alphas' ++ [beta']).length := by
+                  simpa only [List.concat_eq_append] using hi_target
+                simpa only [List.concat_eq_append, proof_irrel_heq] using
+                  (List.getElem_append_left (as := alphas') (bs := [beta'])
+                    hi_alpha :
+                    (alphas' ++ [beta'])[i]'hi_append = alphas'[i]'hi_alpha)
               rw [List.getElem_dropLast hi, AList.lookup_insert_ne hz]
               calc
-                St3.types.lookup (vs[i]'(j.isLt)) =
-                    some (xs j).canonicalSMT.snd.fst :=
-                  AList.lookup_of_subset P_types_sub (hbound_type j)
+                St3.types.lookup (vs[i]'j.isLt) =
+                    some ((alphas'.concat beta')[i]'hi_target) :=
+                  AList.lookup_of_subset P_types_sub hlookup
                 _ = some (alphas'[i]'(by
                   have hlt := dropLast_lt hi
                   simpa only [alphas'_len] using hlt)) :=
-                  congrArg some (prefix_component i hi)
-            have last_component :
-                (xs ⟨vs.length - 1, by omega⟩).canonicalSMT.snd.fst =
-                  beta' := by
-              let j : Fin vs.length := ⟨vs.length - 1, by omega⟩
-              have hlast_raw : vs.length - 1 <
-                  (tau.toSMTType.fromProdl (vs.length - 1)).length := by
-                rw [← hraw_types]
-                simp only [List.length_concat]
-                rw [alphas'_len]
-                omega
-              have hlast_concat : vs.length - 1 <
-                  (alphas'.concat beta').length := by
-                simp only [List.length_concat]
-                rw [alphas'_len]
-                omega
-              have hlast_eq :
-                  (tau.toSMTType.fromProdl (vs.length - 1))[vs.length - 1]'hlast_raw =
-                    (alphas'.concat beta')[vs.length - 1]'hlast_concat := by
-                have hopt := congrArg (fun l : List SMTType => l[vs.length - 1]?)
-                  hraw_types.symm
-                simpa only [List.getElem?_eq_getElem hlast_raw,
-                  List.getElem?_eq_getElem hlast_concat, Option.some.injEq] using hopt
-              have hget := toSMTType_get_eq_fromProdl_getElem
-                tau_hasArity j.isLt
-              calc
-                (xs j).canonicalSMT.snd.fst =
-                    (tau.get vs.length j).toSMTType := by
-                      exact B.Dom.canonicalSMT_type _
-                _ = (tau.toSMTType.fromProdl (vs.length - 1))[vs.length - 1]'hlast_raw := by
-                      simpa [j] using hget
-                _ = (alphas'.concat beta')[vs.length - 1]'hlast_concat := hlast_eq
-                _ = beta' := by
-                      have hlast_concat' : vs.length - 1 <
-                          (alphas' ++ [beta']).length := by
-                        simpa only [List.concat_eq_append] using hlast_concat
-                      simpa only [List.concat_eq_append] using
-                        (List.getElem_concat_length (l := alphas') (a := beta')
-                          alphas'_len.symm hlast_concat')
+                  congrArg some htarget
             have last_lookup :
                 (St3.types.insert z alpha').lookup (vs.getLast vs_nemp) =
                   some beta' := by
@@ -832,12 +802,28 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
               let j : Fin vs.length := ⟨vs.length - 1, by omega⟩
               have hz : vs[vs.length - 1] ≠ z := z_ne_vs _
                 (List.getElem_mem j.isLt)
+              have hlast_target : vs.length - 1 <
+                  (alphas'.concat beta').length := by
+                simp only [List.length_concat, alphas'_len]
+                omega
+              have hlookup : St2.types.lookup vs[vs.length - 1] =
+                  some ((alphas'.concat beta')[vs.length - 1]'hlast_target) := by
+                rw [St2_types]
+                exact foldl_insert_lookup_zip vs_nodup j.isLt hlast_target
+              have hlast :
+                  (alphas'.concat beta')[vs.length - 1]'hlast_target = beta' := by
+                have hlast_append : vs.length - 1 <
+                    (alphas' ++ [beta']).length := by
+                  simpa only [List.concat_eq_append] using hlast_target
+                simpa only [List.concat_eq_append, proof_irrel_heq] using
+                  (List.getElem_concat_length (l := alphas') (a := beta')
+                    alphas'_len.symm hlast_append)
               rw [AList.lookup_insert_ne hz]
               calc
                 St3.types.lookup vs[vs.length - 1] =
-                    some (xs j).canonicalSMT.snd.fst :=
-                  AList.lookup_of_subset P_types_sub (hbound_type j)
-                _ = some beta' := congrArg some last_component
+                    some ((alphas'.concat beta')[vs.length - 1]'hlast_target) :=
+                  AList.lookup_of_subset P_types_sub hlookup
+                _ = some beta' := congrArg some hlast
             have z_not_bv_Denc : z ∉ SMT.bv Denc := by
               intro hz
               apply z_not_used
@@ -1168,17 +1154,12 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
             simpa only [tau, htau, proof_irrel_heq] using den_t
           have bound_expected : ∀ i : Fin vs.length,
               St3.types.lookup vs[i] =
-                some (((a ×ᴮ b).get vs.length i).toSMTType) := by
+                some (((alpha'.fromProdl (vs.length - 2)).concat beta')[i.val]'(by
+                    rw [← alphas'_def, ← vs_target_len]
+                    exact i.isLt)) := by
             intro i
-            calc
-              St3.types.lookup vs[i] =
-                  some (xs i).canonicalSMT.snd.fst :=
-                AList.lookup_of_subset P_types_sub (hbound_type i)
-              _ = some (((a ×ᴮ b).get vs.length i).toSMTType) := by
-                apply congrArg some
-                rw [B.Dom.canonicalSMT_type]
-                dsimp [xs]
-                rw [htau]
+            simpa [ss, alphas'_def, proof_irrel_heq] using
+              AList.lookup_of_subset P_types_sub (hbound_type i)
           have source_respects_upd : ∀ ss : Fin vs.length → SMT.Dom,
               (∀ i, St3.types.lookup vs[i] = some (ss i).snd.fst) →
               B.RenamingContext.RespectsTypeContextOnFV
@@ -1259,8 +1240,9 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
           refine ⟨ThetaP, hcov_lambda, ThetaP_ext0, related_out,
             ThetaP_none_out, respects_collect_out, target_respects_lambda_out,
             ThetaP_dom_out, lamVal, hden_lambda, hlam_type, ?_, ?_⟩
-          · have hrel_ab := represented_collect_option_lambda
+          · have hrel_ab := represented_collect_option_lambda_supported
               (D := D) (P := P) (alpha := a) (beta := b)
+              (sigma := alpha') (rho := beta')
               (Xi := Xi) (Dval := Dval) (hDval := hDval_ab)
               (T := T) (hT := hT_ab) (Denc := Denc) (Penc := Penc)
               (body := body) (z := z) (ThetaD := ThetaP)
@@ -1270,22 +1252,18 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
               (LambdaP := DCore.update vs (alphas'.concat beta')
                 vs_target_len) (GammaP := St3.types)
               (DltP := []) (sigmaP := SMTType.bool)
-              vs_nemp prefix_nemp_out vs_nodup Xi_fv hprod_arity_ab
+              vs_nemp prefix_nemp_out vs_nodup halpha hbeta Xi_fv hprod_arity_ab
               vs_len_ge_two den_D_ab den_collect_ab
-              (by simpa only [hbeta] using body_def)
-              (by simpa only [halpha, proof_irrel_heq] using hcov_lambda)
-              (by simpa only [halpha, proof_irrel_heq] using hden_lambda)
-              (by simpa only [halpha, hbeta] using hlam_type)
+              body_def hcov_lambda hden_lambda hlam_type
               (by simpa only [proof_irrel_heq] using hcov_D_upd)
               (by
                 intro W
                 rw [hden_D_upd_eq W, hden_D_ThetaP_eq]
                 exact hden_Denc)
-              (by simpa only [halpha, hbeta] using hDenc_type)
-              (by simpa only [halpha, hbeta] using hDenc_func)
-              (by simpa only [htau, halpha, hbeta, proof_irrel_heq] using D_rel)
-              (by simpa only [hbeta, proof_irrel_heq] using hcov_body_upd)
-              (by simpa only [halpha, hbeta, proof_irrel_heq] using hbody_total)
+              rfl hDenc_func
+              (by simpa only [htau, proof_irrel_heq] using D_rel)
+              (by simpa only [proof_irrel_heq] using hcov_body_upd)
+              (by simpa only [proof_irrel_heq] using hbody_total)
               hDapp_fv_not_bv hDapp_fv_disj_vs hvs_not_bv
               (by
                 intro hz
@@ -1332,7 +1310,7 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
                 (List.ofFn fun i => some (xs i))
             let ThetaP0_alt : SMT.RenamingContext.Context :=
               Function.updates ThetaD_alt vs
-                ((List.ofFn fun i => (xs i).canonicalSMT).map Option.some)
+                ((List.ofFn ss).map Option.some)
             have wf_P_alt : B.RenWF Ebody.context XiP_alt := by
               dsimp [XiP_alt]
               exact B.RenWF.updates_ofFn wf_alt vs_nodup vs_context_disj
@@ -1348,11 +1326,26 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
                 XiP_alt ThetaP0_alt P := by
               dsimp [XiP_alt, ThetaP0_alt]
               rw [hThetaP0_map]
-              apply RValuationCastSupportedOnFV.updates_of_collect_default
-                vs_nodup tau_hasArity
-              intro v hv hv_not_vs
-              exact related_collect_D_alt v
-                (B.fv.mem_collect (.inr ⟨hv, hv_not_vs⟩))
+              apply RValuationCastSupportedOnFV.updates vs_nodup xs ss
+              · intro v hv hv_not_vs
+                exact related_collect_D_alt v
+                  (B.fv.mem_collect (.inr ⟨hv, hv_not_vs⟩))
+              · intro i
+                let jalpha : Fin alphas.length := Fin.cast vs_alphas_len i
+                have hcomp := RDomCastSupported.get_of_reduce_toProdl
+                  alphas_nemp alphas_target_len
+                  BType.mem_toZFSet_of_defaultZFSet hYrun_prodl
+                  run_rel_prodl jalpha
+                have hsource : xs i =
+                    (⟨tau.defaultZFSet.get alphas.length jalpha,
+                      alphas[jalpha],
+                      BType.mem_get_of_mem_reduce_toZFSet alphas_nemp
+                        BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom) := by
+                  exact B.Dom.ext_type_value
+                    (BType.get_reduce alphas_nemp vs_alphas_len i)
+                    (ZFSet.get_cast vs_alphas_len i)
+                rw [hsource]
+                simpa [ss, jalpha] using hcomp
             have ThetaP0_alt_none_St2 : ∀ v ∉ St2.env.usedVars,
                 ThetaP0_alt v = none := by
               intro v hv
@@ -1696,8 +1689,9 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
                 (DCore.update vs (alphas'.concat beta') vs_target_len) []
                 St3.types :=
               P_trace.scoped_extends
-            have hrel_alt := represented_collect_option_lambda
+            have hrel_alt := represented_collect_option_lambda_supported
               (D := D) (P := P) (alpha := a) (beta := b)
+              (sigma := alpha') (rho := beta')
               (Xi := Xi_alt) (Dval := Dval_alt) (hDval := hDval_alt_ab)
               (T := T_alt) (hT := hT_alt_ab) (Denc := Denc) (Penc := Penc)
               (body := body) (z := z) (ThetaD := ThetaP_alt)
@@ -1706,22 +1700,18 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
               (LambdaP := DCore.update vs (alphas'.concat beta')
                 vs_target_len) (GammaP := St3.types)
               (DltP := []) (sigmaP := SMTType.bool)
-              vs_nemp prefix_nemp_out vs_nodup Xi_fv_alt hprod_arity_ab
+              vs_nemp prefix_nemp_out vs_nodup halpha hbeta Xi_fv_alt
+              hprod_arity_ab
               vs_len_ge_two den_D_alt_ab den_collect_alt_ab
-              (by simpa only [hbeta] using body_def)
-              (by simpa only [halpha, proof_irrel_heq] using hcov_lambda_alt)
-              (by simpa only [halpha, proof_irrel_heq] using hden_lambda_alt)
-              (by simpa only [halpha, hbeta] using hlam_type_alt)
+              body_def hcov_lambda_alt hden_lambda_alt hlam_type_alt
               (by simpa only [proof_irrel_heq] using hcov_D_upd_alt)
               (by simpa only [proof_irrel_heq] using hden_D_upd_alt)
-              (by simpa only [halpha, hbeta] using hDenc_type_alt)
-              (by simpa only [halpha, hbeta] using hDenc_func_alt)
+              hDenc_type_alt hDenc_func_alt
               (by
-                simpa only [htau, halpha, hbeta, proof_irrel_heq] using
+                simpa only [htau, proof_irrel_heq] using
                   D_rel_alt)
-              (by simpa only [hbeta, proof_irrel_heq] using hcov_body_upd_alt)
-              (by simpa only [halpha, hbeta, proof_irrel_heq] using
-                hbody_total_alt)
+              (by simpa only [proof_irrel_heq] using hcov_body_upd_alt)
+              (by simpa only [proof_irrel_heq] using hbody_total_alt)
               hDapp_fv_not_bv hDapp_fv_disj_vs hvs_not_bv
               (by
                 intro hz
@@ -2005,17 +1995,12 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
             simpa only [htau] using tau_hasArity
           have bound_expected : ∀ i : Fin vs.length,
               St3.types.lookup vs[i] =
-                some (((a ×ᴮ b).get vs.length i).toSMTType) := by
+                some (((alpha'.fromProdl (vs.length - 2)).concat beta')[i.val]'(by
+                    rw [← alphas'_def, ← vs_target_len]
+                    exact i.isLt)) := by
             intro i
-            calc
-              St3.types.lookup vs[i] =
-                  some (xs i).canonicalSMT.snd.fst :=
-                AList.lookup_of_subset P_types_sub (hbound_type i)
-              _ = some (((a ×ᴮ b).get vs.length i).toSMTType) := by
-                apply congrArg some
-                rw [B.Dom.canonicalSMT_type]
-                dsimp [xs]
-                rw [htau]
+            simpa [ss, alphas'_def, proof_irrel_heq] using
+              AList.lookup_of_subset P_types_sub (hbound_type i)
           have collect_guard : EncodeTermRepGuardedSound.{u}
               (B.Term.collect vs D P) E (BType.set tau)
               ((λˢ [z]) [alpha'] body)
@@ -2182,7 +2167,9 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
             have bound_expected_guard : ∀ i : Fin vs.length,
                 (DCore.update vs (alphas'.concat beta')
                   vs_target_len).lookup vs[i] =
-                  some (((a ×ᴮ b).get vs.length i).toSMTType) := by
+                  some (((alpha'.fromProdl (vs.length - 2)).concat beta')[i.val]'(by
+                      rw [← alphas'_def, ← vs_target_len]
+                      exact i.isLt)) := by
               intro i
               have hbody : (DCore.update vs (alphas'.concat beta')
                   vs_target_len).lookup vs[i] =
@@ -2191,14 +2178,7 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
                     exact i.isLt)) :=
                 SMT.TypeContext.lookup_update_of_mem_nodup DCore
                   vs_nodup vs_target_len i.isLt
-              have hSt3 := AList.lookup_of_subset body_base_sub_St3 hbody
-              have htype :
-                  (alphas'.concat beta')[i.val]'(by
-                    rw [← vs_target_len]
-                    exact i.isLt) =
-                    ((a ×ᴮ b).get vs.length i).toSMTType :=
-                Option.some.inj (hSt3.symm.trans (bound_expected i))
-              simpa only [htype] using hbody
+              simpa only [alphas'_def, proof_irrel_heq] using hbody
             have source_respects_upd_guard :
                 ∀ ss : Fin vs.length → SMT.Dom.{u},
                 (∀ i, (DCore.update vs (alphas'.concat beta')
@@ -2310,8 +2290,9 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
                   some (⟨T_alt, BType.set (a ×ᴮ b),
                     hT_alt_ab⟩ : B.Dom) := by
               simpa only [htau, proof_irrel_heq] using den_alt
-            have hrel_guard := represented_collect_option_lambda
+            have hrel_guard := represented_collect_option_lambda_supported
               (D := D) (P := P) (alpha := a) (beta := b)
+              (sigma := alpha') (rho := beta')
               (Xi := Xi_alt) (Dval := Dval_alt) (hDval := hDval_alt_ab)
               (T := T_alt) (hT := hT_alt_ab) (Denc := Denc)
               (Penc := Penc) (body := body) (z := z) (ThetaD := Theta)
@@ -2322,21 +2303,18 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
               (GammaP := DCore.update vs (alphas'.concat beta')
                 vs_target_len)
               (DltP := []) (sigmaP := SMTType.bool)
-              vs_nemp prefix_nemp vs_nodup Xi_fv_alt hprod_arity_ab
+              vs_nemp prefix_nemp vs_nodup halpha hbeta Xi_fv_alt
+              hprod_arity_ab
               vs_len_ge_two den_D_alt_ab den_collect_alt_ab
-              (by simpa only [hbeta] using body_def)
-              (by simpa only [halpha, proof_irrel_heq] using hcov_lambda_alt)
-              (by simpa only [halpha, proof_irrel_heq] using hden_lambda_alt)
-              (by simpa only [halpha, hbeta] using hlam_type_alt)
+              body_def hcov_lambda_alt hden_lambda_alt hlam_type_alt
               (by simpa only [proof_irrel_heq] using hcov_D_upd_guard)
               (by simpa only [proof_irrel_heq] using hden_D_upd_guard)
-              (by simpa only [halpha, hbeta] using hDenc_type_guard)
-              (by simpa only [halpha, hbeta] using hDenc_func_guard)
-              (by simpa only [htau, halpha, hbeta, proof_irrel_heq] using
+              hDenc_type_guard hDenc_func_guard
+              (by simpa only [htau, proof_irrel_heq] using
                 D_rel_guard)
-              (by simpa only [hbeta, proof_irrel_heq] using
+              (by simpa only [proof_irrel_heq] using
                 hcov_body_upd_guard)
-              (by simpa only [halpha, hbeta, proof_irrel_heq] using
+              (by simpa only [proof_irrel_heq] using
                 hbody_total_guard)
               hDapp_fv_not_bv hDapp_fv_disj_vs hvs_not_bv
               z_not_bv_Penc z_not_vs hcov_sub_upd_guard
@@ -2372,7 +2350,8 @@ theorem encodeTerm_rep_spec.collect_case_and_scoped.{u}
     rw [DencVal_eq] at hden_Denc D_rel
     have tau'_supported : BType.SupportedSMT tau tau' := by
       rcases BType.SupportedSMT.setE D_rel.supported with
-        ⟨rho, hpred, rho_supported⟩ | ⟨a, b, hab, hoption⟩
+        ⟨rho, hpred, rho_supported⟩ |
+          ⟨a, b, rho, upsilon, hab, hoption, _ha, _hb⟩
       · have hrho := SMTType.fun.inj hpred |>.1
         subst rho
         exact rho_supported

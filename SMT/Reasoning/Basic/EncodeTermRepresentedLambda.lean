@@ -63,18 +63,19 @@ theorem RDomCastSupported.default_of_supported.{u}
           (htrue.symm.trans hfalse)).elim
       · intro x hx
         simp [BType.defaultZFSet] at hx
-  | optionFun alpha beta =>
+  | @optionFun alpha beta sigma tau hsigma htau _ _ =>
       let F : ZFSet.{u} := SMTType.defaultZFSet
-        (SMTType.fun alpha.toSMTType
-          (SMTType.option beta.toSMTType))
-      have hF : F ∈ ⟦SMTType.fun alpha.toSMTType
-          (SMTType.option beta.toSMTType)⟧ᶻ :=
+        (SMTType.fun sigma (SMTType.option tau))
+      have hF : F ∈ ⟦SMTType.fun sigma
+          (SMTType.option tau)⟧ᶻ :=
         SMTType.mem_toZFSet_of_defaultZFSet
-      let G := optionGraph alpha.toSMTType beta.toSMTType F
+      let csigma := hsigma.canonicalCastPath
+      let ctau := htau.canonicalCastPath
+      let G := castZF_apply (castPath.graph csigma ctau) F
       have hG : G ∈ ⟦SMTType.fun
           (SMTType.pair alpha.toSMTType beta.toSMTType)
           SMTType.bool⟧ᶻ :=
-        optionGraph_mem alpha.toSMTType beta.toSMTType hF
+        castZF_apply_mem (castPath.graph csigma ctau) hF
       have hGfunc :
           ⟦SMTType.pair alpha.toSMTType beta.toSMTType⟧ᶻ.IsFunc
             ZFSet.𝔹 G := by
@@ -93,25 +94,25 @@ theorem RDomCastSupported.default_of_supported.{u}
         · exact ZFSet.sep_subset_self
         · intro xy hxy htrue
           obtain ⟨x, hx, y, hy, rfl⟩ := ZFSet.mem_prod.mp hxy
-          have hsome :=
-            (optionGraph_apply_eq_zftrue_iff
-              alpha.toSMTType beta.toSMTType hF hx hy).mp
+          obtain ⟨a, ha, b, hb, _, _, hsome⟩ :=
+            castZF_apply_graph_preimage_of_true
+              csigma ctau hF hx hy
               (by simpa only [G, proof_irrel_heq] using htrue)
-          have hFfunc : ⟦alpha.toSMTType⟧ᶻ.IsFunc
-              ⟦SMTType.option beta.toSMTType⟧ᶻ F := by
+          have hFfunc : ⟦sigma⟧ᶻ.IsFunc
+              ⟦SMTType.option tau⟧ᶻ F := by
             simpa [SMTType.toZFSet] using hF
           have hnone :
               (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
-                ⟨x, by rw [ZFSet.is_func_dom_eq hFfunc]; exact hx⟩).val =
+                ⟨a, by rw [ZFSet.is_func_dom_eq hFfunc]; exact ha⟩).val =
                 (ZFSet.Option.none
-                  (S := ⟦beta.toSMTType⟧ᶻ)).val := by
+                  (S := ⟦tau⟧ᶻ)).val := by
             simpa only [F, SMTType.defaultZFSet, proof_irrel_heq] using
               (defaultZFSetFunApp
-                (α := alpha.toSMTType)
-                (β := SMTType.option beta.toSMTType) hx)
+                (α := sigma)
+                (β := SMTType.option tau) ha)
           have hnone_some :
-              ZFSet.Option.none (S := ⟦beta.toSMTType⟧ᶻ) =
-                ZFSet.Option.some (S := ⟦beta.toSMTType⟧ᶻ) ⟨y, hy⟩ :=
+              ZFSet.Option.none (S := ⟦tau⟧ᶻ) =
+                ZFSet.Option.some (S := ⟦tau⟧ᶻ) ⟨b, hb⟩ :=
             Subtype.ext (hnone.symm.trans hsome)
           exact False.elim
             (ZFSet.Option.some_ne_none _ hnone_some.symm)
@@ -121,11 +122,9 @@ theorem RDomCastSupported.default_of_supported.{u}
           (⟨(BType.set (alpha ×ᴮ beta)).defaultZFSet,
             BType.set (alpha ×ᴮ beta),
             BType.mem_toZFSet_of_defaultZFSet⟩ : B.Dom.{u})
-          (⟨F, SMTType.fun alpha.toSMTType
-            (SMTType.option beta.toSMTType), hF⟩ : SMT.Dom.{u}) := by
-        refine ⟨castPath.graph
-          (castPath.reflexive alpha.toSMTType)
-          (castPath.reflexive beta.toSMTType), ?_⟩
+          (⟨F, SMTType.fun sigma
+            (SMTType.option tau), hF⟩ : SMT.Dom.{u}) := by
+        refine ⟨castPath.graph csigma ctau, ?_⟩
         change retract (BType.set (alpha ×ᴮ beta)) G =
           (BType.set (alpha ×ᴮ beta)).defaultZFSet
         obtain ⟨c, hret⟩ := hgraphRel.toRDomCast
@@ -133,84 +132,289 @@ theorem RDomCastSupported.default_of_supported.{u}
           castZF_apply_reflexive _ hG] at hret
         exact hret
       exact ⟨RDomCast.toRDomCastAdmissible_of_supported hbare
-          (.optionFun alpha beta),
-        .optionFun alpha beta⟩
+          (.optionFun hsigma htau),
+        .optionFun hsigma htau⟩
 
 open Classical in
-/-- Package one emitted Boolean lambda as a represented source set once its
-body has an exact pointwise source correspondence. -/
-theorem represented_setPred_lambda_of_pointwise.{u}
-    {alpha : BType} {sigma : SMTType}
+/-- Build a supported option-function representation from exact pointwise
+graph correspondence at arbitrary supported endpoint representations. -/
+theorem RDomCastSupported.optionFunction_of_pointwise.{u}
+    {alpha beta : BType} {sigma tau : SMTType}
     (hsigma : BType.SupportedSMT alpha sigma)
-    {S : ZFSet.{u}} (hSsub : S ⊆ ⟦alpha⟧ᶻ)
-    {Theta : SMT.RenamingContext.Context.{u}} {z : SMT.𝒱}
-    {body : SMT.Term} {lamVal : SMT.Dom.{u}}
-    (hcov_lambda : SMT.RenamingContext.CoversFV Theta
-      ((λˢ [z]) [sigma] body))
-    (hden_lambda : ⟦((λˢ [z]) [sigma] body).abstract
-      Theta hcov_lambda⟧ˢ = some lamVal)
-    (hlam_type : lamVal.snd.fst =
-      SMTType.fun sigma SMTType.bool)
-    (hbody_total : ∀ (y : ZFSet.{u}) (hy : y ∈ ⟦sigma⟧ᶻ),
-      ∃ (hcov_body : SMT.RenamingContext.CoversFV
-          (Function.update Theta z
-            (some (⟨y, sigma, hy⟩ : SMT.Dom))) body)
-        (bodyVal : SMT.Dom.{u}),
-        ⟦body.abstract (Function.update Theta z
-          (some (⟨y, sigma, hy⟩ : SMT.Dom))) hcov_body⟧ˢ =
-            some bodyVal)
-    (hforward : ∀ (y : ZFSet.{u}) (hy : y ∈ ⟦sigma⟧ᶻ)
-      (hcov_body : SMT.RenamingContext.CoversFV
-        (Function.update Theta z
-          (some (⟨y, sigma, hy⟩ : SMT.Dom))) body)
-      (bodyVal : SMT.Dom.{u}),
-      ⟦body.abstract (Function.update Theta z
-        (some (⟨y, sigma, hy⟩ : SMT.Dom))) hcov_body⟧ˢ =
-          some bodyVal →
-      bodyVal.fst = ZFSet.zftrue →
-      ∃ (x : ZFSet.{u}) (hx : x ∈ S),
-        RDomCastSupported
-          (⟨x, alpha, hSsub hx⟩ : B.Dom)
-          (⟨y, sigma, hy⟩ : SMT.Dom))
-    (hbackward : ∀ (x : ZFSet.{u}) (hx : x ∈ S),
-      ∃ (y : ZFSet.{u}) (hy : y ∈ ⟦sigma⟧ᶻ)
-        (_hrel : RDomCastSupported
-          (⟨x, alpha, hSsub hx⟩ : B.Dom)
-          (⟨y, sigma, hy⟩ : SMT.Dom))
-        (hcov_body : SMT.RenamingContext.CoversFV
-          (Function.update Theta z
-            (some (⟨y, sigma, hy⟩ : SMT.Dom))) body)
-        (bodyVal : SMT.Dom.{u}),
-        ⟦body.abstract (Function.update Theta z
-          (some (⟨y, sigma, hy⟩ : SMT.Dom))) hcov_body⟧ˢ =
-            some bodyVal ∧
-        bodyVal.fst = ZFSet.zftrue) :
+    (htau : BType.SupportedSMT beta tau)
+    {S F : ZFSet.{u}}
+    (hS : S ∈ ⟦BType.set (alpha ×ᴮ beta)⟧ᶻ)
+    (hF : F ∈ ⟦SMTType.fun sigma (SMTType.option tau)⟧ᶻ)
+    (hFfunc : ⟦sigma⟧ᶻ.IsFunc ⟦SMTType.option tau⟧ᶻ F)
+    (hforward : ∀ (a : ZFSet.{u}) (ha : a ∈ ⟦sigma⟧ᶻ)
+      (b : ZFSet.{u}) (hb : b ∈ ⟦tau⟧ᶻ),
+      (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+        ⟨a, by rw [ZFSet.is_func_dom_eq hFfunc]; exact ha⟩).val =
+          (ZFSet.Option.some (S := ⟦tau⟧ᶻ) ⟨b, hb⟩).val →
+      ∃ (x : ZFSet.{u}) (hx : x ∈ ⟦alpha⟧ᶻ)
+        (p : ZFSet.{u}) (hp : p ∈ ⟦beta⟧ᶻ),
+        x.pair p ∈ S ∧
+        RDomCastSupported (⟨x, alpha, hx⟩ : B.Dom)
+          (⟨a, sigma, ha⟩ : SMT.Dom) ∧
+        RDomCastSupported (⟨p, beta, hp⟩ : B.Dom)
+          (⟨b, tau, hb⟩ : SMT.Dom))
+    (hbackward : ∀ (x : ZFSet.{u}) (hx : x ∈ ⟦alpha⟧ᶻ)
+      (p : ZFSet.{u}) (hp : p ∈ ⟦beta⟧ᶻ), x.pair p ∈ S →
+      ∃ (a : ZFSet.{u}) (ha : a ∈ ⟦sigma⟧ᶻ)
+        (b : ZFSet.{u}) (hb : b ∈ ⟦tau⟧ᶻ),
+        RDomCastSupported (⟨x, alpha, hx⟩ : B.Dom)
+          (⟨a, sigma, ha⟩ : SMT.Dom) ∧
+        RDomCastSupported (⟨p, beta, hp⟩ : B.Dom)
+          (⟨b, tau, hb⟩ : SMT.Dom) ∧
+        (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+          ⟨a, by rw [ZFSet.is_func_dom_eq hFfunc]; exact ha⟩).val =
+            (ZFSet.Option.some (S := ⟦tau⟧ᶻ) ⟨b, hb⟩).val) :
     RDomCastSupported
-      (⟨S, BType.set alpha, ZFSet.mem_powerset.mpr hSsub⟩ : B.Dom)
-      lamVal := by
-  rcases lamVal with ⟨F, rho, hF⟩
-  dsimp at hlam_type hden_lambda ⊢
-  subst rho
-  have hFfunc : ⟦sigma⟧ᶻ.IsFunc ZFSet.𝔹 F := by
-    simpa [SMTType.toZFSet] using hF
-  apply RDomCastSupported.setPred_of_pointwise
-    hsigma hSsub hF hFfunc
-  · intro y hy htrue
-    obtain ⟨hcov_body, bodyVal, hden_body⟩ :=
-      hbody_total y hy
-    have happly := single_lambda_fapply_eq_body
-      (beta := SMTType.bool) hcov_lambda hden_lambda hFfunc rfl hy
-      hcov_body hden_body
-    exact hforward y hy hcov_body bodyVal hden_body
-      (happly.symm.trans htrue)
-  · intro x hx
-    obtain ⟨y, hy, hrel, hcov_body, bodyVal, hden_body,
-      hbody_true⟩ := hbackward x hx
-    refine ⟨y, hy, hrel, ?_⟩
-    have happly := single_lambda_fapply_eq_body
-      (beta := SMTType.bool) hcov_lambda hden_lambda hFfunc rfl hy
-      hcov_body hden_body
-    exact happly.trans hbody_true
+      (⟨S, BType.set (alpha ×ᴮ beta), hS⟩ : B.Dom)
+      (⟨F, SMTType.fun sigma (SMTType.option tau), hF⟩ : SMT.Dom) := by
+  have hSsub : S ⊆ ⟦alpha ×ᴮ beta⟧ᶻ := by
+    simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hS
+  let csigma := hsigma.canonicalCastPath
+  let ctau := htau.canonicalCastPath
+  let G := castZF_apply (castPath.graph csigma ctau) F
+  have hG : G ∈ ⟦SMTType.fun
+      (SMTType.pair alpha.toSMTType beta.toSMTType)
+      SMTType.bool⟧ᶻ :=
+    castZF_apply_mem (castPath.graph csigma ctau) hF
+  have hGfunc :
+      ⟦SMTType.pair alpha.toSMTType beta.toSMTType⟧ᶻ.IsFunc
+        ZFSet.𝔹 G := by
+    simpa [SMTType.toZFSet] using hG
+  have hGrel : RDomCastSupported
+      (⟨S, BType.set (alpha ×ᴮ beta), hS⟩ : B.Dom)
+      (⟨G, SMTType.fun
+        (SMTType.pair alpha.toSMTType beta.toSMTType)
+        SMTType.bool, hG⟩ : SMT.Dom) := by
+    apply RDomCastSupported.setPred_of_pointwise
+      (BType.SupportedSMT.canonical (alpha ×ᴮ beta))
+      hSsub hG hGfunc
+    · intro ab hab htrue
+      obtain ⟨a', ha', b', hb', rfl⟩ := ZFSet.mem_prod.mp hab
+      obtain ⟨a, ha, b, hb, hca, hcb, happ⟩ :=
+        (castZF_apply_graph_fapply_eq_zftrue_iff
+          csigma ctau hF ha' hb').mp
+          (by simpa only [G, proof_irrel_heq] using htrue)
+      obtain ⟨x, hx, p, hp, hxp, hxrel, hprel⟩ :=
+        hforward a ha b hb
+          (by simpa only [proof_irrel_heq] using happ)
+      have hcastA : a.pair a' ∈ (castZF_of_path csigma).1 := by
+        simpa only [hca] using castZF_apply_pair csigma ha
+      have hcastB : b.pair b' ∈ (castZF_of_path ctau).1 := by
+        simpa only [hcb] using castZF_apply_pair ctau hb
+      have hxrel' := RDomCastSupported.of_cast_to_supported
+        (hY := ha') hxrel (BType.SupportedSMT.canonical alpha)
+          csigma hcastA
+      have hprel' := RDomCastSupported.of_cast_to_supported
+        (hY := hb') hprel (BType.SupportedSMT.canonical beta)
+          ctau hcastB
+      refine ⟨x.pair p, hxp, ?_⟩
+      simpa only [proof_irrel_heq] using
+        RDomCastSupported.pair hxrel' hprel'
+    · intro xp hxp
+      have hxp_type := hSsub hxp
+      obtain ⟨x, hx, p, hp, rfl⟩ := ZFSet.mem_prod.mp hxp_type
+      obtain ⟨a, ha, b, hb, hxrel, hprel, happ⟩ :=
+        hbackward x hx p hp (by simpa only [proof_irrel_heq] using hxp)
+      let a' := castZF_apply csigma a
+      let b' := castZF_apply ctau b
+      have ha' : a' ∈ ⟦alpha.toSMTType⟧ᶻ :=
+        castZF_apply_mem csigma ha
+      have hb' : b' ∈ ⟦beta.toSMTType⟧ᶻ :=
+        castZF_apply_mem ctau hb
+      have hxrel' := RDomCastSupported.of_cast_to_supported
+        (Y := a') (hY := ha') hxrel
+          (BType.SupportedSMT.canonical alpha) csigma
+          (castZF_apply_pair csigma ha)
+      have hprel' := RDomCastSupported.of_cast_to_supported
+        (Y := b') (hY := hb') hprel
+          (BType.SupportedSMT.canonical beta) ctau
+          (castZF_apply_pair ctau hb)
+      refine ⟨a'.pair b', ZFSet.pair_mem_prod.mpr ⟨ha', hb'⟩, ?_, ?_⟩
+      · simpa only [a', b', proof_irrel_heq] using
+          RDomCastSupported.pair hxrel' hprel'
+      · simpa only [G, a', b', proof_irrel_heq] using
+          castZF_apply_graph_true_of_apply_some
+            csigma ctau hF ha hb happ
+  have hbare : RDomCast
+      (⟨S, BType.set (alpha ×ᴮ beta), hS⟩ : B.Dom)
+      (⟨F, SMTType.fun sigma (SMTType.option tau), hF⟩ : SMT.Dom) := by
+    refine ⟨castPath.graph csigma ctau, ?_⟩
+    change retract (BType.set (alpha ×ᴮ beta)) G = S
+    obtain ⟨c, hret⟩ := hGrel.toRDomCast
+    rw [castPath.eq_reflexive c,
+      castZF_apply_reflexive _ hG] at hret
+    exact hret
+  exact ⟨RDomCast.toRDomCastAdmissible_of_supported hbare
+      (.optionFun hsigma htau),
+    .optionFun hsigma htau⟩
+
+open Classical in
+/-- A guarded optional payload equals `some W` exactly when its Boolean guard
+is true and its payload equals `W`. -/
+theorem denote_ite_some_none_eq_some_iff.{u}
+    {c p : SMT.PHOAS.Term SMT.Dom.{u}}
+    {Dc Dp Dbody W : SMT.Dom.{u}} {gamma : SMTType}
+    (hden_c : ⟦c⟧ˢ = some Dc)
+    (hDc_type : Dc.snd.fst = SMTType.bool)
+    (hden_p : ⟦p⟧ˢ = some Dp)
+    (hDp_type : Dp.snd.fst = gamma)
+    (hden_body : ⟦SMT.PHOAS.Term.ite c
+      (SMT.PHOAS.Term.some p) (SMT.PHOAS.Term.none gamma)⟧ˢ =
+        some Dbody)
+    (hW_type : W.snd.fst = gamma) :
+    Dbody.fst = (ZFSet.Option.some
+      (S := ⟦gamma⟧ᶻ) ⟨W.fst, by
+        rw [← hW_type]
+        exact W.snd.snd⟩).val ↔
+      Dc.fst = ZFSet.zftrue ∧ Dp.fst = W.fst := by
+  rcases Dc with ⟨C, sigmaC, hC⟩
+  dsimp at hDc_type hden_c hden_body ⊢
+  subst sigmaC
+  rcases Dp with ⟨P, sigmaP, hP⟩
+  dsimp at hDp_type hden_p hden_body ⊢
+  subst sigmaP
+  rcases ZFSet.ZFBool.mem_𝔹_iff C |>.mp hC with hfalse | htrue
+  · have htoBool : ZFSet.ZFBool.toBool ⟨C, hC⟩ = false := by
+      have hCeq : (⟨C, hC⟩ : ZFSet.ZFBool) = ⊥ := by
+        apply Subtype.ext
+        exact hfalse
+      rw [hCeq]
+      exact ZFSet.ZFBool.toBool_false
+    let Dnone : SMT.Dom.{u} :=
+      ⟨(ZFSet.Option.none (S := ⟦gamma⟧ᶻ)).val,
+        SMTType.option gamma, SetLike.coe_mem _⟩
+    have hden_none : ⟦SMT.PHOAS.Term.none gamma⟧ˢ = some Dnone := by
+      rfl
+    have hbody_eq : Dbody = Dnone := by
+      apply Option.some.inj
+      calc
+        some Dbody = ⟦SMT.PHOAS.Term.ite c
+            (SMT.PHOAS.Term.some p)
+            (SMT.PHOAS.Term.none gamma)⟧ˢ := hden_body.symm
+        _ = ⟦SMT.PHOAS.Term.none gamma⟧ˢ := by
+          rw [SMT.denote, hden_c]
+          change (if ZFSet.ZFBool.toBool ⟨C, hC⟩ then
+            ⟦SMT.PHOAS.Term.some p⟧ˢ else
+            ⟦SMT.PHOAS.Term.none gamma⟧ˢ) =
+              ⟦SMT.PHOAS.Term.none gamma⟧ˢ
+          rw [htoBool, if_neg (by decide)]
+        _ = some Dnone := hden_none
+    constructor
+    · intro hsome
+      have hnone_some : ZFSet.Option.none (S := ⟦gamma⟧ᶻ) =
+          ZFSet.Option.some ⟨W.fst, by
+            rw [← hW_type]
+            exact W.snd.snd⟩ := by
+        apply Subtype.ext
+        change Dnone.fst = _
+        rw [← hbody_eq, hsome]
+      exact (ZFSet.Option.some_ne_none _ hnone_some.symm).elim
+    · rintro ⟨htrue', _⟩
+      exact (ZFSet.zftrue_ne_zffalse
+        (htrue'.symm.trans hfalse)).elim
+  · have htoBool : ZFSet.ZFBool.toBool ⟨C, hC⟩ = true := by
+      have hCeq : (⟨C, hC⟩ : ZFSet.ZFBool) = ⊤ := by
+        apply Subtype.ext
+        exact htrue
+      rw [hCeq]
+      exact ZFSet.ZFBool.toBool_true
+    let Dsome : SMT.Dom.{u} :=
+      ⟨(ZFSet.Option.some (S := ⟦gamma⟧ᶻ) ⟨P, hP⟩).val,
+        SMTType.option gamma, SetLike.coe_mem _⟩
+    have hden_some : ⟦SMT.PHOAS.Term.some p⟧ˢ = some Dsome := by
+      rw [SMT.denote, hden_p]
+      rfl
+    have hbody_eq : Dbody = Dsome := by
+      apply Option.some.inj
+      calc
+        some Dbody = ⟦SMT.PHOAS.Term.ite c
+            (SMT.PHOAS.Term.some p)
+            (SMT.PHOAS.Term.none gamma)⟧ˢ := hden_body.symm
+        _ = ⟦SMT.PHOAS.Term.some p⟧ˢ := by
+          rw [SMT.denote, hden_c]
+          change (if ZFSet.ZFBool.toBool ⟨C, hC⟩ then
+            ⟦SMT.PHOAS.Term.some p⟧ˢ else
+            ⟦SMT.PHOAS.Term.none gamma⟧ˢ) =
+              ⟦SMT.PHOAS.Term.some p⟧ˢ
+          rw [htoBool, if_pos rfl]
+        _ = some Dsome := hden_some
+    constructor
+    · intro hsome
+      refine ⟨htrue, ?_⟩
+      have hsome_eq : ZFSet.Option.some (S := ⟦gamma⟧ᶻ) ⟨P, hP⟩ =
+          ZFSet.Option.some ⟨W.fst, by
+            rw [← hW_type]
+            exact W.snd.snd⟩ := by
+        apply Subtype.ext
+        change Dsome.fst = _
+        rw [← hbody_eq, hsome]
+      exact congrArg Subtype.val (ZFSet.Option.some.injEq.mp hsome_eq)
+    · rintro ⟨_, hPW⟩
+      rw [hbody_eq]
+      dsimp only [Dsome]
+      apply congrArg (fun q : {x // x ∈ ⟦gamma⟧ᶻ} =>
+        (ZFSet.Option.some q).val)
+      apply Subtype.ext
+      exact hPW
+
+open Classical in
+/-- Producing a `some` value from an optional `ite` forces its guard to be
+true, independently of whether the payload branch has yet been evaluated. -/
+theorem denote_ite_some_none_some_implies_true.{u}
+    {c p : SMT.PHOAS.Term SMT.Dom.{u}}
+    {Dc Dbody W : SMT.Dom.{u}} {gamma : SMTType}
+    (hden_c : ⟦c⟧ˢ = some Dc)
+    (hDc_type : Dc.snd.fst = SMTType.bool)
+    (hden_body : ⟦SMT.PHOAS.Term.ite c
+      (SMT.PHOAS.Term.some p) (SMT.PHOAS.Term.none gamma)⟧ˢ =
+        some Dbody)
+    (hW_type : W.snd.fst = gamma)
+    (hbody_some : Dbody.fst = (ZFSet.Option.some
+      (S := ⟦gamma⟧ᶻ) ⟨W.fst, by
+        rw [← hW_type]
+        exact W.snd.snd⟩).val) :
+    Dc.fst = ZFSet.zftrue := by
+  rcases Dc with ⟨C, sigmaC, hC⟩
+  dsimp at hDc_type hden_c hden_body ⊢
+  subst sigmaC
+  rcases ZFSet.ZFBool.mem_𝔹_iff C |>.mp hC with hfalse | htrue
+  · have htoBool : ZFSet.ZFBool.toBool ⟨C, hC⟩ = false := by
+      have hCeq : (⟨C, hC⟩ : ZFSet.ZFBool) = ⊥ := by
+        apply Subtype.ext
+        exact hfalse
+      rw [hCeq]
+      exact ZFSet.ZFBool.toBool_false
+    let Dnone : SMT.Dom.{u} :=
+      ⟨(ZFSet.Option.none (S := ⟦gamma⟧ᶻ)).val,
+        SMTType.option gamma, SetLike.coe_mem _⟩
+    have hbody_eq : Dbody = Dnone := by
+      apply Option.some.inj
+      calc
+        some Dbody = ⟦SMT.PHOAS.Term.ite c
+            (SMT.PHOAS.Term.some p)
+            (SMT.PHOAS.Term.none gamma)⟧ˢ := hden_body.symm
+        _ = ⟦SMT.PHOAS.Term.none gamma⟧ˢ := by
+          rw [SMT.denote, hden_c]
+          change (if ZFSet.ZFBool.toBool ⟨C, hC⟩ then
+            ⟦SMT.PHOAS.Term.some p⟧ˢ else
+            ⟦SMT.PHOAS.Term.none gamma⟧ˢ) =
+              ⟦SMT.PHOAS.Term.none gamma⟧ˢ
+          rw [htoBool, if_neg (by decide)]
+        _ = some Dnone := rfl
+    have hnone_some : ZFSet.Option.none (S := ⟦gamma⟧ᶻ) =
+        ZFSet.Option.some ⟨W.fst, by
+          rw [← hW_type]
+          exact W.snd.snd⟩ := by
+      apply Subtype.ext
+      change Dnone.fst = _
+      rw [← hbody_eq, hbody_some]
+    exact (ZFSet.Option.some_ne_none _ hnone_some.symm).elim
+  · exact htrue
 
 private lemma lambda_BDom_ext {z1 z2 : ZFSet} {tau1 tau2 : BType}
     {h1 : z1 ∈ ⟦tau1⟧ᶻ} {h2 : z2 ∈ ⟦tau2⟧ᶻ}
@@ -1128,6 +1332,128 @@ theorem lambda_subst_of_total_body_toDestPair.{u}
     (hts_fv_disj_xs := hts_fv_disj_xs) (hts_den := hts_den)
 
 open Classical in
+/-- Variant of `lambda_subst_of_total_body_toDestPair` for the direct domain
+binder used by the option-function lambda encoding. -/
+theorem lambda_subst_of_total_body_toDestPair_var.{u}
+    {Penc : SMT.Term}
+    {vs : List SMT.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {z : SMT.𝒱}
+    {DeltaCtx ThetaBase : SMT.RenamingContext.Context.{u}}
+    {W : SMT.Dom.{u}} {ss : Fin vs.length → SMT.Dom.{u}}
+    (hcomponents : ∀ i : Fin vs.length,
+      ∃ hcov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W))
+          ((toDestPair vs (.var z))[i.val]'(by
+            rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+            exact i.isLt)),
+        ⟦((toDestPair vs (.var z))[i.val]'(by
+          rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+          exact i.isLt)).abstract (Function.update DeltaCtx z (some W))
+            hcov⟧ˢ = some (ss i))
+    (hcov_sub : SMT.RenamingContext.CoversFV
+      (Function.update DeltaCtx z (some W))
+      (SMT.substList vs (toDestPair vs (.var z)) Penc))
+    (hcov_upd : SMT.RenamingContext.CoversFV
+      (Function.updates (Function.update DeltaCtx z (some W)) vs
+        ((List.ofFn ss).map Option.some)) Penc)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc)
+    (hz_not_vs : z ∉ vs)
+    {Pterm : B.Term} {E : B.Env} {alpha : BType}
+    {Lambda Gamma : SMT.TypeContext}
+    {sigma : SMTType} {used : List SMT.𝒱}
+    (P_total : EncodeTermRepTotal.{u}
+      Pterm E alpha Lambda Penc sigma Gamma used)
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv Pterm, (Xi v).isSome = true)
+    (related : RValuationCastSupportedOnFV Xi ThetaBase Pterm)
+    (wf : B.RenWF E.context Xi)
+    (Lambda_keys_used : Lambda.keys ⊆ used)
+    (source_respects : B.RenamingContext.RespectsTypeContextOnFV
+      ThetaBase Lambda Pterm)
+    (source_fv_in_Lambda : ∀ v ∈ B.fv Pterm, v ∈ Lambda)
+    (bound_in_Lambda : ∀ v ∈ vs, v ∈ Lambda)
+    (Penc_fv_in_Lambda : ∀ v ∈ SMT.fv Penc, v ∈ Lambda)
+    {Pval : ZFSet.{u}} {hPval : Pval ∈ ⟦alpha⟧ᶻ}
+    (den_P : ⟦Pterm.abstract Xi Xi_fv⟧ᴮ =
+      some (⟨Pval, alpha, hPval⟩ : B.Dom))
+    (bound_values : ∀ (i : ℕ) (hi_x : i < vs.length)
+      (_hi_d : i < (List.ofFn ss).length),
+      ThetaBase vs[i] = some (ss ⟨i, hi_x⟩))
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars Pterm)
+    (z_not_vars_Pterm : z ∉ B.Term.vars Pterm)
+    (hctx_source : ∀ v ∈ B.Term.vars Pterm, v ∉ vs →
+      DeltaCtx v = ThetaBase v) :
+    ∃ dP : SMT.Dom.{u},
+      ⟦(SMT.substList vs (toDestPair vs (.var z)) Penc).abstract
+        (Function.update DeltaCtx z (some W)) hcov_sub⟧ˢ = some dP ∧
+      dP.snd.fst = sigma ∧
+      RDomCastSupported (⟨Pval, alpha, hPval⟩ : B.Dom) dP := by
+  have hlen_xt : vs.length = (toDestPair vs (.var z)).length := by
+    rw [toDestPair_length_gen vs (.var z) (.var z) [] vs_nemp]
+    simp
+  have hlen_xd : vs.length = (List.ofFn ss).length := by simp
+  have hbound_values : ∀ (i : ℕ) (hi_x : i < vs.length)
+      (hi_d : i < (List.ofFn ss).length),
+      ThetaBase vs[i] = some (List.ofFn ss)[i] := by
+    intro i hi_x hi_d
+    simpa only [List.getElem_ofFn, Fin.getElem_fin] using
+      bound_values i hi_x hi_d
+  have hbase_fv : ∀ w ∈ SMT.fv (.var z), w = z := by
+    intro w hw
+    simpa [SMT.fv] using hw
+  have hts_fv_not_bv : ∀ t ∈ toDestPair vs (.var z),
+      ∀ w ∈ SMT.fv t, w ∉ SMT.bv Penc := by
+    intro t ht w hw
+    rw [SMT_fv_toDestPair_subset_base hbase_fv ht hw]
+    exact hz_not_bv
+  have hts_fv_disj_xs : ∀ t ∈ toDestPair vs (.var z),
+      ∀ w ∈ SMT.fv t, w ∉ vs := by
+    intro t ht w hw
+    rw [SMT_fv_toDestPair_subset_base hbase_fv ht hw]
+    exact hz_not_vs
+  have hts_den : ∀ (i : ℕ) (_hi_x : i < vs.length)
+      (hi_t : i < (toDestPair vs (.var z)).length)
+      (hi_d : i < (List.ofFn ss).length),
+      ∃ (ht_cov : SMT.RenamingContext.CoversFV
+          (Function.update DeltaCtx z (some W))
+          (toDestPair vs (.var z))[i]),
+        ⟦(toDestPair vs (.var z))[i].abstract
+          (Function.update DeltaCtx z (some W)) ht_cov⟧ˢ =
+            some (List.ofFn ss)[i] := by
+    intro i hi_x _hi_t _hi_d
+    let j : Fin vs.length := ⟨i, hi_x⟩
+    obtain ⟨hcov, hden⟩ := hcomponents j
+    refine ⟨hcov, ?_⟩
+    simpa [j] using hden
+  have hz_not_fv_Penc : z ∉ SMT.fv Penc := by
+    intro hz
+    exact z_not_vars_Pterm (hPenc_fv hz)
+  exact lambda_subst_of_total_body_source_fv_fresh
+    (xs := vs) (ts := toDestPair vs (.var z))
+    (Ds := List.ofFn ss) (DeltaCtx := DeltaCtx) (ThetaBase := ThetaBase)
+    (z := z) (W := W) (Pterm := Pterm) (E := E) (alpha := alpha)
+    (Lambda := Lambda) (Gamma := Gamma) (sigma := sigma) (used := used)
+    (P_total := P_total) (Xi := Xi) (Xi_fv := Xi_fv)
+    (related := related) (wf := wf)
+    (Lambda_keys_used := Lambda_keys_used)
+    (source_respects := source_respects)
+    (source_fv_in_Lambda := source_fv_in_Lambda)
+    (bound_in_Lambda := bound_in_Lambda)
+    (Penc_fv_in_Lambda := Penc_fv_in_Lambda)
+    (Pval := Pval) (hPval := hPval) (den_P := den_P)
+    (bound_values := hbound_values) (hPenc_fv := hPenc_fv)
+    (z_not_xs := hz_not_vs) (z_not_fv_Penc := hz_not_fv_Penc)
+    (z_not_vars_source := z_not_vars_Pterm) (hctx_source := hctx_source)
+    (hcov_sub := hcov_sub) (hcov_upd := hcov_upd)
+    (hlen_xt := hlen_xt) (hlen_xd := hlen_xd) (hnodup := vs_nodup)
+    (hxs_not_bv := hvs_not_bv)
+    (hts_bv_nil := toDestPair_bv_nil_base (by simp [SMT.bv]))
+    (hts_fv_not_bv := hts_fv_not_bv)
+    (hts_not_none := lambda_toDestPair_ne_none (by simp))
+    (hts_fv_disj_xs := hts_fv_disj_xs) (hts_den := hts_den)
+
+open Classical in
 /-- Transport a represented body result through the tuple projections used by
 `lambda`, under an arbitrary valuation satisfying the body's scoped helper
 contract.  Unlike the existential-totality bridge above, this statement keeps
@@ -1394,6 +1720,76 @@ theorem lambda_domain_denote_of_lambda_denote.{u}
       (Function.update Theta z (some W)) Denc :=
     SMT.RenamingContext.coversFV_update_of_notMem z_not_fv_D hcov_D
   simp only [SMT.Term.abstract, SMT.denote, Option.bind_eq_bind] at hbody
+  match hD : ⟦Denc.abstract (Function.update Theta z (some W))
+      hcov_D_upd⟧ˢ with
+  | none => simp [hD] at hbody
+  | some ⟨F, .bool, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .int, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .unit, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .option a, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .pair a b, hF⟩ => simp [hD] at hbody
+  | some ⟨F, .fun a b, hF⟩ =>
+      simp [W, hD] at hbody
+      split_ifs at hbody with ha hp hdom
+      · subst a
+        cases b with
+        | bool =>
+            refine ⟨⟨F, .fun sigma .bool, hF⟩, ?_, rfl⟩
+            calc
+              ⟦Denc.abstract Theta hcov_D⟧ˢ =
+                  ⟦Denc.abstract (Function.update Theta z (some W))
+                    hcov_D_upd⟧ˢ := by
+                exact SMT.RenamingContext.denote_update_of_notMem
+                  (h := hcov_D) z_not_fv_D
+              _ = some ⟨F, .fun sigma .bool, hF⟩ := hD
+        | int => simp at hbody
+        | unit => simp at hbody
+        | «fun» c d => simp at hbody
+        | option c => simp at hbody
+        | pair c d => simp at hbody
+      · simp at hbody
+      · simp at hbody
+      · simp at hbody
+
+open Classical in
+/-- A successfully denoting option-valued lambda exposes its encoded domain
+predicate at the expected function type. -/
+theorem lambda_option_domain_denote_of_lambda_denote.{u}
+    {Theta : SMT.RenamingContext.Context.{u}}
+    {z : SMT.𝒱} {sigma gamma : SMTType}
+    {Denc Psub : SMT.Term} {lamVal : SMT.Dom.{u}}
+    (hcov_lambda : SMT.RenamingContext.CoversFV Theta
+      ((λˢ [z]) [sigma]
+        (SMT.Term.ite
+          (SMT.Term.app Denc (.var z))
+          (SMT.Term.some Psub)
+          (none$ gamma))))
+    (hden_lambda :
+      ⟦((λˢ [z]) [sigma]
+        (SMT.Term.ite
+          (SMT.Term.app Denc (.var z))
+          (SMT.Term.some Psub)
+          (none$ gamma))).abstract Theta hcov_lambda⟧ˢ = some lamVal)
+    (hcov_body_upd : ∀ W : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV (Function.update Theta z (some W))
+        (SMT.Term.ite
+          (SMT.Term.app Denc (.var z))
+          (SMT.Term.some Psub)
+          (none$ gamma)))
+    (hcov_D : SMT.RenamingContext.CoversFV Theta Denc)
+    (z_not_fv_D : z ∉ SMT.fv Denc) :
+    ∃ d : SMT.Dom.{u}, ⟦Denc.abstract Theta hcov_D⟧ˢ = some d ∧
+      d.snd.fst = SMTType.fun sigma SMTType.bool := by
+  let W : SMT.Dom.{u} :=
+    ⟨sigma.defaultZFSet, sigma,
+      SMTType.mem_toZFSet_of_defaultZFSet⟩
+  obtain ⟨bodyVal, hbody⟩ := lambda_body_total_of_denote
+    hcov_lambda hden_lambda hcov_body_upd W rfl
+  have hcov_D_upd : SMT.RenamingContext.CoversFV
+      (Function.update Theta z (some W)) Denc :=
+    SMT.RenamingContext.coversFV_update_of_notMem z_not_fv_D hcov_D
+  simp only [noneCast, SMT.Term.abstract, SMT.denote,
+    Option.bind_eq_bind] at hbody
   match hD : ⟦Denc.abstract (Function.update Theta z (some W))
       hcov_D_upd⟧ˢ with
   | none => simp [hD] at hbody
@@ -1693,6 +2089,189 @@ theorem represented_lambda_body_at_domain.{u}
     have htruth := lambda_and_eq_truth_iff hden_Dapp hDapp_type
       hden_snd hden_Psub (hWp_type.trans hdP_type.symm) hbody_abs hden_body
     simpa only [hDapp_true, true_and] using htruth
+
+open Classical in
+/-- Evaluate the encoded lambda payload at one represented source-domain
+point for the direct option-function binder. -/
+theorem represented_lambda_option_subst_at_domain.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {D P : B.Term} {tau beta : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.lambda vs D P),
+      (Xi v).isSome = true)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_lambda (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set (tau ×ᴮ beta)⟧ᶻ}
+    (den_lambda : ⟦(B.Term.lambda vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set (tau ×ᴮ beta), hT⟩ : B.Dom))
+    {sigma gamma : SMTType}
+    (hsigma : BType.SupportedSMT tau sigma)
+    {Penc : SMT.Term} {z : SMT.𝒱}
+    {ThetaD : SMT.RenamingContext.Context.{u}}
+    (hcov_sub_upd : ∀ W : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W))
+        (SMT.substList vs (toDestPair vs (SMT.Term.var z)) Penc))
+    (hcov_P_upd : ∀ (W : SMT.Dom.{u})
+      (ss : Fin vs.length → SMT.Dom.{u}),
+      SMT.RenamingContext.CoversFV
+        (Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some)) Penc)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc) (hz_not_vs : z ∉ vs)
+    {Ebody : B.Env} {LambdaP GammaP : SMT.TypeContext}
+    {usedP : List SMT.𝒱}
+    (typ_P : Ebody.context ⊢ᴮ P : beta)
+    (P_total : EncodeTermRepTotal.{u}
+      P Ebody beta LambdaP Penc gamma GammaP usedP)
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs →
+      match Xi v, ThetaD v with
+      | some source, some target => RDomCastSupported source target
+      | _, _ => False)
+    (wf_bound : ∀ (x : ZFSet.{u}) (hx : x ∈ ⟦tau⟧ᶻ)
+      (_hx_D : x ∈ Dval),
+      B.RenWF Ebody.context
+        (Function.updates Xi vs (List.ofFn fun i => some
+          (⟨x.get vs.length i, tau.get vs.length i,
+            get_mem_type_of_isTuple
+              (hasArity_of_mem_toZFSet tau_hasArity hx)
+              tau_hasArity hx⟩ : B.Dom))))
+    (bound_expected : ∀ i : Fin vs.length,
+      LambdaP.lookup vs[i] =
+        some ((sigma.fromProdl (vs.length - 1))[i.val]'(by
+          have hlen := hsigma.fromProdl_length_of_hasArity tau_hasArity
+          exact i.isLt.trans_eq hlen.symm)))
+    (source_respects : ∀ ss : Fin vs.length → SMT.Dom.{u},
+      (∀ i, LambdaP.lookup vs[i] = some (ss i).snd.fst) →
+      B.RenamingContext.RespectsTypeContextOnFV
+        (Function.updates ThetaD vs
+          ((List.ofFn ss).map Option.some)) LambdaP P)
+    (source_fv_in_LambdaP : ∀ v ∈ B.fv P, v ∈ LambdaP)
+    (Penc_fv_in_LambdaP : ∀ v ∈ SMT.fv Penc, v ∈ LambdaP)
+    (LambdaP_keys_used : LambdaP.keys ⊆ usedP)
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars P)
+    (z_not_vars_P : z ∉ B.Term.vars P)
+    {x : ZFSet.{u}} (hx : x ∈ ⟦tau⟧ᶻ) (hxD : x ∈ Dval)
+    {Wy : SMT.Dom.{u}}
+    (hWy_type : Wy.snd.fst = sigma)
+    (hWy_mem : Wy.fst ∈ ⟦sigma⟧ᶻ)
+    (hrel_x : RDomCastSupported (⟨x, tau, hx⟩ : B.Dom) Wy) :
+    ∃ (XiP_fv : ∀ v ∈ B.fv P,
+        (Function.updates Xi vs (List.ofFn fun i => some
+          (⟨x.get vs.length i, tau.get vs.length i,
+            get_mem_type_of_isTuple
+              (hasArity_of_mem_toZFSet tau_hasArity hx)
+              tau_hasArity hx⟩ : B.Dom)) v).isSome = true)
+      (Pval : ZFSet.{u}) (hPval : Pval ∈ ⟦beta⟧ᶻ)
+      (dP : SMT.Dom.{u}),
+      ⟦P.abstract
+        (Function.updates Xi vs (List.ofFn fun i => some
+          (⟨x.get vs.length i, tau.get vs.length i,
+            get_mem_type_of_isTuple
+              (hasArity_of_mem_toZFSet tau_hasArity hx)
+              tau_hasArity hx⟩ : B.Dom))) XiP_fv⟧ᴮ =
+        some (⟨Pval, beta, hPval⟩ : B.Dom) ∧
+      ⟦(SMT.substList vs (toDestPair vs (SMT.Term.var z)) Penc).abstract
+        (Function.update ThetaD z (some Wy))
+        (hcov_sub_upd Wy)⟧ˢ = some dP ∧
+      dP.snd.fst = gamma ∧
+      RDomCastSupported (⟨Pval, beta, hPval⟩ : B.Dom) dP := by
+  let x_fin : Fin vs.length → B.Dom.{u} := fun i =>
+    ⟨x.get vs.length i, tau.get vs.length i,
+      get_mem_type_of_isTuple
+        (hasArity_of_mem_toZFSet tau_hasArity hx)
+        tau_hasArity hx⟩
+  have hx_fin_typ : ∀ i, (x_fin i).snd.fst = tau.get vs.length i ∧
+      (x_fin i).fst ∈ ⟦tau.get vs.length i⟧ᶻ :=
+    fun i => ⟨rfl, (x_fin i).snd.snd⟩
+  have hx_fin_eq : ZFSet.ofFinDom x_fin = x := by
+    simpa [x_fin] using
+      (ZFSet.ofFinDom_get (List.length_pos_iff.mpr vs_nemp)
+        (fun i => get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet tau_hasArity hx)
+          tau_hasArity hx)
+        (hasArity_of_mem_toZFSet tau_hasArity hx) tau_hasArity)
+  have hx_fin_D : ZFSet.ofFinDom x_fin ∈ Dval := by
+    rw [hx_fin_eq]
+    exact hxD
+  obtain ⟨XiP_fv, Pval, hPval, den_P⟩ :=
+    B.denote_lambda_body_exists Xi_fv vs_nemp vs_nodup tau_hasArity
+      den_D den_lambda typ_P hx_fin_typ hx_fin_D (wf_bound x hx hxD)
+  have hcov_z : SMT.RenamingContext.CoversFV
+      (Function.update ThetaD z (some Wy)) (.var z) := by
+    intro v hv
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    simp
+  have hden_z : ⟦(SMT.Term.var z).abstract
+      (Function.update ThetaD z (some Wy)) hcov_z⟧ˢ = some Wy := by
+    rw [SMT.Term.abstract.eq_def, SMT.denote, Option.pure_def,
+      Option.some.injEq]
+    apply Option.get_of_eq_some
+    exact Function.update_self z (some Wy) ThetaD
+  obtain ⟨ss, hcomponents, related_P⟩ :=
+    represented_lambda_toDestPair_bound_context vs_nemp vs_nodup
+      tau_hasArity hsigma hx hcov_z hden_z hWy_type hWy_mem hrel_x
+      ambient
+  have hss_map : (List.ofFn ss).map Option.some =
+      List.ofFn (fun i => some (ss i)) := by
+    rw [List.map_ofFn]
+    rfl
+  have related_P' : RValuationCastSupportedOnFV
+      (Function.updates Xi vs (List.ofFn fun i => some (x_fin i)))
+      (Function.updates ThetaD vs
+        ((List.ofFn ss).map Option.some)) P := by
+    rw [hss_map]
+    simpa [x_fin] using related_P
+  have hss_type : ∀ i : Fin vs.length,
+      LambdaP.lookup vs[i] = some (ss i).snd.fst := by
+    intro i
+    obtain ⟨_, _, _, htype⟩ := hcomponents i
+    exact (bound_expected i).trans (congrArg some htype).symm
+  have vs_in_LambdaP : ∀ v ∈ vs, v ∈ LambdaP := by
+    intro v hv
+    let i : Fin vs.length :=
+      ⟨vs.idxOf v, List.idxOf_lt_length_of_mem hv⟩
+    have hvi : vs[i] = v := List.getElem_idxOf i.isLt
+    rw [← hvi]
+    exact AList.lookup_isSome.mp
+      (Option.isSome_of_eq_some (bound_expected i))
+  let ThetaBase : SMT.RenamingContext.Context.{u} :=
+    Function.updates ThetaD vs ((List.ofFn ss).map Option.some)
+  have bound_values : ∀ (i : ℕ) (hi_x : i < vs.length)
+      (_hi_d : i < (List.ofFn ss).length),
+      ThetaBase vs[i] = some (ss ⟨i, hi_x⟩) := by
+    intro i hi_x _hi_d
+    dsimp [ThetaBase]
+    rw [Function.updates_eq_if (by simp) vs_nodup,
+      dif_pos (List.getElem_mem hi_x)]
+    simp [List.Nodup.idxOf_getElem vs_nodup]
+  have hctx_source : ∀ v ∈ B.Term.vars P, v ∉ vs →
+      ThetaD v = ThetaBase v := by
+    intro v _hv hvs
+    dsimp [ThetaBase]
+    rw [Function.updates_of_not_mem ThetaD vs _ v hvs]
+  obtain ⟨dP, hden_Psub, hdP_type, hrel_P⟩ :=
+    lambda_subst_of_total_body_toDestPair_var
+      (Penc := Penc) vs_nemp vs_nodup (z := z) (DeltaCtx := ThetaD)
+      (ThetaBase := ThetaBase) (W := Wy) (ss := ss)
+      (hcomponents := by
+        intro i
+        obtain ⟨hcov, hden, _, _⟩ := hcomponents i
+        exact ⟨hcov, hden⟩)
+      (hcov_sub := hcov_sub_upd Wy)
+      (hcov_upd := hcov_P_upd Wy ss)
+      hvs_not_bv hz_not_bv hz_not_vs P_total XiP_fv
+      (by simpa [ThetaBase, x_fin] using related_P')
+      (wf_bound x hx hxD) LambdaP_keys_used (source_respects ss hss_type)
+      source_fv_in_LambdaP vs_in_LambdaP Penc_fv_in_LambdaP den_P
+      bound_values hPenc_fv z_not_vars_P hctx_source
+  refine ⟨XiP_fv, Pval, hPval, dP, ?_, hden_Psub,
+    hdP_type, hrel_P⟩
+  simpa [x_fin] using den_P
 
 /- Both interpreter branches compute the same extensional graph: the
 nonempty branch chooses a domain element only to determine the result type,
@@ -2215,6 +2794,288 @@ theorem represented_lambda_of_total_body.{u}
     have hiff := B.denote_lambda_member_iff Xi_fv tau_hasArity den_D
       den_lambda hx_arity hx hp hPval den_P_go
     simpa only [hxD, true_and] using hiff
+
+/- Semantic representation theorem for the option-valued function emitted by
+the direct lambda encoding. -/
+open Classical in
+theorem represented_lambda_option_of_total_body.{u}
+    {vs : List B.𝒱} (vs_nemp : vs ≠ []) (vs_nodup : vs.Nodup)
+    {D P : B.Term} {tau beta : BType}
+    {Xi : B.RenamingContext.Context.{u}}
+    (Xi_fv : ∀ v ∈ B.fv (B.Term.lambda vs D P),
+      (Xi v).isSome = true)
+    (tau_hasArity : tau.hasArity vs.length)
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    (den_D : ⟦D.abstract Xi
+      (fun v hv => Xi_fv v (B.fv.mem_lambda (.inl hv)))⟧ᴮ =
+      some (⟨Dval, BType.set tau, hDval⟩ : B.Dom))
+    {T : ZFSet.{u}} {hT : T ∈ ⟦BType.set (tau ×ᴮ beta)⟧ᶻ}
+    (den_lambda : ⟦(B.Term.lambda vs D P).abstract Xi Xi_fv⟧ᴮ =
+      some (⟨T, BType.set (tau ×ᴮ beta), hT⟩ : B.Dom))
+    {sigma gamma : SMTType}
+    (hsigma : BType.SupportedSMT tau sigma)
+    (hgamma : BType.SupportedSMT beta gamma)
+    {Denc Penc body : SMT.Term} {z : SMT.𝒱}
+    {ThetaD : SMT.RenamingContext.Context.{u}}
+    {DencVal lamVal : SMT.Dom.{u}}
+    (body_def : body = SMT.Term.ite
+      (SMT.Term.app Denc (SMT.Term.var z))
+      (SMT.Term.some (SMT.substList vs
+        (toDestPair vs (SMT.Term.var z)) Penc))
+      (none$ gamma))
+    (hcov_lambda : SMT.RenamingContext.CoversFV ThetaD
+      ((λˢ [z]) [sigma] body))
+    (hden_target_lambda :
+      ⟦((λˢ [z]) [sigma] body).abstract ThetaD hcov_lambda⟧ˢ =
+        some lamVal)
+    (hlam_type : lamVal.snd.fst =
+      SMTType.fun sigma (SMTType.option gamma))
+    (hcov_D_upd : ∀ W : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W)) Denc)
+    (den_D_upd : ∀ W : SMT.Dom.{u},
+      ⟦Denc.abstract (Function.update ThetaD z (some W))
+        (hcov_D_upd W)⟧ˢ = some DencVal)
+    (hDenc_type : DencVal.snd.fst = sigma.fun SMTType.bool)
+    (hDenc_func : ⟦sigma⟧ᶻ.IsFunc ZFSet.𝔹 DencVal.fst)
+    (D_rel : RDomCastSupported
+      (⟨Dval, BType.set tau, hDval⟩ : B.Dom) DencVal)
+    (hcov_body_upd : ∀ W : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W)) body)
+    (hbody_total : ∀ W : SMT.Dom.{u}, W.snd.fst = sigma →
+      ∃ bodyVal : SMT.Dom.{u},
+        ⟦body.abstract (Function.update ThetaD z (some W))
+          (hcov_body_upd W)⟧ˢ = some bodyVal)
+    (hcov_sub_upd : ∀ W : SMT.Dom.{u},
+      SMT.RenamingContext.CoversFV
+        (Function.update ThetaD z (some W))
+        (SMT.substList vs (toDestPair vs (SMT.Term.var z)) Penc))
+    (hcov_P_upd : ∀ (W : SMT.Dom.{u})
+      (ss : Fin vs.length → SMT.Dom.{u}),
+      SMT.RenamingContext.CoversFV
+        (Function.updates (Function.update ThetaD z (some W)) vs
+          ((List.ofFn ss).map Option.some)) Penc)
+    (hvs_not_bv : ∀ v ∈ vs, v ∉ SMT.bv Penc)
+    (hz_not_bv : z ∉ SMT.bv Penc) (hz_not_vs : z ∉ vs)
+    {Ebody : B.Env} {LambdaP GammaP : SMT.TypeContext}
+    {usedP : List SMT.𝒱}
+    (typ_P : Ebody.context ⊢ᴮ P : beta)
+    (P_total : EncodeTermRepTotal.{u}
+      P Ebody beta LambdaP Penc gamma GammaP usedP)
+    (ambient : ∀ v ∈ B.fv P, v ∉ vs →
+      match Xi v, ThetaD v with
+      | some source, some target => RDomCastSupported source target
+      | _, _ => False)
+    (wf_bound : ∀ (x : ZFSet.{u}) (hx : x ∈ ⟦tau⟧ᶻ)
+      (_hx_D : x ∈ Dval),
+      B.RenWF Ebody.context
+        (Function.updates Xi vs (List.ofFn fun i => some
+          (⟨x.get vs.length i, tau.get vs.length i,
+            get_mem_type_of_isTuple
+              (hasArity_of_mem_toZFSet tau_hasArity hx)
+              tau_hasArity hx⟩ : B.Dom))))
+    (bound_expected : ∀ i : Fin vs.length,
+      LambdaP.lookup vs[i] =
+        some ((sigma.fromProdl (vs.length - 1))[i.val]'(by
+          have hlen := hsigma.fromProdl_length_of_hasArity tau_hasArity
+          exact i.isLt.trans_eq hlen.symm)))
+    (source_respects : ∀ ss : Fin vs.length → SMT.Dom.{u},
+      (∀ i, LambdaP.lookup vs[i] = some (ss i).snd.fst) →
+      B.RenamingContext.RespectsTypeContextOnFV
+        (Function.updates ThetaD vs
+          ((List.ofFn ss).map Option.some)) LambdaP P)
+    (source_fv_in_LambdaP : ∀ v ∈ B.fv P, v ∈ LambdaP)
+    (Penc_fv_in_LambdaP : ∀ v ∈ SMT.fv Penc, v ∈ LambdaP)
+    (LambdaP_keys_used : LambdaP.keys ⊆ usedP)
+    (hPenc_fv : SMT.fv Penc ⊆ B.Term.vars P)
+    (z_not_vars_P : z ∉ B.Term.vars P) :
+    RDomCastSupported
+      (⟨T, BType.set (tau ×ᴮ beta), hT⟩ : B.Dom) lamVal := by
+  subst body
+  have hDsub : Dval ⊆ ⟦tau⟧ᶻ := by
+    simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hDval
+  let DencVal' : SMT.Dom.{u} :=
+    ⟨DencVal.fst, sigma.fun SMTType.bool, by
+      rw [← hDenc_type]
+      exact DencVal.snd.snd⟩
+  have hDencVal_eq : DencVal = DencVal' :=
+    SMT.RenamingContext.Dom_ext' rfl hDenc_type
+  have D_rel' : RDomCastSupported
+      (⟨Dval, BType.set tau, hDval⟩ : B.Dom) DencVal' := by
+    simpa only [hDencVal_eq] using D_rel
+  rcases lamVal with ⟨F, lambdaType, hF⟩
+  dsimp at hlam_type hden_target_lambda ⊢
+  subst lambdaType
+  have hFfunc : ⟦sigma⟧ᶻ.IsFunc
+      ⟦SMTType.option gamma⟧ᶻ F := by
+    simpa [SMTType.toZFSet] using hF
+  apply RDomCastSupported.optionFunction_of_pointwise
+    hsigma hgamma hT hF hFfunc
+  · intro a ha b hb happ
+    let Wa : SMT.Dom.{u} := ⟨a, sigma, ha⟩
+    let Wb : SMT.Dom.{u} := ⟨b, gamma, hb⟩
+    obtain ⟨bodyVal, hden_body⟩ := hbody_total Wa rfl
+    have happly := single_lambda_fapply_eq_body
+      hcov_lambda hden_target_lambda hFfunc rfl ha
+      (hcov_body_upd Wa) hden_body
+    have hbody_some : bodyVal.fst =
+        (ZFSet.Option.some (S := ⟦gamma⟧ᶻ) ⟨b, hb⟩).val := by
+      exact happly.symm.trans
+        (by simpa only [Wa, proof_irrel_heq] using happ)
+    obtain ⟨hcov_Dapp, Dapp, hDapp_type, hDapp_value,
+        hden_Dapp⟩ :=
+      funDenoteAppAt (Δctx := ThetaD) (t := Denc) (x := z)
+        (α := sigma) (β := SMTType.bool) (Y := DencVal)
+        hcov_D_upd den_D_upd hDenc_type hDenc_func Wa rfl ha
+    have hden_body' : ⟦SMT.PHOAS.Term.ite
+        ((SMT.Term.app Denc (.var z)).abstract
+          (Function.update ThetaD z (some Wa)) hcov_Dapp)
+        (SMT.PHOAS.Term.some
+          ((SMT.substList vs (toDestPair vs (.var z)) Penc).abstract
+            (Function.update ThetaD z (some Wa)) (hcov_sub_upd Wa)))
+        (SMT.PHOAS.Term.none gamma)⟧ˢ = some bodyVal := by
+      simpa only [noneCast, SMT.Term.abstract, proof_irrel_heq] using
+        hden_body
+    have hDapp_true := denote_ite_some_none_some_implies_true
+      (W := Wb) (gamma := gamma)
+      hden_Dapp hDapp_type hden_body' rfl
+        (by simpa only [Wb] using hbody_some)
+    have happ_true := hDapp_value.symm.trans hDapp_true
+    obtain ⟨x, hxD, hrel_x⟩ :=
+      RDomCastSupported.setPred_target_of_true D_rel' ha (by
+        simpa only [DencVal', Wa, proof_irrel_heq] using happ_true)
+    have hx : x ∈ ⟦tau⟧ᶻ := hDsub hxD
+    obtain ⟨XiP_fv, Pval, hPval, dP, den_P, hden_Psub,
+        hdP_type, hrel_P⟩ :=
+      represented_lambda_option_subst_at_domain
+        (D := D) (P := P) (tau := tau) (beta := beta) (Xi := Xi)
+        (Dval := Dval) (T := T) (sigma := sigma) (gamma := gamma)
+        (Penc := Penc) (z := z) (ThetaD := ThetaD)
+        (Ebody := Ebody) (LambdaP := LambdaP) (GammaP := GammaP)
+        (usedP := usedP) vs_nemp vs_nodup Xi_fv tau_hasArity den_D
+        den_lambda hsigma hcov_sub_upd hcov_P_upd hvs_not_bv hz_not_bv
+        hz_not_vs typ_P P_total ambient wf_bound bound_expected
+        source_respects source_fv_in_LambdaP Penc_fv_in_LambdaP
+        LambdaP_keys_used hPenc_fv z_not_vars_P hx hxD rfl ha
+        (by simpa only [Wa, proof_irrel_heq] using hrel_x)
+    have hbody_point := (denote_ite_some_none_eq_some_iff
+      (W := Wb) (gamma := gamma)
+      hden_Dapp hDapp_type hden_Psub hdP_type hden_body' rfl).mp
+        (by simpa only [Wb] using hbody_some)
+    have hdP_b : dP.fst = b := hbody_point.2
+    let x_fin : Fin vs.length → B.Dom.{u} := fun i =>
+      ⟨x.get vs.length i, tau.get vs.length i,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet tau_hasArity hx)
+          tau_hasArity hx⟩
+    have den_P_go :
+        ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+          (B.fv.mem_lambda (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ =
+          some (⟨Pval, beta, hPval⟩ : B.Dom) := by
+      rw [denote_term_abstract_go_eq_term_abstract
+        vs_nodup vs_nemp x_fin XiP_fv]
+      simpa only [x_fin, proof_irrel_heq] using den_P
+    have hx_arity := hasArity_of_mem_toZFSet tau_hasArity hx
+    have hmem : x.pair Pval ∈ T :=
+      (B.denote_lambda_member_iff Xi_fv tau_hasArity den_D den_lambda
+        hx_arity hx hPval hPval den_P_go).mpr ⟨hxD, rfl⟩
+    have hrel_P' : RDomCastSupported
+        (⟨Pval, beta, hPval⟩ : B.Dom)
+        (⟨b, gamma, hb⟩ : SMT.Dom) := by
+      have hdP_eq : dP = (⟨b, gamma, hb⟩ : SMT.Dom) :=
+        SMT.RenamingContext.Dom_ext' hdP_b hdP_type
+      rw [← hdP_eq]
+      exact hrel_P
+    refine ⟨x, hx, Pval, hPval, hmem, ?_, hrel_P'⟩
+    simpa only [Wa, proof_irrel_heq] using hrel_x
+  · intro x hx p hp hmem
+    have hxD : x ∈ Dval :=
+      B.denote_lambda_member_domain Xi_fv tau_hasArity den_D den_lambda
+        hx hp hmem
+    obtain ⟨a, ha, hrel_x⟩ :=
+      RDomCastSupported.setPred_member_preimage D_rel' hxD
+    let Wa : SMT.Dom.{u} := ⟨a, sigma, ha⟩
+    obtain ⟨XiP_fv, Pval, hPval, dP, den_P, hden_Psub,
+        hdP_type, hrel_P⟩ :=
+      represented_lambda_option_subst_at_domain
+        (D := D) (P := P) (tau := tau) (beta := beta) (Xi := Xi)
+        (Dval := Dval) (T := T) (sigma := sigma) (gamma := gamma)
+        (Penc := Penc) (z := z) (ThetaD := ThetaD)
+        (Ebody := Ebody) (LambdaP := LambdaP) (GammaP := GammaP)
+        (usedP := usedP) vs_nemp vs_nodup Xi_fv tau_hasArity den_D
+        den_lambda hsigma hcov_sub_upd hcov_P_upd hvs_not_bv hz_not_bv
+        hz_not_vs typ_P P_total ambient wf_bound bound_expected
+        source_respects source_fv_in_LambdaP Penc_fv_in_LambdaP
+        LambdaP_keys_used hPenc_fv z_not_vars_P hx hxD rfl ha
+        (by simpa only [Wa, proof_irrel_heq] using hrel_x)
+    let x_fin : Fin vs.length → B.Dom.{u} := fun i =>
+      ⟨x.get vs.length i, tau.get vs.length i,
+        get_mem_type_of_isTuple
+          (hasArity_of_mem_toZFSet tau_hasArity hx)
+          tau_hasArity hx⟩
+    have den_P_go :
+        ⟦(B.Term.abstract.go P vs Xi (fun v hv hvs => Xi_fv v
+          (B.fv.mem_lambda (.inr ⟨hv, hvs⟩)))).uncurry x_fin⟧ᴮ =
+          some (⟨Pval, beta, hPval⟩ : B.Dom) := by
+      rw [denote_term_abstract_go_eq_term_abstract
+        vs_nodup vs_nemp x_fin XiP_fv]
+      simpa only [x_fin, proof_irrel_heq] using den_P
+    have hx_arity := hasArity_of_mem_toZFSet tau_hasArity hx
+    have hPval_eq : Pval = p :=
+      ((B.denote_lambda_member_iff Xi_fv tau_hasArity den_D den_lambda
+        hx_arity hx hp hPval den_P_go).mp hmem).2
+    subst Pval
+    obtain ⟨hcov_Dapp, Dapp, hDapp_type, hDapp_value,
+        hden_Dapp⟩ :=
+      funDenoteAppAt (Δctx := ThetaD) (t := Denc) (x := z)
+        (α := sigma) (β := SMTType.bool) (Y := DencVal)
+        hcov_D_upd den_D_upd hDenc_type hDenc_func Wa rfl ha
+    have hDapp_true : Dapp.fst = ZFSet.zftrue := by
+      rw [hDapp_value]
+      simpa only [DencVal', Wa, proof_irrel_heq] using
+        (RDomCastSupported.setPred_fapply_eq_zftrue_iff
+          (by simpa only [Wa, proof_irrel_heq] using hrel_x.toRDomCast)
+          D_rel').mpr hxD
+    obtain ⟨bodyVal, hden_body⟩ := hbody_total Wa rfl
+    have hden_body' : ⟦SMT.PHOAS.Term.ite
+        ((SMT.Term.app Denc (.var z)).abstract
+          (Function.update ThetaD z (some Wa)) hcov_Dapp)
+        (SMT.PHOAS.Term.some
+          ((SMT.substList vs (toDestPair vs (.var z)) Penc).abstract
+            (Function.update ThetaD z (some Wa)) (hcov_sub_upd Wa)))
+        (SMT.PHOAS.Term.none gamma)⟧ˢ = some bodyVal := by
+      simpa only [noneCast, SMT.Term.abstract, proof_irrel_heq] using
+        hden_body
+    have hbody_some := (denote_ite_some_none_eq_some_iff
+      hden_Dapp hDapp_type hden_Psub hdP_type hden_body' hdP_type).mpr
+        ⟨hDapp_true, rfl⟩
+    have happly := single_lambda_fapply_eq_body
+      hcov_lambda hden_target_lambda hFfunc rfl ha
+      (hcov_body_upd Wa) hden_body
+    have happ :
+        (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+          ⟨a, by rw [ZFSet.is_func_dom_eq hFfunc]; exact ha⟩).val =
+          (ZFSet.Option.some (S := ⟦gamma⟧ᶻ)
+            ⟨dP.fst, by rw [← hdP_type]; exact dP.snd.snd⟩).val := by
+      exact happly.trans hbody_some
+    have hdP_mem : dP.fst ∈ ⟦gamma⟧ᶻ := by
+      rw [← hdP_type]
+      exact dP.snd.snd
+    let dP' : SMT.Dom.{u} := ⟨dP.fst, gamma, hdP_mem⟩
+    have hdP_eq : dP = dP' :=
+      SMT.RenamingContext.Dom_ext' rfl hdP_type
+    have hrel_P' : RDomCastSupported
+        (⟨p, beta, hp⟩ : B.Dom) dP' := by
+      have hsrc : (⟨p, beta, hPval⟩ : B.Dom) =
+          (⟨p, beta, hp⟩ : B.Dom) :=
+        B.Dom.ext_type_value rfl rfl
+      rw [← hsrc, ← hdP_eq]
+      exact hrel_P
+    refine ⟨a, ha, dP.fst, hdP_mem, ?_, ?_, ?_⟩
+    · simpa only [Wa, proof_irrel_heq] using hrel_x
+    · simpa only [dP', proof_irrel_heq] using hrel_P'
+    · simpa only [proof_irrel_heq] using happ
 
 /- The body induction hypothesis needs one successful source evaluation before
 its alternative-valuation clause becomes available.  Source lambda semantics

@@ -745,145 +745,117 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
             SMT.Typing.weakening St1_sub_St3_types typ_Denc
               bv_Denc_disj_St3
 
-          have typ_out_St6 : St6.types ⊢ˢ
-              SMT.Term.lambda [z] [rho.pair gamma]
-                (SMT.Term.and
-                  (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                  (SMT.Term.eq (SMT.Term.snd (.var z))
+          have St6_types_eq : St6.types = St3.types := by
+            rw [St6_types, St5_types, St4_types]
+            exact encodeTerm_state.erase_insert_self z_fresh
+          have typ_out_St3 : St3.types ⊢ˢ
+              SMT.Term.lambda [z] [rho]
+                (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
                     (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc))) :
-              SMTType.fun (rho.pair gamma) SMTType.bool := by
+                      (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)) :
+              SMTType.fun rho (SMTType.option gamma) := by
             have hupdate : SMT.TypeContext.update St3.types [z]
-                [rho.pair gamma] rfl =
-                St3.types.insert z (rho.pair gamma) := by
+                [rho] rfl = St3.types.insert z rho := by
               simp only [SMT.TypeContext.update, List.length_cons,
                 List.length_nil, zero_add, Nat.reduceAdd,
                 Fin.cast_eq_self, Fin.getElem_fin, Fin.val_eq_zero,
                 List.getElem_cons_zero, Fin.foldl_succ, Fin.foldl_zero]
-            have typ_out_St3 : St3.types ⊢ˢ
-                SMT.Term.lambda [z] [rho.pair gamma]
-                  (SMT.Term.and
-                    (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                    (SMT.Term.eq (SMT.Term.snd (.var z))
-                      (SMT.substList vs
-                        (toDestPair vs
-                          (SMT.Term.fst (.var z))) Penc))) :
-                SMTType.fun (rho.pair gamma) SMTType.bool := by
-              refine SMT.Typing.lambda St3.types [z]
-                [rho.pair gamma] _ SMTType.bool ?_ ?_
-                (by simp) rfl ?_
-              · intro v hv
-                rw [List.mem_singleton] at hv
-                simpa [hv] using z_fresh
-              · intro v hv
-                rw [List.mem_singleton] at hv
-                subst v
-                simp only [SMT.bv, List.append_nil, List.nil_append,
-                  List.mem_append, not_or]
-                refine ⟨z_not_bv_Denc, ?_⟩
-                intro hbv
-                exact z_not_bv_Penc <|
-                  SMT_bv_substList_subset
-                    (fun t ht => toDestPair_bv_nil_base
-                      (by simp [SMT.bv]) t ht) _ hbv
-              · rw [hupdate]
-                have h_ins :=
-                  SMT.TypeContext.entries_subset_insert_of_notMem
-                    (v := z) (τ := rho.pair gamma) z_fresh
-                refine SMT.Typing.and _ _ _ ?_ ?_
-                · exact SMT.Typing.app _ _ _ _ _
-                    (SMT.Typing.weakening h_ins typ_Denc_St3
-                      (SMT.Typing.bv_notMem_insert_of_fresh
-                        typ_Denc_St3 z_not_bv_Denc))
-                    (SMT.Typing.fst _ _ _ _
-                      (SMT.Typing.var _ z (rho.pair gamma)
-                        (AList.lookup_insert St3.types)))
-                · refine SMT.Typing.eq _ _ _ gamma ?_ ?_
-                  · exact SMT.Typing.snd _ _ _ _
-                      (SMT.Typing.var _ z (rho.pair gamma)
-                        (AList.lookup_insert St3.types))
-                  · apply SMT_Typing_substList
-                    · exact SMT.Typing.weakening h_ins typ_Penc
-                        (SMT.Typing.bv_notMem_insert_of_fresh
-                          typ_Penc z_not_bv_Penc)
-                    · exact toDestPair_bv_nil_base (by simp [SMT.bv])
-                    · let GammaZ :=
-                          St3.types.insert z (rho.pair gamma)
-                      intro i hi_vs hi_terms hlookup
-                      have hi_sigmas : i < sigmas.length := by
-                        rw [sigmas_len]
-                        exact hi_vs
-                      have hlookup_St2 : St2.types.lookup vs[i] =
-                          some sigmas[i] := by
-                        rw [St2_update]
-                        exact SMT.TypeContext.lookup_update_of_mem_nodup
-                          St1.types vs_nodup vs_sigmas_len hi_vs
-                      have hlookup_St3 : St3.types.lookup vs[i] =
-                          some sigmas[i] :=
-                        AList.mem_lookup_iff.mpr <|
-                          St2_sub_St3 <|
-                            AList.mem_lookup_iff.mp hlookup_St2
-                      have hv_ne_z : vs[i] ≠ z := by
-                        intro heq
-                        apply z_not_used
-                        rw [← heq]
-                        exact used_sub_St3
-                          (vs_used_St2 vs[i]
-                            (List.getElem_mem hi_vs))
-                      have hlookup_GammaZ : GammaZ.lookup vs[i] =
-                          some sigmas[i] := by
-                        change (St3.types.insert z (rho.pair gamma)).lookup
-                          vs[i] = some sigmas[i]
-                        rw [AList.lookup_insert_ne hv_ne_z]
-                        exact hlookup_St3
-                      have hget : (GammaZ.lookup vs[i]).get hlookup =
-                          sigmas[i] := by
-                        simp [hlookup_GammaZ]
-                      rw [hget]
-                      have hz_lookup : GammaZ.lookup z =
-                          some (rho.pair gamma) := by
-                        exact AList.lookup_insert St3.types
-                      have typ_z : GammaZ ⊢ˢ SMT.Term.var z :
-                          rho.pair gamma :=
-                        SMT.Typing.var GammaZ z _ hz_lookup
-                      have typ_fst : GammaZ ⊢ˢ
-                          SMT.Term.fst (.var z) : rho :=
-                        SMT.Typing.fst _ _ _ _ typ_z
-                      have hdest := toDestPair_typing_gen GammaZ vs
-                        (SMT.Term.fst (.var z))
-                        (SMT.Term.fst (.var z)) rho [] []
-                        vs_nemp rfl typ_fst sigmas_len rfl
-                        (fun j hj => absurd hj (Nat.not_lt_zero j))
-                        i sigmas[i]
-                        (by
-                          simp only [List.append_nil]
-                          rw [List.getElem?_eq_getElem hi_sigmas])
-                      exact hdest.2
-            apply SMT.Typing.strengthening_of_fv_subset
-              St6_sub_St3 typ_out_St3
-            intro v hv
-            have hv_St3 := SMT.Typing.mem_context_of_mem_fv
-              typ_out_St3 hv
-            have hv' := hv
-            simp only [SMT.fv] at hv'
-            unfold List.removeAll at hv'
-            rw [List.mem_filter] at hv'
-            have hv_ne_z : v ≠ z := by simpa using hv'.2
-            rw [St6_types, St5_types, St4_types]
-            obtain ⟨sigma_v, hsigma_v⟩ :=
-              Option.isSome_iff_exists.mp
-                (AList.lookup_isSome.mpr hv_St3)
-            have hentry := AList.mem_lookup_iff.mp hsigma_v
-            have hins : ⟨v, sigma_v⟩ ∈
-                (AList.insert z (rho.pair gamma) St3.types).entries := by
-              rw [AList.entries_insert_of_notMem z_fresh]
-              exact List.mem_cons_of_mem _ hentry
-            exact AList.mem_keys.mpr <| List.mem_map.mpr
-              ⟨⟨v, sigma_v⟩,
-                List.mem_kerase_of_ne_key hv_ne_z hins, rfl⟩
-          have St6_types_eq : St6.types = St3.types := by
-            rw [St6_types, St5_types, St4_types]
-            exact encodeTerm_state.erase_insert_self z_fresh
+            refine SMT.Typing.lambda St3.types [z] [rho] _
+              (SMTType.option gamma) ?_ ?_ (by simp) rfl ?_
+            · intro v hv
+              rw [List.mem_singleton] at hv
+              simpa [hv] using z_fresh
+            · intro v hv
+              rw [List.mem_singleton] at hv
+              subst v
+              simp only [noneCast, SMT.bv, List.append_nil, List.nil_append,
+                List.mem_append, not_or]
+              refine ⟨z_not_bv_Denc, ?_⟩
+              intro hbv
+              exact z_not_bv_Penc <|
+                SMT_bv_substList_subset
+                  (fun t ht => toDestPair_bv_nil_base
+                    (by simp [SMT.bv]) t ht) _ hbv
+            · rw [hupdate]
+              let GammaZ := St3.types.insert z rho
+              have h_ins :=
+                SMT.TypeContext.entries_subset_insert_of_notMem
+                  (v := z) (τ := rho) z_fresh
+              have typ_Denc_GammaZ : GammaZ ⊢ˢ Denc :
+                  SMTType.fun rho SMTType.bool :=
+                SMT.Typing.weakening h_ins typ_Denc_St3
+                  (SMT.Typing.bv_notMem_insert_of_fresh
+                    typ_Denc_St3 z_not_bv_Denc)
+              have typ_Penc_GammaZ : GammaZ ⊢ˢ Penc : gamma :=
+                SMT.Typing.weakening h_ins typ_Penc
+                  (SMT.Typing.bv_notMem_insert_of_fresh
+                    typ_Penc z_not_bv_Penc)
+              have typ_z : GammaZ ⊢ˢ SMT.Term.var z : rho :=
+                SMT.Typing.var _ z rho (AList.lookup_insert St3.types)
+              have typ_Dapp : GammaZ ⊢ˢ
+                  SMT.Term.app Denc (.var z) : SMTType.bool :=
+                SMT.Typing.app _ _ _ _ _ typ_Denc_GammaZ typ_z
+              have typ_Psub : GammaZ ⊢ˢ
+                  SMT.substList vs (toDestPair vs (.var z)) Penc :
+                  gamma := by
+                apply SMT_Typing_substList
+                · exact typ_Penc_GammaZ
+                · exact toDestPair_bv_nil_base (by simp [SMT.bv])
+                · intro i hi_vs hi_terms hlookup
+                  have hi_sigmas : i < sigmas.length := by
+                    rw [sigmas_len]
+                    exact hi_vs
+                  have hlookup_St2 : St2.types.lookup vs[i] =
+                      some sigmas[i] := by
+                    rw [St2_update]
+                    exact SMT.TypeContext.lookup_update_of_mem_nodup
+                      St1.types vs_nodup vs_sigmas_len hi_vs
+                  have hlookup_St3 : St3.types.lookup vs[i] =
+                      some sigmas[i] :=
+                    AList.mem_lookup_iff.mpr <|
+                      St2_sub_St3 <| AList.mem_lookup_iff.mp hlookup_St2
+                  have hv_ne_z : vs[i] ≠ z := by
+                    intro heq
+                    apply z_not_used
+                    rw [← heq]
+                    exact used_sub_St3
+                      (vs_used_St2 vs[i] (List.getElem_mem hi_vs))
+                  have hlookup_GammaZ : GammaZ.lookup vs[i] =
+                      some sigmas[i] := by
+                    change (St3.types.insert z rho).lookup vs[i] =
+                      some sigmas[i]
+                    rw [AList.lookup_insert_ne hv_ne_z]
+                    exact hlookup_St3
+                  have hget : (GammaZ.lookup vs[i]).get hlookup =
+                      sigmas[i] := by
+                    simp [hlookup_GammaZ]
+                  rw [hget]
+                  have hdest := toDestPair_typing_gen GammaZ vs
+                    (.var z) (.var z) rho [] [] vs_nemp rfl typ_z
+                    sigmas_len rfl
+                    (fun j hj => absurd hj (Nat.not_lt_zero j))
+                    i sigmas[i]
+                    (by
+                      simp only [List.append_nil]
+                      rw [List.getElem?_eq_getElem hi_sigmas])
+                  exact hdest.2
+              exact SMT.Typing.ite _ _ _ _ _ typ_Dapp
+                (SMT.Typing.some _ _ _ typ_Psub)
+                (SMT.Typing.none _ gamma)
+          have typ_out_St6 : St6.types ⊢ˢ
+              SMT.Term.lambda [z] [rho]
+                (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs
+                      (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)) :
+              SMTType.fun rho (SMTType.option gamma) := by
+            rw [St6_types_eq]
+            exact typ_out_St3
           have St0_sub_St6 : St0.types ⊆ St6.types := by
             rw [St6_types_eq]
             exact AList.subset_trans
@@ -938,32 +910,32 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
           have hsemantic_scoped : LambdaScopedSemanticPost.{u}
               (B.Term.lambda vs D P) (BType.set (tau ×ᴮ beta))
               St0.types Xi Theta0 T hT_parent E
-              (SMT.Term.lambda [z] [rho.pair gamma]
-                (SMT.Term.and
-                  (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                  (SMT.Term.eq (SMT.Term.snd (.var z))
-                    (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc))))
-              (SMTType.fun (rho.pair gamma) SMTType.bool)
+              (SMT.Term.lambda [z] [rho]
+                (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)))
+              (SMTType.fun rho (SMTType.option gamma))
               St6.env St6.types DltD := by
             have hpath : Nonempty
-                (SMTType.fun (rho.pair gamma) SMTType.bool ~>
+                (SMTType.fun rho (SMTType.option gamma) ~>
                   (BType.set (tau ×ᴮ beta)).toSMTType) :=
-                (rho_supported.prod gamma_supported).setPred
+                (rho_supported.optionFun gamma_supported)
                   |>.nonemptyCanonicalCastPath
             refine ⟨by simpa [tau] using hpath, typ_out_St6, trivial, ?_⟩
             let body : SMT.Term :=
-              SMT.Term.and
-                (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                (SMT.Term.eq (SMT.Term.snd (.var z))
-                  (SMT.substList vs
-                    (toDestPair vs (SMT.Term.fst (.var z))) Penc))
+              SMT.Term.ite
+                (SMT.Term.app Denc (.var z))
+                (SMT.Term.some
+                  (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                (none$ gamma)
             have body_def : body =
-                SMT.Term.and
-                  (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                  (SMT.Term.eq (SMT.Term.snd (.var z))
-                    (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc)) := rfl
+                SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma) := rfl
             have ThetaP_ext_D : SMT.RenamingContext.Extends
                 ThetaP ThetaD := by
               intro v d hv
@@ -1087,7 +1059,7 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                 SMT.RenamingContext.CoversFV
                   (Function.update ThetaBody z (some W))
                   (SMT.substList vs
-                    (toDestPair vs (SMT.Term.fst (.var z))) Penc) := by
+                    (toDestPair vs (.var z)) Penc) := by
               intro W v hv
               rcases SMT_mem_fv_substList hv with hv_P |
                   ⟨t, ht, hv_t⟩
@@ -1096,7 +1068,7 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                     exact z_not_fv_Penc (heq ▸ hv_P))]
                 exact hcov_Penc v hv_P
               · have hvz := SMT_fv_toDestPair_subset_base
-                    (t₀ := SMT.Term.fst (.var z))
+                    (t₀ := .var z)
                     (by
                       intro w hw
                       simpa [SMT.fv] using hw)
@@ -1108,15 +1080,14 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                   (Function.update ThetaBody z (some W)) body := by
               intro W v hv
               rw [body_def] at hv
-              simp only [SMT.fv, List.mem_append, List.mem_singleton,
+              simp only [noneCast, SMT.fv, List.mem_append, List.mem_singleton,
                 List.not_mem_nil, or_false] at hv
-              rcases hv with (hv_D | rfl) | (rfl | hv_sub)
+              rcases hv with (hv_D | rfl) | hv_sub
               · exact hcov_D_upd W v hv_D
-              · simp
               · simp
               · exact hcov_sub_upd W v hv_sub
             have hcov_lambda : SMT.RenamingContext.CoversFV ThetaBody
-                ((λˢ [z]) [rho.pair gamma] body) := by
+                ((λˢ [z]) [rho] body) := by
               intro v hv
               simp only [SMT.fv, List.mem_removeAll_iff] at hv
               obtain ⟨hv_body, hv_ne_z⟩ := hv
@@ -1128,24 +1099,23 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
             have target_respects_lambda :
                 SMT.RenamingContext.RespectsTypeContextOnFV
                   ThetaBody St3.types
-                    ((λˢ [z]) [rho.pair gamma] body) := by
+                    ((λˢ [z]) [rho] body) := by
               intro v sigma hv hlookup
               simp only [SMT.fv, List.mem_removeAll_iff] at hv
               obtain ⟨hv_body, hv_ne_z⟩ := hv
               have hvz : v ≠ z := List.mem_singleton.not.mp hv_ne_z
               rw [body_def] at hv_body
-              simp only [SMT.fv, List.mem_append, List.mem_singleton,
+              simp only [noneCast, SMT.fv, List.mem_append, List.mem_singleton,
                 List.not_mem_nil, or_false] at hv_body
-              rcases hv_body with (hv_D | hv_z1) | (hv_z2 | hv_sub)
+              rcases hv_body with (hv_D | hv_z) | hv_sub
               · exact target_respects_D_body hv_D hlookup
-              · exact absurd hv_z1 hvz
-              · exact absurd hv_z2 hvz
+              · exact absurd hv_z hvz
               · rcases SMT_mem_fv_substList hv_sub with hv_P |
                     ⟨t, ht, hv_t⟩
                 · exact target_respects_Penc hv_P hlookup
                 · exact absurd
                     (SMT_fv_toDestPair_subset_base
-                      (t₀ := SMT.Term.fst (.var z))
+                      (t₀ := .var z)
                       (by
                         intro w hw
                         simpa [SMT.fv] using hw)
@@ -1153,25 +1123,25 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
             have target_respects_lambda_out :
                 SMT.RenamingContext.RespectsTypeContextOnFV
                   ThetaBody St6.types
-                    ((λˢ [z]) [rho.pair gamma] body) := by
+                    ((λˢ [z]) [rho] body) := by
               rw [St6_types_eq]
               exact target_respects_lambda
             obtain ⟨_, hlen_z, gamma_body, _, _, htype_out,
                 typ_body_update⟩ := SMT.Typing.lambdaE typ_out_St6
-            have gamma_body_eq : gamma_body = SMTType.bool := by
+            have gamma_body_eq : gamma_body = SMTType.option gamma := by
               have h := (SMTType.fun.inj htype_out).2
               exact h.symm
             subst gamma_body
             have hupdate_body : St6.types.update [z]
-                [rho.pair gamma] hlen_z =
-                St3.types.insert z (rho.pair gamma) := by
+                [rho] hlen_z =
+                St3.types.insert z rho := by
               rw [St6_types_eq]
               simp only [SMT.TypeContext.update, List.length_cons,
                 List.length_nil, zero_add, Nat.reduceAdd,
                 Fin.cast_eq_self, Fin.getElem_fin, Fin.val_eq_zero,
                 List.getElem_cons_zero, Fin.foldl_succ, Fin.foldl_zero]
-            have typ_body : St3.types.insert z (rho.pair gamma) ⊢ˢ
-                body : SMTType.bool := by
+            have typ_body : St3.types.insert z rho ⊢ˢ
+                body : SMTType.option gamma := by
               rw [hupdate_body] at typ_body_update
               simpa [body] using typ_body_update
             have Theta_wt : ∀ v ∈ SMT.fv body,
@@ -1197,7 +1167,7 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
               SMT.RenamingContext.denote_update_total_and_type_of_typing
                 typ_body Theta_wt hcov_body_upd
             have hbody_total : ∀ W : SMT.Dom.{u},
-                W.snd.fst = rho.pair gamma →
+                W.snd.fst = rho →
                 ∃ bodyVal : SMT.Dom.{u},
                   ⟦body.abstract (Function.update ThetaBody z (some W))
                     (hcov_body_upd W)⟧ˢ = some bodyVal := by
@@ -1284,7 +1254,7 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
             have hrel_lambda : RDomCastSupported
                 (⟨T, BType.set (tau ×ᴮ beta), hT_lambda⟩ : B.Dom)
                 lamVal := by
-              exact represented_lambda_of_total_body
+              exact represented_lambda_option_of_total_body
                 (D := D) (P := P) (tau := tau) (beta := beta)
                 (Xi := Xi) (Dval := Dval) (hDval := hDval)
                 (T := T) (hT := hT_lambda) (sigma := rho)
@@ -1673,7 +1643,7 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                   SMT.RenamingContext.CoversFV
                     (Function.update ThetaBody_alt z (some W))
                     (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc) := by
+                      (toDestPair vs (.var z)) Penc) := by
                 intro W v hv
                 rcases SMT_mem_fv_substList hv with hv_P |
                     ⟨t, ht, hv_t⟩
@@ -1682,7 +1652,7 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                       exact z_not_fv_Penc (heq ▸ hv_P))]
                   exact hcov_P_alt v hv_P
                 · have hvz := SMT_fv_toDestPair_subset_base
-                      (t₀ := SMT.Term.fst (.var z))
+                      (t₀ := .var z)
                       (by
                         intro w hw
                         simpa [SMT.fv] using hw)
@@ -1694,16 +1664,15 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                     (Function.update ThetaBody_alt z (some W)) body := by
                 intro W v hv
                 rw [body_def] at hv
-                simp only [SMT.fv, List.mem_append,
-                  List.mem_singleton] at hv
-                rcases hv with (hv_D | rfl) | (rfl | hv_sub)
+                simp only [noneCast, SMT.fv, List.mem_append,
+                  List.mem_singleton, List.not_mem_nil, or_false] at hv
+                rcases hv with (hv_D | rfl) | hv_sub
                 · exact hcov_D_upd_alt W v hv_D
-                · simp
                 · simp
                 · exact hcov_sub_upd_alt W v hv_sub
               have hcov_lambda_alt :
                   SMT.RenamingContext.CoversFV ThetaBody_alt
-                    ((λˢ [z]) [rho.pair gamma] body) := by
+                    ((λˢ [z]) [rho] body) := by
                 intro v hv
                 simp only [SMT.fv, List.mem_removeAll_iff] at hv
                 obtain ⟨hv_body, hv_ne_z⟩ := hv
@@ -1715,25 +1684,25 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
               have target_respects_lambda_alt :
                   SMT.RenamingContext.RespectsTypeContextOnFV
                     ThetaBody_alt St3.types
-                      ((λˢ [z]) [rho.pair gamma] body) := by
+                      ((λˢ [z]) [rho] body) := by
                 intro v sigma hv hlookup
                 simp only [SMT.fv, List.mem_removeAll_iff] at hv
                 obtain ⟨hv_body, hv_ne_z⟩ := hv
                 have hvz : v ≠ z :=
                   List.mem_singleton.not.mp hv_ne_z
                 rw [body_def] at hv_body
-                simp only [SMT.fv, List.mem_append,
-                  List.mem_singleton] at hv_body
-                rcases hv_body with (hv_D | hv_z1) | (hv_z2 | hv_sub)
+                simp only [noneCast, SMT.fv, List.mem_append,
+                  List.mem_singleton, List.not_mem_nil,
+                  or_false] at hv_body
+                rcases hv_body with (hv_D | hv_z) | hv_sub
                 · exact target_respects_D_body_alt hv_D hlookup
-                · exact absurd hv_z1 hvz
-                · exact absurd hv_z2 hvz
+                · exact absurd hv_z hvz
                 · rcases SMT_mem_fv_substList hv_sub with hv_P |
                       ⟨t, ht, hv_t⟩
                   · exact target_respects_P_alt hv_P hlookup
                   · exact absurd
                       (SMT_fv_toDestPair_subset_base
-                        (t₀ := SMT.Term.fst (.var z))
+                        (t₀ := .var z)
                         (by
                           intro w hw
                           simpa [SMT.fv] using hw)
@@ -1741,7 +1710,7 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
               have target_respects_lambda_out_alt :
                   SMT.RenamingContext.RespectsTypeContextOnFV
                     ThetaBody_alt St6.types
-                      ((λˢ [z]) [rho.pair gamma] body) := by
+                      ((λˢ [z]) [rho] body) := by
                 rw [St6_types_eq]
                 exact target_respects_lambda_alt
               have Theta_wt_alt : ∀ v ∈ SMT.fv body,
@@ -1768,7 +1737,7 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                 SMT.RenamingContext.denote_update_total_and_type_of_typing
                   typ_body Theta_wt_alt hcov_body_upd_alt
               have hbody_total_alt : ∀ W : SMT.Dom.{u},
-                  W.snd.fst = rho.pair gamma →
+                  W.snd.fst = rho →
                   ∃ bodyVal : SMT.Dom.{u},
                     ⟦body.abstract
                       (Function.update ThetaBody_alt z (some W))
@@ -1826,7 +1795,7 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
               have hrel_lambda_alt : RDomCastSupported
                   (⟨T_alt, BType.set (tau ×ᴮ beta),
                     hT_alt_lambda⟩ : B.Dom) lamVal_alt := by
-                exact represented_lambda_of_total_body
+                exact represented_lambda_option_of_total_body
                   (D := D) (P := P) (tau := tau) (beta := beta)
                   (Xi := Xi_alt) (Dval := Dval_alt)
                   (hDval := hDval_alt) (T := T_alt)
@@ -1888,35 +1857,34 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
             · exact Penc_bv_not_body_base
 
           have hdest_length : vs.length =
-              (toDestPair vs (SMT.Term.fst (.var z))).length := by
-            rw [toDestPair_length_gen vs (SMT.Term.fst (.var z))
-              (SMT.Term.fst (.var z)) [] vs_nemp]
+              (toDestPair vs (.var z)).length := by
+            rw [toDestPair_length_gen vs (.var z)
+              (.var z) [] vs_nemp]
             simp
           have output_fv_DCore : ∀ v ∈ SMT.fv
-              (SMT.Term.lambda [z] [rho.pair gamma]
-                (SMT.Term.and
-                  (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                  (SMT.Term.eq (SMT.Term.snd (.var z))
-                    (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc)))),
+              (SMT.Term.lambda [z] [rho]
+                (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma))),
               v ∈ DCore := by
             intro v hv
             simp only [SMT.fv, List.mem_removeAll_iff] at hv
             obtain ⟨hv_body, hv_ne_z⟩ := hv
             have hvz : v ≠ z := List.mem_singleton.not.mp hv_ne_z
-            simp only [SMT.fv, List.mem_append,
-              List.mem_singleton] at hv_body
-            rcases hv_body with (hv_D | hv_z1) | (hv_z2 | hv_sub)
+            simp only [noneCast, SMT.fv, List.mem_append,
+              List.mem_singleton, List.not_mem_nil, or_false] at hv_body
+            rcases hv_body with (hv_D | hv_z) | hv_sub
             · exact SMT.Typing.mem_context_of_mem_fv typ_Denc_DCore hv_D
-            · exact absurd hv_z1 hvz
-            · exact absurd hv_z2 hvz
+            · exact absurd hv_z hvz
             · have hv_not_vs : v ∉ vs := by
                 intro hvs
                 exact (SMT_not_mem_fv_substList_of_mem_vars
                   (Nat.le_of_eq hdest_length) hvs
                   (fun t ht hv_t => hvz <|
                     SMT_fv_toDestPair_subset_base
-                      (t₀ := SMT.Term.fst (.var z))
+                      (t₀ := .var z)
                       (by intro w hw; simpa [SMT.fv] using hw)
                       ht hv_t)) hv_sub
               rcases SMT_mem_fv_substList hv_sub with hv_P |
@@ -1929,27 +1897,27 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                 · exact hCore
               · exact absurd
                   (SMT_fv_toDestPair_subset_base
-                    (t₀ := SMT.Term.fst (.var z))
+                    (t₀ := .var z)
                     (by intro w hw; simpa [SMT.fv] using hw)
                     ht hv_t) hvz
           have typ_out_DCore : DCore ⊢ˢ
-              SMT.Term.lambda [z] [rho.pair gamma]
-                (SMT.Term.and
-                  (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                  (SMT.Term.eq (SMT.Term.snd (.var z))
-                    (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc))) :
-              SMTType.fun (rho.pair gamma) SMTType.bool :=
+              SMT.Term.lambda [z] [rho]
+                (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)) :
+              SMTType.fun rho (SMTType.option gamma) :=
             SMT.Typing.strengthening_of_fv_subset DCore_sub_St6
               typ_out_St6 output_fv_DCore
           have lambda_scoped_typing : ScopedGeneratedTyping St0.types DltD
-              (SMT.Term.lambda [z] [rho.pair gamma]
-                (SMT.Term.and
-                  (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                  (SMT.Term.eq (SMT.Term.snd (.var z))
-                    (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc))))
-              (SMTType.fun (rho.pair gamma) SMTType.bool) := by
+              (SMT.Term.lambda [z] [rho]
+                (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)))
+              (SMTType.fun rho (SMTType.option gamma)) := by
             constructor
             · intro GammaSup hscope hbv
               have DCore_sub_sup : DCore.entries ⊆ GammaSup.entries := by
@@ -1994,13 +1962,13 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
 
           have lambda_guard : EncodeTermRepGuardedSound.{u}
               (B.Term.lambda vs D P) E (BType.set (tau ×ᴮ beta))
-              (SMT.Term.lambda [z] [rho.pair gamma]
-                (SMT.Term.and
-                  (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                  (SMT.Term.eq (SMT.Term.snd (.var z))
-                    (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc))))
-              (SMTType.fun (rho.pair gamma) SMTType.bool)
+              (SMT.Term.lambda [z] [rho]
+                (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)))
+              (SMTType.fun rho (SMTType.option gamma))
               St0.types DltD := by
             intro GammaSup parent_scope Xi_alt Xi_fv_alt Theta
               related_alt wf_alt source_respects_sup target_respects_sup
@@ -2042,12 +2010,11 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
             have hcov_body_upd_guard : ∀ W : SMT.Dom.{u},
                 SMT.RenamingContext.CoversFV
                   (Function.update Theta z (some W))
-                  (SMT.Term.and
-                    (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                    (SMT.Term.eq (SMT.Term.snd (.var z))
-                      (SMT.substList vs
-                        (toDestPair vs
-                          (SMT.Term.fst (.var z))) Penc))) := by
+                  (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)) := by
               intro W v hv
               by_cases hvz : v = z
               · subst v
@@ -2056,23 +2023,23 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                 apply hcov_lambda_alt v
                 simp only [SMT.fv, List.mem_removeAll_iff]
                 exact ⟨by
-                  simpa only [SMT.fv, List.mem_append,
+                  simpa only [noneCast, SMT.fv, List.mem_append,
                     List.mem_singleton] using hv,
                   by simpa using hvz⟩
             have Denc_fv_in_lambda_guard : ∀ v ∈ SMT.fv Denc,
                 v ∈ SMT.fv
-                  (SMT.Term.lambda [z] [rho.pair gamma]
-                    (SMT.Term.and
-                      (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                      (SMT.Term.eq (SMT.Term.snd (.var z))
-                        (SMT.substList vs
-                          (toDestPair vs
-                            (SMT.Term.fst (.var z))) Penc)))) := by
+                  (SMT.Term.lambda [z] [rho]
+                    (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma))) := by
               intro v hv
               have hvz : v ≠ z := fun h =>
                 z_not_fv_Denc_guard (h ▸ hv)
-              simp only [SMT.fv, List.mem_removeAll_iff,
-                List.mem_append, List.mem_singleton]
+              simp only [noneCast, SMT.fv, List.mem_removeAll_iff,
+                List.mem_append, List.mem_singleton, List.not_mem_nil,
+                or_false]
               exact ⟨Or.inl (Or.inl hv), by simpa using hvz⟩
             have hcov_D_guard : SMT.RenamingContext.CoversFV
                 Theta Denc :=
@@ -2085,10 +2052,10 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                 (Denc_fv_in_lambda_guard v hv) hlookup
             obtain ⟨DencVal_guard, hden_D_guard,
                 hDenc_type_guard⟩ :=
-              lambda_domain_denote_of_lambda_denote
+              lambda_option_domain_denote_of_lambda_denote
                 (Denc := Denc)
                 (Psub := SMT.substList vs
-                  (toDestPair vs (SMT.Term.fst (.var z))) Penc)
+                  (toDestPair vs (.var z)) Penc)
                 hcov_lambda_alt hden_lambda_alt hcov_body_upd_guard
                 hcov_D_guard z_not_fv_Denc_guard
             have D_rel_guard : RDomCastSupported
@@ -2125,14 +2092,13 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
               rw [SMTType.toZFSet] at hmem
               exact ZFSet.mem_funs.mp hmem
             have hbody_total_guard : ∀ W : SMT.Dom.{u},
-                W.snd.fst = rho.pair gamma →
+                W.snd.fst = rho →
                 ∃ bodyVal : SMT.Dom.{u},
-                  ⟦(SMT.Term.and
-                    (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                    (SMT.Term.eq (SMT.Term.snd (.var z))
-                      (SMT.substList vs
-                        (toDestPair vs
-                          (SMT.Term.fst (.var z))) Penc))).abstract
+                  ⟦(SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)).abstract
                     (Function.update Theta z (some W))
                     (hcov_body_upd_guard W)⟧ˢ = some bodyVal :=
               lambda_body_total_of_denote hcov_lambda_alt
@@ -2141,39 +2107,40 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
                 SMT.RenamingContext.CoversFV
                   (Function.update Theta z (some W))
                   (SMT.substList vs
-                    (toDestPair vs (SMT.Term.fst (.var z))) Penc) := by
+                    (toDestPair vs (.var z)) Penc) := by
               intro W v hv
               apply hcov_body_upd_guard W v
-              simp only [SMT.fv, List.mem_append, List.mem_singleton]
-              exact Or.inr (Or.inr hv)
+              simp only [noneCast, SMT.fv, List.mem_append,
+                List.mem_singleton, List.not_mem_nil, or_false]
+              exact Or.inr hv
             have toDest_fv_disj_vs_guard :
-                ∀ q ∈ toDestPair vs (SMT.Term.fst (.var z)),
+                ∀ q ∈ toDestPair vs (.var z),
                   ∀ v ∈ SMT.fv q, v ∉ vs := by
               intro q hq v hv hvs
               have hvz := SMT_fv_toDestPair_subset_base
-                (t₀ := SMT.Term.fst (.var z))
+                (t₀ := .var z)
                 (by intro w hw; simpa [SMT.fv] using hw) hq hv
               subst v
               exact z_not_vs_guard hvs
             have Penc_fv_in_lambda_guard : ∀ v ∈ SMT.fv Penc,
                 v ∉ vs →
                 v ∈ SMT.fv
-                  (SMT.Term.lambda [z] [rho.pair gamma]
-                    (SMT.Term.and
-                      (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                      (SMT.Term.eq (SMT.Term.snd (.var z))
-                        (SMT.substList vs
-                          (toDestPair vs
-                            (SMT.Term.fst (.var z))) Penc)))) := by
+                  (SMT.Term.lambda [z] [rho]
+                    (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma))) := by
               intro v hv hvs
               have hv_sub :=
                 SMT.RenamingContext.fv_mem_fv_substList_no_bv
                   hv hvs toDest_fv_disj_vs_guard
               have hvz : v ≠ z := fun h =>
                 z_not_fv_Penc_guard (h ▸ hv)
-              simp only [SMT.fv, List.mem_removeAll_iff,
-                List.mem_append, List.mem_singleton]
-              exact ⟨Or.inr (Or.inr hv_sub), by simpa using hvz⟩
+              simp only [noneCast, SMT.fv, List.mem_removeAll_iff,
+                List.mem_append, List.mem_singleton, List.not_mem_nil,
+                or_false]
+              exact ⟨Or.inr hv_sub, by simpa using hvz⟩
             have hcov_P_upd_guard : ∀ (W : SMT.Dom.{u})
                 (ss' : Fin vs.length → SMT.Dom.{u}),
                 SMT.RenamingContext.CoversFV
@@ -2274,16 +2241,16 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
             have St2_keys_used_St3_guard : St2.types.keys ⊆
                 St3.env.usedVars :=
               fun v hv => used_sub_St3 (St2_keys_sub hv)
-            exact represented_lambda_of_total_body
+            exact represented_lambda_option_of_total_body
               (D := D) (P := P) (tau := tau) (beta := beta)
               (Xi := Xi_alt) (Dval := Dval_alt) (hDval := hDval_alt)
               (T := T_alt) (hT := hT_alt) (sigma := rho)
               (gamma := gamma) (Denc := Denc) (Penc := Penc)
-              (body := SMT.Term.and
-                (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                (SMT.Term.eq (SMT.Term.snd (.var z))
-                  (SMT.substList vs
-                    (toDestPair vs (SMT.Term.fst (.var z))) Penc)))
+              (body := SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma))
               (z := z) (ThetaD := Theta) (DencVal := DencVal_guard)
               (lamVal := lamVal_alt) (Ebody := Ebody)
               (LambdaP := St2.types) (GammaP := St3.types)
@@ -2301,13 +2268,13 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
           have lambda_semantic : EncodeTermRepSemanticPost.{u}
               (B.Term.lambda vs D P) (BType.set (tau ×ᴮ beta))
               St0.types Xi Theta0 T hT_parent E
-              (SMT.Term.lambda [z] [rho.pair gamma]
-                (SMT.Term.and
-                  (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                  (SMT.Term.eq (SMT.Term.snd (.var z))
-                    (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc))))
-              (SMTType.fun (rho.pair gamma) SMTType.bool)
+              (SMT.Term.lambda [z] [rho]
+                (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)))
+              (SMTType.fun rho (SMTType.option gamma))
               St6.env St6.types := by
             refine ⟨lambda_path, lambda_typing, lambda_shape,
               ThetaOut, hcovOut, ThetaOut_ext, relatedOut,
@@ -2319,13 +2286,13 @@ theorem encodeTerm_rep_spec.lambda_case_and_scoped.{u}
           have scoped_post_tau : EncodeTermRepScopedPost.{u}
               (B.Term.lambda vs D P) E (BType.set (tau ×ᴮ beta))
               St0.types decl
-              (SMT.Term.lambda [z] [rho.pair gamma]
-                (SMT.Term.and
-                  (SMT.Term.app Denc (SMT.Term.fst (.var z)))
-                  (SMT.Term.eq (SMT.Term.snd (.var z))
-                    (SMT.substList vs
-                      (toDestPair vs (SMT.Term.fst (.var z))) Penc))))
-              (SMTType.fun (rho.pair gamma) SMTType.bool)
+              (SMT.Term.lambda [z] [rho]
+                (SMT.Term.ite
+                  (SMT.Term.app Denc (.var z))
+                  (SMT.Term.some
+                    (SMT.substList vs (toDestPair vs (.var z)) Penc))
+                  (none$ gamma)))
+              (SMTType.fun rho (SMTType.option gamma))
               St6.env St6.types := by
             refine ⟨DltD, ?_, ?_, ?_, lambda_scoped_total, ?_,
               D_specs_final, lambda_scoped_typing⟩

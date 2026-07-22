@@ -1,4 +1,3 @@
-import SMT.Reasoning.Basic.CastMembershipSpec
 import SMT.Reasoning.Basic.LoosenAuxExactUniv
 import SMT.Reasoning.Basic.EncodeTermStruct
 import SMT.Reasoning.Basic.LoosenAuxFV
@@ -436,6 +435,7 @@ theorem castMembership_option_exact_spec.{u}
     enter [2, 1, 1]
     simp only [bind_pure_comp]
   rw [dif_pos α_le, dif_pos β_le]
+  unfold castMembership.optionForward
   mspec (Std.Do.Triple.and _
     (Std.Do.Triple.and _
       (Std.Do.Triple.and _
@@ -464,7 +464,7 @@ theorem castMembership_option_exact_spec.{u}
     typ_x!_St1, typ_x!_spec_St1, fv_x!_spec, hadq_univ⟩,
     _x!_not_used_fv, fv_x_spec, _used_sub_fv⟩,
     St1_decl_eq⟩, ⟨St1_types_exact, _⟩⟩ := pre
-  mspec Std.Do.Spec.map
+  simp only
   mspec SMT.declareConst_addSpec_spec
     (x! := x!) (x!_spec := x!_spec) (τ := .pair α' β')
     (decl := St1.env.declarations)

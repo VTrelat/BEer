@@ -419,8 +419,8 @@ theorem ValueCastAdmissible.canonical.{u}
 
 /-- SMT representation shapes that the encoder can actually emit and consume.
 Besides the canonical encoding, products may combine supported component
-representations and binary relations may use the exact option-function
-encoding selected by `encodeTypeContext`. -/
+representations and functional binary relations may use option functions whose
+domain and codomain themselves have supported representations. -/
 inductive BType.SupportedSMT : BType → SMTType → Prop where
   | int : BType.SupportedSMT BType.int SMTType.int
   | bool : BType.SupportedSMT BType.bool SMTType.bool
@@ -432,9 +432,11 @@ inductive BType.SupportedSMT : BType → SMTType → Prop where
       BType.SupportedSMT τ σ →
       BType.SupportedSMT (BType.set τ)
         (SMTType.fun σ SMTType.bool)
-  | optionFun (α β : BType) :
+  | optionFun {α β : BType} {σ τ : SMTType} :
+      BType.SupportedSMT α σ →
+      BType.SupportedSMT β τ →
       BType.SupportedSMT (BType.set (α ×ᴮ β))
-        (SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
+        (SMTType.fun σ (SMTType.option τ))
 
 theorem BType.SupportedSMT.canonical (τ : BType) :
     BType.SupportedSMT τ τ.toSMTType := by
@@ -455,11 +457,13 @@ theorem BType.SupportedSMT.setE {τ : BType} {σ : SMTType}
     (h : BType.SupportedSMT (BType.set τ) σ) :
     (∃ ρ, σ = SMTType.fun ρ SMTType.bool ∧
       BType.SupportedSMT τ ρ) ∨
-      ∃ α β, τ = α ×ᴮ β ∧
-        σ = SMTType.fun α.toSMTType (SMTType.option β.toSMTType) := by
+      ∃ α β ρ υ, τ = α ×ᴮ β ∧
+        σ = SMTType.fun ρ (SMTType.option υ) ∧
+        BType.SupportedSMT α ρ ∧ BType.SupportedSMT β υ := by
   cases h with
   | setPred hτ => exact Or.inl ⟨_, rfl, hτ⟩
-  | optionFun α β => exact Or.inr ⟨α, β, rfl, rfl⟩
+  | @optionFun α β ρ υ hα hβ =>
+      exact Or.inr ⟨α, β, ρ, υ, rfl, rfl, hα, hβ⟩
 
 /-- Every encoder-supported target representation has a structural path to
 the canonical SMT representation of its source type. -/
@@ -471,9 +475,8 @@ theorem BType.SupportedSMT.nonemptyCanonicalCastPath
   | bool => exact ⟨castPath.reflexive SMTType.bool⟩
   | prod _ _ ihα ihβ => exact ⟨castPath.pair ihα.some ihβ.some⟩
   | setPred _ ih => exact ⟨castPath.chpred ih.some⟩
-  | optionFun α β =>
-      exact ⟨castPath.graph (castPath.reflexive α.toSMTType)
-        (castPath.reflexive β.toSMTType)⟩
+  | optionFun _ _ ihα ihβ =>
+      exact ⟨castPath.graph ihα.some ihβ.some⟩
 
 /-- A chosen canonical cast path for an encoder-supported representation. -/
 noncomputable def BType.SupportedSMT.canonicalCastPath
@@ -521,7 +524,7 @@ theorem SMTFlagTypeRel.supported
                 subst α
                 subst β
                 rw [hout]
-                exact .optionFun γ δ
+                exact .optionFun (.canonical γ) (.canonical δ)
       · cases τ <;> nomatch hin
 
 private theorem List.toProdl_cons_eq_foldl
@@ -780,9 +783,10 @@ theorem RDomCastSupported.supported.{u}
     BType.SupportedSMT d.snd.fst d'.snd.fst := h.2
 
 /-- An option-valued function can represent only a source relation over a
-binary product, and its argument and payload types are the canonical images
-of the source endpoints.  This exposes the structural information carried by
-the supported-representation grammar to encoder case proofs. -/
+binary product, and its argument and payload types are supported
+representations of the source endpoints.  This exposes the structural
+information carried by the supported-representation grammar to encoder case
+proofs. -/
 theorem RDomCastSupported.optionFunctionE.{u}
     {T F : ZFSet.{u}} {tau : BType} {alpha beta : SMTType}
     {hT : T ∈ ⟦BType.set tau⟧ᶻ}
@@ -790,14 +794,15 @@ theorem RDomCastSupported.optionFunctionE.{u}
     (h : RDomCastSupported
       (⟨T, BType.set tau, hT⟩ : B.Dom)
       (⟨F, SMTType.fun alpha (SMTType.option beta), hF⟩ : SMT.Dom)) :
-    ∃ a b, tau = a ×ᴮ b ∧ alpha = a.toSMTType ∧ beta = b.toSMTType := by
+    ∃ a b, tau = a ×ᴮ b ∧
+      BType.SupportedSMT a alpha ∧ BType.SupportedSMT b beta := by
   rcases BType.SupportedSMT.setE h.supported with
-      ⟨rho, hpred, _⟩ | ⟨a, b, htau, htype⟩
+      ⟨rho, hpred, _⟩ | ⟨a, b, rho, υ, htau, htype, ha, hb⟩
   · injection hpred with _ hcod
     nomatch hcod
-  · injection htype with halpha hbeta
-    injection hbeta with hbeta
-    exact ⟨a, b, htau, halpha, hbeta⟩
+  · simp only [SMTType.fun.injEq, SMTType.option.injEq] at htype
+    obtain ⟨rfl, rfl⟩ := htype
+    exact ⟨a, b, htau, ha, hb⟩
 
 /-- Attach a separately proved nested binder-admissibility certificate to a
 representation witness. -/
@@ -839,6 +844,34 @@ theorem RDomCastSupported.setPred_binder_admissible_of_type_eq.{u}
   change SetCastAdmissible tau Dval
       (SMTType.fun rho SMTType.bool) ∧
     (∀ x ∈ Dval, ValueCastAdmissible tau rho x) at hadmissible
+  obtain ⟨⟨c, hc⟩, _⟩ := hadmissible
+  have hpath : hcast.toCastPath = c := castPath.eq_of_endpoints _ _
+  rwa [hpath]
+
+/-- A represented option-valued function supplies binder preimages at the
+paired endpoint representation.  As for characteristic predicates, the
+selected binder type may be only propositionally equal to that pair; cast
+path uniqueness transports the stored admissibility witness. -/
+theorem RDomCastSupported.optionFun_binder_admissible_of_type_eq.{u}
+    {tau : BType} {sigma rho kappa : SMTType}
+    {Dval : ZFSet.{u}} {hDval : Dval ∈ ⟦BType.set tau⟧ᶻ}
+    {d' : SMT.Dom.{u}}
+    (hrel : RDomCastSupported
+      (⟨Dval, BType.set tau, hDval⟩ : B.Dom) d')
+    (htype : d'.snd.fst =
+      SMTType.fun sigma (SMTType.option rho))
+    (hkappa : kappa = SMTType.pair sigma rho)
+    (hcast : kappa ⊑ tau.toSMTType) :
+    BinderCastAdmissible tau kappa hcast.toCastPath Dval := by
+  subst kappa
+  rcases d' with ⟨Y, target, hY⟩
+  dsimp at htype
+  subst target
+  have hadmissible := hrel.toRDomCastAdmissible.valueCastAdmissible
+  change SetCastAdmissible tau Dval
+      (SMTType.fun sigma (SMTType.option rho)) ∧
+    (∀ x ∈ Dval,
+      ValueCastAdmissible tau (SMTType.pair sigma rho) x) at hadmissible
   obtain ⟨⟨c, hc⟩, _⟩ := hadmissible
   have hpath : hcast.toCastPath = c := castPath.eq_of_endpoints _ _
   rwa [hpath]
@@ -1191,7 +1224,7 @@ private theorem BDom_eq_of_type_value.{u}
   subst Y
   rfl
 
-private theorem SMTDom_eq_of_type_value.{u}
+theorem SMTDom_eq_of_type_value.{u}
     {X Y : ZFSet.{u}} {α β : SMTType}
     {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦β⟧ᶻ}
     (hα : α = β) (hXY : X = Y) :
@@ -1506,7 +1539,7 @@ of a B relation. -/
 theorem RDomCast.optionFunction_graph_retract.{u}
     {α β : BType} {X F : ZFSet.{u}} {hX hF}
     (hrel : RDomCast
-      (⟨X, BType.set (α ×ᴮ β), hX⟩ : B.Dom)
+      (⟨X, BType.set (α ×ᴮ β), hX⟩ : _root_.B.Dom)
       (⟨F, SMTType.fun α.toSMTType (SMTType.option β.toSMTType), hF⟩ :
         SMT.Dom)) :
     retract (BType.set (α ×ᴮ β))
@@ -1777,6 +1810,706 @@ theorem castZF_apply_chpred_fapply_eq_zftrue_iff.{u}
         (ZFSet.is_func_is_pfunc hF'_func) z).val) harg
     exact happ_arg.symm.trans (happ.trans htrue)
 
+private theorem zftrue_eq_ofBool_decide_iff {P : Prop} [Decidable P] :
+    zftrue = (ZFSet.ZFBool.ofBool (decide P)).val ↔ P := by
+  rw [(by rfl : zftrue = (↑(⊤ : ZFBool) : ZFSet)), ← Subtype.ext_iff,
+    eq_comm, ZFBool.ofBool_decide_eq_true_iff]
+
+/-- A true point in a graph cast exposes represented input and output values
+whose component casts are the queried canonical endpoints. -/
+theorem castZF_apply_graph_preimage_of_true.{u}
+    {σ α τ β : SMTType} (pα : σ ~> α) (pβ : τ ~> β)
+    {F x y : ZFSet.{u}}
+    (hF : F ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ)
+    (hx : x ∈ ⟦α⟧ᶻ) (hy : y ∈ ⟦β⟧ᶻ)
+    (htrue :
+      let G := castZF_apply (castPath.graph pα pβ) F
+      let hG : G ∈ ⟦SMTType.fun (SMTType.pair α β) SMTType.bool⟧ᶻ :=
+        castZF_apply_mem (castPath.graph pα pβ) hF
+      (ZFSet.fapply G (ZFSet.is_func_is_pfunc (by
+          simpa [SMTType.toZFSet] using hG))
+        ⟨x.pair y, by
+          rw [ZFSet.is_func_dom_eq (by
+            simpa [SMTType.toZFSet] using hG :
+              ⟦SMTType.pair α β⟧ᶻ.IsFunc ZFSet.𝔹 G)]
+          exact ZFSet.pair_mem_prod.mpr ⟨hx, hy⟩⟩).val = ZFSet.zftrue) :
+    ∃ (a : ZFSet.{u}) (ha : a ∈ ⟦σ⟧ᶻ)
+      (b : ZFSet.{u}) (hb : b ∈ ⟦τ⟧ᶻ),
+      castZF_apply pα a = x ∧ castZF_apply pβ b = y ∧
+        (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+            simpa [SMTType.toZFSet] using hF))
+          ⟨a, by
+            rw [ZFSet.is_func_dom_eq (by
+              simpa [SMTType.toZFSet] using hF :
+                ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F)]
+            exact ha⟩).val =
+          (ZFSet.Option.some (S := ⟦τ⟧ᶻ) ⟨b, hb⟩).val := by
+  dsimp only at htrue
+  let G := castZF_apply (castPath.graph pα pβ) F
+  have hG : G ∈ ⟦SMTType.fun (SMTType.pair α β) SMTType.bool⟧ᶻ :=
+    castZF_apply_mem (castPath.graph pα pβ) hF
+  have hF_func : IsFunc ⟦σ⟧ᶻ ⟦SMTType.option τ⟧ᶻ F := by
+    simpa [SMTType.toZFSet] using hF
+  have hG_func : IsFunc ⟦SMTType.pair α β⟧ᶻ ZFSet.𝔹 G := by
+    simpa [SMTType.toZFSet] using hG
+  have hxy : x.pair y ∈ ⟦SMTType.pair α β⟧ᶻ :=
+    ZFSet.pair_mem_prod.mpr ⟨hx, hy⟩
+  have hpair_true : (x.pair y).pair ZFSet.zftrue ∈ G := by
+    have hdef := ZFSet.fapply.def (ZFSet.is_func_is_pfunc hG_func)
+      (x := x.pair y) (by rw [ZFSet.is_func_dom_eq hG_func]; exact hxy)
+    rw [htrue] at hdef
+    exact hdef
+  have hpair := castZF_apply_pair (castPath.graph pα pβ) hF
+  change F.pair G ∈
+    (castZF_graph (castZF_of_path pα) (castZF_of_path pβ)).1 at hpair
+  unfold castZF_graph at hpair
+  rw [ZFSet.lambda_spec] at hpair
+  obtain ⟨_, _, hG_eq⟩ := hpair
+  rw [hG_eq, dif_pos hF_func, ZFSet.lambda_spec] at hpair_true
+  obtain ⟨_, _, hbody⟩ := hpair_true
+  simp only [hxy, dif_pos, ZFSet.π₁_pair, ZFSet.π₂_pair] at hbody
+  by_cases hx_range : x ∈ (castZF_of_path pα).1.Range
+      (castZF_of_path pα).2.1
+  · rw [dif_pos hx_range] at hbody
+    by_cases hy_range : y ∈ (castZF_of_path pβ).1.Range
+        (castZF_of_path pβ).2.1
+    · rw [dif_pos hy_range] at hbody
+      let a := Classical.choose (ZFSet.mem_sep.mp hx_range).2
+      let b := Classical.choose (ZFSet.mem_sep.mp hy_range).2
+      have ha_dom : a ∈ (castZF_of_path pα).1.Dom
+          (castZF_of_path pα).2.1 :=
+        (Classical.choose_spec (ZFSet.mem_sep.mp hx_range).2).1
+      have hb_dom : b ∈ (castZF_of_path pβ).1.Dom
+          (castZF_of_path pβ).2.1 :=
+        (Classical.choose_spec (ZFSet.mem_sep.mp hy_range).2).1
+      have ha : a ∈ ⟦σ⟧ᶻ := (ZFSet.mem_sep.mp ha_dom).1
+      have hb : b ∈ ⟦τ⟧ᶻ := (ZFSet.mem_sep.mp hb_dom).1
+      have ha_pair : a.pair x ∈ (castZF_of_path pα).1 :=
+        (Classical.choose_spec (ZFSet.mem_sep.mp hx_range).2).2
+      have hb_pair : b.pair y ∈ (castZF_of_path pβ).1 :=
+        (Classical.choose_spec (ZFSet.mem_sep.mp hy_range).2).2
+      have hcast_a : castZF_apply pα a = x := by
+        have happ := ZFSet.fapply.of_pair
+          (ZFSet.is_func_is_pfunc (castZF_of_path pα).2) ha_pair
+        unfold castZF_apply
+        rw [dif_pos ha]
+        exact congrArg Subtype.val happ
+      have hcast_b : castZF_apply pβ b = y := by
+        have happ := ZFSet.fapply.of_pair
+          (ZFSet.is_func_is_pfunc (castZF_of_path pβ).2) hb_pair
+        unfold castZF_apply
+        rw [dif_pos hb]
+        exact congrArg Subtype.val happ
+      refine ⟨a, ha, b, hb, hcast_a, hcast_b, ?_⟩
+      apply (zftrue_eq_ofBool_decide_iff).mp
+      simpa [a, b] using hbody
+    · rw [dif_neg hy_range] at hbody
+      exact (ZFSet.zftrue_ne_zffalse hbody).elim
+  · rw [dif_neg hx_range] at hbody
+    exact (ZFSet.zftrue_ne_zffalse hbody).elim
+
+/-- A represented `some` output produces a true point in the corresponding
+graph cast.  Together with `castZF_apply_graph_preimage_of_true`, this is the
+exact operational interface of graph casts used by represented functions. -/
+theorem castZF_apply_graph_true_of_apply_some.{u}
+    {σ α τ β : SMTType} (pα : σ ~> α) (pβ : τ ~> β)
+    {F a b : ZFSet.{u}}
+    (hF : F ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ)
+    (ha : a ∈ ⟦σ⟧ᶻ) (hb : b ∈ ⟦τ⟧ᶻ)
+    (hsome :
+      (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+          simpa [SMTType.toZFSet] using hF))
+        ⟨a, by
+          rw [ZFSet.is_func_dom_eq (by
+            simpa [SMTType.toZFSet] using hF :
+              ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F)]
+          exact ha⟩).val =
+        (ZFSet.Option.some (S := ⟦τ⟧ᶻ) ⟨b, hb⟩).val) :
+    let x := castZF_apply pα a
+    let y := castZF_apply pβ b
+    let G := castZF_apply (castPath.graph pα pβ) F
+    let hG : G ∈ ⟦SMTType.fun (SMTType.pair α β) SMTType.bool⟧ᶻ :=
+      castZF_apply_mem (castPath.graph pα pβ) hF
+    (ZFSet.fapply G (ZFSet.is_func_is_pfunc (by
+        simpa [SMTType.toZFSet] using hG))
+      ⟨x.pair y, by
+        rw [ZFSet.is_func_dom_eq (by
+          simpa [SMTType.toZFSet] using hG :
+            ⟦SMTType.pair α β⟧ᶻ.IsFunc ZFSet.𝔹 G)]
+        exact ZFSet.pair_mem_prod.mpr
+          ⟨castZF_apply_mem pα ha, castZF_apply_mem pβ hb⟩⟩).val =
+      ZFSet.zftrue := by
+  dsimp only
+  let x := castZF_apply pα a
+  let y := castZF_apply pβ b
+  let G := castZF_apply (castPath.graph pα pβ) F
+  have hx : x ∈ ⟦α⟧ᶻ := castZF_apply_mem pα ha
+  have hy : y ∈ ⟦β⟧ᶻ := castZF_apply_mem pβ hb
+  have hG : G ∈ ⟦SMTType.fun (SMTType.pair α β) SMTType.bool⟧ᶻ :=
+    castZF_apply_mem (castPath.graph pα pβ) hF
+  have hF_func : IsFunc ⟦σ⟧ᶻ ⟦SMTType.option τ⟧ᶻ F := by
+    simpa [SMTType.toZFSet] using hF
+  have hG_func : IsFunc ⟦SMTType.pair α β⟧ᶻ ZFSet.𝔹 G := by
+    simpa [SMTType.toZFSet] using hG
+  have hxy : x.pair y ∈ ⟦SMTType.pair α β⟧ᶻ :=
+    ZFSet.pair_mem_prod.mpr ⟨hx, hy⟩
+  have hpair := castZF_apply_pair (castPath.graph pα pβ) hF
+  change F.pair G ∈
+    (castZF_graph (castZF_of_path pα) (castZF_of_path pβ)).1 at hpair
+  unfold castZF_graph at hpair
+  rw [ZFSet.lambda_spec] at hpair
+  obtain ⟨_, _, hG_eq⟩ := hpair
+  have hx_range : x ∈ (castZF_of_path pα).1.Range
+      (castZF_of_path pα).2.1 := by
+    exact ZFSet.IsPFunc.mem_range_of_mem
+      (ZFSet.is_func_is_pfunc (castZF_of_path pα).2)
+      (castZF_apply_pair pα ha)
+  have hy_range : y ∈ (castZF_of_path pβ).1.Range
+      (castZF_of_path pβ).2.1 := by
+    exact ZFSet.IsPFunc.mem_range_of_mem
+      (ZFSet.is_func_is_pfunc (castZF_of_path pβ).2)
+      (castZF_apply_pair pβ hb)
+  let a' := Classical.choose (ZFSet.mem_sep.mp hx_range).2
+  let b' := Classical.choose (ZFSet.mem_sep.mp hy_range).2
+  have ha'_dom : a' ∈ (castZF_of_path pα).1.Dom
+      (castZF_of_path pα).2.1 :=
+    (Classical.choose_spec (ZFSet.mem_sep.mp hx_range).2).1
+  have hb'_dom : b' ∈ (castZF_of_path pβ).1.Dom
+      (castZF_of_path pβ).2.1 :=
+    (Classical.choose_spec (ZFSet.mem_sep.mp hy_range).2).1
+  have ha' : a' ∈ ⟦σ⟧ᶻ := (ZFSet.mem_sep.mp ha'_dom).1
+  have hb' : b' ∈ ⟦τ⟧ᶻ := (ZFSet.mem_sep.mp hb'_dom).1
+  have ha'_pair : a'.pair x ∈ (castZF_of_path pα).1 :=
+    (Classical.choose_spec (ZFSet.mem_sep.mp hx_range).2).2
+  have hb'_pair : b'.pair y ∈ (castZF_of_path pβ).1 :=
+    (Classical.choose_spec (ZFSet.mem_sep.mp hy_range).2).2
+  have ha'_eq : a' = a :=
+    castZF_of_path_injective pα a' a x ha' ha hx
+      ha'_pair (castZF_apply_pair pα ha)
+  have hb'_eq : b' = b :=
+    castZF_of_path_injective pβ b' b y hb' hb hy
+      hb'_pair (castZF_apply_pair pβ hb)
+  have hchosen :
+      (ZFSet.fapply F (ZFSet.is_func_is_pfunc hF_func)
+        ⟨a', by rw [ZFSet.is_func_dom_eq hF_func]; exact ha'⟩).val =
+        (ZFSet.Option.some (S := ⟦τ⟧ᶻ) ⟨b', hb'⟩).val := by
+    simpa [ha'_eq, hb'_eq, proof_irrel_heq] using hsome
+  have hpair_true : (x.pair y).pair ZFSet.zftrue ∈ G := by
+    rw [hG_eq, dif_pos hF_func, ZFSet.lambda_spec]
+    refine ⟨hxy, ZFSet.ZFBool.zftrue_mem_𝔹, ?_⟩
+    simp only [ZFSet.π₁_pair, ZFSet.π₂_pair]
+    rw [dif_pos hxy, dif_pos hx_range, dif_pos hy_range]
+    apply (zftrue_eq_ofBool_decide_iff).mpr
+    apply Subtype.ext
+    simpa only [a', b', proof_irrel_heq] using hchosen
+  exact congrArg Subtype.val
+    (ZFSet.fapply.of_pair (ZFSet.is_func_is_pfunc hG_func) hpair_true)
+
+/-- A graph cast is true at a target pair exactly when that pair has source
+preimages on which the original option-function returns `some`. -/
+theorem castZF_apply_graph_fapply_eq_zftrue_iff.{u}
+    {σ ρ τ υ : SMTType} (pσ : σ ~> ρ) (pτ : τ ~> υ)
+    {F y z : ZFSet.{u}}
+    (hF : F ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ)
+    (hy : y ∈ ⟦ρ⟧ᶻ) (hz : z ∈ ⟦υ⟧ᶻ) :
+    let G := castZF_apply (castPath.graph pσ pτ) F
+    let hG : G ∈
+        ⟦SMTType.fun (SMTType.pair ρ υ) SMTType.bool⟧ᶻ :=
+      castZF_apply_mem (castPath.graph pσ pτ) hF
+    (ZFSet.fapply G (ZFSet.is_func_is_pfunc (by
+        simpa [SMTType.toZFSet] using hG))
+      ⟨y.pair z, by
+        rw [ZFSet.is_func_dom_eq (by
+          simpa [SMTType.toZFSet] using hG :
+            ⟦SMTType.pair ρ υ⟧ᶻ.IsFunc ZFSet.𝔹 G)]
+        exact ZFSet.pair_mem_prod.mpr ⟨hy, hz⟩⟩).val = ZFSet.zftrue ↔
+      ∃ (x : ZFSet.{u}) (hx : x ∈ ⟦σ⟧ᶻ)
+        (w : ZFSet.{u}) (hw : w ∈ ⟦τ⟧ᶻ),
+        castZF_apply pσ x = y ∧ castZF_apply pτ w = z ∧
+          (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+              simpa [SMTType.toZFSet] using hF))
+            ⟨x, by
+              rw [ZFSet.is_func_dom_eq (by
+                simpa [SMTType.toZFSet] using hF :
+                  ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F)]
+              exact hx⟩).val =
+            (ZFSet.Option.some (S := ⟦τ⟧ᶻ) ⟨w, hw⟩).val := by
+  dsimp only
+  constructor
+  · exact castZF_apply_graph_preimage_of_true pσ pτ hF hy hz
+  · rintro ⟨x, hx, w, hw, hxy, hwz, happ⟩
+    simpa only [hxy, hwz, proof_irrel_heq] using
+      castZF_apply_graph_true_of_apply_some pσ pτ hF hx hw happ
+
+/-- The identity-endpoint graph of an option-function records exactly its
+`some` outputs. -/
+theorem optionGraph_fapply_eq_zftrue_iff.{u}
+    {σ τ : SMTType} {F a b : ZFSet.{u}}
+    (hF : F ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ)
+    (ha : a ∈ ⟦σ⟧ᶻ) (hb : b ∈ ⟦τ⟧ᶻ) :
+    (ZFSet.fapply (optionGraph σ τ F)
+      (ZFSet.is_func_is_pfunc (by
+        simpa [SMTType.toZFSet] using optionGraph_mem σ τ hF))
+      ⟨a.pair b, by
+        rw [ZFSet.is_func_dom_eq (by
+          simpa [SMTType.toZFSet] using optionGraph_mem σ τ hF :
+            ⟦SMTType.pair σ τ⟧ᶻ.IsFunc ZFSet.𝔹
+              (optionGraph σ τ F))]
+        exact ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩⟩).val = ZFSet.zftrue ↔
+      (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+          simpa [SMTType.toZFSet] using hF))
+        ⟨a, by
+          rw [ZFSet.is_func_dom_eq (by
+            simpa [SMTType.toZFSet] using hF :
+              ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F)]
+          exact ha⟩).val =
+        (ZFSet.Option.some (S := ⟦τ⟧ᶻ) ⟨b, hb⟩).val := by
+  unfold optionGraph
+  have hgraph := castZF_apply_graph_fapply_eq_zftrue_iff
+    (castPath.reflexive σ) (castPath.reflexive τ) hF ha hb
+  dsimp only at hgraph
+  rw [hgraph]
+  constructor
+  · rintro ⟨a', ha', b', hb', haa, hbb, happ⟩
+    have haa' : a' = a :=
+      (castZF_apply_self (castPath.reflexive σ) ha').symm.trans haa
+    have hbb' : b' = b :=
+      (castZF_apply_self (castPath.reflexive τ) hb').symm.trans hbb
+    subst a'
+    subst b'
+    simpa only [proof_irrel_heq] using happ
+  · intro happ
+    exact ⟨a, ha, b, hb,
+      castZF_apply_self (castPath.reflexive σ) ha,
+      castZF_apply_self (castPath.reflexive τ) hb, happ⟩
+
+/-- Applying an option-valued representative returns `some` exactly on the
+corresponding source graph point.  The argument and payload may themselves be
+at arbitrary target representations; their cast witnesses are synchronized
+with the two components of the function's canonical graph cast. -/
+theorem RDomCast.optionFunction_fapply_eq_some_iff.{u}
+    {α β : BType} {σ τ : SMTType}
+    {S X Y F a b : ZFSet.{u}}
+    {hS : S ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ}
+    {hX : X ∈ ⟦α⟧ᶻ} {hY : Y ∈ ⟦β⟧ᶻ}
+    {hF : F ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ}
+    {ha : a ∈ ⟦σ⟧ᶻ} {hb : b ∈ ⟦τ⟧ᶻ}
+    (Srel : RDomCast
+      (⟨S, BType.set (α ×ᴮ β), hS⟩ : B.Dom)
+      (⟨F, SMTType.fun σ (SMTType.option τ), hF⟩ : SMT.Dom))
+    (Xrel : RDomCast (⟨X, α, hX⟩ : B.Dom)
+      (⟨a, σ, ha⟩ : SMT.Dom))
+    (Yrel : RDomCast (⟨Y, β, hY⟩ : B.Dom)
+      (⟨b, τ, hb⟩ : SMT.Dom)) :
+    (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+        simpa [SMTType.toZFSet] using hF))
+      ⟨a, by
+        rw [ZFSet.is_func_dom_eq (by
+          simpa [SMTType.toZFSet] using hF :
+            ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F)]
+        exact ha⟩).val =
+      (ZFSet.Option.some (S := ⟦τ⟧ᶻ) ⟨b, hb⟩).val ↔
+        X.pair Y ∈ S := by
+  obtain ⟨cS, hSret⟩ := Srel
+  cases cS with
+  | graph pα pβ =>
+      obtain ⟨cX, hXret⟩ := Xrel
+      obtain ⟨cY, hYret⟩ := Yrel
+      have hcX : cX = pα := castPath.eq_of_endpoints cX pα
+      have hcY : cY = pβ := castPath.eq_of_endpoints cY pβ
+      subst cX
+      subst cY
+      let x := castZF_apply pα a
+      let y := castZF_apply pβ b
+      have hx : x ∈ ⟦α.toSMTType⟧ᶻ := castZF_apply_mem pα ha
+      have hy : y ∈ ⟦β.toSMTType⟧ᶻ := castZF_apply_mem pβ hb
+      have hxy : x.pair y ∈
+          ⟦SMTType.pair α.toSMTType β.toSMTType⟧ᶻ :=
+        ZFSet.pair_mem_prod.mpr ⟨hx, hy⟩
+      have hXY : X.pair Y ∈ ⟦α ×ᴮ β⟧ᶻ :=
+        ZFSet.pair_mem_prod.mpr ⟨hX, hY⟩
+      have hpairRet : retract (α ×ᴮ β) (x.pair y) = X.pair Y := by
+        simp only [retract, ZFSet.π₁_pair, ZFSet.π₂_pair]
+        exact congrArg₂ ZFSet.pair hXret hYret
+      let G := castZF_apply (castPath.graph pα pβ) F
+      have hG : G ∈ ⟦SMTType.fun
+          (SMTType.pair α.toSMTType β.toSMTType)
+          SMTType.bool⟧ᶻ :=
+        castZF_apply_mem (castPath.graph pα pβ) hF
+      have hGfunc :
+          ⟦SMTType.pair α.toSMTType β.toSMTType⟧ᶻ.IsFunc
+            ZFSet.𝔹 G := by
+        simpa [SMTType.toZFSet] using hG
+      have hset :
+          (ZFSet.fapply G (ZFSet.is_func_is_pfunc hGfunc)
+            ⟨x.pair y, by
+              rw [ZFSet.is_func_dom_eq hGfunc]
+              exact hxy⟩).val = ZFSet.zftrue ↔ X.pair Y ∈ S :=
+        RDomCast.setPred_apply_eq_zftrue_iff
+          hXY hxy hG hpairRet hSret
+      have hgraph :
+          (ZFSet.fapply G (ZFSet.is_func_is_pfunc hGfunc)
+            ⟨x.pair y, by
+              rw [ZFSet.is_func_dom_eq hGfunc]
+              exact hxy⟩).val = ZFSet.zftrue ↔
+          (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+              simpa [SMTType.toZFSet] using hF))
+            ⟨a, by
+              rw [ZFSet.is_func_dom_eq (by
+                simpa [SMTType.toZFSet] using hF :
+                  ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F)]
+              exact ha⟩).val =
+            (ZFSet.Option.some (S := ⟦τ⟧ᶻ) ⟨b, hb⟩).val := by
+        constructor
+        · intro htrue
+          obtain ⟨a', ha', b', hb', hcastA, hcastB, happ⟩ :=
+            castZF_apply_graph_preimage_of_true pα pβ hF hx hy
+              (by simpa only [G, x, y, proof_irrel_heq] using htrue)
+          have ha'eq : a' = a :=
+            castZF_of_path_injective pα a' a x ha' ha hx
+              (by rw [← hcastA]; exact castZF_apply_pair pα ha')
+              (castZF_apply_pair pα ha)
+          have hb'eq : b' = b :=
+            castZF_of_path_injective pβ b' b y hb' hb hy
+              (by rw [← hcastB]; exact castZF_apply_pair pβ hb')
+              (castZF_apply_pair pβ hb)
+          simpa [ha'eq, hb'eq] using happ
+        · intro happ
+          exact castZF_apply_graph_true_of_apply_some pα pβ hF ha hb happ
+      exact hgraph.symm.trans hset
+  | «fun» _ _ hcod => cases hcod
+
+/-- Option casts map `some` by the payload cast. -/
+theorem castZF_apply_opt_some.{u}
+    {α β : SMTType} (p : α ~> β) {x : ZFSet.{u}}
+    (hx : x ∈ ⟦α⟧ᶻ) :
+    castZF_apply (castPath.opt p)
+        (ZFSet.Option.some (S := ⟦α⟧ᶻ) ⟨x, hx⟩).val =
+      (ZFSet.Option.some (S := ⟦β⟧ᶻ)
+        ⟨castZF_apply p x, castZF_apply_mem p hx⟩).val := by
+  let X := ZFSet.Option.some (S := ⟦α⟧ᶻ) ⟨x, hx⟩
+  let Y := ZFSet.Option.some (S := ⟦β⟧ᶻ)
+    ⟨castZF_apply p x, castZF_apply_mem p hx⟩
+  apply castZF_apply_eq_of_pair (castPath.opt p) X.property
+  rw [castZF_of_path, castZF_option, ZFSet.lambda_spec]
+  refine ⟨X.property, Y.property, ?_⟩
+  have hX_not_none : X.val ≠
+      (ZFSet.Option.none (S := ⟦α⟧ᶻ)).val := by
+    intro h
+    exact ZFSet.Option.some_ne_none ⟨x, hx⟩
+      (Subtype.ext (by simpa [X] using h))
+  simp only [X.property, dif_pos, hX_not_none]
+  let y_def : ∃ y, X.val =
+      (ZFSet.Option.some (S := ⟦α⟧ᶻ) y).val :=
+    ⟨⟨x, hx⟩, rfl⟩
+  have hy_choose : X.val =
+      (ZFSet.Option.some (S := ⟦α⟧ᶻ)
+        (Classical.choose y_def)).val :=
+    Classical.choose_spec y_def
+  have hchoose_eq :
+      (Classical.choose y_def : {z // z ∈ ⟦α⟧ᶻ}) = ⟨x, hx⟩ := by
+    apply (ZFSet.Option.some.injEq).1
+    exact Subtype.ext hy_choose.symm
+  change Y.val =
+    (ZFSet.Option.some (S := ⟦β⟧ᶻ)
+      (ZFSet.fapply (castZF_of_path p).1
+        (ZFSet.is_func_is_pfunc (castZF_of_path p).2)
+        ⟨(Classical.choose y_def).val, by
+          rw [ZFSet.is_func_dom_eq (castZF_of_path p).2]
+          exact (Classical.choose y_def).property⟩)).val
+  apply congrArg Subtype.val
+  apply congrArg (ZFSet.Option.some (S := ⟦β⟧ᶻ))
+  apply Subtype.ext
+  simpa only [Y, hchoose_eq] using congrArg Subtype.val
+    (ZFSet.fapply.of_pair
+      (ZFSet.is_func_is_pfunc (castZF_of_path p).2)
+      (castZF_apply_pair p hx)).symm
+
+/-- Option casts map `none` to `none`. -/
+theorem castZF_apply_opt_none
+    {α β : SMTType} (p : α ~> β) :
+    castZF_apply (castPath.opt p)
+        (ZFSet.Option.none (S := ⟦α⟧ᶻ)).val =
+      (ZFSet.Option.none (S := ⟦β⟧ᶻ)).val := by
+  let X := ZFSet.Option.none (S := ⟦α⟧ᶻ)
+  let Y := ZFSet.Option.none (S := ⟦β⟧ᶻ)
+  apply castZF_apply_eq_of_pair (castPath.opt p) X.property
+  rw [castZF_of_path, castZF_option, ZFSet.lambda_spec]
+  refine ⟨X.property, Y.property, ?_⟩
+  simp [X, Y]
+
+/-- An option cast can be `some y` only by casting a unique source payload. -/
+theorem castZF_apply_opt_eq_some_iff.{u}
+    {α β : SMTType} (p : α ~> β)
+    {o y : ZFSet.{u}} (ho : o ∈ ⟦SMTType.option α⟧ᶻ)
+    (hy : y ∈ ⟦β⟧ᶻ) :
+    castZF_apply (castPath.opt p) o =
+        (ZFSet.Option.some (S := ⟦β⟧ᶻ) ⟨y, hy⟩).val ↔
+      ∃ (x : ZFSet.{u}) (hx : x ∈ ⟦α⟧ᶻ),
+        o = (ZFSet.Option.some (S := ⟦α⟧ᶻ) ⟨x, hx⟩).val ∧
+        castZF_apply p x = y := by
+  obtain hnone | ⟨x, hsome⟩ := ZFSet.Option.casesOn ⟨o, ho⟩
+  · have hnone' : o = (ZFSet.Option.none (S := ⟦α⟧ᶻ)).val := by
+      exact congrArg Subtype.val hnone
+    rw [hnone']
+    rw [castZF_apply_opt_none]
+    constructor
+    · intro h
+      exact (ZFSet.Option.some_ne_none _ (Subtype.ext h.symm)).elim
+    · rintro ⟨x, hx, h⟩
+      exact (ZFSet.Option.some_ne_none ⟨x, hx⟩ (Subtype.ext h.1.symm)).elim
+  · have hsome' : o = (ZFSet.Option.some (S := ⟦α⟧ᶻ) x).val := by
+      exact congrArg Subtype.val hsome
+    rw [hsome']
+    rw [castZF_apply_opt_some]
+    constructor
+    · intro h
+      have hsome_eq :
+          ZFSet.Option.some (S := ⟦β⟧ᶻ)
+              ⟨castZF_apply p x, castZF_apply_mem p x.property⟩ =
+            ZFSet.Option.some (S := ⟦β⟧ᶻ) ⟨y, hy⟩ :=
+        Subtype.ext h
+      rw [ZFSet.Option.some.injEq] at hsome_eq
+      exact ⟨x, x.property, rfl, Subtype.ext_iff.mp hsome_eq⟩
+    · rintro ⟨x', hx', heq, hcast⟩
+      have hxx' : x = x' := by
+        have hsome_eq :
+            ZFSet.Option.some (S := ⟦α⟧ᶻ) ⟨x, x.property⟩ =
+              ZFSet.Option.some (S := ⟦α⟧ᶻ) ⟨x', hx'⟩ :=
+          Subtype.ext heq
+        rw [ZFSet.Option.some.injEq] at hsome_eq
+        exact Subtype.ext_iff.mp hsome_eq
+      subst x'
+      exact congrArg Subtype.val
+        (congrArg (ZFSet.Option.some (S := ⟦β⟧ᶻ))
+          (Subtype.ext hcast))
+
+/-- A cast option-function agrees with the source function at every cast
+argument, with the result transported by the option payload cast. -/
+theorem castZF_apply_optionFun_fapply_at_cast.{u}
+    {σ ρ τ υ : SMTType} (pσ : σ ~> ρ) (pτ : τ ~> υ)
+    {F x : ZFSet.{u}}
+    (hF : F ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ)
+    (hx : x ∈ ⟦σ⟧ᶻ) :
+    let c := castPath.«fun» (by simp)
+      pσ (castPath.opt pτ)
+    let F' := castZF_apply c F
+    let y := castZF_apply pσ x
+    let hF' : F' ∈ ⟦SMTType.fun ρ (SMTType.option υ)⟧ᶻ :=
+      castZF_apply_mem c hF
+    let hy : y ∈ ⟦ρ⟧ᶻ := castZF_apply_mem pσ hx
+    (ZFSet.fapply F' (ZFSet.is_func_is_pfunc (by
+        simpa [SMTType.toZFSet] using hF'))
+      ⟨y, by
+        rw [ZFSet.is_func_dom_eq (by
+          simpa [SMTType.toZFSet] using hF' :
+            ⟦ρ⟧ᶻ.IsFunc ⟦SMTType.option υ⟧ᶻ F')]
+        exact hy⟩).val =
+      castZF_apply (castPath.opt pτ)
+        (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+          simpa [SMTType.toZFSet] using hF))
+          ⟨x, by
+            rw [ZFSet.is_func_dom_eq (by
+              simpa [SMTType.toZFSet] using hF :
+                ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F)]
+            exact hx⟩).val := by
+  dsimp only
+  let c := castPath.«fun» (by simp)
+    pσ (castPath.opt pτ)
+  let F' := castZF_apply c F
+  let y := castZF_apply pσ x
+  have hF' : F' ∈ ⟦SMTType.fun ρ (SMTType.option υ)⟧ᶻ :=
+    castZF_apply_mem c hF
+  have hy : y ∈ ⟦ρ⟧ᶻ := castZF_apply_mem pσ hx
+  have hFfunc : ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F := by
+    simpa [SMTType.toZFSet] using hF
+  have hF'func : ⟦ρ⟧ᶻ.IsFunc ⟦SMTType.option υ⟧ᶻ F' := by
+    simpa [SMTType.toZFSet] using hF'
+  let Fx := ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+    ⟨x, by rw [ZFSet.is_func_dom_eq hFfunc]; exact hx⟩
+  have hFx : Fx.val ∈ ⟦SMTType.option τ⟧ᶻ := Fx.property
+  let z := castZF_apply (castPath.opt pτ) Fx.val
+  have hz : z ∈ ⟦SMTType.option υ⟧ᶻ :=
+    castZF_apply_mem (castPath.opt pτ) hFx
+  have hpair := castZF_apply_pair c hF
+  change F.pair F' ∈
+    (castZF_fun (castZF_of_path pσ)
+      (castZF_of_path (castPath.opt pτ))).1 at hpair
+  rw [castZF_fun, ZFSet.lambda_spec] at hpair
+  obtain ⟨_, _, hF'_eq⟩ := hpair
+  have hy_range : y ∈ (castZF_of_path pσ).1.Range
+      (castZF_of_path pσ).2.1 :=
+    ZFSet.IsPFunc.mem_range_of_mem
+      (ZFSet.is_func_is_pfunc (castZF_of_path pσ).2)
+      (castZF_apply_pair pσ hx)
+  let x' := Classical.choose (ZFSet.mem_sep.mp hy_range).2
+  have hx'_dom : x' ∈ (castZF_of_path pσ).1.Dom
+      (castZF_of_path pσ).2.1 :=
+    (Classical.choose_spec (ZFSet.mem_sep.mp hy_range).2).1
+  have hx' : x' ∈ ⟦σ⟧ᶻ := (ZFSet.mem_sep.mp hx'_dom).1
+  have hx'_pair : x'.pair y ∈ (castZF_of_path pσ).1 :=
+    (Classical.choose_spec (ZFSet.mem_sep.mp hy_range).2).2
+  have hxx' : x' = x :=
+    castZF_of_path_injective pσ x' x y hx' hx hy hx'_pair
+      (castZF_apply_pair pσ hx)
+  have hpair_out : y.pair z ∈ F' := by
+    rw [hF'_eq, dif_pos hFfunc, ZFSet.lambda_spec]
+    refine ⟨hy, hz, ?_⟩
+    rw [dif_pos hy_range]
+    dsimp only
+    have hchoose_eq : Classical.choose
+        (ZFSet.mem_sep.mp hy_range).2 = x := by
+      simpa only [x'] using hxx'
+    dsimp [z, castZF_apply]
+    rw [dif_pos hFx]
+    simp only [hchoose_eq, Fx, proof_irrel_heq]
+  exact congrArg Subtype.val
+    (ZFSet.fapply.of_pair (ZFSet.is_func_is_pfunc hF'func) hpair_out)
+
+/-- A cast option-function returns `some y` exactly when both its argument and
+payload have source preimages related by the original function. -/
+theorem castZF_apply_optionFun_fapply_eq_some_iff.{u}
+    {σ ρ τ υ : SMTType} (pσ : σ ~> ρ) (pτ : τ ~> υ)
+    {F y z : ZFSet.{u}}
+    (hF : F ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ)
+    (hy : y ∈ ⟦ρ⟧ᶻ) (hz : z ∈ ⟦υ⟧ᶻ) :
+    let c := castPath.«fun» (by simp)
+      pσ (castPath.opt pτ)
+    let F' := castZF_apply c F
+    let hF' : F' ∈ ⟦SMTType.fun ρ (SMTType.option υ)⟧ᶻ :=
+      castZF_apply_mem c hF
+    (ZFSet.fapply F' (ZFSet.is_func_is_pfunc (by
+        simpa [SMTType.toZFSet] using hF'))
+      ⟨y, by
+        rw [ZFSet.is_func_dom_eq (by
+          simpa [SMTType.toZFSet] using hF' :
+            ⟦ρ⟧ᶻ.IsFunc ⟦SMTType.option υ⟧ᶻ F')]
+        exact hy⟩).val =
+        (ZFSet.Option.some (S := ⟦υ⟧ᶻ) ⟨z, hz⟩).val ↔
+      ∃ (x : ZFSet.{u}) (hx : x ∈ ⟦σ⟧ᶻ)
+        (w : ZFSet.{u}) (hw : w ∈ ⟦τ⟧ᶻ),
+        castZF_apply pσ x = y ∧ castZF_apply pτ w = z ∧
+          (ZFSet.fapply F (ZFSet.is_func_is_pfunc (by
+            simpa [SMTType.toZFSet] using hF))
+            ⟨x, by
+              rw [ZFSet.is_func_dom_eq (by
+                simpa [SMTType.toZFSet] using hF :
+                  ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F)]
+              exact hx⟩).val =
+            (ZFSet.Option.some (S := ⟦τ⟧ᶻ) ⟨w, hw⟩).val := by
+  dsimp only
+  let c := castPath.«fun» (by simp)
+    pσ (castPath.opt pτ)
+  let F' := castZF_apply c F
+  have hF' : F' ∈ ⟦SMTType.fun ρ (SMTType.option υ)⟧ᶻ :=
+    castZF_apply_mem c hF
+  have hFfunc : ⟦σ⟧ᶻ.IsFunc ⟦SMTType.option τ⟧ᶻ F := by
+    simpa [SMTType.toZFSet] using hF
+  have hF'func : ⟦ρ⟧ᶻ.IsFunc ⟦SMTType.option υ⟧ᶻ F' := by
+    simpa [SMTType.toZFSet] using hF'
+  have hpair := castZF_apply_pair c hF
+  change F.pair F' ∈
+    (castZF_fun (castZF_of_path pσ)
+      (castZF_of_path (castPath.opt pτ))).1 at hpair
+  rw [castZF_fun, ZFSet.lambda_spec] at hpair
+  obtain ⟨_, _, hF'_eq⟩ := hpair
+  by_cases hy_range : y ∈ (castZF_of_path pσ).1.Range
+      (castZF_of_path pσ).2.1
+  · let x := Classical.choose (ZFSet.mem_sep.mp hy_range).2
+    have hx_dom : x ∈ (castZF_of_path pσ).1.Dom
+        (castZF_of_path pσ).2.1 :=
+      (Classical.choose_spec (ZFSet.mem_sep.mp hy_range).2).1
+    have hx : x ∈ ⟦σ⟧ᶻ := (ZFSet.mem_sep.mp hx_dom).1
+    have hx_pair : x.pair y ∈ (castZF_of_path pσ).1 :=
+      (Classical.choose_spec (ZFSet.mem_sep.mp hy_range).2).2
+    have hcastX : castZF_apply pσ x = y :=
+      castZF_apply_eq_of_pair pσ hx hx_pair
+    have happAt := castZF_apply_optionFun_fapply_at_cast pσ pτ hF hx
+    have harg :
+        (⟨castZF_apply pσ x, by
+          rw [ZFSet.is_func_dom_eq hF'func]
+          exact castZF_apply_mem pσ hx⟩ : {q // q ∈ F'.Dom}) =
+        ⟨y, by rw [ZFSet.is_func_dom_eq hF'func]; exact hy⟩ :=
+      Subtype.ext hcastX
+    have happArg := congrArg
+      (fun q => (ZFSet.fapply F'
+        (ZFSet.is_func_is_pfunc hF'func) q).val) harg
+    have happEq :
+        (ZFSet.fapply F' (ZFSet.is_func_is_pfunc hF'func)
+          ⟨y, by rw [ZFSet.is_func_dom_eq hF'func]; exact hy⟩).val =
+        castZF_apply (castPath.opt pτ)
+          (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+            ⟨x, by rw [ZFSet.is_func_dom_eq hFfunc]; exact hx⟩).val := by
+      exact happArg.symm.trans
+        (by simpa only [c, F', proof_irrel_heq] using happAt)
+    constructor
+    · intro hsome
+      let Fx := ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+        ⟨x, by rw [ZFSet.is_func_dom_eq hFfunc]; exact hx⟩
+      have hopt : castZF_apply (castPath.opt pτ) Fx.val =
+          (ZFSet.Option.some (S := ⟦υ⟧ᶻ) ⟨z, hz⟩).val := by
+        exact happEq.symm.trans hsome
+      obtain ⟨w, hw, hFx, hcastW⟩ :=
+        (castZF_apply_opt_eq_some_iff pτ Fx.property hz).mp hopt
+      exact ⟨x, hx, w, hw, hcastX, hcastW,
+        by simpa only [Fx, proof_irrel_heq] using hFx⟩
+    · rintro ⟨x₀, hx₀, w, hw, hcastX₀, hcastW, hsome⟩
+      have happAt₀ :=
+        castZF_apply_optionFun_fapply_at_cast pσ pτ hF hx₀
+      have harg₀ :
+          (⟨castZF_apply pσ x₀, by
+            rw [ZFSet.is_func_dom_eq hF'func]
+            exact castZF_apply_mem pσ hx₀⟩ : {q // q ∈ F'.Dom}) =
+          ⟨y, by rw [ZFSet.is_func_dom_eq hF'func]; exact hy⟩ :=
+        Subtype.ext hcastX₀
+      have happArg₀ := congrArg
+        (fun q => (ZFSet.fapply F'
+          (ZFSet.is_func_is_pfunc hF'func) q).val) harg₀
+      have hopt : castZF_apply (castPath.opt pτ)
+          (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+            ⟨x₀, by rw [ZFSet.is_func_dom_eq hFfunc]; exact hx₀⟩).val =
+          (ZFSet.Option.some (S := ⟦υ⟧ᶻ) ⟨z, hz⟩).val := by
+        rw [hsome, castZF_apply_opt_some]
+        exact congrArg Subtype.val
+          (congrArg (ZFSet.Option.some (S := ⟦υ⟧ᶻ))
+            (Subtype.ext hcastW))
+      calc
+        (ZFSet.fapply F' (ZFSet.is_func_is_pfunc hF'func)
+            ⟨y, by rw [ZFSet.is_func_dom_eq hF'func]; exact hy⟩).val =
+            (ZFSet.fapply F' (ZFSet.is_func_is_pfunc hF'func)
+              ⟨castZF_apply pσ x₀, by
+                rw [ZFSet.is_func_dom_eq hF'func]
+                exact castZF_apply_mem pσ hx₀⟩).val := happArg₀.symm
+        _ = castZF_apply (castPath.opt pτ)
+            (ZFSet.fapply F (ZFSet.is_func_is_pfunc hFfunc)
+              ⟨x₀, by rw [ZFSet.is_func_dom_eq hFfunc]; exact hx₀⟩).val := by
+              simpa only [c, F', proof_irrel_heq] using happAt₀
+        _ = (ZFSet.Option.some (S := ⟦υ⟧ᶻ) ⟨z, hz⟩).val := hopt
+  · constructor
+    · intro hsome
+      have hpair_none : y.pair
+          (ZFSet.Option.none (S := ⟦υ⟧ᶻ)).val ∈ F' := by
+        rw [hF'_eq, dif_pos hFfunc, ZFSet.lambda_spec]
+        refine ⟨hy, (ZFSet.Option.none (S := ⟦υ⟧ᶻ)).property, ?_⟩
+        rw [dif_neg hy_range]
+        rfl
+      have hnone := congrArg Subtype.val
+        (ZFSet.fapply.of_pair
+          (ZFSet.is_func_is_pfunc hF'func) hpair_none)
+      have hnone_some :
+          ZFSet.Option.none (S := ⟦υ⟧ᶻ) =
+            ZFSet.Option.some (S := ⟦υ⟧ᶻ) ⟨z, hz⟩ :=
+        Subtype.ext (hnone.symm.trans hsome)
+      exact (ZFSet.Option.some_ne_none _ hnone_some.symm).elim
+    · rintro ⟨x, hx, _, _, hcastX, _⟩
+      have hyrange : y ∈ (castZF_of_path pσ).1.Range
+          (castZF_of_path pσ).2.1 := by
+        rw [← hcastX]
+        exact ZFSet.IsPFunc.mem_range_of_mem
+          (ZFSet.is_func_is_pfunc (castZF_of_path pσ).2)
+          (castZF_apply_pair pσ hx)
+      exact (hy_range hyrange).elim
+
 open Classical in
 /-- A cast relation at an encoder-supported target shape carries the complete
 recursive binder-admissibility invariant.  For characteristic predicates,
@@ -1866,15 +2599,131 @@ theorem RDomCast.toRDomCastAdmissible_of_supported.{u}
             obtain ⟨y, hy, hrel⟩ := hpreimage x hxX
             exact ih x (hXsub hxX) y hy hrel
       | «fun» hne _ _ => exact (hne rfl).elim
-  | optionFun alpha beta =>
-      have hXsub : X ⊆ ⟦alpha ×ᴮ beta⟧ᶻ := by
-        simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hX
-      constructor
-      · exact ⟨castPath.reflexive (alpha ×ᴮ beta).toSMTType,
-          BinderCastAdmissible.reflexive (alpha ×ᴮ beta) hX⟩
-      · intro x hxX
-        exact ValueCastAdmissible.canonical (alpha ×ᴮ beta)
-          (hXsub hxX)
+  | @optionFun alpha beta sigma tau hsigma htau ihsigma ihtau =>
+      obtain ⟨c, hret⟩ := h
+      obtain ⟨⟨pα⟩, ⟨pβ⟩⟩ := castPath.graph_components c
+      have hc : c = castPath.graph pα pβ :=
+        castPath.eq_of_endpoints _ _
+      subst c
+      all_goals
+          let G := castZF_apply (castPath.graph pα pβ) Y
+          have hG : G ∈ ⟦SMTType.fun
+              (SMTType.pair alpha.toSMTType beta.toSMTType)
+              SMTType.bool⟧ᶻ :=
+            castZF_apply_mem (castPath.graph pα pβ) hY
+          have hXsub : X ⊆ ⟦alpha ×ᴮ beta⟧ᶻ := by
+            simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hX
+          have hpreimage : ∀ (z : ZFSet.{u}) (hz : z ∈ X),
+              ∃ (w : ZFSet.{u}) (hw : w ∈ ⟦SMTType.pair sigma tau⟧ᶻ),
+                RDomCast
+                  (⟨z, alpha ×ᴮ beta, hXsub hz⟩ : B.Dom)
+                  (⟨w, SMTType.pair sigma tau, hw⟩ : SMT.Dom) := by
+            intro z hz
+            obtain ⟨a, ha, b, hb, rfl⟩ :=
+              ZFSet.mem_prod.mp (hXsub hz)
+            let Wa := B.Dom.canonicalSMT (⟨a, alpha, ha⟩ : B.Dom)
+            let Wb := B.Dom.canonicalSMT (⟨b, beta, hb⟩ : B.Dom)
+            have hWa : Wa.fst ∈ ⟦alpha.toSMTType⟧ᶻ := by
+              rw [← B.Dom.canonicalSMT_type (⟨a, alpha, ha⟩ : B.Dom)]
+              exact Wa.snd.snd
+            have hWb : Wb.fst ∈ ⟦beta.toSMTType⟧ᶻ := by
+              rw [← B.Dom.canonicalSMT_type (⟨b, beta, hb⟩ : B.Dom)]
+              exact Wb.snd.snd
+            have hpair_src : a.pair b ∈ ⟦alpha ×ᴮ beta⟧ᶻ :=
+              ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩
+            have hpair_can : Wa.fst.pair Wb.fst ∈
+                ⟦SMTType.pair alpha.toSMTType beta.toSMTType⟧ᶻ :=
+              ZFSet.pair_mem_prod.mpr ⟨hWa, hWb⟩
+            have hpair_ret : retract (alpha ×ᴮ beta)
+                (Wa.fst.pair Wb.fst) = a.pair b := by
+              rw [← B.Dom.canonicalSMT_pair_value ha hb]
+              exact retract_of_canonical (alpha ×ᴮ beta) hpair_src
+            have htrue :
+                (ZFSet.fapply G (ZFSet.is_func_is_pfunc (by
+                    simpa [SMTType.toZFSet] using hG))
+                  ⟨Wa.fst.pair Wb.fst, by
+                    rw [ZFSet.is_func_dom_eq (by
+                      simpa [SMTType.toZFSet] using hG :
+                        ⟦SMTType.pair alpha.toSMTType beta.toSMTType⟧ᶻ.IsFunc
+                          ZFSet.𝔹 G)]
+                    exact hpair_can⟩).val = ZFSet.zftrue :=
+              (RDomCast.setPred_apply_eq_zftrue_iff
+                hpair_src hpair_can hG hpair_ret hret).2 hz
+            obtain ⟨a', ha', b', hb', hcast_a, hcast_b, _⟩ :=
+              castZF_apply_graph_preimage_of_true pα pβ hY hWa hWb htrue
+            have rela : RDomCast
+                (⟨a, alpha, ha⟩ : B.Dom)
+                (⟨a', sigma, ha'⟩ : SMT.Dom) := by
+              refine ⟨pα, ?_⟩
+              rw [hcast_a]
+              exact retract_of_canonical alpha ha
+            have relb : RDomCast
+                (⟨b, beta, hb⟩ : B.Dom)
+                (⟨b', tau, hb'⟩ : SMT.Dom) := by
+              refine ⟨pβ, ?_⟩
+              rw [hcast_b]
+              exact retract_of_canonical beta hb
+            exact ⟨a'.pair b', ZFSet.pair_mem_prod.mpr ⟨ha', hb'⟩,
+              RDomCast.pair rela relb⟩
+          change SetCastAdmissible (alpha ×ᴮ beta) X
+              (SMTType.fun sigma (SMTType.option tau)) ∧
+            ∀ z ∈ X,
+              ValueCastAdmissible (alpha ×ᴮ beta)
+                (SMTType.pair sigma tau) z
+          constructor
+          · refine ⟨castPath.pair pα pβ, ?_⟩
+            intro z hz
+            obtain ⟨w, hw, hrel⟩ := hpreimage z hz
+            obtain ⟨q, hq⟩ := hrel
+            have hq_eq : q = castPath.pair pα pβ :=
+              castPath.eq_of_endpoints _ _
+            subst q
+            exact ⟨w, hw, hq⟩
+          · intro z hz
+            have hztype := hXsub hz
+            obtain ⟨a, ha, b, hb, rfl⟩ := ZFSet.mem_prod.mp hztype
+            obtain ⟨w, hw, hrel⟩ := hpreimage (a.pair b) hz
+            obtain ⟨a', ha', b', hb', rfl⟩ := ZFSet.mem_prod.mp hw
+            have hrel' : RDomCast
+                (⟨a.pair b, alpha ×ᴮ beta,
+                  ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩⟩ : B.Dom)
+                (⟨a'.pair b', SMTType.pair sigma tau,
+                  ZFSet.pair_mem_prod.mpr ⟨ha', hb'⟩⟩ : SMT.Dom) := by
+              simpa only [proof_irrel_heq] using hrel
+            have componentRels := RDomCast.of_pair
+              (hX := ha) (hY := hb) (hX' := ha') (hY' := hb') hrel'
+            obtain ⟨hleft, hright⟩ := componentRels
+            change ValueCastAdmissible alpha sigma (a.pair b).π₁ ∧
+              ValueCastAdmissible beta tau (a.pair b).π₂
+            simpa only [ZFSet.π₁_pair, ZFSet.π₂_pair] using
+              And.intro (ihsigma a ha a' ha' hleft)
+                (ihtau b hb b' hb' hright)
+
+/-- Every value at a supported SMT representation determines a supported
+source representative by casting to the canonical type and retracting. -/
+theorem RDomCastSupported.source_of_supported_target.{u}
+    {alpha : BType} {sigma : SMTType}
+    (hsigma : BType.SupportedSMT alpha sigma)
+    {Y : ZFSet.{u}} (hY : Y ∈ ⟦sigma⟧ᶻ) :
+    ∃ (X : ZFSet.{u}) (hX : X ∈ ⟦alpha⟧ᶻ),
+      RDomCastSupported
+        (⟨X, alpha, hX⟩ : B.Dom)
+        (⟨Y, sigma, hY⟩ : SMT.Dom) := by
+  let c := hsigma.canonicalCastPath
+  let Ycan := castZF_apply c Y
+  have hYcan : Ycan ∈ ⟦alpha.toSMTType⟧ᶻ :=
+    castZF_apply_mem c hY
+  let X := retract alpha Ycan
+  have hX : X ∈ ⟦alpha⟧ᶻ :=
+    retract_mem_of_canonical alpha hYcan
+  have hbare : RDomCast
+      (⟨X, alpha, hX⟩ : B.Dom)
+      (⟨Y, sigma, hY⟩ : SMT.Dom) := by
+    refine ⟨c, ?_⟩
+    rfl
+  exact ⟨X, hX,
+    ⟨RDomCast.toRDomCastAdmissible_of_supported hbare hsigma,
+      hsigma⟩⟩
 
 /-- Applying a represented characteristic predicate directly to a represented
 argument computes source membership, even when both use a noncanonical
@@ -2340,6 +3189,285 @@ private theorem RDomCastSupported.setPred_cast_eq_iff.{u}
       exact (castZF_apply_chpred_fapply_eq_zftrue_iff p hA hb).2
         ⟨a, ha, hpab, hAtrue⟩
 
+/-- Taking the identity graph after an option-function cast is the same as
+graphing the original function through the two endpoint casts. -/
+private theorem optionGraph_cast_optionFun.{u}
+    {σ ρ τ υ : SMTType} (pσ : σ ~> ρ) (pτ : τ ~> υ)
+    {F : ZFSet.{u}}
+    (hF : F ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ) :
+    let c := castPath.«fun» (by simp) pσ (castPath.opt pτ)
+    optionGraph ρ υ (castZF_apply c F) =
+      castZF_apply (castPath.graph pσ pτ) F := by
+  dsimp only
+  let c := castPath.«fun» (by simp) pσ (castPath.opt pτ)
+  let F' := castZF_apply c F
+  let left := optionGraph ρ υ F'
+  let right := castZF_apply (castPath.graph pσ pτ) F
+  have hF' : F' ∈ ⟦SMTType.fun ρ (SMTType.option υ)⟧ᶻ :=
+    castZF_apply_mem c hF
+  have hleft : left ∈
+      ⟦SMTType.fun (SMTType.pair ρ υ) SMTType.bool⟧ᶻ := by
+    simpa only [left] using optionGraph_mem ρ υ hF'
+  have hright : right ∈
+      ⟦SMTType.fun (SMTType.pair ρ υ) SMTType.bool⟧ᶻ :=
+    castZF_apply_mem (castPath.graph pσ pτ) hF
+  have hleftFunc : ⟦SMTType.pair ρ υ⟧ᶻ.IsFunc ZFSet.𝔹 left := by
+    simpa [SMTType.toZFSet] using hleft
+  have hrightFunc : ⟦SMTType.pair ρ υ⟧ᶻ.IsFunc ZFSet.𝔹 right := by
+    simpa [SMTType.toZFSet] using hright
+  apply (ZFSet.is_func_ext_iff hleftFunc hrightFunc).2
+  intro w hw
+  obtain ⟨y, hy, z, hz, rfl⟩ := ZFSet.mem_prod.mp hw
+  apply Subtype.ext
+  apply zfBool_eq_of_true_iff_rep
+  · exact ZFSet.fapply_mem_range (ZFSet.is_func_is_pfunc hleftFunc) (by
+      rw [ZFSet.is_func_dom_eq hleftFunc]
+      exact ZFSet.pair_mem_prod.mpr ⟨hy, hz⟩)
+  · exact ZFSet.fapply_mem_range (ZFSet.is_func_is_pfunc hrightFunc) (by
+      rw [ZFSet.is_func_dom_eq hrightFunc]
+      exact ZFSet.pair_mem_prod.mpr ⟨hy, hz⟩)
+  have hoption := optionGraph_fapply_eq_zftrue_iff hF' hy hz
+  have hfun := castZF_apply_optionFun_fapply_eq_some_iff
+    pσ pτ hF hy hz
+  have hgraph := castZF_apply_graph_fapply_eq_zftrue_iff
+    pσ pτ hF hy hz
+  dsimp only at hfun hgraph
+  simpa only [left, right, F', c, proof_irrel_heq] using
+    hoption.trans (hfun.trans hgraph.symm)
+
+/-- The identity-endpoint graph operation is injective on well-typed
+option-valued functions. -/
+private theorem optionGraph_injective.{u}
+    {σ τ : SMTType} {F G : ZFSet.{u}}
+    (hF : F ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ)
+    (hG : G ∈ ⟦SMTType.fun σ (SMTType.option τ)⟧ᶻ)
+    (hgraph : optionGraph σ τ F = optionGraph σ τ G) : F = G := by
+  let c := castPath.graph (castPath.reflexive σ) (castPath.reflexive τ)
+  have htarget : optionGraph σ τ F ∈
+      ⟦SMTType.fun (SMTType.pair σ τ) SMTType.bool⟧ᶻ :=
+    optionGraph_mem σ τ hF
+  apply castZF_of_path_injective c F G (optionGraph σ τ F)
+    hF hG htarget
+  · simpa only [c, optionGraph] using castZF_apply_pair c hF
+  · have hpair := castZF_apply_pair c hG
+    change G.pair (optionGraph σ τ G) ∈ (castZF_of_path c).1 at hpair
+    rw [← hgraph] at hpair
+    exact hpair
+
+/-- Graphing an option-function through supported endpoint casts produces a
+supported characteristic-predicate representation of the same source
+relation.  Element equality is supplied by the structural induction
+hypothesis for the pair type. -/
+theorem RDomCastSupported.optionFun_graph_cast_supported.{u}
+    {α β : BType} {σA τA σB τB : SMTType}
+    {X A : ZFSet.{u}}
+    {hX : X ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ}
+    {hA : A ∈ ⟦SMTType.fun σA (SMTType.option τA)⟧ᶻ}
+    (hsAα : BType.SupportedSMT α σA)
+    (hsAβ : BType.SupportedSMT β τA)
+    (hsBα : BType.SupportedSMT α σB)
+    (hsBβ : BType.SupportedSMT β τB)
+    (relA : RDomCastSupported
+      (⟨X, BType.set (α ×ᴮ β), hX⟩ : _root_.B.Dom)
+      (⟨A, SMTType.fun σA (SMTType.option τA), hA⟩ : SMT.Dom))
+    (cα : σA ~> σB) (cβ : τA ~> τB)
+    (pair_eq : ∀ {U V a b : ZFSet.{u}}
+      {hU : U ∈ ⟦α ×ᴮ β⟧ᶻ} {hV : V ∈ ⟦α ×ᴮ β⟧ᶻ}
+      {ha : a ∈ ⟦SMTType.pair σA τA⟧ᶻ}
+      {hb : b ∈ ⟦SMTType.pair σB τB⟧ᶻ},
+      RDomCastSupported (⟨U, α ×ᴮ β, hU⟩ : _root_.B.Dom)
+          (⟨a, SMTType.pair σA τA, ha⟩ : SMT.Dom) →
+      RDomCastSupported (⟨V, α ×ᴮ β, hV⟩ : _root_.B.Dom)
+          (⟨b, SMTType.pair σB τB, hb⟩ : SMT.Dom) →
+      (castZF_apply (castPath.pair cα cβ) a = b ↔ U = V)) :
+    RDomCastSupported
+      (⟨X, BType.set (α ×ᴮ β), hX⟩ : _root_.B.Dom)
+      (⟨castZF_apply (castPath.graph cα cβ) A,
+        SMTType.fun (SMTType.pair σB τB) SMTType.bool,
+        castZF_apply_mem (castPath.graph cα cβ) hA⟩ : SMT.Dom) := by
+  let G := castZF_apply (castPath.graph cα cβ) A
+  have hG : G ∈ ⟦SMTType.fun (SMTType.pair σB τB) SMTType.bool⟧ᶻ :=
+    castZF_apply_mem (castPath.graph cα cβ) hA
+  have hGfunc : ⟦SMTType.pair σB τB⟧ᶻ.IsFunc ZFSet.𝔹 G := by
+    simpa [SMTType.toZFSet] using hG
+  have hXsub : X ⊆ ⟦α ×ᴮ β⟧ᶻ := by
+    simpa [BType.toZFSet] using ZFSet.mem_powerset.mp hX
+  let hsPairA : BType.SupportedSMT (α ×ᴮ β)
+      (SMTType.pair σA τA) := .prod hsAα hsAβ
+  let hsPairB : BType.SupportedSMT (α ×ᴮ β)
+      (SMTType.pair σB τB) := .prod hsBα hsBβ
+  have castPairRel : ∀ {U W : ZFSet.{u}}
+      {hU : U ∈ ⟦α ×ᴮ β⟧ᶻ}
+      {hW : W ∈ ⟦SMTType.pair σA τA⟧ᶻ},
+      RDomCastSupported (⟨U, α ×ᴮ β, hU⟩ : _root_.B.Dom)
+        (⟨W, SMTType.pair σA τA, hW⟩ : SMT.Dom) →
+      let W' := castZF_apply (castPath.pair cα cβ) W
+      let hW' : W' ∈ ⟦SMTType.pair σB τB⟧ᶻ :=
+        castZF_apply_mem (castPath.pair cα cβ) hW
+      RDomCastSupported (⟨U, α ×ᴮ β, hU⟩ : _root_.B.Dom)
+        (⟨W', SMTType.pair σB τB, hW'⟩ : SMT.Dom) := by
+    intro U W hU hW Urel
+    dsimp only
+    let W' := castZF_apply (castPath.pair cα cβ) W
+    have hW' : W' ∈ ⟦SMTType.pair σB τB⟧ᶻ :=
+      castZF_apply_mem (castPath.pair cα cβ) hW
+    let ccan := hsPairB.canonicalCastPath
+    let U' := retract (α ×ᴮ β) (castZF_apply ccan W')
+    have hU' : U' ∈ ⟦α ×ᴮ β⟧ᶻ :=
+      retract_mem_of_canonical (α ×ᴮ β)
+        (castZF_apply_mem ccan hW')
+    have bare : RDomCast
+        (⟨U', α ×ᴮ β, hU'⟩ : _root_.B.Dom)
+        (⟨W', SMTType.pair σB τB, hW'⟩ : SMT.Dom) :=
+      ⟨ccan, rfl⟩
+    have U'rel : RDomCastSupported
+        (⟨U', α ×ᴮ β, hU'⟩ : _root_.B.Dom)
+        (⟨W', SMTType.pair σB τB, hW'⟩ : SMT.Dom) :=
+      ⟨RDomCast.toRDomCastAdmissible_of_supported bare hsPairB,
+        hsPairB⟩
+    have hUU' := (pair_eq Urel U'rel).mp rfl
+    have hdom : (⟨U', α ×ᴮ β, hU'⟩ : _root_.B.Dom) =
+        (⟨U, α ×ᴮ β, hU⟩ : _root_.B.Dom) := by
+      apply _root_.B.Dom.ext_type_value rfl
+      exact hUU'.symm
+    rw [hdom] at U'rel
+    simpa only [W', proof_irrel_heq] using U'rel
+  have Grel : RDomCastSupported
+      (⟨X, BType.set (α ×ᴮ β), hX⟩ : _root_.B.Dom)
+      (⟨G, SMTType.fun (SMTType.pair σB τB) SMTType.bool, hG⟩ :
+        SMT.Dom) := by
+    apply RDomCastSupported.setPred_of_pointwise hsPairB hXsub hG hGfunc
+    · intro w hw htrue
+      obtain ⟨u, hu, v, hv, rfl⟩ := ZFSet.mem_prod.mp hw
+      obtain ⟨a, ha, b, hb, hcastA, hcastB, happ⟩ :=
+        castZF_apply_graph_preimage_of_true cα cβ hA hu hv
+          (by simpa only [G, proof_irrel_heq] using htrue)
+      let cAα := hsAα.canonicalCastPath
+      let cAβ := hsAβ.canonicalCastPath
+      let U := retract α (castZF_apply cAα a)
+      let V := retract β (castZF_apply cAβ b)
+      have hU : U ∈ ⟦α⟧ᶻ :=
+        retract_mem_of_canonical α (castZF_apply_mem cAα ha)
+      have hV : V ∈ ⟦β⟧ᶻ :=
+        retract_mem_of_canonical β (castZF_apply_mem cAβ hb)
+      have Urel : RDomCastSupported (⟨U, α, hU⟩ : _root_.B.Dom)
+          (⟨a, σA, ha⟩ : SMT.Dom) := by
+        have bare : RDomCast (⟨U, α, hU⟩ : _root_.B.Dom)
+            (⟨a, σA, ha⟩ : SMT.Dom) := ⟨cAα, rfl⟩
+        exact ⟨RDomCast.toRDomCastAdmissible_of_supported bare hsAα,
+          hsAα⟩
+      have Vrel : RDomCastSupported (⟨V, β, hV⟩ : _root_.B.Dom)
+          (⟨b, τA, hb⟩ : SMT.Dom) := by
+        have bare : RDomCast (⟨V, β, hV⟩ : _root_.B.Dom)
+            (⟨b, τA, hb⟩ : SMT.Dom) := ⟨cAβ, rfl⟩
+        exact ⟨RDomCast.toRDomCastAdmissible_of_supported bare hsAβ,
+          hsAβ⟩
+      have hmem : U.pair V ∈ X :=
+        (RDomCast.optionFunction_fapply_eq_some_iff
+          relA.toRDomCast Urel.toRDomCast Vrel.toRDomCast).mp happ
+      have pairArel := RDomCastSupported.pair Urel Vrel
+      have pairBrel := castPairRel pairArel
+      dsimp only at pairBrel
+      have hcastPair :
+          castZF_apply (castPath.pair cα cβ) (a.pair b) =
+            u.pair v := by
+        rw [castZF_apply_pair_path cα cβ ha hb, hcastA, hcastB]
+      have hdom :
+          (⟨castZF_apply (castPath.pair cα cβ) (a.pair b),
+              SMTType.pair σB τB,
+              castZF_apply_mem (castPath.pair cα cβ)
+                (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩ : SMT.Dom) =
+            (⟨u.pair v, SMTType.pair σB τB,
+              ZFSet.pair_mem_prod.mpr ⟨hu, hv⟩⟩ : SMT.Dom) :=
+        SMTDom_eq_of_type_value rfl hcastPair
+      rw [hdom] at pairBrel
+      exact ⟨U.pair V, hmem,
+        by simpa only [proof_irrel_heq] using pairBrel⟩
+    · intro w hw
+      have hwtype := hXsub hw
+      obtain ⟨U, hU, V, hV, rfl⟩ := ZFSet.mem_prod.mp hwtype
+      have hadm := relA.toRDomCastAdmissible.valueCastAdmissible
+      change SetCastAdmissible (α ×ᴮ β) X
+          (SMTType.fun σA (SMTType.option τA)) ∧
+        (∀ z ∈ X, ValueCastAdmissible (α ×ᴮ β)
+          (SMTType.pair σA τA) z) at hadm
+      obtain ⟨⟨p, hpreimage⟩, hnested⟩ := hadm
+      obtain ⟨q, hq, hret⟩ := hpreimage (U.pair V) hw
+      have qrel : RDomCastSupported
+          (⟨U.pair V, α ×ᴮ β, hXsub hw⟩ : _root_.B.Dom)
+          (⟨q, SMTType.pair σA τA, hq⟩ : SMT.Dom) :=
+        ⟨⟨⟨p, hret⟩, hnested (U.pair V) hw⟩, hsPairA⟩
+      obtain ⟨a, ha, b, hb, rfl⟩ := ZFSet.mem_prod.mp hq
+      have qrel' : RDomCastSupported
+          (⟨U.pair V, α ×ᴮ β,
+            ZFSet.pair_mem_prod.mpr ⟨hU, hV⟩⟩ : _root_.B.Dom)
+          (⟨a.pair b, SMTType.pair σA τA,
+            ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩⟩ : SMT.Dom) := by
+        simpa only [proof_irrel_heq] using qrel
+      have componentRels := RDomCastSupported.of_pair
+        (hX := hU) (hY := hV) (hX' := ha) (hY' := hb) qrel'
+      obtain ⟨Urel, Vrel⟩ := componentRels
+      have happ :=
+        (RDomCast.optionFunction_fapply_eq_some_iff
+          relA.toRDomCast Urel.toRDomCast Vrel.toRDomCast).mpr hw
+      let u := castZF_apply cα a
+      let v := castZF_apply cβ b
+      have hu : u ∈ ⟦σB⟧ᶻ := castZF_apply_mem cα ha
+      have hv : v ∈ ⟦τB⟧ᶻ := castZF_apply_mem cβ hb
+      have pairBrel := castPairRel qrel'
+      dsimp only at pairBrel
+      have hcastPair :
+          castZF_apply (castPath.pair cα cβ) (a.pair b) =
+            u.pair v := by
+        simpa only [u, v] using castZF_apply_pair_path cα cβ ha hb
+      have hdom :
+          (⟨castZF_apply (castPath.pair cα cβ) (a.pair b),
+              SMTType.pair σB τB,
+              castZF_apply_mem (castPath.pair cα cβ)
+                (ZFSet.pair_mem_prod.mpr ⟨ha, hb⟩)⟩ : SMT.Dom) =
+            (⟨u.pair v, SMTType.pair σB τB,
+              ZFSet.pair_mem_prod.mpr ⟨hu, hv⟩⟩ : SMT.Dom) :=
+        SMTDom_eq_of_type_value rfl hcastPair
+      rw [hdom] at pairBrel
+      refine ⟨u.pair v, ZFSet.pair_mem_prod.mpr ⟨hu, hv⟩,
+        by simpa only [u, v, proof_irrel_heq] using pairBrel, ?_⟩
+      exact castZF_apply_graph_true_of_apply_some cα cβ hA ha hb happ
+  simpa only [G, proof_irrel_heq] using Grel
+
+/-- Graphing an option-function through supported endpoint casts preserves
+and reflects equality of represented source relations. -/
+private theorem RDomCastSupported.optionFun_graph_cast_eq_iff.{u}
+    {α β : BType} {σA τA σB τB : SMTType}
+    {X Y A B : ZFSet.{u}}
+    {hX : X ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ}
+    {hY : Y ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ}
+    {hA : A ∈ ⟦SMTType.fun σA (SMTType.option τA)⟧ᶻ}
+    {hB : B ∈ ⟦SMTType.fun (SMTType.pair σB τB) SMTType.bool⟧ᶻ}
+    (hsAα : BType.SupportedSMT α σA)
+    (hsAβ : BType.SupportedSMT β τA)
+    (hsBα : BType.SupportedSMT α σB)
+    (hsBβ : BType.SupportedSMT β τB)
+    (relA : RDomCastSupported
+      (⟨X, BType.set (α ×ᴮ β), hX⟩ : _root_.B.Dom)
+      (⟨A, SMTType.fun σA (SMTType.option τA), hA⟩ : SMT.Dom))
+    (relB : RDomCastSupported
+      (⟨Y, BType.set (α ×ᴮ β), hY⟩ : _root_.B.Dom)
+      (⟨B, SMTType.fun (SMTType.pair σB τB) SMTType.bool, hB⟩ : SMT.Dom))
+    (cα : σA ~> σB) (cβ : τA ~> τB)
+    (pair_eq : ∀ {U V a b : ZFSet.{u}}
+      {hU : U ∈ ⟦α ×ᴮ β⟧ᶻ} {hV : V ∈ ⟦α ×ᴮ β⟧ᶻ}
+      {ha : a ∈ ⟦SMTType.pair σA τA⟧ᶻ}
+      {hb : b ∈ ⟦SMTType.pair σB τB⟧ᶻ},
+      RDomCastSupported (⟨U, α ×ᴮ β, hU⟩ : _root_.B.Dom)
+          (⟨a, SMTType.pair σA τA, ha⟩ : SMT.Dom) →
+      RDomCastSupported (⟨V, α ×ᴮ β, hV⟩ : _root_.B.Dom)
+          (⟨b, SMTType.pair σB τB, hb⟩ : SMT.Dom) →
+      (castZF_apply (castPath.pair cα cβ) a = b ↔ U = V)) :
+    castZF_apply (castPath.graph cα cβ) A = B ↔ X = Y := by
+  have Grel := RDomCastSupported.optionFun_graph_cast_supported
+    hsAα hsAβ hsBα hsBβ relA cα cβ pair_eq
+  exact RDomCast.target_value_eq_iff Grel.toRDomCast relB.toRDomCast
+
 /-- Casting between any two encoder-supported representatives preserves and
 reflects equality of the represented B values.  The only non-homomorphic case
 is an option-valued function cast to its pair/Boolean graph; there the graph
@@ -2422,43 +3550,99 @@ theorem RDomCastSupported.cast_eq_iff.{u}
                     (fun relx rely => ih relx rely p)
               | «fun» hbool _ _ => exact (hbool rfl).elim
               | refl h => nomatch h
-          | optionFun α β =>
-              have hcod : SMTType.option β.toSMTType = SMTType.bool :=
-                castable?_of_fun_bool (castable?_of_castPath c)
-              nomatch hcod
-      | optionFun α β =>
+          | optionFun _ _ =>
+              cases c with
+              | «fun» hbool _ _ => exact (hbool rfl).elim
+      | @optionFun α β σA τA hsAα hsAβ =>
           cases hsB : relB.supported with
           | setPred hsBt =>
               obtain ⟨sa, sb, rfl, hsa, hsb⟩ := hsBt.prodE
-              obtain ⟨⟨ca⟩, ⟨cb⟩⟩ := castPath.graph_components c
-              have haeq : α.toSMTType = sa :=
-                castPath.antisymm ca hsa.canonicalCastPath
-              have hbeq : β.toSMTType = sb :=
-                castPath.antisymm cb hsb.canonicalCastPath
-              subst sa
-              subst sb
-              rw [castPath.eq_graph_reflexive c]
-              change optionGraph α.toSMTType β.toSMTType A' = B' ↔
-                X = Y
-              have hGraph := optionGraph_mem
-                α.toSMTType β.toSMTType hA
-              have relGraph : RDomCast
-                  (⟨X, BType.set (α ×ᴮ β), hX⟩ : B.Dom)
-                  (⟨optionGraph α.toSMTType β.toSMTType A',
-                    SMTType.fun
-                      (SMTType.pair α.toSMTType β.toSMTType)
-                      SMTType.bool,
-                    hGraph⟩ : SMT.Dom) := by
-                refine ⟨castPath.reflexive
-                  (BType.set (α ×ᴮ β)).toSMTType, ?_⟩
-                rw [castZF_apply_self _ hGraph]
-                exact relA.toRDomCast.optionFunction_graph_retract
-              exact RDomCast.target_value_eq_iff
-                relGraph relB.toRDomCast
-          | optionFun =>
-              rw [castZF_apply_self c hA]
-              exact RDomCast.target_value_eq_iff
-                relA.toRDomCast relB.toRDomCast
+              cases c with
+              | graph ca cb =>
+                  exact RDomCastSupported.optionFun_graph_cast_eq_iff
+                    hsAα hsAβ hsa hsb relA relB ca cb
+                    (fun relx rely => ih relx rely
+                      (castPath.pair ca cb))
+              | «fun» _ _ hcod => cases hcod
+          | @optionFun _ _ σB τB hsBα hsBβ =>
+              cases c with
+              | refl h =>
+                  rcases h with h | h | h <;> cases h
+              | «fun» hnot ca copt =>
+                  cases copt with
+                  | refl h =>
+                      rcases h with h | h | h <;> cases h
+                  | opt cb =>
+                      let cfun := castPath.«fun» hnot ca (castPath.opt cb)
+                      let Ac := castZF_apply cfun A'
+                      have hAc : Ac ∈
+                          ⟦SMTType.fun σB (SMTType.option τB)⟧ᶻ :=
+                        castZF_apply_mem cfun hA
+                      have hnat := optionGraph_cast_optionFun ca cb hA
+                      dsimp only at hnat
+                      have hnat' : optionGraph σB τB Ac =
+                          castZF_apply (castPath.graph ca cb) A' := by
+                        simpa only [Ac, cfun, proof_irrel_heq] using hnat
+                      have GcastRel :=
+                        RDomCastSupported.optionFun_graph_cast_supported
+                          hsAα hsAβ hsBα hsBβ relA ca cb
+                            (fun relx rely => ih relx rely
+                              (castPath.pair ca cb))
+                      let GAc := optionGraph σB τB Ac
+                      have hGAc : GAc ∈
+                          ⟦SMTType.fun (SMTType.pair σB τB)
+                            SMTType.bool⟧ᶻ := by
+                        simpa only [GAc] using optionGraph_mem σB τB hAc
+                      have hGcast :
+                          castZF_apply (castPath.graph ca cb) A' ∈
+                            ⟦SMTType.fun (SMTType.pair σB τB)
+                              SMTType.bool⟧ᶻ :=
+                        castZF_apply_mem (castPath.graph ca cb) hA
+                      have hGdom :
+                          (⟨castZF_apply (castPath.graph ca cb) A',
+                            SMTType.fun (SMTType.pair σB τB) SMTType.bool,
+                            hGcast⟩ : SMT.Dom) =
+                          (⟨GAc,
+                            SMTType.fun (SMTType.pair σB τB) SMTType.bool,
+                            hGAc⟩ : SMT.Dom) :=
+                        SMTDom_eq_of_type_value rfl hnat'.symm
+                      rw [hGdom] at GcastRel
+                      have GAcRel : RDomCastSupported
+                          (⟨X, BType.set (α ×ᴮ β), hX⟩ : _root_.B.Dom)
+                          (⟨GAc,
+                            SMTType.fun (SMTType.pair σB τB) SMTType.bool,
+                            hGAc⟩ : SMT.Dom) := by
+                        simpa only [proof_irrel_heq] using GcastRel
+                      let rσ := castPath.reflexive σB
+                      let rτ := castPath.reflexive τB
+                      have GBRel0 :=
+                        RDomCastSupported.optionFun_graph_cast_supported
+                          hsBα hsBβ hsBα hsBβ relB rσ rτ
+                            (fun relx rely => ih relx rely
+                              (castPath.pair rσ rτ))
+                      let GB := optionGraph σB τB B'
+                      have hGB : GB ∈
+                          ⟦SMTType.fun (SMTType.pair σB τB)
+                            SMTType.bool⟧ᶻ := by
+                        simpa only [GB] using optionGraph_mem σB τB hB
+                      have GBRel : RDomCastSupported
+                          (⟨Y, BType.set (α ×ᴮ β), hY⟩ : _root_.B.Dom)
+                          (⟨GB,
+                            SMTType.fun (SMTType.pair σB τB) SMTType.bool,
+                            hGB⟩ : SMT.Dom) := by
+                        simpa only [GB, optionGraph, rσ, rτ,
+                          proof_irrel_heq] using GBRel0
+                      have hgraphs : GAc = GB ↔ X = Y :=
+                        RDomCast.target_value_eq_iff
+                          GAcRel.toRDomCast GBRel.toRDomCast
+                      change Ac = B' ↔ X = Y
+                      constructor
+                      · intro hfun
+                        apply hgraphs.mp
+                        exact congrArg (optionGraph σB τB) hfun
+                      · intro hXY
+                        exact optionGraph_injective hAc hB
+                          (hgraphs.mpr hXY)
 
 open Classical in
 /-- Materializing a cast between two supported target representations
@@ -2630,11 +3814,6 @@ theorem graphCollapse_mem.{u} (α β : SMTType) (R : ZFSet.{u}) :
     graphCollapse α β R ∈
       ⟦SMTType.fun α (SMTType.option β)⟧ᶻ :=
   option_func_of_pfun_mem α β R
-
-private theorem zftrue_eq_ofBool_decide_iff {P : Prop} [Decidable P] :
-    zftrue = (ZFSet.ZFBool.ofBool (decide P)).val ↔ P := by
-  rw [(by rfl : zftrue = (↑(⊤ : ZFBool) : ZFSet)), ← Subtype.ext_iff,
-    eq_comm, ZFBool.ofBool_decide_eq_true_iff]
 
 /-- Membership in the graph cast is exactly membership of the corresponding
 `some`-valued pair in the option function. -/

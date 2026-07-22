@@ -123,7 +123,7 @@ theorem RDomCastSupported.functionalGraph_as_optionFunction.{u}
         graphCollapse_mem α.toSMTType β.toSMTType Y⟩ : SMT.Dom) :=
   ⟨RDomCastAdmissible.functionalGraph_as_optionFunction
       α β hX hY hfun hret,
-    BType.SupportedSMT.optionFun α β⟩
+    BType.SupportedSMT.optionFun (.canonical α) (.canonical β)⟩
 
 /-- Concrete Gate A witness: a free relation variable and its option-function
 SMT declaration satisfy the representation-aware valuation relation. -/

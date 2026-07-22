@@ -1105,6 +1105,95 @@ theorem castApp_bv (f x : SMT.Term) (sf sx : SMTType) {used : List SMT.𝒱} {n 
     simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
       List.not_mem_nil, false_or, or_false] at hv
 set_option maxHeartbeats 4000000 in
+/-- Bound variables produced by forward option-membership are either from the
+loosened pair specification or from the relation term, and all remain covered
+by `usedVars`. -/
+theorem castMembership_optionForward_bv
+    (x S : SMT.Term) {α β ρ τ : SMTType} (cα : α ~> ρ) (cβ : β ~> τ)
+    {used : List SMT.𝒱} {n : ℕ}
+    (hbvx : ∀ v ∈ SMT.bv x, v ∈ used)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∈ used) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
+    castMembership.optionForward x S cα cβ
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜(∀ v ∈ SMT.bv t', v ∈ E'.usedVars) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl⟩ := pre
+  unfold castMembership.optionForward
+  mspec (loosenAux_prf_bv _ hbvx)
+  mrename_i pre
+  mintro ∀St₁
+  mpure pre
+  obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
+  mspec SMT.declareConst_addSpec_spec
+  mrename_i pred
+  mintro ∀St₁d
+  mpure pred
+  obtain ⟨_, _, _, hd_used, _⟩ := pred
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  rw [hd_used]
+  refine ⟨?_, L_used_sub⟩
+  intro v hv
+  simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
+    List.not_mem_nil, false_or, or_false] at hv
+  rcases hv with hspec | hvS
+  · exact L_bv v hspec
+  · exact L_used_sub (hbvS v hvS)
+
+set_option maxHeartbeats 4000000 in
+/-- Bound-variable coverage for option-membership after first normalizing the
+relation and then forwarding the pair argument. -/
+theorem castMembership_optionCommon_bv
+    (x S : SMT.Term) {α β α' β' ρ τ : SMTType}
+    (cxα : α ~> ρ) (cxβ : β ~> τ) (cSα : α' ~> ρ) (cSβ : β' ~> τ)
+    {used : List SMT.𝒱} {n : ℕ}
+    (hbvx : ∀ v ∈ SMT.bv x, v ∈ used)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∈ used) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
+    castMembership.optionCommon x S cxα cxβ cSα cSβ
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜(∀ v ∈ SMT.bv t', v ∈ E'.usedVars) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl⟩ := pre
+  unfold castMembership.optionCommon
+  mspec (loosenAux_prf_bv _ hbvS)
+  mrename_i preS
+  mintro ∀St₁
+  rename_i Sout
+  obtain ⟨S!, S!_spec⟩ := Sout
+  mpure preS
+  obtain ⟨S!_used, S!_bv, S!_used_sub⟩ := preS
+  mspec SMT.declareConst_addSpec_spec
+  mrename_i predS
+  mintro ∀St₁d
+  mpure predS
+  obtain ⟨_, _, _, hd_used, _⟩ := predS
+  mspec (castMembership_optionForward_bv x (.var S!) cxα cxβ
+    (used := St₁d.env.usedVars) (n := St₁d.env.freshvarsc)
+    (fun v hv => by rw [hd_used]; exact S!_used_sub (hbvx v hv))
+    (by intro v hv; simp [SMT.bv] at hv))
+  case post.success =>
+    rename_i out
+    obtain ⟨t, σt⟩ := out
+    mrename_i preF
+    mintro ∀St₂
+    mpure preF
+    obtain ⟨F_bv, F_used_sub⟩ := preF
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨?_, ?_⟩
+    · intro v hv
+      simp only [SMT.bv, List.mem_append] at hv
+      rcases hv with hspec | ht
+      · exact F_used_sub (by rw [hd_used]; exact S!_bv v hspec)
+      · exact F_bv v ht
+    · intro v hv
+      exact F_used_sub (by rw [hd_used]; exact S!_used_sub hv)
+
+set_option maxHeartbeats 4000000 in
 /-- bv/usedVars spec of `castMembership`. Unlike `castApp`, the loosen spec is
 embedded in the result term (via `∧ˢ`), so the result's bound variables include
 those of the loosen spec (`loosenAux_prf_bv`'s `bv` clause) plus the inputs. -/
@@ -1172,125 +1261,21 @@ theorem castMembership_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.�
     · exact L_bv v hspec
     · exact L_used_sub (hbvx v hvx)
   case vc4.h_2.h_1.isTrue.isTrue =>
-    rename_i α' β' hσS α β hσx hα_le hβ_le St hpre
-    obtain ⟨rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv _ hbvx)
-    mrename_i pre
-    mintro ∀St₁
-    mpure pre
-    obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i pred
-    mintro ∀St₁d
-    mpure pred
-    obtain ⟨_, _, _, hd_used, _⟩ := pred
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    rw [hd_used]
-    refine ⟨?_, L_used_sub⟩
-    intro v hv
-    simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-      List.not_mem_nil, false_or, or_false] at hv
-    rcases hv with hspec | hvS
-    · exact L_bv v hspec
-    · exact L_used_sub (hbvS v hvS)
+    intro St hfresh hused
+    exact castMembership_optionForward_bv x S _ _ (n := n) (used := used)
+      hbvx hbvS St ⟨hfresh, hused⟩
   case vc5.h_2.h_1.isTrue.isFalse.isTrue =>
-    rename_i α' β' hσS α β hσx hα_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv _ (by intro v hv; exact hbvx v (by rwa [SMT.bv] at hv)))
-    mrename_i preX
-    mintro ∀St₁
-    mpure preX
-    obtain ⟨x!_used, x!_bv, x!_used_sub⟩ := preX
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predX
-    mintro ∀St₁d
-    mpure predX
-    obtain ⟨_, _, _, hdX_used, _⟩ := predX
-    mspec (loosenAux_prf_bv _ (used := St₁d.env.usedVars)
-      (by intro v hv; rw [hdX_used]; exact x!_used_sub (hbvS v hv)))
-    mrename_i preS
-    mintro ∀St₂
-    mpure preS
-    obtain ⟨S!_used, S!_bv, S!_used_sub⟩ := preS
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predS
-    mintro ∀St₂d
-    mpure predS
-    obtain ⟨_, _, _, hdS_used, _⟩ := predS
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    rw [hdS_used]
-    have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂.env.usedVars :=
-      fun {w} h => S!_used_sub (by rw [hdX_used]; exact h)
-    refine ⟨?_, fun v hv => lift1 (x!_used_sub hv)⟩
-    intro v hv
-    simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-      List.not_mem_nil, false_or, or_false] at hv
-    rcases hv with (hspecX | hspecS) | hvx
-    · exact lift1 (x!_bv v hspecX)
-    · exact S!_bv v hspecS
-    · exact lift1 (x!_used_sub (hbvx v hvx))
+    intro St hfresh hused
+    exact castMembership_optionCommon_bv x S _ _ _ _ (n := n) (used := used)
+      hbvx hbvS St ⟨hfresh, hused⟩
   case vc6.h_2.h_1.isFalse.isTrue.isTrue =>
-    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_le St hpre
-    obtain ⟨rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv _ (by intro v hv; exact hbvx v (by rwa [SMT.bv] at hv)))
-    mrename_i preY
-    mintro ∀St₁
-    mpure preY
-    obtain ⟨y!_used, y!_bv, y!_used_sub⟩ := preY
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predY
-    mintro ∀St₁d
-    mpure predY
-    obtain ⟨_, _, _, hdY_used, _⟩ := predY
-    mspec (loosenAux_prf_bv _ (used := St₁d.env.usedVars)
-      (by intro v hv; rw [hdY_used]; exact y!_used_sub (hbvS v hv)))
-    mrename_i preS
-    mintro ∀St₂
-    mpure preS
-    obtain ⟨S!_used, S!_bv, S!_used_sub⟩ := preS
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predS
-    mintro ∀St₂d
-    mpure predS
-    obtain ⟨_, _, _, hdS_used, _⟩ := predS
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    rw [hdS_used]
-    have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂.env.usedVars :=
-      fun {w} h => S!_used_sub (by rw [hdY_used]; exact h)
-    refine ⟨?_, fun v hv => lift1 (y!_used_sub hv)⟩
-    intro v hv
-    simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-      List.not_mem_nil, false_or, or_false] at hv
-    rcases hv with (hspecY | hspecS) | hvx
-    · exact lift1 (y!_bv v hspecY)
-    · exact S!_bv v hspecS
-    · exact lift1 (y!_used_sub (hbvx v hvx))
+    intro St hfresh hused
+    exact castMembership_optionCommon_bv x S _ _ _ _ (n := n) (used := used)
+      hbvx hbvS St ⟨hfresh, hused⟩
   case vc7.h_2.h_1.isFalse.isTrue.isFalse.isTrue =>
-    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv _ hbvS)
-    mrename_i pre
-    mintro ∀St₁
-    mpure pre
-    obtain ⟨L_used, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i pred
-    mintro ∀St₁d
-    mpure pred
-    obtain ⟨_, _, _, hd_used, _⟩ := pred
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    rw [hd_used]
-    refine ⟨?_, L_used_sub⟩
-    intro v hv
-    simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-      List.not_mem_nil, false_or, or_false, or_self] at hv
-    rcases hv with hspec | hvx
-    · exact L_bv v hspec
-    · exact L_used_sub (hbvx v hvx)
+    intro St hfresh hused
+    exact castMembership_optionCommon_bv x S _ _ _ _ (n := n) (used := used)
+      hbvx hbvS St ⟨hfresh, hused⟩
 
 set_option maxHeartbeats 4000000 in
 /-- bv/usedVars spec of `castUnionAux`. Each non-throw branch loosens `S` (spec to
@@ -1375,6 +1360,11 @@ theorem castUnionAux_bv {α β : SMTType} (c : α ~> β) (S T : SMT.Term) {used 
       mintro ∀St₂
       mpure pre2
       obtain ⟨_, _, _, St₂_used_eq, _⟩ := pre2
+      mspec SMT.eraseFromContext_spec
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨_, _, StE_used_eq⟩ := preE
       mspec Std.Do.Spec.pure
       mpure_intro
       refine ⟨?_, ?_⟩
@@ -1382,11 +1372,11 @@ theorem castUnionAux_bv {α β : SMTType} (c : α ~> β) (S T : SMT.Term) {used 
         simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append, List.mem_cons,
           List.not_mem_nil, false_or, or_false, or_self] at hv
         rcases hv with rfl | hvT
-        · rw [St₂_used_eq]; exact List.mem_cons_self
-        · rw [St₂_used_eq, hs_used, hd_used]
+        · rw [StE_used_eq, St₂_used_eq]; exact List.mem_cons_self
+        · rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]
           exact List.mem_cons_of_mem _ (S!_used_sub (hbvT v hvT))
       · intro v hv
-        rw [St₂_used_eq, hs_used, hd_used]
+        rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]
         exact List.mem_cons_of_mem _ (S!_used_sub hv)
     · mvcgen
   | @chpred α α' c_α =>
@@ -1455,6 +1445,20 @@ theorem castUnionAux_bv {α β : SMTType} (c : α ~> β) (S T : SMT.Term) {used 
     mvcgen
 
 set_option maxHeartbeats 4000000 in
+/-- `castUnionAux_bv` specialized to the equal option-function representation
+selected directly by the `castUnion` wrapper. -/
+theorem castUnion_optionFun_bv (S T : SMT.Term) (γ δ : SMTType)
+    {used : List SMT.𝒱} {n : ℕ}
+    (hbvS : ∀ v ∈ SMT.bv S, v ∈ used) (hbvT : ∀ v ∈ SMT.bv T, v ∈ used) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
+    castUnion.fun S T (by simp) (castPath.reflexive γ)
+      (castPath.reflexive (.option δ))
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜(∀ v ∈ SMT.bv t', v ∈ E'.usedVars) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  simpa [castUnionAux, castPath.reflexive] using
+    castUnionAux_bv (castPath.reflexive (.fun γ (.option δ))) S T hbvS hbvT
+
+set_option maxHeartbeats 4000000 in
 theorem castUnion_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {n : ℕ}
     (hbvS : ∀ v ∈ SMT.bv S, v ∈ used) (hbvT : ∀ v ∈ SMT.bv T, v ∈ used) :
     ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
@@ -1494,7 +1498,8 @@ theorem castUnion_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {
       · rw [St₂_used_eq]; exact List.mem_cons_self
       · rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbvS v hvS)
       · rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbvT v hvT)
-    all_goals mvcgen
+    · mspec (castUnion_optionFun_bv S T _ _ hbvS hbvT)
+    · mvcgen
   · mspec (castUnionAux_bv _ S T hbvS hbvT)
   · mspec (castUnionAux_bv _ T S hbvT hbvS)
   · mvcgen
@@ -1586,6 +1591,11 @@ theorem castInter_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {
         mintro ∀St₂
         mpure pre2
         obtain ⟨_, _, _, St₂_used_eq, _⟩ := pre2
+        mspec SMT.eraseFromContext_spec
+        mrename_i preE
+        mintro ∀StE
+        mpure preE
+        obtain ⟨_, _, StE_used_eq⟩ := preE
         mspec Std.Do.Spec.pure
         mpure_intro
         refine ⟨?_, ?_⟩
@@ -1593,11 +1603,11 @@ theorem castInter_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {
           simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append, List.mem_cons,
             List.not_mem_nil, false_or, or_false, or_self] at hv
           rcases hv with rfl | hvT
-          · rw [St₂_used_eq]; exact List.mem_cons_self
-          · rw [St₂_used_eq, hs_used, hd_used]
+          · rw [StE_used_eq, St₂_used_eq]; exact List.mem_cons_self
+          · rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]
             exact List.mem_cons_of_mem _ (S!_used_sub (hbvT' v hvT))
         · intro v hv
-          rw [St₂_used_eq, hs_used, hd_used]
+          rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]
           exact List.mem_cons_of_mem _ (S!_used_sub hv)
       · mvcgen
     | @chpred α α' c_α =>
@@ -1664,6 +1674,14 @@ theorem castInter_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {
       obtain ⟨rfl, rfl⟩ := pre
       unfold castInterAux castInter.refl
       mvcgen
+  have IOption (γ δ : SMTType) :
+      ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
+      castInter.fun S T (by simp) (castPath.reflexive γ)
+        (castPath.reflexive (.option δ))
+      ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+          ⌜(∀ v ∈ SMT.bv t', v ∈ E'.usedVars) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+    simpa [castInterAux, castPath.reflexive] using
+      IAux (castPath.reflexive (.fun γ (.option δ))) S T hbvS hbvT
   mintro pre ∀St
   mpure pre
   obtain ⟨rfl, rfl⟩ := pre
@@ -1697,7 +1715,8 @@ theorem castInter_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.𝒱} {
       · rw [St₂_used_eq]; exact List.mem_cons_self
       · rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbvS v hvS)
       · rw [St₂_used_eq]; exact List.mem_cons_of_mem _ (hbvT v hvT)
-    all_goals mvcgen
+    · mspec (IOption _ _)
+    · mvcgen
   · mspec (IAux _ S T hbvS hbvT)
   · mspec (IAux _ T S hbvT hbvS)
   · mvcgen
@@ -1887,6 +1906,100 @@ theorem castEq_decls_bv (A B : SMT.Term) (σA σB : SMTType) {used : List SMT.�
     · exact fun v hv => by rw [hd_used]; exact B!_used_sub hv
 
 set_option maxHeartbeats 4000000 in
+/-- Declarations produced by forward option-membership form one well-scoped
+helper chunk, while `usedVars` only grows. -/
+theorem castMembership_optionForward_decls_bv
+    (x S : SMT.Term) {α β ρ τ : SMTType} (cα : α ~> ρ) (cβ : β ~> τ)
+    {used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk}
+    (hbvx : ∀ v ∈ SMT.bv x, v ∈ used)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∈ used) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦
+        ⌜E.freshvarsc = n ∧ E.usedVars = used ∧ E.declarations = decl⌝ ⦄
+    castMembership.optionForward x S cα cβ
+    ⦃ ⇓? (_ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜∃ Dl : SMT.Chunk, E'.declarations = decl ++ Dl ∧ DeltaBvOk Dl E'.usedVars
+          ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, rfl⟩ := pre
+  unfold castMembership.optionForward
+  mspec (loosenAux_prf_bv_declsEq _ hbvx)
+  mrename_i pre
+  mintro ∀St₁
+  rename_i xout
+  obtain ⟨x!, x!_spec⟩ := xout
+  mpure pre
+  obtain ⟨x!_used, x!_bv, x!_used_sub, x!_decl⟩ := pre
+  mspec SMT.declareConst_addSpec_spec
+  mrename_i pred
+  mintro ∀St₁d
+  mpure pred
+  obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  refine ⟨_root_.helperSpecChunk x! (.pair ρ τ) x!_spec, ?_, ?_, ?_⟩
+  · rw [hd_decl, x!_decl]
+    simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+  · rw [hd_used]
+    exact DeltaBvOk.helperSpecChunk x!_used x!_bv
+  · intro v hv
+    rw [hd_used]
+    exact x!_used_sub hv
+
+set_option maxHeartbeats 4000000 in
+/-- Declarations-delta coverage for option-membership after normalizing both
+the relation and its pair argument. -/
+theorem castMembership_optionCommon_decls_bv
+    (x S : SMT.Term) {α β α' β' ρ τ : SMTType}
+    (cxα : α ~> ρ) (cxβ : β ~> τ) (cSα : α' ~> ρ) (cSβ : β' ~> τ)
+    {used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk}
+    (hbvx : ∀ v ∈ SMT.bv x, v ∈ used)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∈ used) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦
+        ⌜E.freshvarsc = n ∧ E.usedVars = used ∧ E.declarations = decl⌝ ⦄
+    castMembership.optionCommon x S cxα cxβ cSα cSβ
+    ⦃ ⇓? (_ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜∃ Dl : SMT.Chunk, E'.declarations = decl ++ Dl ∧ DeltaBvOk Dl E'.usedVars
+          ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, rfl⟩ := pre
+  unfold castMembership.optionCommon
+  mspec (loosenAux_prf_bv_declsEq _ hbvS)
+  mrename_i preS
+  mintro ∀St₁
+  rename_i Sout
+  obtain ⟨S!, S!_spec⟩ := Sout
+  mpure preS
+  obtain ⟨S!_used, S!_bv, S!_used_sub, S!_decl⟩ := preS
+  mspec SMT.declareConst_addSpec_spec
+  mrename_i predS
+  mintro ∀St₁d
+  mpure predS
+  obtain ⟨hd_decl, _, _, hd_used, _⟩ := predS
+  mspec (castMembership_optionForward_decls_bv x (.var S!) cxα cxβ
+    (used := St₁d.env.usedVars) (n := St₁d.env.freshvarsc)
+    (decl := St₁d.env.declarations)
+    (fun v hv => by rw [hd_used]; exact S!_used_sub (hbvx v hv))
+    (by intro v hv; simp [SMT.bv] at hv))
+  case post.success =>
+    mrename_i preF
+    mintro ∀St₂
+    mpure preF
+    obtain ⟨D₂, F_decl, F_ok, F_used_sub⟩ := preF
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    let D₁ := _root_.helperSpecChunk S! (.fun ρ (.option τ)) S!_spec
+    refine ⟨D₁ ++ D₂, ?_, DeltaBvOk.append ?_ F_ok, ?_⟩
+    · rw [F_decl, hd_decl, S!_decl]
+      simp [D₁, _root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · exact DeltaBvOk.helperSpecChunk
+        (F_used_sub (by rw [hd_used]; exact S!_used))
+        (fun v hv => F_used_sub (by rw [hd_used]; exact S!_bv v hv))
+    · intro v hv
+      exact F_used_sub (by rw [hd_used]; exact S!_used_sub hv)
+
+set_option maxHeartbeats 4000000 in
 /-- Declarations-delta spec of `castMembership`: every loosened helper is paired
 with the `define_fun` specification asserted by `declareConstWithSpec`. -/
 theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List SMT.𝒱} {n : ℕ}
@@ -1951,135 +2064,21 @@ theorem castMembership_decls_bv (x S : SMT.Term) (sx sS : SMTType) {used : List 
     · rw [hd_used]
       exact DeltaBvOk.helperSpecChunk S!_used S!_bv
   case vc4.h_2.h_1.isTrue.isTrue =>
-    rename_i α' β' hσS α β hσx hα_le hβ_le St hpre
-    obtain ⟨rfl, rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_declsEq _ hbvx)
-    mrename_i pre
-    mintro ∀St₁
-    rename_i xout
-    obtain ⟨x!, x!_spec⟩ := xout
-    mpure pre
-    obtain ⟨x!_used, x!_bv, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i pred
-    mintro ∀St₁d
-    mpure pred
-    obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    refine ⟨_root_.helperSpecChunk x! (.pair α' β') x!_spec, ?_, ?_,
-      fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    · rw [hd_decl, x!_decl]
-      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
-    · rw [hd_used]
-      exact DeltaBvOk.helperSpecChunk x!_used x!_bv
+    intro St hfresh hused hdecl
+    exact castMembership_optionForward_decls_bv x S _ _
+      (n := n) (used := used) (decl := decl) hbvx hbvS St ⟨hfresh, hused, hdecl⟩
   case vc5.h_2.h_1.isTrue.isFalse.isTrue =>
-    rename_i α' β' hσS α β hσx hα_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_declsEq _ (by intro v hv; exact hbvx v (by rwa [SMT.bv] at hv)))
-    mrename_i preX
-    mintro ∀St₁
-    rename_i xout
-    obtain ⟨x!, x!_spec⟩ := xout
-    mpure preX
-    obtain ⟨x!_used, x!_bv, x!_used_sub, x!_decl⟩ := preX
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predX
-    mintro ∀St₁d
-    mpure predX
-    obtain ⟨hdX_decl, _, _, hdX_used, _⟩ := predX
-    mspec (loosenAux_prf_bv_declsEq _ (used := St₁d.env.usedVars)
-      (by intro v hv; rw [hdX_used]; exact x!_used_sub (hbvS v hv)))
-    mrename_i preS
-    mintro ∀St₂
-    rename_i Sout
-    obtain ⟨S!, S!_spec⟩ := Sout
-    mpure preS
-    obtain ⟨S!_used, S!_bv, S!_used_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predS
-    mintro ∀St₂d
-    mpure predS
-    obtain ⟨hdS_decl, _, _, hdS_used, _⟩ := predS
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂d.env.usedVars :=
-      fun {w} h => by rw [hdS_used]; exact S!_used_sub (by rw [hdX_used]; exact h)
-    refine ⟨_root_.helperSpecChunk x! α' x!_spec ++
-        _root_.helperSpecChunk S! (.fun α' (.option β)) S!_spec,
-      ?_, ?_, fun v hv => lift1 (x!_used_sub hv)⟩
-    · rw [hdS_decl, S!_decl, hdX_decl, x!_decl]
-      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
-    · refine DeltaBvOk.append ?_ ?_
-      · exact DeltaBvOk.helperSpecChunk (lift1 x!_used)
-          (fun v hv => lift1 (x!_bv v hv))
-      · rw [hdS_used]
-        exact DeltaBvOk.helperSpecChunk S!_used S!_bv
+    intro St hfresh hused hdecl
+    exact castMembership_optionCommon_decls_bv x S _ _ _ _
+      (n := n) (used := used) (decl := decl) hbvx hbvS St ⟨hfresh, hused, hdecl⟩
   case vc6.h_2.h_1.isFalse.isTrue.isTrue =>
-    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_le St hpre
-    obtain ⟨rfl, rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_declsEq _ (by intro v hv; exact hbvx v (by rwa [SMT.bv] at hv)))
-    mrename_i preY
-    mintro ∀St₁
-    rename_i yout
-    obtain ⟨y!, y!_spec⟩ := yout
-    mpure preY
-    obtain ⟨y!_used, y!_bv, y!_used_sub, y!_decl⟩ := preY
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predY
-    mintro ∀St₁d
-    mpure predY
-    obtain ⟨hdY_decl, _, _, hdY_used, _⟩ := predY
-    mspec (loosenAux_prf_bv_declsEq _ (used := St₁d.env.usedVars)
-      (by intro v hv; rw [hdY_used]; exact y!_used_sub (hbvS v hv)))
-    mrename_i preS
-    mintro ∀St₂
-    rename_i Sout
-    obtain ⟨S!, S!_spec⟩ := Sout
-    mpure preS
-    obtain ⟨S!_used, S!_bv, S!_used_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predS
-    mintro ∀St₂d
-    mpure predS
-    obtain ⟨hdS_decl, _, _, hdS_used, _⟩ := predS
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂d.env.usedVars :=
-      fun {w} h => by rw [hdS_used]; exact S!_used_sub (by rw [hdY_used]; exact h)
-    refine ⟨_root_.helperSpecChunk y! β' y!_spec ++
-        _root_.helperSpecChunk S! (.fun α (.option β')) S!_spec,
-      ?_, ?_, fun v hv => lift1 (y!_used_sub hv)⟩
-    · rw [hdS_decl, S!_decl, hdY_decl, y!_decl]
-      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
-    · refine DeltaBvOk.append ?_ ?_
-      · exact DeltaBvOk.helperSpecChunk (lift1 y!_used)
-          (fun v hv => lift1 (y!_bv v hv))
-      · rw [hdS_used]
-        exact DeltaBvOk.helperSpecChunk S!_used S!_bv
+    intro St hfresh hused hdecl
+    exact castMembership_optionCommon_decls_bv x S _ _ _ _
+      (n := n) (used := used) (decl := decl) hbvx hbvS St ⟨hfresh, hused, hdecl⟩
   case vc7.h_2.h_1.isFalse.isTrue.isFalse.isTrue =>
-    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_declsEq _ hbvS)
-    mrename_i pre
-    mintro ∀St₁
-    rename_i Sout
-    obtain ⟨S!, S!_spec⟩ := Sout
-    mpure pre
-    obtain ⟨S!_used, S!_bv, S!_used_sub, S!_decl⟩ := pre
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i pred
-    mintro ∀St₁d
-    mpure pred
-    obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    refine ⟨_root_.helperSpecChunk S! (.fun α (.option β)) S!_spec, ?_, ?_,
-      fun v hv => by rw [hd_used]; exact S!_used_sub hv⟩
-    · rw [hd_decl, S!_decl]
-      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
-    · rw [hd_used]
-      exact DeltaBvOk.helperSpecChunk S!_used S!_bv
+    intro St hfresh hused hdecl
+    exact castMembership_optionCommon_decls_bv x S _ _ _ _
+      (n := n) (used := used) (decl := decl) hbvx hbvS St ⟨hfresh, hused, hdecl⟩
 
 set_option maxHeartbeats 4000000 in
 /-- Declarations-delta spec of `castUnionAux`: each non-throw branch loosens `S`
@@ -2169,13 +2168,19 @@ theorem castUnionAux_decls_bv {α β : SMTType} (c : α ~> β) (S T : SMT.Term) 
       mintro ∀St₂
       mpure pre2
       obtain ⟨St₂_used_eq, St₂_decl⟩ := pre2
+      mspec SMT.eraseFromContext_used_decls
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨StE_used_eq, StE_decl⟩ := preE
       mspec Std.Do.Spec.pure
       mpure_intro
-      have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂.env.usedVars := fun {w} h => by
-        rw [St₂_used_eq, hs_used, hd_used]; exact List.mem_cons_of_mem _ h
+      have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ StE.env.usedVars := fun {w} h => by
+        rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]; exact List.mem_cons_of_mem _ h
       refine ⟨[.declare_const S! (.fun α' (.option σ)),
         .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_, ?_, fun v hv => lift (S!_used_sub hv)⟩
-      · rw [St₂_decl, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+      · rw [StE_decl, St₂_decl, hs_decl, hd_decl, S!_decl,
+          List.concat_eq_append, List.concat_eq_append,
           List.append_assoc, List.cons_append, List.nil_append]
       · exact DeltaBvOk.append (DeltaBvOk.declare_const (lift S!_used))
           (DeltaBvOk.define_fun_spec (fun w hw => lift (S!_bv w hw)))
@@ -2330,13 +2335,19 @@ theorem castInterAux_decls_bv {α β : SMTType} (c : α ~> β) (S T : SMT.Term) 
       mintro ∀St₂
       mpure pre2
       obtain ⟨St₂_used_eq, St₂_decl⟩ := pre2
+      mspec SMT.eraseFromContext_used_decls
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨StE_used_eq, StE_decl⟩ := preE
       mspec Std.Do.Spec.pure
       mpure_intro
-      have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂.env.usedVars := fun {w} h => by
-        rw [St₂_used_eq, hs_used, hd_used]; exact List.mem_cons_of_mem _ h
+      have lift : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ StE.env.usedVars := fun {w} h => by
+        rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]; exact List.mem_cons_of_mem _ h
       refine ⟨[.declare_const S! (.fun α' (.option σ)),
         .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_, ?_, fun v hv => lift (S!_used_sub hv)⟩
-      · rw [St₂_decl, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+      · rw [StE_decl, St₂_decl, hs_decl, hd_decl, S!_decl,
+          List.concat_eq_append, List.concat_eq_append,
           List.append_assoc, List.cons_append, List.nil_append]
       · exact DeltaBvOk.append (DeltaBvOk.declare_const (lift S!_used))
           (DeltaBvOk.define_fun_spec (fun w hw => lift (S!_bv w hw)))
@@ -2406,6 +2417,36 @@ theorem castInterAux_decls_bv {α β : SMTType} (c : α ~> β) (S T : SMT.Term) 
     mvcgen
 
 set_option maxHeartbeats 4000000 in
+/-- Declaration invariant for the equal option-function branch of `castUnion`. -/
+theorem castUnion_optionFun_decls_bv (S T : SMT.Term) (γ δ : SMTType)
+    {used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk}
+    (hbvS : ∀ v ∈ SMT.bv S, v ∈ used) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦
+        ⌜E.freshvarsc = n ∧ E.usedVars = used ∧ E.declarations = decl⌝ ⦄
+    castUnion.fun S T (by simp) (castPath.reflexive γ)
+      (castPath.reflexive (.option δ))
+    ⦃ ⇓? (_ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜∃ Dl : SMT.Chunk, E'.declarations = decl ++ Dl ∧ DeltaBvOk Dl E'.usedVars
+          ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  simpa [castUnionAux, castPath.reflexive] using
+    castUnionAux_decls_bv (castPath.reflexive (.fun γ (.option δ))) S T hbvS
+
+set_option maxHeartbeats 4000000 in
+/-- Declaration invariant for the equal option-function branch of `castInter`. -/
+theorem castInter_optionFun_decls_bv (S T : SMT.Term) (γ δ : SMTType)
+    {used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk}
+    (hbvS : ∀ v ∈ SMT.bv S, v ∈ used) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦
+        ⌜E.freshvarsc = n ∧ E.usedVars = used ∧ E.declarations = decl⌝ ⦄
+    castInter.fun S T (by simp) (castPath.reflexive γ)
+      (castPath.reflexive (.option δ))
+    ⦃ ⇓? (_ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜∃ Dl : SMT.Chunk, E'.declarations = decl ++ Dl ∧ DeltaBvOk Dl E'.usedVars
+          ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  simpa [castInterAux, castPath.reflexive] using
+    castInterAux_decls_bv (castPath.reflexive (.fun γ (.option δ))) S T hbvS
+
+set_option maxHeartbeats 4000000 in
 /-- Declarations-delta spec of the `castUnion` wrapper: the direct (equal
 char-pred) branch only `freshVar`s (`Dl = []`); the loosening branches delegate to
 `castUnionAux_decls_bv`. -/
@@ -2446,7 +2487,8 @@ theorem castUnion_decls_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.�
       refine ⟨[], ?_, DeltaBvOk_nil, fun v hv => ?_⟩
       · rw [St₃_decl, St₂_decl, List.append_nil]
       · rw [St₃_used_eq, St₂_used_eq]; exact List.mem_cons_of_mem _ hv
-    all_goals mvcgen
+    · mspec (castUnion_optionFun_decls_bv S T _ _ hbvS)
+    · mvcgen
   · mspec (castUnionAux_decls_bv _ S T hbvS)
   · mspec (castUnionAux_decls_bv _ T S hbvT)
   · mvcgen
@@ -2491,7 +2533,8 @@ theorem castInter_decls_bv (S T : SMT.Term) (sS sT : SMTType) {used : List SMT.�
       refine ⟨[], ?_, DeltaBvOk_nil, fun v hv => ?_⟩
       · rw [St₃_decl, St₂_decl, List.append_nil]
       · rw [St₃_used_eq, St₂_used_eq]; exact List.mem_cons_of_mem _ hv
-    all_goals mvcgen
+    · mspec (castInter_optionFun_decls_bv S T _ _ hbvS)
+    · mvcgen
   · mspec (castInterAux_decls_bv _ S T hbvS)
   · mspec (castInterAux_decls_bv _ T S hbvT)
   · mvcgen
@@ -3762,8 +3805,8 @@ theorem encodeTerm_bv_used
           rw [St₅_used, St₄_used_eq]; exact List.mem_cons_of_mem _ h
         refine ⟨?_, fun v hv => lift (P_used_sub (St₁_sub_St₂ (D_used_sub hv))), ΔD ++ ΔP, ?_, ?_⟩
         · intro v hv
-          simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append, List.mem_cons,
-            List.not_mem_nil, false_or, or_false] at hv
+          simp only [noneCast, SMT.bv, List.nil_append, List.append_nil, List.mem_append,
+            List.mem_cons, List.not_mem_nil, false_or, or_false] at hv
           rcases hv with rfl | hvD | hvPx
           · rw [St₅_used, St₄_used_eq]; exact List.mem_cons_self
           · exact lift (P_used_sub (St₁_sub_St₂ (D_bv_used v hvD)))
@@ -5019,6 +5062,96 @@ theorem castApp_bv_notMem (f x : SMT.Term) (sf sx : SMTType) {avoid used : List 
       List.not_mem_nil, false_or, or_false] at hv
 
 set_option maxHeartbeats 4000000 in
+/-- Bound variables produced by forward option-membership stay outside `avoid`,
+while the encoder's `usedVars` only grows. -/
+theorem castMembership_optionForward_bv_notMem
+    (x S : SMT.Term) {α β ρ τ : SMTType} (cα : α ~> ρ) (cβ : β ~> τ)
+    {avoid used : List SMT.𝒱} {n : ℕ} (havsub : avoid ⊆ used)
+    (hbvx : ∀ v ∈ SMT.bv x, v ∉ avoid)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∉ avoid) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
+    castMembership.optionForward x S cα cβ
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜(∀ v ∈ SMT.bv t', v ∉ avoid) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl⟩ := pre
+  unfold castMembership.optionForward
+  mspec (loosenAux_prf_bv_notMem _ havsub hbvx)
+  mrename_i pre
+  mintro ∀St₁
+  mpure pre
+  obtain ⟨_L_notMem, L_bv, L_used_sub⟩ := pre
+  mspec SMT.declareConst_addSpec_spec
+  mrename_i pred
+  mintro ∀St₁d
+  mpure pred
+  obtain ⟨_, _, _, hd_used, _⟩ := pred
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  rw [hd_used]
+  refine ⟨?_, L_used_sub⟩
+  intro v hv
+  simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
+    List.not_mem_nil, false_or, or_false] at hv
+  rcases hv with hspec | hvS
+  · exact L_bv v hspec
+  · exact hbvS v hvS
+
+set_option maxHeartbeats 4000000 in
+/-- Freshness coverage for option-membership after normalizing both the relation
+and its pair argument to common endpoint types. -/
+theorem castMembership_optionCommon_bv_notMem
+    (x S : SMT.Term) {α β α' β' ρ τ : SMTType}
+    (cxα : α ~> ρ) (cxβ : β ~> τ) (cSα : α' ~> ρ) (cSβ : β' ~> τ)
+    {avoid used : List SMT.𝒱} {n : ℕ} (havsub : avoid ⊆ used)
+    (hbvx : ∀ v ∈ SMT.bv x, v ∉ avoid)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∉ avoid) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
+    castMembership.optionCommon x S cxα cxβ cSα cSβ
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜(∀ v ∈ SMT.bv t', v ∉ avoid) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl⟩ := pre
+  unfold castMembership.optionCommon
+  mspec (loosenAux_prf_bv_notMem _ havsub hbvS)
+  mrename_i preS
+  mintro ∀St₁
+  rename_i Sout
+  obtain ⟨S!, S!_spec⟩ := Sout
+  mpure preS
+  obtain ⟨_S!_notMem, S!_bv, S!_used_sub⟩ := preS
+  mspec SMT.declareConst_addSpec_spec
+  mrename_i predS
+  mintro ∀St₁d
+  mpure predS
+  obtain ⟨_, _, _, hd_used, _⟩ := predS
+  have havsub₁d : avoid ⊆ St₁d.env.usedVars := fun w hw => by
+    rw [hd_used]
+    exact S!_used_sub (havsub hw)
+  mspec (castMembership_optionForward_bv_notMem x (.var S!) cxα cxβ
+    (avoid := avoid) (used := St₁d.env.usedVars) (n := St₁d.env.freshvarsc)
+    havsub₁d hbvx (by intro v hv; simp [SMT.bv] at hv))
+  case post.success =>
+    rename_i out
+    obtain ⟨t, σt⟩ := out
+    mrename_i preF
+    mintro ∀St₂
+    mpure preF
+    obtain ⟨F_bv, F_used_sub⟩ := preF
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨?_, ?_⟩
+    · intro v hv
+      simp only [SMT.bv, List.mem_append] at hv
+      rcases hv with hspec | ht
+      · exact S!_bv v hspec
+      · exact F_bv v ht
+    · intro v hv
+      exact F_used_sub (by rw [hd_used]; exact S!_used_sub hv)
+
+set_option maxHeartbeats 4000000 in
 /-- Freshness companion of `castMembership_bv`: every bound variable of the result
 (loosen spec embedded via `∧ˢ`, plus inputs) avoids `avoid`. -/
 theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
@@ -5086,127 +5219,21 @@ theorem castMembership_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     · exact L_bv v hspec
     · exact hbvx v hvx
   case vc4.h_2.h_1.isTrue.isTrue =>
-    rename_i α' β' hσS α β hσx hα_le hβ_le St hpre
-    obtain ⟨rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_notMem _ havsub hbvx)
-    mrename_i pre
-    mintro ∀St₁
-    mpure pre
-    obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i pred
-    mintro ∀St₁d
-    mpure pred
-    obtain ⟨_, _, _, hd_used, _⟩ := pred
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    rw [hd_used]
-    refine ⟨?_, L_used_sub⟩
-    intro v hv
-    simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-      List.not_mem_nil, false_or, or_false] at hv
-    rcases hv with hspec | hvS
-    · exact L_bv v hspec
-    · exact hbvS v hvS
+    intro St hfresh hused
+    exact castMembership_optionForward_bv_notMem x S _ _
+      (n := n) (avoid := avoid) (used := used) havsub hbvx hbvS St ⟨hfresh, hused⟩
   case vc5.h_2.h_1.isTrue.isFalse.isTrue =>
-    rename_i α' β' hσS α β hσx hα_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_notMem _ havsub (by intro v hv; exact hbvx v (by rwa [SMT.bv] at hv)))
-    mrename_i preX
-    mintro ∀St₁
-    mpure preX
-    obtain ⟨x!_notMem, x!_bv, x!_used_sub⟩ := preX
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predX
-    mintro ∀St₁d
-    mpure predX
-    obtain ⟨_, _, _, hdX_used, _⟩ := predX
-    have havsub₁d : avoid ⊆ St₁d.env.usedVars := fun w h => by
-      rw [hdX_used]; exact x!_used_sub (havsub h)
-    mspec (loosenAux_prf_bv_notMem _ havsub₁d (by intro v hv; exact hbvS v hv))
-    mrename_i preS
-    mintro ∀St₂
-    mpure preS
-    obtain ⟨S!_notMem, S!_bv, S!_used_sub⟩ := preS
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predS
-    mintro ∀St₂d
-    mpure predS
-    obtain ⟨_, _, _, hdS_used, _⟩ := predS
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    rw [hdS_used]
-    have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂.env.usedVars :=
-      fun {w} h => S!_used_sub (by rw [hdX_used]; exact h)
-    refine ⟨?_, fun v hv => lift1 (x!_used_sub hv)⟩
-    intro v hv
-    simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-      List.not_mem_nil, false_or, or_false] at hv
-    rcases hv with (hspecX | hspecS) | hvx
-    · exact x!_bv v hspecX
-    · exact S!_bv v hspecS
-    · exact hbvx v hvx
+    intro St hfresh hused
+    exact castMembership_optionCommon_bv_notMem x S _ _ _ _
+      (n := n) (avoid := avoid) (used := used) havsub hbvx hbvS St ⟨hfresh, hused⟩
   case vc6.h_2.h_1.isFalse.isTrue.isTrue =>
-    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_le St hpre
-    obtain ⟨rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_notMem _ havsub (by intro v hv; exact hbvx v (by rwa [SMT.bv] at hv)))
-    mrename_i preY
-    mintro ∀St₁
-    mpure preY
-    obtain ⟨y!_notMem, y!_bv, y!_used_sub⟩ := preY
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predY
-    mintro ∀St₁d
-    mpure predY
-    obtain ⟨_, _, _, hdY_used, _⟩ := predY
-    have havsub₁d : avoid ⊆ St₁d.env.usedVars := fun w h => by
-      rw [hdY_used]; exact y!_used_sub (havsub h)
-    mspec (loosenAux_prf_bv_notMem _ havsub₁d (by intro v hv; exact hbvS v hv))
-    mrename_i preS
-    mintro ∀St₂
-    mpure preS
-    obtain ⟨S!_notMem, S!_bv, S!_used_sub⟩ := preS
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predS
-    mintro ∀St₂d
-    mpure predS
-    obtain ⟨_, _, _, hdS_used, _⟩ := predS
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    rw [hdS_used]
-    have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂.env.usedVars :=
-      fun {w} h => S!_used_sub (by rw [hdY_used]; exact h)
-    refine ⟨?_, fun v hv => lift1 (y!_used_sub hv)⟩
-    intro v hv
-    simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-      List.not_mem_nil, false_or, or_false] at hv
-    rcases hv with (hspecY | hspecS) | hvx
-    · exact y!_bv v hspecY
-    · exact S!_bv v hspecS
-    · exact hbvx v hvx
+    intro St hfresh hused
+    exact castMembership_optionCommon_bv_notMem x S _ _ _ _
+      (n := n) (avoid := avoid) (used := used) havsub hbvx hbvS St ⟨hfresh, hused⟩
   case vc7.h_2.h_1.isFalse.isTrue.isFalse.isTrue =>
-    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_notMem _ havsub hbvS)
-    mrename_i pre
-    mintro ∀St₁
-    mpure pre
-    obtain ⟨L_notMem, L_bv, L_used_sub⟩ := pre
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i pred
-    mintro ∀St₁d
-    mpure pred
-    obtain ⟨_, _, _, hd_used, _⟩ := pred
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    rw [hd_used]
-    refine ⟨?_, L_used_sub⟩
-    intro v hv
-    simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append,
-      List.not_mem_nil, false_or, or_false, or_self] at hv
-    rcases hv with hspec | hvx
-    · exact L_bv v hspec
-    · exact hbvx v hvx
+    intro St hfresh hused
+    exact castMembership_optionCommon_bv_notMem x S _ _ _ _
+      (n := n) (avoid := avoid) (used := used) havsub hbvx hbvS St ⟨hfresh, hused⟩
 
 set_option maxHeartbeats 4000000 in
 /-- Freshness companion of `castUnionAux_bv`: result is `λ x. S!(x) ∨ T(x)`; its
@@ -5294,6 +5321,11 @@ theorem castUnionAux_bv_notMem {α β : SMTType} (c : α ~> β) (S T : SMT.Term)
       mintro ∀St₂
       mpure pre2
       obtain ⟨_, _, _, St₂_used_eq, x_notMem⟩ := pre2
+      mspec SMT.eraseFromContext_spec
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨_, _, StE_used_eq⟩ := preE
       mspec Std.Do.Spec.pure
       mpure_intro
       refine ⟨?_, ?_⟩
@@ -5304,7 +5336,7 @@ theorem castUnionAux_bv_notMem {α β : SMTType} (c : α ~> β) (S T : SMT.Term)
         · exact fun h => x_notMem (havsub₁s h)
         · exact hbvT v hvT
       · intro v hv
-        rw [St₂_used_eq, hs_used, hd_used]
+        rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]
         exact List.mem_cons_of_mem _ (S!_used_sub hv)
     · mvcgen
   | @chpred α α' c_α =>
@@ -5374,6 +5406,20 @@ theorem castUnionAux_bv_notMem {α β : SMTType} (c : α ~> β) (S T : SMT.Term)
     mvcgen
 
 set_option maxHeartbeats 4000000 in
+/-- Freshness invariant for the equal option-function branch of `castUnion`. -/
+theorem castUnion_optionFun_bv_notMem (S T : SMT.Term) (γ δ : SMTType)
+    {avoid used : List SMT.𝒱} {n : ℕ} (havsub : avoid ⊆ used)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∉ avoid) (hbvT : ∀ v ∈ SMT.bv T, v ∉ avoid) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
+    castUnion.fun S T (by simp) (castPath.reflexive γ)
+      (castPath.reflexive (.option δ))
+    ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜(∀ v ∈ SMT.bv t', v ∉ avoid) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  simpa [castUnionAux, castPath.reflexive] using
+    castUnionAux_bv_notMem (castPath.reflexive (.fun γ (.option δ)))
+      S T havsub hbvS hbvT
+
+set_option maxHeartbeats 4000000 in
 /-- Freshness companion of `castUnion_bv`: every bound variable of the result avoids
 `avoid`. -/
 theorem castUnion_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
@@ -5416,7 +5462,8 @@ theorem castUnion_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
       · exact fun h => x_notMem (havsub h)
       · exact hbvS v hvS
       · exact hbvT v hvT
-    all_goals mvcgen
+    · mspec (castUnion_optionFun_bv_notMem S T _ _ havsub hbvS hbvT)
+    · mvcgen
   · mspec (castUnionAux_bv_notMem _ S T havsub hbvS hbvT)
   · mspec (castUnionAux_bv_notMem _ T S havsub hbvT hbvS)
   · mvcgen
@@ -5514,6 +5561,11 @@ theorem castInter_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
         mintro ∀St₂
         mpure pre2
         obtain ⟨_, _, _, St₂_used_eq, x_notMem⟩ := pre2
+        mspec SMT.eraseFromContext_spec
+        mrename_i preE
+        mintro ∀StE
+        mpure preE
+        obtain ⟨_, _, StE_used_eq⟩ := preE
         mspec Std.Do.Spec.pure
         mpure_intro
         refine ⟨?_, ?_⟩
@@ -5524,7 +5576,7 @@ theorem castInter_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
           · exact fun h => x_notMem (havsub₁s h)
           · exact hbvT' v hvT
         · intro v hv
-          rw [St₂_used_eq, hs_used, hd_used]
+          rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]
           exact List.mem_cons_of_mem _ (S!_used_sub hv)
       · mvcgen
     | @chpred α α' c_α =>
@@ -5592,6 +5644,14 @@ theorem castInter_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
       obtain ⟨rfl, rfl⟩ := pre
       unfold castInterAux castInter.refl
       mvcgen
+  have IOption (γ δ : SMTType) :
+      ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦ ⌜E.freshvarsc = n ∧ E.usedVars = used⌝ ⦄
+      castInter.fun S T (by simp) (castPath.reflexive γ)
+        (castPath.reflexive (.option δ))
+      ⦃ ⇓? (⟨t', _σ⟩ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+          ⌜(∀ v ∈ SMT.bv t', v ∉ avoid) ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+    simpa [castInterAux, castPath.reflexive] using
+      IAux (castPath.reflexive (.fun γ (.option δ))) S T hbvS hbvT
   mintro pre ∀St
   mpure pre
   obtain ⟨rfl, rfl⟩ := pre
@@ -5625,7 +5685,8 @@ theorem castInter_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
       · exact fun h => x_notMem (havsub h)
       · exact hbvS v hvS
       · exact hbvT v hvT
-    all_goals mvcgen
+    · mspec (IOption _ _)
+    · mvcgen
   · mspec (IAux _ S T hbvS hbvT)
   · mspec (IAux _ T S hbvT hbvS)
   · mvcgen
@@ -5782,6 +5843,99 @@ theorem castEq_decls_bv_notMem (A B : SMT.Term) (σA σB : SMTType)
     · exact fun v hv => by rw [hd_used]; exact B!_used_sub hv
 
 set_option maxHeartbeats 4000000 in
+/-- Declarations produced by forward option-membership form a helper chunk whose
+declared name and specification binders stay outside `avoid`. -/
+theorem castMembership_optionForward_decls_bv_notMem
+    (x S : SMT.Term) {α β ρ τ : SMTType} (cα : α ~> ρ) (cβ : β ~> τ)
+    {avoid used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk} (havsub : avoid ⊆ used)
+    (hbvx : ∀ v ∈ SMT.bv x, v ∉ avoid)
+    (_hbvS : ∀ v ∈ SMT.bv S, v ∉ avoid) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦
+        ⌜E.freshvarsc = n ∧ E.usedVars = used ∧ E.declarations = decl⌝ ⦄
+    castMembership.optionForward x S cα cβ
+    ⦃ ⇓? (_ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜∃ Dl : SMT.Chunk, E'.declarations = decl ++ Dl ∧ DeltaBvNotMem Dl avoid
+          ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, rfl⟩ := pre
+  unfold castMembership.optionForward
+  mspec (loosenAux_prf_bv_declsEq_notMem _ havsub hbvx)
+  mrename_i pre
+  mintro ∀St₁
+  rename_i xout
+  obtain ⟨x!, x!_spec⟩ := xout
+  mpure pre
+  obtain ⟨x!_notMem, x!_bv, x!_used_sub, x!_decl⟩ := pre
+  mspec SMT.declareConst_addSpec_spec
+  mrename_i pred
+  mintro ∀St₁d
+  mpure pred
+  obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
+  mspec Std.Do.Spec.pure
+  mpure_intro
+  refine ⟨_root_.helperSpecChunk x! (.pair ρ τ) x!_spec, ?_,
+    DeltaBvNotMem.helperSpecChunk x!_notMem x!_bv, ?_⟩
+  · rw [hd_decl, x!_decl]
+    simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+  · intro v hv
+    rw [hd_used]
+    exact x!_used_sub hv
+
+set_option maxHeartbeats 4000000 in
+/-- Declarations-delta freshness for option-membership after normalizing the
+relation and pair argument to common endpoint types. -/
+theorem castMembership_optionCommon_decls_bv_notMem
+    (x S : SMT.Term) {α β α' β' ρ τ : SMTType}
+    (cxα : α ~> ρ) (cxβ : β ~> τ) (cSα : α' ~> ρ) (cSβ : β' ~> τ)
+    {avoid used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk} (havsub : avoid ⊆ used)
+    (hbvx : ∀ v ∈ SMT.bv x, v ∉ avoid)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∉ avoid) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦
+        ⌜E.freshvarsc = n ∧ E.usedVars = used ∧ E.declarations = decl⌝ ⦄
+    castMembership.optionCommon x S cxα cxβ cSα cSβ
+    ⦃ ⇓? (_ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜∃ Dl : SMT.Chunk, E'.declarations = decl ++ Dl ∧ DeltaBvNotMem Dl avoid
+          ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, rfl⟩ := pre
+  unfold castMembership.optionCommon
+  mspec (loosenAux_prf_bv_declsEq_notMem _ havsub hbvS)
+  mrename_i preS
+  mintro ∀St₁
+  rename_i Sout
+  obtain ⟨S!, S!_spec⟩ := Sout
+  mpure preS
+  obtain ⟨S!_notMem, S!_bv, S!_used_sub, S!_decl⟩ := preS
+  mspec SMT.declareConst_addSpec_spec
+  mrename_i predS
+  mintro ∀St₁d
+  mpure predS
+  obtain ⟨hd_decl, _, _, hd_used, _⟩ := predS
+  have havsub₁d : avoid ⊆ St₁d.env.usedVars := fun w hw => by
+    rw [hd_used]
+    exact S!_used_sub (havsub hw)
+  mspec (castMembership_optionForward_decls_bv_notMem x (.var S!) cxα cxβ
+    (avoid := avoid) (used := St₁d.env.usedVars) (n := St₁d.env.freshvarsc)
+    (decl := St₁d.env.declarations) havsub₁d hbvx
+    (by intro v hv; simp [SMT.bv] at hv))
+  case post.success =>
+    mrename_i preF
+    mintro ∀St₂
+    mpure preF
+    obtain ⟨D₂, F_decl, F_ok, F_used_sub⟩ := preF
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    let D₁ := _root_.helperSpecChunk S! (.fun ρ (.option τ)) S!_spec
+    refine ⟨D₁ ++ D₂, ?_, DeltaBvNotMem.append ?_ F_ok, ?_⟩
+    · rw [F_decl, hd_decl, S!_decl]
+      simp [D₁, _root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    · exact DeltaBvNotMem.helperSpecChunk S!_notMem S!_bv
+    · intro v hv
+      exact F_used_sub (by rw [hd_used]; exact S!_used_sub hv)
+
+set_option maxHeartbeats 4000000 in
 /-- Dual declarations-delta spec of `castMembership`: each constrained helper
 and every bound variable of its recorded specification avoid `avoid`. -/
 theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
@@ -5844,131 +5998,25 @@ theorem castMembership_decls_bv_notMem (x S : SMT.Term) (sx sS : SMTType)
     rw [hd_decl, S!_decl]
     simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
   case vc4.h_2.h_1.isTrue.isTrue =>
-    rename_i α' β' hσS α β hσx hα_le hβ_le St hpre
-    obtain ⟨rfl, rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_declsEq_notMem _ havsub hbvx)
-    mrename_i pre
-    mintro ∀St₁
-    rename_i xout
-    obtain ⟨x!, x!_spec⟩ := xout
-    mpure pre
-    obtain ⟨x!_notMem, x!_bv, x!_used_sub, x!_decl⟩ := pre
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i pred
-    mintro ∀St₁d
-    mpure pred
-    obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    refine ⟨_root_.helperSpecChunk x! (.pair α' β') x!_spec, ?_,
-      DeltaBvNotMem.helperSpecChunk x!_notMem x!_bv,
-      fun v hv => by rw [hd_used]; exact x!_used_sub hv⟩
-    rw [hd_decl, x!_decl]
-    simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    intro St hfresh hused hdecl
+    exact castMembership_optionForward_decls_bv_notMem x S _ _
+      (n := n) (avoid := avoid) (used := used) (decl := decl)
+      havsub hbvx hbvS St ⟨hfresh, hused, hdecl⟩
   case vc5.h_2.h_1.isTrue.isFalse.isTrue =>
-    rename_i α' β' hσS α β hσx hα_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_declsEq_notMem _ havsub (by intro v hv; exact hbvx v (by rwa [SMT.bv] at hv)))
-    mrename_i preX
-    mintro ∀St₁
-    rename_i xout
-    obtain ⟨x!, x!_spec⟩ := xout
-    mpure preX
-    obtain ⟨x!_notMem, x!_bv, x!_used_sub, x!_decl⟩ := preX
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predX
-    mintro ∀St₁d
-    mpure predX
-    obtain ⟨hdX_decl, _, _, hdX_used, _⟩ := predX
-    have havsub₁d : avoid ⊆ St₁d.env.usedVars := fun w h => by
-      rw [hdX_used]; exact x!_used_sub (havsub h)
-    mspec (loosenAux_prf_bv_declsEq_notMem _ havsub₁d (by intro v hv; exact hbvS v hv))
-    mrename_i preS
-    mintro ∀St₂
-    rename_i Sout
-    obtain ⟨S!, S!_spec⟩ := Sout
-    mpure preS
-    obtain ⟨S!_notMem, S!_bv, S!_used_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predS
-    mintro ∀St₂d
-    mpure predS
-    obtain ⟨hdS_decl, _, _, hdS_used, _⟩ := predS
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂d.env.usedVars :=
-      fun {w} h => by rw [hdS_used]; exact S!_used_sub (by rw [hdX_used]; exact h)
-    refine ⟨_root_.helperSpecChunk x! α' x!_spec ++
-        _root_.helperSpecChunk S! (.fun α' (.option β)) S!_spec,
-      ?_, ?_, fun v hv => lift1 (x!_used_sub hv)⟩
-    · rw [hdS_decl, S!_decl, hdX_decl, x!_decl]
-      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
-    · exact DeltaBvNotMem.append
-        (DeltaBvNotMem.helperSpecChunk x!_notMem x!_bv)
-        (DeltaBvNotMem.helperSpecChunk S!_notMem S!_bv)
+    intro St hfresh hused hdecl
+    exact castMembership_optionCommon_decls_bv_notMem x S _ _ _ _
+      (n := n) (avoid := avoid) (used := used) (decl := decl)
+      havsub hbvx hbvS St ⟨hfresh, hused, hdecl⟩
   case vc6.h_2.h_1.isFalse.isTrue.isTrue =>
-    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_le St hpre
-    obtain ⟨rfl, rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_declsEq_notMem _ havsub (by intro v hv; exact hbvx v (by rwa [SMT.bv] at hv)))
-    mrename_i preY
-    mintro ∀St₁
-    rename_i yout
-    obtain ⟨y!, y!_spec⟩ := yout
-    mpure preY
-    obtain ⟨y!_notMem, y!_bv, y!_used_sub, y!_decl⟩ := preY
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predY
-    mintro ∀St₁d
-    mpure predY
-    obtain ⟨hdY_decl, _, _, hdY_used, _⟩ := predY
-    have havsub₁d : avoid ⊆ St₁d.env.usedVars := fun w h => by
-      rw [hdY_used]; exact y!_used_sub (havsub h)
-    mspec (loosenAux_prf_bv_declsEq_notMem _ havsub₁d (by intro v hv; exact hbvS v hv))
-    mrename_i preS
-    mintro ∀St₂
-    rename_i Sout
-    obtain ⟨S!, S!_spec⟩ := Sout
-    mpure preS
-    obtain ⟨S!_notMem, S!_bv, S!_used_sub, S!_decl⟩ := preS
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i predS
-    mintro ∀St₂d
-    mpure predS
-    obtain ⟨hdS_decl, _, _, hdS_used, _⟩ := predS
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    have lift1 : ∀ {w}, w ∈ St₁.env.usedVars → w ∈ St₂d.env.usedVars :=
-      fun {w} h => by rw [hdS_used]; exact S!_used_sub (by rw [hdY_used]; exact h)
-    refine ⟨_root_.helperSpecChunk y! β' y!_spec ++
-        _root_.helperSpecChunk S! (.fun α (.option β')) S!_spec,
-      ?_, ?_, fun v hv => lift1 (y!_used_sub hv)⟩
-    · rw [hdS_decl, S!_decl, hdY_decl, y!_decl]
-      simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
-    · exact DeltaBvNotMem.append
-        (DeltaBvNotMem.helperSpecChunk y!_notMem y!_bv)
-        (DeltaBvNotMem.helperSpecChunk S!_notMem S!_bv)
+    intro St hfresh hused hdecl
+    exact castMembership_optionCommon_decls_bv_notMem x S _ _ _ _
+      (n := n) (avoid := avoid) (used := used) (decl := decl)
+      havsub hbvx hbvS St ⟨hfresh, hused, hdecl⟩
   case vc7.h_2.h_1.isFalse.isTrue.isFalse.isTrue =>
-    rename_i α' β' hσS α β hσx hα_nle hα'_le hβ_nle hβ'_le St hpre
-    obtain ⟨rfl, rfl, rfl⟩ := hpre
-    mspec (loosenAux_prf_bv_declsEq_notMem _ havsub hbvS)
-    mrename_i pre
-    mintro ∀St₁
-    rename_i Sout
-    obtain ⟨S!, S!_spec⟩ := Sout
-    mpure pre
-    obtain ⟨S!_notMem, S!_bv, S!_used_sub, S!_decl⟩ := pre
-    mspec SMT.declareConst_addSpec_spec
-    mrename_i pred
-    mintro ∀St₁d
-    mpure pred
-    obtain ⟨hd_decl, _, _, hd_used, _⟩ := pred
-    mspec Std.Do.Spec.pure
-    mpure_intro
-    refine ⟨_root_.helperSpecChunk S! (.fun α (.option β)) S!_spec, ?_,
-      DeltaBvNotMem.helperSpecChunk S!_notMem S!_bv,
-      fun v hv => by rw [hd_used]; exact S!_used_sub hv⟩
-    rw [hd_decl, S!_decl]
-    simp [_root_.helperSpecChunk, List.concat_eq_append, List.append_assoc]
+    intro St hfresh hused hdecl
+    exact castMembership_optionCommon_decls_bv_notMem x S _ _ _ _
+      (n := n) (avoid := avoid) (used := used) (decl := decl)
+      havsub hbvx hbvS St ⟨hfresh, hused, hdecl⟩
 
 set_option maxHeartbeats 4000000 in
 /-- Dual declarations-delta spec of `castApp`: the spliced declarations' declared
@@ -6380,14 +6428,22 @@ theorem castUnionAux_decls_bv_notMem {α β : SMTType} (c : α ~> β) (S T : SMT
       mintro ∀St₂
       mpure pre2
       obtain ⟨St₂_used_eq, St₂_decl⟩ := pre2
+      mspec SMT.eraseFromContext_used_decls
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨StE_used_eq, StE_decl⟩ := preE
       mspec Std.Do.Spec.pure
       mpure_intro
       refine ⟨[.declare_const S! (.fun α' (.option σ)),
         .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_,
         DeltaBvNotMem.append (DeltaBvNotMem.declare_const S!_notMem)
           (DeltaBvNotMem.define_fun_spec S!_bv),
-        fun v hv => by rw [St₂_used_eq, hs_used, hd_used]; exact List.mem_cons_of_mem _ (S!_used_sub hv)⟩
-      rw [St₂_decl, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+        fun v hv => by
+          rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]
+          exact List.mem_cons_of_mem _ (S!_used_sub hv)⟩
+      rw [StE_decl, St₂_decl, hs_decl, hd_decl, S!_decl,
+        List.concat_eq_append, List.concat_eq_append,
         List.append_assoc, List.cons_append, List.nil_append]
     · mvcgen
   | @chpred α α' c_α =>
@@ -6542,14 +6598,22 @@ theorem castInterAux_decls_bv_notMem {α β : SMTType} (c : α ~> β) (S T : SMT
       mintro ∀St₂
       mpure pre2
       obtain ⟨St₂_used_eq, St₂_decl⟩ := pre2
+      mspec SMT.eraseFromContext_used_decls
+      mrename_i preE
+      mintro ∀StE
+      mpure preE
+      obtain ⟨StE_used_eq, StE_decl⟩ := preE
       mspec Std.Do.Spec.pure
       mpure_intro
       refine ⟨[.declare_const S! (.fun α' (.option σ)),
         .define_fun s!"{S!}_spec" .unit .bool S!_spec], ?_,
         DeltaBvNotMem.append (DeltaBvNotMem.declare_const S!_notMem)
           (DeltaBvNotMem.define_fun_spec S!_bv),
-        fun v hv => by rw [St₂_used_eq, hs_used, hd_used]; exact List.mem_cons_of_mem _ (S!_used_sub hv)⟩
-      rw [St₂_decl, hs_decl, hd_decl, S!_decl, List.concat_eq_append, List.concat_eq_append,
+        fun v hv => by
+          rw [StE_used_eq, St₂_used_eq, hs_used, hd_used]
+          exact List.mem_cons_of_mem _ (S!_used_sub hv)⟩
+      rw [StE_decl, St₂_decl, hs_decl, hd_decl, S!_decl,
+        List.concat_eq_append, List.concat_eq_append,
         List.append_assoc, List.cons_append, List.nil_append]
     · mvcgen
   | @chpred α α' c_α =>
@@ -6618,6 +6682,38 @@ theorem castInterAux_decls_bv_notMem {α β : SMTType} (c : α ~> β) (S T : SMT
     mvcgen
 
 set_option maxHeartbeats 4000000 in
+/-- Declaration freshness for the equal option-function branch of `castUnion`. -/
+theorem castUnion_optionFun_decls_bv_notMem (S T : SMT.Term) (γ δ : SMTType)
+    {avoid used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk} (havsub : avoid ⊆ used)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∉ avoid) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦
+        ⌜E.freshvarsc = n ∧ E.usedVars = used ∧ E.declarations = decl⌝ ⦄
+    castUnion.fun S T (by simp) (castPath.reflexive γ)
+      (castPath.reflexive (.option δ))
+    ⦃ ⇓? (_ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜∃ Dl : SMT.Chunk, E'.declarations = decl ++ Dl ∧ DeltaBvNotMem Dl avoid
+          ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  simpa [castUnionAux, castPath.reflexive] using
+    castUnionAux_decls_bv_notMem (castPath.reflexive (.fun γ (.option δ)))
+      S T havsub hbvS
+
+set_option maxHeartbeats 4000000 in
+/-- Declaration freshness for the equal option-function branch of `castInter`. -/
+theorem castInter_optionFun_decls_bv_notMem (S T : SMT.Term) (γ δ : SMTType)
+    {avoid used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk} (havsub : avoid ⊆ used)
+    (hbvS : ∀ v ∈ SMT.bv S, v ∉ avoid) :
+    ⦃ fun (⟨E, _Λ'⟩ : EncoderState) ↦
+        ⌜E.freshvarsc = n ∧ E.usedVars = used ∧ E.declarations = decl⌝ ⦄
+    castInter.fun S T (by simp) (castPath.reflexive γ)
+      (castPath.reflexive (.option δ))
+    ⦃ ⇓? (_ : SMT.Term × SMTType) (⟨E', _Γ'⟩ : EncoderState) =>
+        ⌜∃ Dl : SMT.Chunk, E'.declarations = decl ++ Dl ∧ DeltaBvNotMem Dl avoid
+          ∧ used ⊆ E'.usedVars⌝ ⦄ := by
+  simpa [castInterAux, castPath.reflexive] using
+    castInterAux_decls_bv_notMem (castPath.reflexive (.fun γ (.option δ)))
+      S T havsub hbvS
+
+set_option maxHeartbeats 4000000 in
 /-- Dual declarations-delta spec of the `castUnion` wrapper. -/
 theorem castUnion_decls_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
     {avoid used : List SMT.𝒱} {n : ℕ} {decl : SMT.Chunk} (havsub : avoid ⊆ used)
@@ -6656,7 +6752,8 @@ theorem castUnion_decls_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
       refine ⟨[], ?_, DeltaBvNotMem_nil, fun v hv => ?_⟩
       · rw [St₃_decl, St₂_decl, List.append_nil]
       · rw [St₃_used_eq, St₂_used_eq]; exact List.mem_cons_of_mem _ hv
-    all_goals mvcgen
+    · mspec (castUnion_optionFun_decls_bv_notMem S T _ _ havsub hbvS)
+    · mvcgen
   · mspec (castUnionAux_decls_bv_notMem _ S T havsub hbvS)
   · mspec (castUnionAux_decls_bv_notMem _ T S havsub hbvT)
   · mvcgen
@@ -6700,7 +6797,8 @@ theorem castInter_decls_bv_notMem (S T : SMT.Term) (sS sT : SMTType)
       refine ⟨[], ?_, DeltaBvNotMem_nil, fun v hv => ?_⟩
       · rw [St₃_decl, St₂_decl, List.append_nil]
       · rw [St₃_used_eq, St₂_used_eq]; exact List.mem_cons_of_mem _ hv
-    all_goals mvcgen
+    · mspec (castInter_optionFun_decls_bv_notMem S T _ _ havsub hbvS)
+    · mvcgen
   · mspec (castInterAux_decls_bv_notMem _ S T havsub hbvS)
   · mspec (castInterAux_decls_bv_notMem _ T S havsub hbvT)
   · mvcgen
@@ -7647,8 +7745,8 @@ theorem encodeTerm_bv_notMem_used
           fun w h => P_used_sub (used_sub_St₂ h)
         refine ⟨?_, fun v hv => lift (P_used_sub (St₁_sub_St₂ (D_used_sub hv))), ΔD ++ ΔP, ?_, ?_⟩
         · intro v hv
-          simp only [SMT.bv, List.nil_append, List.append_nil, List.mem_append, List.mem_cons,
-            List.not_mem_nil, false_or, or_false] at hv
+          simp only [noneCast, SMT.bv, List.nil_append, List.append_nil, List.mem_append,
+            List.mem_cons, List.not_mem_nil, false_or, or_false] at hv
           rcases hv with rfl | hvD | hvPx
           · exact fun h => xy_notMem (used_sub_St₃ h)
           · exact D_bv v hvD

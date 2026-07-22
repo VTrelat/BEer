@@ -1882,7 +1882,9 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
       BType.SupportedSMT (BType.set tau) setRep := by
     simpa [setRep] using D_rel.supported
   rcases D_rel.supported.setE with
-    ⟨rho, hsetPred, rho_supported⟩ | ⟨a, b, htau, hoption⟩
+    ⟨rho, hsetPred, rho_supported⟩ |
+      ⟨a, b, rho, upsilon, htau, hoption,
+        rho_supported, upsilon_supported⟩
   all_goals first
     | dsimp at hsetPred
       subst sigmaD
@@ -1908,28 +1910,28 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
           vs_nemp vs_alphas_len tau rfl tau_hasArity typ_t typ_D
           binder_condition Xi Xi_fv_D Dval hDval den_D rho
           rho_supported sigmas hlen_eq sigmas_len flag_rel
-    | dsimp at hoption
+    | dsimp [setRep] at hoption
       subst sigmaD
       simp only [BType.toSMTType] at *
-      have hlen_eq : vs.length =
-          (tau.toSMTType.fromProdl (vs.length - 1)).length :=
-        (fromProdl_length_of_hasArity tau_hasArity).symm
-      let sigmas :=
-        (a.toSMTType.pair b.toSMTType).fromProdl (vs.length - 1)
-      have sigmas_eq : sigmas =
-          tau.toSMTType.fromProdl (vs.length - 1) := by
-        dsimp [sigmas]
+      have pair_supported : BType.SupportedSMT tau
+          (SMTType.pair rho upsilon) := by
         rw [htau]
-        simp only [BType.toSMTType]
+        exact .prod rho_supported upsilon_supported
+      have hlen_eq : vs.length =
+          ((SMTType.pair rho upsilon).fromProdl
+            (vs.length - 1)).length :=
+        (pair_supported.fromProdl_length_of_hasArity tau_hasArity).symm
+      let sigmas :=
+        (SMTType.pair rho upsilon).fromProdl (vs.length - 1)
       have sigmas_len : sigmas.length =
-          (tau.toSMTType.fromProdl (vs.length - 1)).length := by
-        rw [sigmas_eq]
+          ((SMTType.pair rho upsilon).fromProdl
+            (vs.length - 1)).length := rfl
       have vs_sigmas_len_raw :
-          ((a.toSMTType.pair b.toSMTType).fromProdl
+          ((SMTType.pair rho upsilon).fromProdl
             (vs.length - 1)).length = vs.length := by
-        simpa [sigmas] using (hlen_eq.trans sigmas_len.symm).symm
+        exact hlen_eq.symm
       have harity :
-          (((a.toSMTType.pair b.toSMTType).fromProdl
+          (((SMTType.pair rho upsilon).fromProdl
             (vs.length - 1)).length == vs.length) = true :=
         beq_iff_eq.mpr vs_sigmas_len_raw
       rw [if_pos harity]
@@ -1944,33 +1946,22 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
           BType.SupportedSMT alphas[i] sigmas[i] := by
         intro i hi_alpha hi_sigma
         have hi_vs : i < vs.length := vs_alphas_len ▸ hi_alpha
-        have hfrom :
-            (tau.get vs.length ⟨i, hi_vs⟩).toSMTType =
-              (tau.toSMTType.fromProdl (vs.length - 1))[i] :=
-          toSMTType_get_eq_fromProdl_getElem tau_hasArity hi_vs
         have hreduce : tau.get vs.length ⟨i, hi_vs⟩ =
             alphas[i] := by
           dsimp [tau]
           simpa using _root_.BType.get_reduce alphas_nemp
             vs_alphas_len ⟨i, hi_vs⟩
-        have htarget : alphas[i].toSMTType = sigmas[i] := by
-          have hsigmas_get : sigmas[i] =
-              (tau.toSMTType.fromProdl (vs.length - 1))[i] :=
-            List.getElem_of_eq sigmas_eq hi_sigma
-          calc
-            alphas[i].toSMTType =
-                (tau.get vs.length ⟨i, hi_vs⟩).toSMTType :=
-              congrArg BType.toSMTType hreduce.symm
-            _ = (tau.toSMTType.fromProdl (vs.length - 1))[i] := hfrom
-            _ = sigmas[i] := hsigmas_get.symm
-        rw [← htarget]
-        exact BType.SupportedSMT.canonical alphas[i]
-      have sigmas_toProdl : sigmas.toProdl = tau.toSMTType := by
-        rw [sigmas_eq]
+        have hcomponent := pair_supported.get_fromProdl_of_hasArity
+          tau_hasArity hi_vs
+        simpa only [sigmas, hreduce, List.get_eq_getElem] using hcomponent
+      have sigmas_toProdl : sigmas.toProdl =
+          SMTType.pair rho upsilon := by
+        dsimp [sigmas]
         have h_arith :
-            (tau.toSMTType.fromProdl (vs.length - 1)).length =
+            ((SMTType.pair rho upsilon).fromProdl
+              (vs.length - 1)).length =
               vs.length - 1 + 1 := by
-          rw [← hlen_eq]
+          rw [hlen_eq.symm]
           have := List.length_pos_of_ne_nil vs_nemp
           omega
         exact SMT.SMTType.fromProdl_toProdl_roundtrip _ _ h_arith
@@ -1983,17 +1974,17 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
               some ⟨Dval_alt, ⟨BType.set tau, hDval_alt⟩⟩)
             (denDenc_alt : SMT.Dom.{u})
             (_hdenDenc_alt_type : denDenc_alt.snd.fst =
-              SMTType.fun a.toSMTType (SMTType.option b.toSMTType))
-            (_D_alt_rel : RDomCastSupported
+              SMTType.fun rho (SMTType.option upsilon))
+            (D_alt_rel : RDomCastSupported
               (⟨Dval_alt, BType.set tau, hDval_alt⟩ : B.Dom)
               denDenc_alt)
             (hcast : sigmas.toProdl ⊑ tau.toSMTType),
             BinderCastAdmissible tau sigmas.toProdl
               hcast.toCastPath Dval_alt := by
         intro _Xi_alt _Xi_fv_D_alt Dval_alt hDval_alt _den_D_alt
-          _denDenc_alt _hdenDenc_alt_type _D_alt_rel hcast
-        exact BinderCastAdmissible.of_eq_canonical
-          sigmas_toProdl hDval_alt hcast
+          denDenc_alt hdenDenc_alt_type D_alt_rel hcast
+        exact D_alt_rel.optionFun_binder_admissible_of_type_eq
+          hdenDenc_alt_type sigmas_toProdl hcast
   all_goals
     have vs_sigmas_len : vs.length = sigmas.length := by
       rw [sigmas_len]
@@ -2260,7 +2251,7 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
             PBase.types.keys ⊆ PBase.env.usedVars := St3_keys_sub
         have PBase_decl_eq :
             PBase.env.declarations = St3.env.declarations := rfl
-      | have _option_branch := sigmas_eq
+      | have _option_branch := pair_supported
         mspec (Std.Do.Triple.and _
           (SMT.freshVarList_spec sigmas)
           (SMT.freshVarList_decls sigmas
@@ -2516,7 +2507,7 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
             (SMT.Typing.bv_notMem_context htyp v hv)
           intro hz
           exact zs_not_used v hz (hbv v hv)
-      | have _option_branch := sigmas_eq
+      | have _option_branch := pair_supported
         let St5 := St4
         have St5_fvc : St5.env.freshvarsc = St4.env.freshvarsc := rfl
         have St5_used : St5.env.usedVars = St4.env.usedVars := rfl
@@ -2576,7 +2567,7 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
         have P_preserves_St3 : ∀ v ∈ St3.env.usedVars,
             v ∉ St3.types → v ∉ P.vars → v ∉ St4.types := by
           exact P_preserves
-      | have _option_branch := sigmas_eq
+      | have _option_branch := pair_supported
         have P_preserves_St3 : ∀ v ∈ St3.env.usedVars,
             v ∉ St3.types → v ∉ P.vars → v ∉ St4.types := by
           intro v hvused hv3 hvP hv4
@@ -2744,7 +2735,7 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
           rw [Function.updates_eq_if (by simp) zs_nodup,
             dif_pos (List.getElem_mem hi)]
           simp [List.Nodup.idxOf_getElem zs_nodup]
-      | have _option_branch_guard := sigmas_eq
+      | have _option_branch_guard := pair_supported
         let ThetaP_guard := Function.updates ThetaP zs
           (List.ofFn fun i => some (wZ_guard i))
         have zs_not_fv_P_guard : ∀ z ∈ zs, z ∉ B.fv P := by
@@ -2995,7 +2986,7 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
         have St8_types_eq : St8.types = St3.types := by
           rw [St8_types,
             encodeTerm_state.foldl_erase_of_notMem zs zs_not_St3]
-      | have _option_branch := sigmas_eq
+      | have _option_branch := pair_supported
         have St8_types_eq : St8.types = St3.types := by
           rw [St8_types, PBase_types]
           have hmap : (zs.zip sigmas).map Prod.fst = zs :=
@@ -3155,7 +3146,7 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
           intro z hz hzCore
           exact zs_not_types z hz
             (AList.mem_of_subset PClean_sub_St4 hzCore)
-      | have _option_branch := sigmas_eq
+      | have _option_branch := pair_supported
         have zs_not_PClean : ∀ z ∈ zs, z ∉ PClean := by
           intro z hz hzCore
           rcases P_clean_trace.context_generated.mem_classify hzCore with
@@ -3893,7 +3884,7 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
             rw [Function.updates_eq_if (by simp) zs_nodup,
               dif_pos (List.getElem_mem hi)]
             simp [List.Nodup.idxOf_getElem zs_nodup]
-        | have _option_branch := sigmas_eq
+        | have _option_branch := pair_supported
           let ThetaP_run := Function.updates ThetaP_alt zs
             (List.ofFn fun i => some (wZ i))
           have zs_not_fv_P : ∀ z ∈ zs, z ∉ B.fv P := by
@@ -5316,7 +5307,7 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
                 rw [Function.updates_eq_if (by simp) zs_nodup,
                   dif_pos (List.getElem_mem hi)]
                 simp [List.Nodup.idxOf_getElem zs_nodup]
-            | have _option_branch := sigmas_eq
+            | have _option_branch := pair_supported
               let ThetaP_w := Function.updates ThetaBaseW zs
                 (List.ofFn fun i => some (w i))
               have zs_not_fv_P_w : ∀ z ∈ zs, z ∉ B.fv P := by
@@ -7094,7 +7085,7 @@ theorem encodeTerm_rep_spec.all_case_and_scoped_of_oracle_or_unflagged.{u}
                 rw [Function.updates_eq_if (by simp) zs_nodup,
                   dif_pos (List.getElem_mem hi)]
                 simp [List.Nodup.idxOf_getElem zs_nodup]
-            | have _option_branch := sigmas_eq
+            | have _option_branch := pair_supported
               let ThetaP_w := Function.updates ThetaBaseW zs
                 (List.ofFn fun i => some (w i))
               have zs_not_fv_P_w : ∀ z ∈ zs, z ∉ B.fv P := by

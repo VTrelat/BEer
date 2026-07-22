@@ -5,9 +5,9 @@ import SMT.Reasoning.Basic.LoosenAuxExactUniv
 
 open Std.Do B SMT ZFSet Classical
 
-/-! # Generated-helper contract for represented intersection -/
+/-! # Generated-helper contract for represented inter -/
 
-/-- Soundness of a completed intersection cast under an arbitrary valuation of its
+/-- Soundness of a completed inter cast under an arbitrary valuation of its
 generated helpers. -/
 abbrev CastInterRepGuardedSemantics.{u}
     (τ : BType) (S T out : SMT.Term) (σS σT σout : SMTType)
@@ -73,7 +73,7 @@ abbrev CastInterRepSemantics.{u}
   CastInterRepGuardedSemantics.{u}
     τ S T out σS σT σout Λ Dlt
 
-/-- Operational intersection contract carrying its exact declaration delta. -/
+/-- Operational inter contract carrying its exact declaration delta. -/
 abbrev CastInterRepScopedSpec.{u} (τ : BType)
     (S T : SMT.Term) (σS σT : SMTType) : Prop :=
   ∀ {Λ : SMT.TypeContext} {n : ℕ} {used : List SMT.𝒱}
@@ -112,6 +112,42 @@ abbrev CastInterRepScopedSpec.{u} (τ : BType)
           ScopedGeneratedTyping Λ Dlt out σout⌝⦄
 
 namespace EncodeTermRepresentedScopedInter
+
+/-- The two-sided semantic contract exported by `loosenAux_prf_exact_univ`.
+It is named here so the scoped inter helpers can share the same guarded-use
+argument for characteristic predicates and option-valued functions. -/
+abbrev LoosenExactSemantics.{u}
+    (Λ : SMT.TypeContext) (S spec : SMT.Term) (helper : SMT.𝒱)
+    {σS σT : SMTType} (c : σS ~> σT) : Prop :=
+  ∀ (Θ : SMT.RenamingContext.Context.{u})
+    (hS : RenamingContext.CoversFV Θ S)
+    (_respects : SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ S)
+    (pf : ∀ (x_ : SMT.𝒱) (X_ : SMT.Dom),
+      ∀ v ∈ SMT.fv (SMT.Term.var x_),
+        (Function.update Θ x_ (some X_) v).isSome = true),
+  ∀ (denS : SMT.Dom), ⟦S.abstract Θ hS⟧ˢ = some denS →
+    ∃ (Φ H : SMT.Dom)
+      (_ : ⟦(SMT.Term.var helper).abstract
+        (Function.update Θ helper (some H)) (pf helper H)⟧ˢ = some H)
+      (hφ : RenamingContext.CoversFV
+        (Function.update Θ helper (some H)) spec)
+      (_ : ⟦spec.abstract (Function.update Θ helper (some H))
+        hφ⟧ˢ = some Φ),
+      H.snd.fst = σT ∧
+      Φ.snd.fst = SMTType.bool ∧
+      (Φ.fst = zftrue ∧
+        denS.fst.pair H.fst ∈ (castZF_of_path c).1) ∧
+      (∀ (Y : SMT.Dom)
+        (_ : Y.snd.fst = σT)
+        (hφY : RenamingContext.CoversFV
+          (Function.update Θ helper (some Y)) spec),
+        (⟦spec.abstract (Function.update Θ helper (some Y))
+          hφY⟧ˢ).isSome = true ∧
+        ∀ {ΦY : SMT.Dom},
+          ⟦spec.abstract (Function.update Θ helper (some Y))
+            hφY⟧ˢ = some ΦY →
+          ΦY.fst = zftrue →
+          denS.fst.pair Y.fst ∈ (castZF_of_path c).1)
 
 theorem direct_shape_decls
     (S T : SMT.Term) (ρ : SMTType)
@@ -180,7 +216,7 @@ theorem direct_shape_decls
     · exact funNotMemFvOfNotMemContext typS z_fresh
     · exact funNotMemFvOfNotMemContext typT z_fresh
 
-/-- The direct pointwise intersection lambda is sound under every valuation of its
+/-- The direct pointwise inter lambda is sound under every valuation of its
 free operands. -/
 theorem direct_guarded.{u}
     {τ : BType} {ρ : SMTType} (hρ : BType.SupportedSMT τ ρ)
@@ -327,7 +363,7 @@ theorem direct_scoped_contract.{u}
 
 set_option maxHeartbeats 3500000 in
 /-- A helper specification that is true under the ambient valuation forces
-the helper to denote the cast of the source set.  The final pointwise intersection
+the helper to denote the cast of the source set.  The final pointwise inter
 lambda is therefore sound for every satisfying helper assignment, not only
 for the witness selected while running the encoder. -/
 theorem helper_guarded.{u}
@@ -483,6 +519,188 @@ theorem helper_guarded.{u}
   exact direct_guarded hρ hcovHelper hcovT hdenHelper hdenT
     rfl hdenT_type F_helper_supported G_rel z_not_fv_helper z_not_fv_T
     hcovOut denOut hdenOut
+
+/-- Guarded soundness of the graph lambda emitted after an option-valued
+function helper has been declared.  The helper specification is used only to
+recover the represented left operand; the output itself is the characteristic
+predicate of the inter graph. -/
+theorem option_helper_guarded.{u}
+    (α β : BType) {σ τ σS : SMTType}
+    (hsα : BType.SupportedSMT α σ)
+    (hsβ : BType.SupportedSMT β τ)
+    {S T spec : SMT.Term} {helper p : SMT.𝒱}
+    {Λ Γop Γsup : SMT.TypeContext}
+    (scope : ScopedContextExtends Λ
+      (helperSpecChunk helper
+        (SMTType.fun σ (SMTType.option τ)) spec) Γsup)
+    (generated : ContextGeneratedByDeclarations Λ Γop
+      (helperSpecChunk helper
+        (SMTType.fun σ (SMTType.option τ)) spec))
+    (c : σS ~> SMTType.fun σ (SMTType.option τ))
+    (exactness : LoosenExactSemantics.{u} Λ S spec helper c)
+    (typOut : Γop ⊢ˢ
+      SMT.Term.lambda [p] [SMTType.pair σ τ]
+        (.and
+          (.eq (.app (.var helper) (.fst (.var p)))
+            (.some (.snd (.var p))))
+          (.eq (.app T (.fst (.var p)))
+            (.some (.snd (.var p))))) :
+      SMTType.fun (SMTType.pair σ τ) SMTType.bool)
+    {Θ : SMT.RenamingContext.Context.{u}}
+    (hcovS : RenamingContext.CoversFV Θ S)
+    (hcovT : RenamingContext.CoversFV Θ T)
+    (respectsS : SMT.RenamingContext.RespectsTypeContextOnFV Θ Γsup S)
+    (_respectsT : SMT.RenamingContext.RespectsTypeContextOnFV Θ Γsup T)
+    {F G : ZFSet.{u}}
+    {hF : F ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ}
+    {hG : G ∈ ⟦BType.set (α ×ᴮ β)⟧ᶻ}
+    {denS denT : SMT.Dom.{u}}
+    (hdenS : ⟦S.abstract Θ hcovS⟧ˢ = some denS)
+    (hdenT : ⟦T.abstract Θ hcovT⟧ˢ = some denT)
+    (hdenS_type : denS.snd.fst = σS)
+    (hdenT_type : denT.snd.fst =
+      SMTType.fun σ (SMTType.option τ))
+    (F_rel : RDomCastSupported
+      (⟨F, BType.set (α ×ᴮ β), hF⟩ : B.Dom) denS)
+    (G_rel : RDomCastSupported
+      (⟨G, BType.set (α ×ᴮ β), hG⟩ : B.Dom) denT)
+    (p_not_fv_helper : p ∉ SMT.fv (SMT.Term.var helper))
+    (p_not_fv_T : p ∉ SMT.fv T)
+    (hcovOut : RenamingContext.CoversFV Θ
+      (SMT.Term.lambda [p] [SMTType.pair σ τ]
+        (.and
+          (.eq (.app (.var helper) (.fst (.var p)))
+            (.some (.snd (.var p))))
+          (.eq (.app T (.fst (.var p)))
+            (.some (.snd (.var p)))))))
+    (denOut : SMT.Dom.{u})
+    (respectsOut : SMT.RenamingContext.RespectsTypeContextOnFV Θ Γsup
+      (SMT.Term.lambda [p] [SMTType.pair σ τ]
+        (.and
+          (.eq (.app (.var helper) (.fst (.var p)))
+            (.some (.snd (.var p))))
+          (.eq (.app T (.fst (.var p)))
+            (.some (.snd (.var p)))))))
+    (specsTrue : SpecBodiesTrue Θ Γsup
+      (helperSpecChunk helper
+        (SMTType.fun σ (SMTType.option τ)) spec))
+    (hdenOut :
+      ⟦(SMT.Term.lambda [p] [SMTType.pair σ τ]
+        (.and
+          (.eq (.app (.var helper) (.fst (.var p)))
+            (.some (.snd (.var p))))
+          (.eq (.app T (.fst (.var p)))
+            (.some (.snd (.var p)))))).abstract Θ hcovOut⟧ˢ =
+        some denOut) :
+    RDomCastSupported
+      (⟨F ∩ G, BType.set (α ×ᴮ β), relation_inter_mem hF hG⟩ : B.Dom)
+      denOut := by
+  have respectsS_base :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ Λ S :=
+    fun _ _ hv hlookup =>
+      respectsS hv (AList.lookup_of_subset scope.base hlookup)
+  let pf : ∀ (x_ : SMT.𝒱) (H : SMT.Dom),
+      ∀ v ∈ SMT.fv (SMT.Term.var x_),
+        (Function.update Θ x_ (some H) v).isSome = true := by
+    intro x_ H v hv
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    simp
+  obtain ⟨_ΦW, _HW, _hdenVarW, _hcovSpecW, _hdenSpecW,
+      _HWty, _ΦWty, _castW, guard⟩ :=
+    exactness Θ hcovS respectsS_base pf denS hdenS
+  have hp_ne_helper : p ≠ helper := by
+    intro h
+    subst p
+    exact p_not_fv_helper (by simp [SMT.fv])
+  have helperFV : helper ∈ SMT.fv
+      (SMT.Term.lambda [p] [SMTType.pair σ τ]
+        (.and
+          (.eq (.app (.var helper) (.fst (.var p)))
+            (.some (.snd (.var p))))
+          (.eq (.app T (.fst (.var p)))
+            (.some (.snd (.var p)))))) := by
+    rw [SMT.fv, List.mem_removeAll_iff]
+    constructor
+    · simp [SMT.fv]
+    · simpa using hp_ne_helper.symm
+  have helperSome : (Θ helper).isSome = true :=
+    hcovOut helper helperFV
+  obtain ⟨helperVal, hhelperVal⟩ :=
+    Option.isSome_iff_exists.mp helperSome
+  have helperTy : helperVal.snd.fst =
+      SMTType.fun σ (SMTType.option τ) := by
+    have helperLookup : Γsup.lookup helper =
+        some (SMTType.fun σ (SMTType.option τ)) :=
+      scope.lookup_of_declared (by simp [declEntries_helperSpecChunk])
+    obtain ⟨d, hd, hdty⟩ := respectsOut helperFV helperLookup
+    rw [hhelperVal] at hd
+    injection hd with hdeq
+    subst d
+    exact hdty
+  have updateEq : Function.update Θ helper (some helperVal) = Θ := by
+    rw [← hhelperVal]
+    exact Function.update_eq_self helper Θ
+  have specTrue := specsTrue spec (by
+    simp [specBodies_helperSpecChunk])
+  obtain ⟨hcovSpec, denSpec, _respectsSpec, hdenSpec,
+      _hdenSpecTy, hdenSpecTrue⟩ := specTrue
+  have hcovSpecUpdate : RenamingContext.CoversFV
+      (Function.update Θ helper (some helperVal)) spec := by
+    rw [updateEq]
+    exact hcovSpec
+  obtain ⟨_specSome, guardTrue⟩ :=
+    guard helperVal helperTy hcovSpecUpdate
+  have hdenSpecUpdate :
+      ⟦spec.abstract (Function.update Θ helper (some helperVal))
+        hcovSpecUpdate⟧ˢ = some denSpec := by
+    simpa only [updateEq, proof_irrel_heq] using hdenSpec
+  have castPair := guardTrue hdenSpecUpdate hdenSpecTrue
+  have hcovHelper : RenamingContext.CoversFV Θ (.var helper) := by
+    intro v hv
+    simp only [SMT.fv, List.mem_singleton] at hv
+    subst v
+    exact helperSome
+  have hdenHelper :
+      ⟦(SMT.Term.var helper).abstract Θ hcovHelper⟧ˢ =
+        some helperVal := by
+    rw [SMT.Term.abstract]
+    simp only [SMT.denote]
+    congr 1
+    exact Option.get_of_eq_some _ hhelperVal
+  rcases denS with ⟨Fenc, σS0, hFenc⟩
+  dsimp at hdenS_type
+  subst σS0
+  rcases helperVal with ⟨Fhelper, σhelper, hFhelper⟩
+  dsimp at helperTy
+  subst σhelper
+  have F_helper_supported : RDomCastSupported
+      (⟨F, BType.set (α ×ᴮ β), hF⟩ : B.Dom)
+      (⟨Fhelper, SMTType.fun σ (SMTType.option τ),
+        hFhelper⟩ : SMT.Dom) :=
+    RDomCastSupported.of_cast_to_supported F_rel
+      (.optionFun hsα hsβ) c castPair
+  have Γop_sub : Γop ⊆ Γsup := fun e he => scope (generated he)
+  have respectsOut_op :
+      SMT.RenamingContext.RespectsTypeContextOnFV Θ Γop
+        (SMT.Term.lambda [p] [SMTType.pair σ τ]
+          (.and
+            (.eq (.app (.var helper) (.fst (.var p)))
+              (.some (.snd (.var p))))
+            (.eq (.app T (.fst (.var p)))
+              (.some (.snd (.var p)))))) :=
+    fun _ _ hv hlookup =>
+      respectsOut hv (AList.lookup_of_subset Γop_sub hlookup)
+  obtain ⟨denU, hdenU, U_rel⟩ :=
+    castInter_option_denotation α β hsα hsβ hF hG
+      rfl hdenT_type F_helper_supported G_rel
+      hcovHelper hcovT hdenHelper hdenT
+      p_not_fv_helper p_not_fv_T typOut respectsOut_op hcovOut
+  have denEq : denOut = denU := by
+    rw [hdenU] at hdenOut
+    exact Option.some.inj hdenOut.symm
+  subst denU
+  exact U_rel
 
 set_option maxHeartbeats 7000000 in
 /-- Generic left-loosening branch used by both characteristic-predicate and
@@ -862,6 +1080,518 @@ theorem left_helper_scoped_contract.{u}
         subst body
         exact typ_spec3)
 
+set_option maxHeartbeats 7000000 in
+/-- Scoped contract for the option-valued function branch.  The left operand
+is materialized at the right endpoint by one declared helper; the returned
+term is then the characteristic predicate of the inter of both graphs. -/
+theorem fun_scoped_contract.{u}
+    (α β : BType) {σA τA σB τB : SMTType}
+    (hsAα : BType.SupportedSMT α σA)
+    (hsAβ : BType.SupportedSMT β τA)
+    (hsBα : BType.SupportedSMT α σB)
+    (hsBβ : BType.SupportedSMT β τB)
+    (hα : σA ⊑ σB) (hβ : τA ⊑ τB)
+    (S T : SMT.Term) :
+    CastInterRepScopedSpec.{u} (α ×ᴮ β) S T
+      (SMTType.fun σA (SMTType.option τA))
+      (SMTType.fun σB (SMTType.option τB)) := by
+  let cfun : SMTType.fun σA (SMTType.option τA) ~>
+      SMTType.fun σB (SMTType.option τB) :=
+    castPath.fun (by simp) hα.toCastPath
+      (castPath.opt hβ.toCastPath)
+  have hcastInter :
+      castInter
+        (S, SMTType.fun σA (SMTType.option τA))
+        (T, SMTType.fun σB (SMTType.option τB)) =
+      castInter.fun S T (by simp) hα.toCastPath
+        (castPath.opt hβ.toCastPath) := by
+    simp only [castInter]
+    by_cases heq : SMTType.fun σA (SMTType.option τA) =
+        SMTType.fun σB (SMTType.option τB)
+    · injection heq with hσ hopt
+      injection hopt with hτ
+      subst σB
+      subst τB
+      rw [dif_pos rfl]
+      simp only
+      have hdom : castPath.reflexive σA = hα.toCastPath :=
+        castPath.eq_of_endpoints _ _
+      have hcod : castPath.reflexive (SMTType.option τA) =
+          castPath.opt hβ.toCastPath := castPath.eq_of_endpoints _ _
+      rw [hdom, hcod]
+    · rw [dif_neg heq]
+      let hfun : SMTType.fun σA (SMTType.option τA) ⊑
+          SMTType.fun σB (SMTType.option τB) :=
+        castable?.fun (by simp) hα (castable?.opt hβ)
+      rw [dif_pos hfun]
+      unfold castInterAux
+      have hpath : hfun.toCastPath = cfun :=
+        castPath.eq_of_endpoints _ _
+      rw [hpath]
+  unfold CastInterRepScopedSpec
+  intro Λ n used decl typS typT bvS_used bvT_used
+  rw [hcastInter]
+  unfold castInter.fun
+  mstart
+  mintro pre ∀St
+  mpure pre
+  obtain ⟨rfl, rfl, St_keys, rfl, rfl⟩ := pre
+  mspec (Std.Do.Triple.and _
+    (Std.Do.Triple.and _
+      (Std.Do.Triple.and _
+        (loosenAux_prf_exact_univ
+          (Λ := St.types) (n := St.env.freshvarsc)
+          (used := St.env.usedVars) typS bvS_used cfun)
+        (loosenAux_prf_fv_of_faithful (castPath.fvFaithful cfun)
+          (used := St.env.usedVars) (n := St.env.freshvarsc)
+          (x := S) (by
+            intro v hv
+            exact St_keys (SMT.Typing.mem_context_of_mem_fv typS hv))))
+      (loosenAux_prf_decls cfun (decl := St.env.declarations)))
+    (loosenAux_prf_types_eq cfun))
+  next out =>
+  obtain ⟨helper, spec⟩ := out
+  mrename_i pre
+  mintro ∀St1
+  mpure pre
+  obtain ⟨⟨⟨⟨_hn1, St1_types_sub, helper_fresh, helper_not_used,
+      used_sub1, keys_sub1, preserves1, _typ_helper_insert,
+      _typ_spec_insert, typ_helper, typ_spec, spec_fv, exactness⟩,
+      _helper_not_used_fv, source_fv_spec, _used_sub_fv⟩,
+      St1_decl_eq⟩, ⟨St1_types_exact, _⟩⟩ := pre
+  mspec SMT.declareConst_spec (v := helper)
+    (τ := SMTType.fun σB (SMTType.option τB))
+    (decl := St1.env.declarations) (as := St1.env.asserts)
+    (n := St1.env.freshvarsc) (Γ := St1.types)
+    (used := St1.env.usedVars)
+  mrename_i pre
+  mintro ∀StD
+  mpure pre
+  obtain ⟨StD_decl_eq, _StD_asserts, _StD_fvc, StD_used,
+      StD_types⟩ := pre
+  mspec SMT.addSpec_spec (x! := helper) (x!_spec := spec)
+    (decl := StD.env.declarations) (as := StD.env.asserts)
+    (n := StD.env.freshvarsc) (Γ := StD.types)
+    (used := StD.env.usedVars)
+  mrename_i pre
+  mintro ∀St2
+  mpure pre
+  obtain ⟨St2_decl_raw, _St2_asserts, _St2_fvc, St2_used_raw,
+      St2_types_raw⟩ := pre
+  have St2_types : St2.types = St1.types := by
+    rw [St2_types_raw, StD_types]
+  have St2_used : St2.env.usedVars = St1.env.usedVars := by
+    rw [St2_used_raw, StD_used]
+  have St2_decl_eq : St2.env.declarations =
+      St1.env.declarations ++
+        helperSpecChunk helper
+          (SMTType.fun σB (SMTType.option τB)) spec := by
+    rw [St2_decl_raw, StD_decl_eq]
+    simp [helperSpecChunk, List.concat_eq_append, List.append_assoc]
+  have Λ_sub1 : St.types ⊆ St1.types := fun v hv =>
+    St1_types_sub
+      (SMT.TypeContext.entries_subset_insert_of_notMem helper_fresh hv)
+  have typT1 : St1.types ⊢ˢ T :
+      SMTType.fun σB (SMTType.option τB) :=
+    SMT.Typing.weakening Λ_sub1 typT
+      (fun v hv => preserves1 v (bvT_used v hv)
+        (SMT.Typing.bv_notMem_context typT v hv))
+  mspec (Std.Do.Triple.and _
+    (SMT.freshVar_spec (Γ := St2.types)
+      (τ := SMTType.pair σB τB)
+      (n := St2.env.freshvarsc) (used := St2.env.usedVars))
+    (SMT.freshVar_decls (τ := SMTType.pair σB τB)
+      (decl := St2.env.declarations)))
+  next p =>
+    mrename_i pre
+    mintro ∀St3
+    mpure pre
+    obtain ⟨⟨St3_types_eq, p_fresh, _St3_fvc,
+      St3_used_eq, p_not_used⟩, St3_decl_eq⟩ := pre
+    mspec (Std.Do.Triple.and _
+      (SMT.eraseFromContext_spec (v := p) (Γ := St3.types)
+        (n := St3.env.freshvarsc) (used := St3.env.usedVars))
+      (SMT.eraseFromContext_decls (v := p)
+        (decl := St3.env.declarations)))
+    mrename_i pre
+    mintro ∀St4
+    mpure pre
+    obtain ⟨⟨St4_types_eq, _St4_fvc, St4_used_eq⟩,
+      St4_decl_eq⟩ := pre
+    have p_fresh1 : p ∉ St1.types := by
+      simpa [St2_types] using p_fresh
+    have St4_types_exact : St4.types = St1.types := by
+      rw [St4_types_eq, St3_types_eq, St2_types]
+      apply AList.ext
+      show List.kerase p
+          (AList.insert p (SMTType.pair σB τB) St1.types).entries =
+        St1.types.entries
+      rw [AList.entries_insert_of_notMem p_fresh1]
+      exact List.kerase_cons_eq rfl
+    have p_not_bv_T : p ∉ SMT.bv T := by
+      intro hp
+      apply p_not_used
+      rw [St2_used]
+      exact used_sub1 (bvT_used p hp)
+    have typOut : St4.types ⊢ˢ
+        SMT.Term.lambda [p] [SMTType.pair σB τB]
+          (.and
+            (.eq (.app (.var helper) (.fst (.var p)))
+              (.some (.snd (.var p))))
+            (.eq (.app T (.fst (.var p)))
+              (.some (.snd (.var p))))) :
+        SMTType.fun (SMTType.pair σB τB) SMTType.bool := by
+      rw [St4_types_exact]
+      refine SMT.Typing.lambda St1.types [p]
+        [SMTType.pair σB τB] _ SMTType.bool
+        ?_ ?_ (by simp) rfl ?_
+      · intro v hv
+        rw [List.mem_singleton] at hv
+        simpa [hv] using p_fresh1
+      · intro v hv
+        rw [List.mem_singleton] at hv
+        subst v
+        simp only [SMT.bv, List.append_nil, List.mem_append]
+        push_neg
+        exact ⟨by simp, p_not_bv_T⟩
+      · have hupdate :
+            TypeContext.update St1.types [p]
+              [SMTType.pair σB τB] rfl =
+            St1.types.insert p (SMTType.pair σB τB) := by
+          simp only [TypeContext.update, List.length_cons, List.length_nil,
+            zero_add, Nat.reduceAdd, Fin.cast_eq_self, Fin.getElem_fin,
+            Fin.val_eq_zero, List.getElem_cons_zero, Fin.foldl_succ,
+            Fin.foldl_zero]
+        rw [hupdate]
+        have typ_var : St1.types.insert p (SMTType.pair σB τB) ⊢ˢ
+            SMT.Term.var p : SMTType.pair σB τB :=
+          SMT.Typing.var _ p _ (AList.lookup_insert St1.types)
+        have typ_fst : St1.types.insert p (SMTType.pair σB τB) ⊢ˢ
+            .fst (.var p) : σB := SMT.Typing.fst _ _ _ _ typ_var
+        have typ_snd : St1.types.insert p (SMTType.pair σB τB) ⊢ˢ
+            .snd (.var p) : τB := SMT.Typing.snd _ _ _ _ typ_var
+        have typ_some : St1.types.insert p (SMTType.pair σB τB) ⊢ˢ
+            .some (.snd (.var p)) : SMTType.option τB :=
+          SMT.Typing.some _ _ _ typ_snd
+        have typ_helper_body :
+            St1.types.insert p (SMTType.pair σB τB) ⊢ˢ
+              SMT.Term.var helper :
+                SMTType.fun σB (SMTType.option τB) :=
+          SMT.Typing.weakening
+            (TypeContext.entries_subset_insert_of_notMem p_fresh1)
+            typ_helper
+            (SMT.Typing.bv_notMem_insert_of_fresh typ_helper
+              (by simp [SMT.bv]))
+        have typ_T_body :
+            St1.types.insert p (SMTType.pair σB τB) ⊢ˢ T :
+              SMTType.fun σB (SMTType.option τB) :=
+          SMT.Typing.weakening
+            (TypeContext.entries_subset_insert_of_notMem p_fresh1)
+            typT1
+            (SMT.Typing.bv_notMem_insert_of_fresh typT1 p_not_bv_T)
+        apply SMT.Typing.and
+        · apply SMT.Typing.eq
+          · exact SMT.Typing.app _ _ _ _ _ typ_helper_body typ_fst
+          · exact typ_some
+        · apply SMT.Typing.eq
+          · exact SMT.Typing.app _ _ _ _ _ typ_T_body typ_fst
+          · exact typ_some
+    have p_not_fv_helper : p ∉ SMT.fv (SMT.Term.var helper) :=
+      funNotMemFvOfNotMemContext typ_helper p_fresh1
+    have p_not_fv_T : p ∉ SMT.fv T :=
+      funNotMemFvOfNotMemContext typT1 p_fresh1
+    have helper_ctx_gen4 : ContextGeneratedByDeclarations St.types St4.types
+        (helperSpecChunk helper
+          (SMTType.fun σB (SMTType.option τB)) spec) := by
+      rw [St4_types_exact, St1_types_exact]
+      exact ContextGeneratedByDeclarations.insert_helper
+        St.types helper (SMTType.fun σB (SMTType.option τB))
+          spec helper_fresh
+    have helper_ctx_trace4 : DeclarationContextTrace St.types
+        (helperSpecChunk helper
+          (SMTType.fun σB (SMTType.option τB)) spec)
+        St4.types := by
+      rw [St4_types_exact, St1_types_exact]
+      exact DeclarationContextTrace.helperSpecChunk
+        St.types helper (SMTType.fun σB (SMTType.option τB))
+          spec helper_fresh
+    have typ_spec4 : St4.types ⊢ˢ spec : SMTType.bool := by
+      rw [St4_types_exact]
+      exact typ_spec
+    have used_sub_out : St.env.usedVars ⊆ St4.env.usedVars := by
+      intro v hv
+      rw [St4_used_eq, St3_used_eq, St2_used]
+      exact List.mem_cons_of_mem p (used_sub1 hv)
+    have initial_sub4 : St.types ⊆ St4.types := by
+      intro e he
+      rw [St4_types_exact]
+      exact Λ_sub1 he
+    have keys_sub4 : St4.types.keys ⊆ St4.env.usedVars := by
+      rw [St4_types_exact, St4_used_eq, St3_used_eq, St2_used]
+      intro v hv
+      exact List.mem_cons_of_mem p (keys_sub1 hv)
+    have preserves4 : ∀ v ∈ St.env.usedVars,
+        v ∉ St.types → v ∉ St4.types := by
+      intro v hv hnot
+      rw [St4_types_exact]
+      exact preserves1 v hv hnot
+    mspec Std.Do.Spec.pure
+    mpure_intro
+    refine ⟨used_sub_out, initial_sub4, keys_sub4,
+      (BType.SupportedSMT.setPred
+        (.prod hsBα hsBβ)).nonemptyCanonicalCastPath,
+      typOut, preserves4,
+      helperSpecChunk helper
+        (SMTType.fun σB (SMTType.option τB)) spec,
+      ?_, helper_ctx_gen4, helper_ctx_trace4, ?_, ?_, ?_, ?_, ?_,
+      ?_, ?_, ?_⟩
+    · rw [St4_decl_eq, St3_decl_eq, St2_decl_eq, St1_decl_eq]
+    · intro v hv
+      simp only [declVars_helperSpecChunk, List.mem_singleton] at hv
+      subst v
+      exact helper_not_used
+    · intro v hv
+      exact Or.inr ⟨spec, by simp [specBodies_helperSpecChunk],
+        source_fv_spec hv⟩
+    · intro v hv
+      refine Or.inl ?_
+      rw [SMT.fv, List.mem_removeAll_iff]
+      constructor
+      · simp [SMT.fv, hv]
+      · intro hvp
+        rw [List.mem_singleton] at hvp
+        subst v
+        exact p_not_fv_T hv
+    · intro v hv
+      simp only [SMT.fv, List.removeAll, List.mem_filter,
+        List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+      obtain ⟨hv_body, hv_ne_p⟩ := hv
+      simp only [List.elem_eq_contains, List.contains_eq_mem,
+        List.mem_cons, List.not_mem_nil, or_false, Bool.not_eq_true',
+        decide_eq_false_iff_not] at hv_ne_p
+      simp only [List.mem_union_iff, declVars_helperSpecChunk,
+        List.mem_singleton]
+      rcases hv_body with
+        (((rfl | rfl) | rfl) | ((hvT | rfl) | rfl))
+      · exact Or.inr rfl
+      · exact absurd rfl hv_ne_p
+      · exact absurd rfl hv_ne_p
+      · exact Or.inl (Or.inr hvT)
+      · exact absurd rfl hv_ne_p
+      · exact absurd rfl hv_ne_p
+    · intro body hbody v hv
+      simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+      subst body
+      simp only [List.mem_union_iff, declVars_helperSpecChunk,
+        List.mem_singleton]
+      rcases List.mem_union_iff.mp (spec_fv hv) with hS | hhelper
+      · exact Or.inl (Or.inl hS)
+      · exact Or.inr (List.mem_singleton.mp hhelper)
+    · constructor
+      · intro Θ hcovS hcovT Θ_none respectsS respectsT Θ_dom
+          F G hF hG denS denT hdenS hdenT F_rel G_rel
+        let pf : ∀ (x_ : SMT.𝒱) (H : SMT.Dom),
+            ∀ v ∈ SMT.fv (SMT.Term.var x_),
+              (Function.update Θ x_ (some H) v).isSome = true := by
+          intro x_ H v hv
+          simp only [SMT.fv, List.mem_singleton] at hv
+          subst v
+          simp
+        obtain ⟨Φ, denHelper, hdenVar, hcovSpec, hdenSpec,
+            denHelper_type, Φ_type, ⟨Φ_true, castPair⟩, _guard⟩ :=
+          exactness Θ hcovS respectsS pf denS hdenS
+        let Δhelper := Function.update Θ helper (some denHelper)
+        have helper_none : Θ helper = none :=
+          Θ_none helper helper_not_used
+        have Δhelper_ext : RenamingContext.Extends Δhelper Θ :=
+          RenamingContext.extends_update_of_none helper_none
+        have hhelper : RenamingContext.CoversFV Δhelper (.var helper) := by
+          intro v hv
+          simp only [SMT.fv, List.mem_singleton] at hv
+          subst v
+          simp [Δhelper]
+        have hdenHelper :
+            ⟦(SMT.Term.var helper).abstract Δhelper hhelper⟧ˢ =
+              some denHelper := by
+          simpa only [Δhelper] using hdenVar
+        have helper_not_fv_T : helper ∉ SMT.fv T :=
+          funNotMemFvOfNotMemContext typT helper_fresh
+        have hcovT_helper : RenamingContext.CoversFV Δhelper T :=
+          SMT.RenamingContext.coversFV_update_of_notMem
+            helper_not_fv_T hcovT
+        have hdenT_helper :
+            ⟦T.abstract Δhelper hcovT_helper⟧ˢ = some denT := by
+          have heq : ⟦T.abstract Θ hcovT⟧ˢ =
+              ⟦T.abstract Δhelper hcovT_helper⟧ˢ := by
+            rw [← SMT.RenamingContext.denote,
+              ← SMT.RenamingContext.denote]
+            exact SMT.RenamingContext.denote_update_of_notMem
+              helper_not_fv_T
+          exact heq.symm.trans hdenT
+        have respectsS1 :
+            SMT.RenamingContext.RespectsTypeContextOnFV Θ St1.types S :=
+          respectsS.of_extends (RenamingContext.extends_refl Θ)
+            Λ_sub1 typS
+        have helper_lookup4 : St4.types.lookup helper =
+            some (SMTType.fun σB (SMTType.option τB)) := by
+          rw [St4_types_exact]
+          exact SMT.Typing.varE typ_helper
+        have respectsT4 :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δhelper St4.types T :=
+          respectsT.of_extends Δhelper_ext initial_sub4 typT
+        have target_respects_out :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δhelper St4.types
+              (SMT.Term.lambda [p] [SMTType.pair σB τB]
+                (.and
+                  (.eq (.app (.var helper) (.fst (.var p)))
+                    (.some (.snd (.var p))))
+                  (.eq (.app T (.fst (.var p)))
+                    (.some (.snd (.var p)))))) := by
+          intro v σv hv hlookup
+          simp only [SMT.fv, List.removeAll, List.mem_filter,
+            List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+          obtain ⟨hv_body, hv_ne_p⟩ := hv
+          simp only [List.elem_eq_contains, List.contains_eq_mem,
+            List.mem_cons, List.not_mem_nil, or_false, Bool.not_eq_true',
+            decide_eq_false_iff_not] at hv_ne_p
+          rcases hv_body with
+            (((rfl | rfl) | rfl) | ((hvT | rfl) | rfl))
+          · rw [helper_lookup4] at hlookup
+            injection hlookup with heq
+            subst σv
+            exact ⟨denHelper, Function.update_self _ _ _, denHelper_type⟩
+          · exact absurd rfl hv_ne_p
+          · exact absurd rfl hv_ne_p
+          · exact respectsT4 hvT hlookup
+          · exact absurd rfl hv_ne_p
+          · exact absurd rfl hv_ne_p
+        have hcovOut : RenamingContext.CoversFV Δhelper
+            (SMT.Term.lambda [p] [SMTType.pair σB τB]
+              (.and
+                (.eq (.app (.var helper) (.fst (.var p)))
+                  (.some (.snd (.var p))))
+                (.eq (.app T (.fst (.var p)))
+                  (.some (.snd (.var p)))))) := by
+          intro v hv
+          simp only [SMT.fv, List.removeAll, List.mem_filter,
+            List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hv
+          obtain ⟨hv_body, hv_ne_p⟩ := hv
+          simp only [List.elem_eq_contains, List.contains_eq_mem,
+            List.mem_cons, List.not_mem_nil, or_false, Bool.not_eq_true',
+            decide_eq_false_iff_not] at hv_ne_p
+          rcases hv_body with
+            (((rfl | rfl) | rfl) | ((hvT | rfl) | rfl))
+          · exact hhelper v (by simp [SMT.fv])
+          · exact absurd rfl hv_ne_p
+          · exact absurd rfl hv_ne_p
+          · exact hcovT_helper v hvT
+          · exact absurd rfl hv_ne_p
+          · exact absurd rfl hv_ne_p
+        have denS_type := SMT.RenamingContext.denote_type_of_typing_fv
+          typS respectsS hcovS hdenS
+        have denT_type := SMT.RenamingContext.denote_type_of_typing_fv
+          typT respectsT hcovT hdenT
+        rcases denS with ⟨Fenc, σS0, hFenc⟩
+        dsimp at denS_type
+        subst σS0
+        rcases denT with ⟨Genc, σT0, hGenc⟩
+        dsimp at denT_type
+        subst σT0
+        rcases denHelper with ⟨Fhelper, σhelper, hFhelper⟩
+        dsimp at denHelper_type
+        subst σhelper
+        let hsS : BType.SupportedSMT (BType.set (α ×ᴮ β))
+            (SMTType.fun σA (SMTType.option τA)) :=
+          .optionFun hsAα hsAβ
+        let hsT : BType.SupportedSMT (BType.set (α ×ᴮ β))
+            (SMTType.fun σB (SMTType.option τB)) :=
+          .optionFun hsBα hsBβ
+        have F_supported : RDomCastSupported
+            (⟨F, BType.set (α ×ᴮ β), hF⟩ : B.Dom)
+            (⟨Fenc, SMTType.fun σA (SMTType.option τA), hFenc⟩ :
+              SMT.Dom) :=
+          ⟨RDomCast.toRDomCastAdmissible_of_supported F_rel hsS, hsS⟩
+        have G_supported : RDomCastSupported
+            (⟨G, BType.set (α ×ᴮ β), hG⟩ : B.Dom)
+            (⟨Genc, SMTType.fun σB (SMTType.option τB), hGenc⟩ :
+              SMT.Dom) :=
+          ⟨RDomCast.toRDomCastAdmissible_of_supported G_rel hsT, hsT⟩
+        have F_helper_supported : RDomCastSupported
+            (⟨F, BType.set (α ×ᴮ β), hF⟩ : B.Dom)
+            (⟨Fhelper, SMTType.fun σB (SMTType.option τB), hFhelper⟩ :
+              SMT.Dom) :=
+          RDomCastSupported.of_cast_to_supported F_supported hsT
+            cfun castPair
+        obtain ⟨denU, hdenU, U_rel⟩ :=
+          castInter_option_denotation α β hsBα hsBβ hF hG
+            rfl rfl F_helper_supported G_supported
+            hhelper hcovT_helper hdenHelper hdenT_helper
+            p_not_fv_helper p_not_fv_T typOut
+            target_respects_out hcovOut
+        have denU_type := SMT.RenamingContext.denote_type_of_typing_fv
+          typOut target_respects_out hcovOut hdenU
+        have respectsSpec_helper :
+            SMT.RenamingContext.RespectsTypeContextOnFV
+              Δhelper St1.types spec :=
+          SMT.RenamingContext.respects_update_helper spec_fv respectsS1
+            (SMT.Typing.varE typ_helper) rfl
+        have specs_helper4 : SpecBodiesTrue Δhelper St4.types
+            (helperSpecChunk helper
+              (SMTType.fun σB (SMTType.option τB)) spec) := by
+          intro body hbody
+          simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+          subst body
+          refine ⟨hcovSpec, Φ, ?_, hdenSpec, Φ_type, Φ_true⟩
+          simpa [St4_types_exact] using respectsSpec_helper
+        refine ⟨Δhelper, hcovOut, denU, Δhelper_ext, ?_,
+          target_respects_out, ?_, specs_helper4,
+          hdenU, denU_type, U_rel⟩
+        · intro v hv4
+          have hv1 : v ∉ St1.env.usedVars := by
+            intro hv
+            apply hv4
+            rw [St4_used_eq, St3_used_eq, St2_used]
+            exact List.mem_cons_of_mem p hv
+          by_cases hvh : v = helper
+          · subst v
+            exfalso
+            apply hv1
+            exact keys_sub1 (AList.lookup_isSome.mp
+              (Option.isSome_of_eq_some (SMT.Typing.varE typ_helper)))
+          · simp only [Δhelper, Function.update_of_ne hvh]
+            apply Θ_none
+            intro hv0
+            exact hv1 (used_sub1 hv0)
+        · intro v hv
+          by_cases hvh : v = helper
+          · subst v
+            exact AList.lookup_isSome.mp
+              (Option.isSome_of_eq_some helper_lookup4)
+          · have hv0 : v ∈ St.types := Θ_dom v (by
+              simpa [Δhelper, Function.update_of_ne hvh] using hv)
+            exact AList.mem_of_subset initial_sub4 hv0
+      · intro Γsup scopeG Θ hcovS hcovT respectsS respectsT
+          F G hF hG denS denT hdenS hdenT hdenS_type hdenT_type
+          F_rel G_rel hcovOut denOut respectsOut specsTrue
+          hdenOut _hdenOut_type
+        exact option_helper_guarded α β hsBα hsBβ scopeG
+          helper_ctx_gen4 cfun exactness typOut hcovS hcovT
+          respectsS respectsT hdenS hdenT hdenS_type hdenT_type
+          F_rel G_rel p_not_fv_helper p_not_fv_T hcovOut denOut
+          respectsOut specsTrue hdenOut
+    · intro body hbody
+      simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+      subst body
+      exact typ_spec4
+    · exact ScopedGeneratedTyping.of_operational helper_ctx_gen4 typOut
+        (by
+          intro body hbody
+          simp only [specBodies_helperSpecChunk, List.mem_singleton] at hbody
+          subst body
+          exact typ_spec4)
+
 theorem chpred_scoped_contract.{u}
     (τ : BType) (ρ σ : SMTType)
     (hρ : BType.SupportedSMT τ ρ)
@@ -906,64 +1636,58 @@ theorem chpred_scoped_contract.{u}
     typS typT bvS_used bvT_used
 
 theorem graph_scoped_contract.{u}
-    (α β : BType) (S T : SMT.Term) :
+    (α β : BType) {σA τA σB τB : SMTType}
+    (hsAα : BType.SupportedSMT α σA)
+    (hsAβ : BType.SupportedSMT β τA)
+    (hsBα : BType.SupportedSMT α σB)
+    (hsBβ : BType.SupportedSMT β τB)
+    (hα : σA ⊑ σB) (hβ : τA ⊑ τB)
+    (S T : SMT.Term) :
     CastInterRepScopedSpec.{u} (α ×ᴮ β) S T
-      (SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
-      (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+      (SMTType.fun σA (SMTType.option τA))
+      (SMTType.fun (SMTType.pair σB τB)
         SMTType.bool) := by
-  let cα : α.toSMTType ~> α.toSMTType :=
-    castPath.reflexive α.toSMTType
-  let cβ : β.toSMTType ~> β.toSMTType :=
-    castPath.reflexive β.toSMTType
-  let c : SMTType.fun α.toSMTType (SMTType.option β.toSMTType) ~>
-      SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+  let cα : σA ~> σB := hα.toCastPath
+  let cβ : τA ~> τB := hβ.toCastPath
+  let c : SMTType.fun σA (SMTType.option τA) ~>
+      SMTType.fun (SMTType.pair σB τB)
         SMTType.bool := castPath.graph cα cβ
   have hcastInter :
       castInter
-        (S, SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
-        (T, SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        (S, SMTType.fun σA (SMTType.option τA))
+        (T, SMTType.fun (SMTType.pair σB τB)
           SMTType.bool) = castInter.graph S T cα cβ := by
     simp only [castInter]
     rw [dif_neg (by simp)]
-    let hα : α.toSMTType ⊑ α.toSMTType := castable?.reflexive
-    let hβ : β.toSMTType ⊑ β.toSMTType := castable?.reflexive
     let hgraph :
-        SMTType.fun α.toSMTType (SMTType.option β.toSMTType) ⊑
-          SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        SMTType.fun σA (SMTType.option τA) ⊑
+          SMTType.fun (SMTType.pair σB τB)
             SMTType.bool := castable?.graph hα hβ
     rw [dif_pos hgraph]
     unfold castInterAux
-    have hpα : hα.toCastPath = cα :=
-      SMTType.castable?_to_castPath_reflexive
-    have hpβ : hβ.toCastPath = cβ :=
-      SMTType.castable?_to_castPath_reflexive
     have hpath : hgraph.toCastPath = c := by
-      calc
-        hgraph.toCastPath = (castable?.graph hα hβ).toCastPath :=
-          congrArg castable?.toCastPath (Subsingleton.elim _ _)
-        _ = castPath.graph hα.toCastPath hβ.toCastPath :=
-          SMTType.castable?_to_castPath_graph hα hβ
-        _ = c := by rw [hpα, hpβ]
+      exact castPath.eq_of_endpoints _ _
     rw [hpath]
   have hvia : castInter.graph S T cα cβ = (do
       let ⟨helper, spec⟩ ← loosenAux_prf "inter!" c S
       declareConstWithSpec helper
-        (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        (SMTType.fun (SMTType.pair σB τB)
           SMTType.bool) spec
       castInter
         (SMT.Term.var helper,
-          SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+          SMTType.fun (SMTType.pair σB τB)
             SMTType.bool)
-        (T, SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        (T, SMTType.fun (SMTType.pair σB τB)
           SMTType.bool)) := by
     unfold castInter.graph SMT.declareConstWithSpec castInter c cα cβ
     simp
   unfold CastInterRepScopedSpec
   intro Λ n used decl typS typT bvS_used bvT_used
   exact left_helper_scoped_contract (α ×ᴮ β)
-    (SMTType.pair α.toSMTType β.toSMTType)
-    (SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
-    (BType.SupportedSMT.canonical (α ×ᴮ β)) (.optionFun α β)
+    (SMTType.pair σB τB)
+    (SMTType.fun σA (SMTType.option τA))
+    (.prod hsBα hsBβ)
+    (.optionFun hsAα hsAβ)
     S T c (castPath.fvFaithful c) (hcastInter.trans hvia)
     typS typT bvS_used bvT_used
 
@@ -1048,6 +1772,46 @@ theorem of_swap.{u}
       hdenT_type hdenS_type G_rel F_rel hcovOut denOut
       respectsOut specsTrue hdenOut hdenOut_type)
 
+/-- The reverse option-function branch is reduced to the forward branch by
+commutativity of relational inter. -/
+theorem fun_rev_scoped_contract.{u}
+    (α β : BType) {σA τA σB τB : SMTType}
+    (hsAα : BType.SupportedSMT α σA)
+    (hsAβ : BType.SupportedSMT β τA)
+    (hsBα : BType.SupportedSMT α σB)
+    (hsBβ : BType.SupportedSMT β τB)
+    (hne : SMTType.fun σA (SMTType.option τA) ≠
+      SMTType.fun σB (SMTType.option τB))
+    (hα : σB ⊑ σA) (hβ : τB ⊑ τA)
+    (S T : SMT.Term) :
+    CastInterRepScopedSpec.{u} (α ×ᴮ β) S T
+      (SMTType.fun σA (SMTType.option τA))
+      (SMTType.fun σB (SMTType.option τB)) := by
+  have hswap :
+      castInter
+        (S, SMTType.fun σA (SMTType.option τA))
+        (T, SMTType.fun σB (SMTType.option τB)) =
+      castInter
+        (T, SMTType.fun σB (SMTType.option τB))
+        (S, SMTType.fun σA (SMTType.option τA)) := by
+    simp only [castInter]
+    let hrev : SMTType.fun σB (SMTType.option τB) ⊑
+        SMTType.fun σA (SMTType.option τA) :=
+      castable?.fun (by simp) hα (castable?.opt hβ)
+    have hnot : ¬SMTType.fun σA (SMTType.option τA) ⊑
+        SMTType.fun σB (SMTType.option τB) := by
+      intro hfwd
+      exact hne (castable?.antisymm hfwd hrev)
+    rw [dif_neg hne, dif_neg hnot, dif_pos hrev,
+      dif_neg hne.symm, dif_pos hrev]
+  unfold CastInterRepScopedSpec
+  intro Λ n used decl typS typT bvS_used bvT_used
+  exact of_swap (α ×ᴮ β) S T
+    (SMTType.fun σA (SMTType.option τA))
+    (SMTType.fun σB (SMTType.option τB)) hswap
+    (fun_scoped_contract α β hsBα hsBβ hsAα hsAβ hα hβ T S)
+    typS typT bvS_used bvT_used
+
 theorem chpred_rev_scoped_contract.{u}
     (τ : BType) (ρ σ : SMTType)
     (hρ : BType.SupportedSMT τ ρ)
@@ -1085,54 +1849,58 @@ theorem chpred_rev_scoped_contract.{u}
     typS typT bvS_used bvT_used
 
 theorem graph_rev_scoped_contract.{u}
-    (α β : BType) (S T : SMT.Term) :
+    (α β : BType) {σA τA σB τB : SMTType}
+    (hsAα : BType.SupportedSMT α σA)
+    (hsAβ : BType.SupportedSMT β τA)
+    (hsBα : BType.SupportedSMT α σB)
+    (hsBβ : BType.SupportedSMT β τB)
+    (hα : σA ⊑ σB) (hβ : τA ⊑ τB)
+    (S T : SMT.Term) :
     CastInterRepScopedSpec.{u} (α ×ᴮ β) S T
-      (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+      (SMTType.fun (SMTType.pair σB τB)
         SMTType.bool)
-      (SMTType.fun α.toSMTType (SMTType.option β.toSMTType)) := by
+      (SMTType.fun σA (SMTType.option τA)) := by
   have hswap :
       castInter
           (S, SMTType.fun
-            (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool)
-          (T, SMTType.fun α.toSMTType
-            (SMTType.option β.toSMTType)) =
+            (SMTType.pair σB τB) SMTType.bool)
+          (T, SMTType.fun σA
+            (SMTType.option τA)) =
         castInter
-          (T, SMTType.fun α.toSMTType
-            (SMTType.option β.toSMTType))
+          (T, SMTType.fun σA
+            (SMTType.option τA))
           (S, SMTType.fun
-            (SMTType.pair α.toSMTType β.toSMTType) SMTType.bool) := by
+            (SMTType.pair σB τB) SMTType.bool) := by
     simp only [castInter]
     have hne :
-        SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        SMTType.fun (SMTType.pair σB τB)
             SMTType.bool ≠
-          SMTType.fun α.toSMTType (SMTType.option β.toSMTType) := by
+          SMTType.fun σA (SMTType.option τA) := by
       simp
     have hne' :
-        SMTType.fun α.toSMTType (SMTType.option β.toSMTType) ≠
-          SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        SMTType.fun σA (SMTType.option τA) ≠
+          SMTType.fun (SMTType.pair σB τB)
             SMTType.bool := hne.symm
     have hnot : ¬
-        SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        SMTType.fun (SMTType.pair σB τB)
             SMTType.bool ⊑
-          SMTType.fun α.toSMTType (SMTType.option β.toSMTType) := by
+          SMTType.fun σA (SMTType.option τA) := by
       intro h
       have := castable?_of_fun_bool h
       contradiction
-    let hα : α.toSMTType ⊑ α.toSMTType := castable?.reflexive
-    let hβ : β.toSMTType ⊑ β.toSMTType := castable?.reflexive
     let hgraph :
-        SMTType.fun α.toSMTType (SMTType.option β.toSMTType) ⊑
-          SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+        SMTType.fun σA (SMTType.option τA) ⊑
+          SMTType.fun (SMTType.pair σB τB)
             SMTType.bool := castable?.graph hα hβ
     rw [dif_neg hne, dif_neg hnot, dif_pos hgraph,
       dif_neg hne', dif_pos hgraph]
   unfold CastInterRepScopedSpec
   intro Λ n used decl typS typT bvS_used bvT_used
   exact of_swap (α ×ᴮ β) S T
-    (SMTType.fun (SMTType.pair α.toSMTType β.toSMTType)
+    (SMTType.fun (SMTType.pair σB τB)
       SMTType.bool)
-    (SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
-    hswap (graph_scoped_contract α β T S)
+    (SMTType.fun σA (SMTType.option τA))
+    hswap (graph_scoped_contract α β hsAα hsAβ hsBα hsBβ hα hβ T S)
     typS typT bvS_used bvT_used
 
 private theorem castable_chpredE {ρ σ : SMTType}
@@ -1142,6 +1910,15 @@ private theorem castable_chpredE {ρ σ : SMTType}
   | refl hbase => nomatch hbase
   | chpred hρ => exact hρ
   | «fun» hbool _ _ => exact (hbool rfl).elim
+
+private theorem castable_optionFunE
+    {σA τA σB τB : SMTType}
+    (h : SMTType.fun σA (SMTType.option τA) ⊑
+      SMTType.fun σB (SMTType.option τB)) :
+    σA ⊑ σB ∧ τA ⊑ τB := by
+  cases h with
+  | refl hbase => rcases hbase with h | h | h <;> cases h
+  | «fun» _ hα hβ => exact ⟨hα, castable?.optE hβ⟩
 
 private theorem not_castable_chpred_option
     (ρ α β : SMTType) :
@@ -1182,26 +1959,21 @@ private theorem incomparable_scoped_contract.{u}
   mvcgen
 
 private theorem option_scoped_contract.{u}
-    (α β : BType) (S T : SMT.Term) :
+    (α β : BType) {σ τ : SMTType}
+    (hsα : BType.SupportedSMT α σ)
+    (hsβ : BType.SupportedSMT β τ)
+    (S T : SMT.Term) :
     CastInterRepScopedSpec.{u} (α ×ᴮ β) S T
-      (SMTType.fun α.toSMTType (SMTType.option β.toSMTType))
-      (SMTType.fun α.toSMTType (SMTType.option β.toSMTType)) := by
-  unfold CastInterRepScopedSpec
-  intro Λ n used decl typS typT bvS_used bvT_used
-  mstart
-  mintro pre ∀St
-  mpure pre
-  unfold castInter
-  simp
-  mvcgen
+      (SMTType.fun σ (SMTType.option τ))
+      (SMTType.fun σ (SMTType.option τ)) := by
+  exact fun_scoped_contract α β hsα hsβ hsα hsβ
+    castable?.reflexive castable?.reflexive S T
 
 theorem supported_scoped_contract.{u}
     (τ : BType) (S T : SMT.Term) (σS σT : SMTType)
     (supportedS : BType.SupportedSMT (BType.set τ) σS)
     (supportedT : BType.SupportedSMT (BType.set τ) σT) :
     CastInterRepScopedSpec.{u} τ S T σS σT := by
-  unfold CastInterRepScopedSpec
-  intro Λ n used decl typS typT bvS_used bvT_used
   cases supportedS with
   | @setPred τ ρ hρ =>
       cases supportedT with
@@ -1209,63 +1981,82 @@ theorem supported_scoped_contract.{u}
           by_cases heq : ρ = σ
           · subst σ
             exact direct_scoped_contract τ ρ hρ S T
-              typS typT bvS_used bvT_used
           · by_cases hcast : ρ ⊑ σ
             · exact chpred_scoped_contract τ ρ σ hρ hσ
-                heq hcast S T typS typT bvS_used bvT_used
+                heq hcast S T
             · by_cases hrev : σ ⊑ ρ
               · exact chpred_rev_scoped_contract τ ρ σ hρ hσ
-                  heq hrev S T typS typT bvS_used bvT_used
+                  heq hrev S T
               · exact incomparable_scoped_contract τ S T
                   (SMTType.fun ρ SMTType.bool)
                   (SMTType.fun σ SMTType.bool)
                   (by simpa using heq)
                   (fun h => hcast (castable_chpredE h))
                   (fun h => hrev (castable_chpredE h))
-                  typS typT bvS_used bvT_used
-      | optionFun α β =>
-          have hne : SMTType.fun ρ SMTType.bool ≠
-              SMTType.fun α.toSMTType
-                (SMTType.option β.toSMTType) := by simp
+      | @optionFun α β σA τA hsAα hsAβ =>
+          obtain ⟨σB, τB, rfl, hsBα, hsBβ⟩ := hρ.prodE
+          have hne : SMTType.fun (SMTType.pair σB τB) SMTType.bool ≠
+              SMTType.fun σA (SMTType.option τA) := by simp
           have hforward := not_castable_chpred_option
-            ρ α.toSMTType β.toSMTType
-          by_cases hgraph : SMTType.fun α.toSMTType
-              (SMTType.option β.toSMTType) ⊑
-            SMTType.fun ρ SMTType.bool
-          · have hρeq :=
-              supported_prod_eq_canonical_of_graph_cast hρ hgraph
-            subst ρ
-            exact graph_rev_scoped_contract α β S T
+            (SMTType.pair σB τB) σA τA
+          unfold CastInterRepScopedSpec
+          intro Λ n used decl typS typT bvS_used bvT_used
+          by_cases hgraph : SMTType.fun σA (SMTType.option τA) ⊑
+              SMTType.fun (SMTType.pair σB τB) SMTType.bool
+          · obtain ⟨⟨cα⟩, ⟨cβ⟩⟩ :=
+              castPath.graph_components hgraph.toCastPath
+            exact graph_rev_scoped_contract α β
+              hsAα hsAβ hsBα hsBβ
+              (castable?_of_castPath cα) (castable?_of_castPath cβ) S T
               typS typT bvS_used bvT_used
           · exact incomparable_scoped_contract (α ×ᴮ β) S T
-              (SMTType.fun ρ SMTType.bool)
-              (SMTType.fun α.toSMTType
-                (SMTType.option β.toSMTType))
+              (SMTType.fun (SMTType.pair σB τB) SMTType.bool)
+              (SMTType.fun σA (SMTType.option τA))
               hne hforward hgraph typS typT bvS_used bvT_used
-  | optionFun α β =>
+  | @optionFun α β σA τA hsAα hsAβ =>
       cases supportedT with
       | @setPred _ ρ hρ =>
-          have hne : SMTType.fun α.toSMTType
-                (SMTType.option β.toSMTType) ≠
-              SMTType.fun ρ SMTType.bool := by simp
+          obtain ⟨σB, τB, rfl, hsBα, hsBβ⟩ := hρ.prodE
+          have hne : SMTType.fun σA (SMTType.option τA) ≠
+              SMTType.fun (SMTType.pair σB τB) SMTType.bool := by simp
           have hreverse := not_castable_chpred_option
-            ρ α.toSMTType β.toSMTType
-          by_cases hgraph : SMTType.fun α.toSMTType
-              (SMTType.option β.toSMTType) ⊑
-            SMTType.fun ρ SMTType.bool
-          · have hρeq :=
-              supported_prod_eq_canonical_of_graph_cast hρ hgraph
-            subst ρ
-            exact graph_scoped_contract α β S T
+            (SMTType.pair σB τB) σA τA
+          unfold CastInterRepScopedSpec
+          intro Λ n used decl typS typT bvS_used bvT_used
+          by_cases hgraph : SMTType.fun σA (SMTType.option τA) ⊑
+              SMTType.fun (SMTType.pair σB τB) SMTType.bool
+          · obtain ⟨⟨cα⟩, ⟨cβ⟩⟩ :=
+              castPath.graph_components hgraph.toCastPath
+            exact graph_scoped_contract α β
+              hsAα hsAβ hsBα hsBβ
+              (castable?_of_castPath cα) (castable?_of_castPath cβ) S T
               typS typT bvS_used bvT_used
           · exact incomparable_scoped_contract (α ×ᴮ β) S T
-              (SMTType.fun α.toSMTType
-                (SMTType.option β.toSMTType))
-              (SMTType.fun ρ SMTType.bool)
+              (SMTType.fun σA (SMTType.option τA))
+              (SMTType.fun (SMTType.pair σB τB) SMTType.bool)
               hne hgraph hreverse typS typT bvS_used bvT_used
-      | optionFun =>
-          exact option_scoped_contract α β S T
-            typS typT bvS_used bvT_used
+      | @optionFun _ _ σB τB hsBα hsBβ =>
+          by_cases heq : SMTType.fun σA (SMTType.option τA) =
+              SMTType.fun σB (SMTType.option τB)
+          · injection heq with hσ hopt
+            injection hopt with hτ
+            subst σB
+            subst τB
+            exact option_scoped_contract α β hsAα hsAβ S T
+          · by_cases hfwd : SMTType.fun σA (SMTType.option τA) ⊑
+                SMTType.fun σB (SMTType.option τB)
+            · obtain ⟨hα, hβ⟩ := castable_optionFunE hfwd
+              exact fun_scoped_contract α β hsAα hsAβ hsBα hsBβ
+                hα hβ S T
+            · by_cases hrev : SMTType.fun σB (SMTType.option τB) ⊑
+                  SMTType.fun σA (SMTType.option τA)
+              · obtain ⟨hα, hβ⟩ := castable_optionFunE hrev
+                exact fun_rev_scoped_contract α β
+                  hsAα hsAβ hsBα hsBβ heq hα hβ S T
+              · exact incomparable_scoped_contract (α ×ᴮ β) S T
+                  (SMTType.fun σA (SMTType.option τA))
+                  (SMTType.fun σB (SMTType.option τB))
+                  heq hfwd hrev
 
 theorem pair_helper_typing
     {Base Λop Γop : SMT.TypeContext}
@@ -1324,7 +2115,7 @@ private theorem encodeTerm_inter_via_maplet_scoped
       match p, σp with
       | .pair S' T', .pair σS σT =>
           castInter ⟨S', σS⟩ ⟨T', σT⟩
-      | _, _ => throw "encodeTerm:intersection: impossible maplet result") := by
+      | _, _ => throw "encodeTerm:inter: impossible maplet result") := by
   simp [encodeTerm]
 
 private theorem denote_pair_inv_scoped.{u}

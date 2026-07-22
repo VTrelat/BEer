@@ -165,7 +165,7 @@ theorem RDomCastSupported.optionFunction_of_graph_truth.{u}
       (⟨S, BType.set (alpha ×ᴮ beta), hS⟩ : B.Dom)
       (⟨F, SMTType.fun alpha.toSMTType
         (SMTType.option beta.toSMTType), hF⟩ : SMT.Dom) := by
-  refine ⟨?_, BType.SupportedSMT.optionFun alpha beta⟩
+  refine ⟨?_, BType.SupportedSMT.optionFun (.canonical alpha) (.canonical beta)⟩
   refine ⟨?_, ?_⟩
   · refine ⟨castPath.graph (castPath.reflexive alpha.toSMTType)
       (castPath.reflexive beta.toSMTType), ?_⟩
