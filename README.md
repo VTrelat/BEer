@@ -63,8 +63,12 @@ To measure coverage over a corpus of `.pog` files:
 scripts/sweep.sh <corpus-dir> out.tsv
 ```
 
-Large obligations are slow: a ~1 MB `.pog` takes on the order of a minute, all
-of it inside `encodeTerm`.
+On a 136-file sample of the ABZ benchmark corpus, 10 files translated before
+this branch and 104 do now, with a 25 s budget per file.
+
+Very large obligations remain slow — a few hundred kilobytes of `.pog` can take
+minutes, all of it inside `encodeTerm`. The remaining cost is spread across the
+recursion and the `AList` type context rather than concentrated in one place.
 
 ## Paper
 An online version of the paper is available [here](https://vtrelat.github.io/papers/abz25.pdf).
