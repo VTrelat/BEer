@@ -6,6 +6,15 @@ Icon?
 
 .lake/
 Test/
+!Test/
+Test/*
+!Test/Micro/
+!Test/Micro/**
+Test/Micro/machines/*.pog
+Test/Micro/machines/*.bxml
+Test/Micro/machines/*.po
+Test/Micro/machines/*.pos
+Test/Micro/results/
 
 *.css
 *.js
