@@ -126,12 +126,20 @@ def Term.toString : Term → String
 
 instance : ToString Term := ⟨Term.toString⟩
 
+/-- `xs` without the elements of `ys`.
+
+Spelled out rather than via `List.removeAll` because that recurses once per kept
+element, and the free-variable list of a large proof obligation is long enough
+to exhaust the stack.  Order is not preserved; callers only test membership. -/
+def removeAll (xs ys : List 𝒱) : List 𝒱 :=
+  xs.foldl (fun acc x => if ys.contains x then acc else x :: acc) []
+
 def fv : Term → List 𝒱
   | .var v => [v]
   | .int _ => []
   | .bool _ => []
   | .app f x => fv f ++ fv x
-  | .lambda vs _ t | .forall vs _ t | .exists vs _ t => List.removeAll (fv t) vs
+  | .lambda vs _ t | .forall vs _ t | .exists vs _ t => removeAll (fv t) vs
   | .as t _ => fv t
   | .eq t₁ t₂ => fv t₁ ++ fv t₂
   | .and t₁ t₂ => fv t₁ ++ fv t₂

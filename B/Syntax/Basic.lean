@@ -81,6 +81,14 @@ prefix:20 "@ᴮ" => Term.app
 infixl:90 " ⇸ᴮ " => Term.pfun
 notation:90 "|" S "|ᴮ" => Term.card S
 
+/-- `xs` without the elements of `ys`.
+
+Spelled out rather than via `List.removeAll` because that recurses once per kept
+element, and the free-variable list of a large proof obligation is long enough
+to exhaust the stack.  Order is not preserved; callers only test membership. -/
+def removeAll (xs ys : List 𝒱) : List 𝒱 :=
+  xs.foldl (fun acc x => if ys.contains x then acc else x :: acc) []
+
 def fv : Term → List 𝒱
   | .var v => [v]
   | .int _ => []
@@ -91,7 +99,7 @@ def fv : Term → List 𝒱
   | .ℤ => []
   | .𝔹 => []
   | .mem x S => fv x ++ fv S
-  | .collect vs D P | .all vs D P | .lambda vs D P => fv D ++ List.removeAll (fv P) vs
+  | .collect vs D P | .all vs D P | .lambda vs D P => fv D ++ removeAll (fv P) vs
   | .pow S => fv S
   | .cprod S T => fv S ++ fv T
   | .union S T => fv S ++ fv T
