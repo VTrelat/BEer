@@ -591,7 +591,11 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
             match τ with
             | .fun (.pair α β) .bool => return .fun α (.option β)
             | .fun α (.option β) => return .fun α (.option β)
-            | ξ => throw s!"encodeTerm:all: Unsupported flag type {vs[i]} : {ξ}"
+            -- The flag only picks a representation, so a type that has no
+            -- partial-function form keeps the default one.  Flags are collected
+            -- by name and Atelier B reuses names across obligations, so a name
+            -- flagged in one obligation can denote something else in another.
+            | ξ => return ξ
           else return τ
 
         for ⟨v, τ⟩ in vs.zip τs do addToContext v τ
@@ -668,15 +672,21 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       return (.forall xs τs scoped_body, .bool)
     | _ => throw s!"encodeTerm:all: Expected a set or a function, got {← encodeTerm D E}"
 
+/-- The SMT type of a source variable.
+
+A *flagged* variable is one the POG reader saw used as a function; it is stored
+as `α → Option β` rather than as the characteristic predicate of its graph.  The
+flag is only a representation hint: flags are collected by name, and Atelier B
+reuses names across obligations, so a flagged name whose type admits no such
+form simply keeps the default representation. -/
+def smtTypeOf (flagged : Bool) (τ : B.BType) : SMTType :=
+  match flagged, τ with
+  | true, .set (.prod α β) => .fun α.toSMTType (.option β.toSMTType)
+  | _, ξ => ξ.toSMTType
+
 def encodeTypeContext (e : B.Env) : Encoder Unit := do
   for ⟨v, τ⟩ in e.context.entries do
-    if v ∈ e.flags then
-      match τ with
-      | .set (.prod α β) =>
-        addToContext v <| .fun (α.toSMTType) (.option β.toSMTType)
-      | ξ => throw s!"Unsupported flag type {v} : {ξ}"
-    else
-      addToContext v τ.toSMTType
+    addToContext v <| smtTypeOf (v ∈ e.flags) τ
 
 def encodeDefs (E : B.Env) : Encoder Unit := do
   let rec aux : List ((_ : B.𝒱) × B.Term) → List SMT.𝒱 → Encoder (List SMT.𝒱)
@@ -737,12 +747,7 @@ def encodeProofObligation (φ : B.ProofObligation) (E : B.Env) : Encoder Stages 
   let declsBefore := (← get).env.declarations.length
   let mut localDecls : Chunk := []
   for ⟨v, τ⟩ in φ.localContext.entries do
-    let smtτ : SMTType ←
-      if v ∈ φ.localFlags ∨ v ∈ E.flags then
-        match τ with
-        | .set (.prod α β) => pure <| .fun α.toSMTType (.option β.toSMTType)
-        | ξ => throw s!"encodeProofObligation: unsupported flag type {v} : {ξ}"
-      else pure τ.toSMTType
+    let smtτ := smtTypeOf (v ∈ φ.localFlags ∨ v ∈ E.flags) τ
     addToContext v smtτ
     localDecls := localDecls.concat (Instr.declare_const v smtτ)
   -- Augment the B environment with PO-local context/flags so `encodeTerm`'s
