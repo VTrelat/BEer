@@ -140,7 +140,7 @@ Returns the body with the helper occurrences rewritten. -/
 def rescopeHelpers (before : Nat) (vs : List 𝒱) (subs : List Term)
     (z : 𝒱) (τ : SMTType) (body : Term) : Encoder Term := do
   let st ← get
-  let new := st.env.declarations.drop before
+  let new := st.env.declarations.extract before
   let helpers := new.filterMap fun | .declare_const v _ => some v | _ => none
   if helpers.isEmpty then return body
   let applyRen := fun t =>

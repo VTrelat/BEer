@@ -54,7 +54,9 @@ def Stages.map (f : Chunk → Chunk) : Stages → Stages
   | .asserts as => .asserts (as.attach.map (λ ⟨a,_⟩ => a.map f))
 
 structure Env where
-  declarations : Chunk := []
+  /-- Emitted in order.  An array rather than a `Chunk`: the encoder appends
+  one instruction at a time, and `List.concat` made that quadratic. -/
+  declarations : Array Instr := #[]
   asserts : Stages := .asserts []
   freshvarsc : Nat := 0
   /-- Every name ever handed out, as a set: `freshVar` tests it on every call,
@@ -66,6 +68,6 @@ instance : ToString Env where
   toString E :=
     let nl := "\n"
     let nltab := nl++"  "
-    s!"Env:{nltab}declarations:{nl}{E.declarations.printLines}{nltab}asserts:{nl}{E.asserts}{nltab}usedVars: {E.usedVars.toList}"
+    s!"Env:{nltab}declarations:{nl}{E.declarations.toList.printLines}{nltab}asserts:{nl}{E.asserts}{nltab}usedVars: {E.usedVars.toList}"
 
 end SMT

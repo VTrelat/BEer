@@ -496,7 +496,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let Dapp := .app D' (.var z)
       let Dz := .the Dapp
       let subs := (toDestPair vs.dropLast (.var z)).concat Dz
-      let P' ← SMT.rescopeHelpers decls_snap.length vs subs z α P'
+      let P' ← SMT.rescopeHelpers decls_snap.size vs subs z α P'
       let P' := substList vs subs P'
       -- `the` is total in the semantic model, so retain the option equality
       -- guard to rule out its arbitrary value when `Dapp` is `none`.
@@ -512,7 +512,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
       let z ← freshVar τ
       let subs := toDestPair vs (.var z)
-      let P' ← SMT.rescopeHelpers decls_snap.length vs subs z τ P'
+      let P' ← SMT.rescopeHelpers decls_snap.size vs subs z τ P'
       let P' := substList vs subs P'
       SMT.eraseFromContext z
       return (.lambda [z] [τ] (.ite (.app D' (.var z)) P' (.bool false)), .fun τ .bool)
@@ -535,7 +535,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let ⟨P', γ⟩ ← encodeTerm P E
       let x ← freshVar τ
       let subs := toDestPair vs (.var x)
-      let P' ← SMT.rescopeHelpers decls_snap.length vs subs x τ P'
+      let P' ← SMT.rescopeHelpers decls_snap.size vs subs x τ P'
       let Px := substList vs subs P'
       let x_mem_D' := .app D' (.var x)
       SMT.eraseFromContext x
@@ -616,7 +616,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
         -- Collect cast-helper delta and revert: declarations, asserts, and types.
         -- usedVars is kept growing to prevent future freshVar collisions.
-        let new_decls := (← get).env.declarations.drop decls_snap.length
+        let new_decls := ((← get).env.declarations.extract decls_snap.size).toList
         -- The helper declarations are about to be re-scoped inside the ∀, so a
         -- site recorded while encoding the body must not outlive it: its
         -- constant is no longer declared at this level.
@@ -657,7 +657,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
       let ⟨xsy_mem_D, _⟩ ← castMembership (xs.map .var |>.toPairl, τs.toProdl) (D', .fun α (.option β))
 
-      let new_decls := (← get).env.declarations.drop decls_snap.length
+      let new_decls := ((← get).env.declarations.extract decls_snap.size).toList
       modify λ e => { e with env := { e.env with declarations := decls_snap, asserts := asserts_snap }, types := types_snap, sites := sites_snap }
 
       let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
@@ -698,7 +698,7 @@ def encodeDefs (E : B.Env) : Encoder Unit := do
         NOTE: Using define_fun instead of define_const because cvc5 doesn't
         support define_const for function types.
       -/
-      modify (λ e => { e with env := { e.env with declarations := e.env.declarations.concat <| Instr.define_fun v .unit τ t } })
+      modify (λ e => { e with env := { e.env with declarations := e.env.declarations.push <| Instr.define_fun v .unit τ t } })
       aux defs (v :: vs)
   let declared ← aux E.defs.entries []
   let e ← get
@@ -710,7 +710,7 @@ def encodeDefs (E : B.Env) : Encoder Unit := do
   -- unsound because categories like `inv`/`ass` are GOALS for some POs
   -- (e.g. `Initialisation` does not list `inv`).
   modify λ e => { e with env := { e.env with
-    declarations := decl.reverse ++ e.env.declarations }}
+    declarations := decl.reverse.toArray ++ e.env.declarations }}
 
 def encodeDistinctFinite (E : B.Env) : Encoder Unit := do
   let ds ← E.distinct.mapM λ ds => Term.distinct <$> ds.mapM (λ t => Prod.fst <$> (encodeTerm t E))
@@ -744,19 +744,22 @@ def encodeProofObligation (φ : B.ProofObligation) (E : B.Env) : Encoder Stages 
   -- variables, which are declared inside the `push` below.  Emitting them into
   -- the global declaration chunk would put them out of scope, so the run of
   -- instructions they add is moved into the obligation itself.
-  let declsBefore := (← get).env.declarations.length
-  let mut localDecls : Chunk := []
+  let declsBefore := (← get).env.declarations.size
+  -- Accumulated in reverse: appending to a list per local variable is
+  -- quadratic, and obligations can carry thousands of them.
+  let mut localDeclsRev : Chunk := []
   for ⟨v, τ⟩ in φ.localContext.entries do
     let smtτ := smtTypeOf (v ∈ φ.localFlags ∨ v ∈ E.flags) τ
     addToContext v smtτ
-    localDecls := localDecls.concat (Instr.declare_const v smtτ)
+    localDeclsRev := Instr.declare_const v smtτ :: localDeclsRev
+  let localDecls := localDeclsRev.reverse
   -- Augment the B environment with PO-local context/flags so `encodeTerm`'s
   -- B-side lookups succeed for the duration of this PO.
   let E_local : B.Env := φ.extendEnv E
   let defs ← (φ.defs.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
   let globalHyps : Chunk ← (φ.hyps.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
   let goals : List Stages ← φ.negateGoals.goals.mapM (encodeSimpleGoal · E_local)
-  let helpers := (← get).env.declarations.drop declsBefore
+  let helpers := ((← get).env.declarations.extract declsBefore).toList
   -- Pop PO-local types so subsequent POs start clean.
   modify λ e => { e with
     types := typesSnapshot
@@ -782,7 +785,7 @@ def encodeProofObligations (E : B.Env) : Encoder Unit := do
 -- `addToContext` runs after `encodeDefs`'s bulk-declare pass.
 def finalBulkDeclare : Encoder Unit := do
   let e ← get
-  let alreadyDeclared : List SMT.𝒱 := e.env.declarations.filterMap fun
+  let alreadyDeclared : List SMT.𝒱 := e.env.declarations.toList.filterMap fun
     | .declare_const v _ => some v
     | .define_fun v _ _ _ => some v
     | .define_const v _ _ => some v
@@ -790,7 +793,7 @@ def finalBulkDeclare : Encoder Unit := do
   let Γ : TypeContext := e.types.filter (λ k _ => k ∉ alreadyDeclared)
   let decl := Γ.entries.map (λ ⟨v, τ⟩ => Instr.declare_const v τ)
   modify λ e => { e with env := { e.env with
-    declarations := decl.reverse ++ e.env.declarations } }
+    declarations := decl.reverse.toArray ++ e.env.declarations } }
 
 def encode (e : B.Env) : Encoder Unit := do
   modify λ st => { st with env := { st.env with
@@ -800,7 +803,7 @@ def encode (e : B.Env) : Encoder Unit := do
 
 def EncoderState.toSMTFile : Encoder String := do
   let env := (← get).env.simplify
-  return toString <| Stages.asserts [.instr env.declarations, env.asserts]
+  return toString <| Stages.asserts [.instr env.declarations.toList, env.asserts]
 
 def encodePOG (pogpath : System.FilePath) (show_encoding := false): IO String := do
   let pog ← readPOG pogpath |>.propagateError

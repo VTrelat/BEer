@@ -106,10 +106,10 @@ def SMT.freshVarList : List SMTType → Encoder (List 𝒱)
   | τ::τs => .cons <$> freshVar τ <*> freshVarList τs
 
 def SMT.defineFun (v : 𝒱) (τ σ : SMTType) (d : Term) : Encoder Unit :=
-  modify λ e => { e with env := { e.env with declarations := e.env.declarations.concat <| .define_fun v τ σ d }}
+  modify λ e => { e with env := { e.env with declarations := e.env.declarations.push <| .define_fun v τ σ d }}
 
 def SMT.declareConst (v : 𝒱) (τ : SMTType) : Encoder Unit :=
-  modify λ e => { e with env := { e.env with declarations := e.env.declarations.concat <| .declare_const v τ }}
+  modify λ e => { e with env := { e.env with declarations := e.env.declarations.push <| .declare_const v τ }}
 
 def SMT.addToContext (v : 𝒱) (τ : SMTType) : Encoder Unit :=
   modify λ e => { e with types := e.types.insert v τ, env.usedVars := e.env.usedVars.insert v }
@@ -164,7 +164,7 @@ rewritten. -/
 def SMT.addSpec (x! : 𝒱) (x!_spec : Term) : Encoder Unit := do
   defineFun s!"{x!}_spec" .unit .bool x!_spec
   modify λ e => { e with env := { e.env with
-    declarations := e.env.declarations.concat <| .assert (.var s!"{x!}_spec") }}
+    declarations := e.env.declarations.push <| .assert (.var s!"{x!}_spec") }}
 
 /-- Declare a cast helper and assert its defining specification.  Keeping the
 pair as one encoder operation lets quantifier encoding collect and re-scope
