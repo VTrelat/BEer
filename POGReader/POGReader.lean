@@ -142,21 +142,23 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
   | "(", _ => pure ∘₂ .app
   -- | "<'" => throw "Not implemented"
   | "prj1", τ => fun E F => do
-    let .set (.prod (.prod α _) α') := τ | throw s!"prj1 operator should have type `set (α × β × α)`, got {τ}"
+    let .set (.prod (.prod α _) α') := τ | throw s!"prj1 operator should have type `set ((α × β) × α)`, got {τ}"
     unless α = α' do
-      throw s!"prj1 operator should have type `set (α × β × α)`, got {τ}"
+      throw s!"prj1 operator should have type `set ((α × β) × α)`, got {τ}"
     let x := s!"x{← incrementFreshVarC}"
     let y := s!"y{← incrementFreshVarC}"
     let z := s!"z{← incrementFreshVarC}"
     return .collect [x, y, z] (E ⨯ᴮ F ⨯ᴮ E) (.var z =ᴮ .var x)
+  -- `prj2 : (α × β) → β`, so its relation type is `set ((α × β) × β)` — the
+  -- *second* component is the one repeated, unlike `prj1`.
   | "prj2", τ => λ E F => do
-      let .set (.prod (.prod α _) α') := τ | throw s!"prj2 operator should have type `set (α × β × α)`, got {τ}"
-      unless α = α' do
-        throw s!"prj2 operator should have type `set (α × β × α)`, got {τ}"
+      let .set (.prod (.prod _ β) β') := τ | throw s!"prj2 operator should have type `set ((α × β) × β)`, got {τ}"
+      unless β = β' do
+        throw s!"prj2 operator should have type `set ((α × β) × β)`, got {τ}"
       let x := s!"x{← incrementFreshVarC}"
       let y := s!"y{← incrementFreshVarC}"
       let z := s!"z{← incrementFreshVarC}"
-      return .collect [x, y, z] (E ⨯ᴮ F ⨯ᴮ E) (.var z =ᴮ .var y)
+      return .collect [x, y, z] (E ⨯ᴮ F ⨯ᴮ F) (.var z =ᴮ .var y)
   -- `iterate(R, n)` is `R` composed with itself `n` times.  A literal count is
   -- unfolded into compositions, which solvers handle far better; a symbolic one
   -- falls back to the primitive, encoded as a relation indexed by an integer.
