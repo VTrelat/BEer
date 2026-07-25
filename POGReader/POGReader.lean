@@ -9,8 +9,12 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
   | "/:", _ => pure ∘₂ (.not ∘₂ .mem)
   | "<:", .bool => fun S T ↦ .All S fun x ↦ return x ∈ᴮ T
   | "/<:", _ => pure ∘₂ (.not ∘₂ (.mem · ∘ .pow))
-  -- | "<<:" => throw "Not implemented StrictSubset"
-  -- | "/<<:" => throw "Not implemented NotStrictSubset"
+  | "<<:", _ => fun S T ↦ do
+      let sub ← .All S fun x ↦ return x ∈ᴮ T
+      return sub ∧ᴮ ¬ᴮ (S =ᴮ T)
+  | "/<<:", _ => fun S T ↦ do
+      let sub ← .All S fun x ↦ return x ∈ᴮ T
+      return ¬ᴮ (sub ∧ᴮ ¬ᴮ (S =ᴮ T))
   | "=", _ => pure ∘₂ .eq
   | "/=", _ => pure ∘₂ (.not ∘₂ .eq)
   | ">=r", _ | ">=f", _ | ">=i", _ => pure ∘₂ (flip .le)
@@ -21,9 +25,13 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
   -- | "," => throw "Not implemented"
   | "*", _ | "*i", _ | "*r", _ | "*f", _ => pure ∘₂ .mul
   -- | "**" => throw "Not implemented"
-  | "**i", _ => fun x y => do
-    let .int n := y | throw s!"Cannot exponentiate with symbolic exponent {y}"
-    return x ^ᴮ n
+  -- A literal exponent unfolds into repeated multiplication, which solvers
+  -- handle much better than the axiomatised `bpow`; symbolic exponents fall
+  -- back to the real exponentiation operator.
+  | "**i", _ | "**r", _ => fun x y => do
+      match y with
+      | .int n => return x.expLit n
+      | _ => return x ^ᴮ y
   | "*s", _ => pure ∘₂ .cprod
   -- | "**r" => throw "Not implemented"
   | "+", _ | "+i", _ | "+r", _ | "+f", _ => pure ∘₂ .add
@@ -38,13 +46,19 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
   | "..", .set .int => λ a b => do
       let v := s!"x{← incrementFreshVarC}"
       return .collect [v] .ℤ ((a ≤ᴮ (.var v)) ∧ᴮ ((.var v) ≤ᴮ b))
-  -- | "/" => throw "Not implemented"
-  -- | "/i" => throw "Not implemented"
-  -- | "/r" => throw "Not implemented"
-  -- | "/f" => throw "Not implemented"
+  | "/", _ | "/i", _ | "/r", _ | "/f", _ => pure ∘₂ .div
+  | "mod", _ => pure ∘₂ .mod
   | "/\\", _ => pure ∘₂ .inter
-  -- | "/|\\" => throw "Not implemented"
-  -- | ";", τ => fun S T => do
+  | "/|\\", _ => B.Term.seqTake
+  | "\\|/", _ => B.Term.seqDrop
+  | "^", _ => B.Term.seqConcat
+  | "<-", _ => B.Term.seqAppend
+  | "->", _ => B.Term.seqPrepend
+  | ";", τ => fun R S ↦ do
+      let .set (.prod α γ) := τ | throw s!"; operator expects a relation, got type {τ}"
+      let .set (.prod _ β) ← R.getType
+        | throw s!"; operator expects a relation on the left, got type {← R.getType}"
+      B.Term.compose α β γ R S
   | "<+", τ => fun S T ↦ do
       let .set (.prod α β) := τ | throw s!"<+ operator should have type `set (α × β)`, got {τ}"
       B.Term.overload α β S T
@@ -103,9 +117,6 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
         (.var x ↦ᴮ .var z ∈ᴮ F)))
   -- | "||" => throw "Not implemented"
   | "\\/", _ => pure ∘₂ .union
-  -- | "\\|/" => throw "Not implemented"
-  -- | "^" => throw "Not implemented"
-  -- | "mod" => throw "Not implemented"
   | "|->", _ => pure ∘₂ .maplet
   | "|>", τ => fun S T ↦ do
       let .set (.prod _ _) := τ | throw s!"<| operator expects a relation, got type {τ}"
@@ -168,11 +179,11 @@ def String.toUnaryOp : String → B.BType → B.Term → Decoder B.Term
   | "POW1", τ => fun S => do
     let .set (.set τ') := τ | throw s!"POW1 operator expects a set, got type {τ}"
     .Collect S.pow fun s => .Exists τ'.toTerm fun x => return x ∈ᴮ s
-  | "FIN", .set (.set τ) => λ S => do .Collect (𝒫ᴮ S) (B.Term.finite τ ·)
+  | "FIN", .set (.set τ) => λ S => do .Collect (𝒫ᴮ S) (B.Term.mkFinite τ ·)
   | "FIN1", .set (.set τ) => λ S => do
     .Collect (𝒫ᴮ S) (fun x => do
       let emp ← B.Term.emptyset τ
-      let fin ← (x.finite τ)
+      let fin ← (x.mkFinite τ)
       return fin ∧ᴮ ¬ᴮ(x =ᴮ emp))
   | "union", τ => fun S => do
     let .set τ' := τ | throw s!"union operator expects a set, got type {τ}"
@@ -205,8 +216,11 @@ def String.toUnaryOp : String → B.BType → B.Term → Decoder B.Term
   | "perm", τ => fun S => do
     let .set _ := τ | throw s!"perm operator expects a set, got type {τ}"
     S.perm
-  -- | "first" => throw "Unary operator not implemented"
-  -- | "last" => throw "Unary operator not implemented"
+  | "first", _ => B.Term.seqFirst
+  | "last", _ => B.Term.seqLast
+  | "tail", _ => B.Term.seqTail
+  | "front", _ => B.Term.seqFront
+  | "rev", _ => B.Term.seqRev
   | "id", τ => fun S => do
     let .set (.prod α α') := τ | throw s!"id operator expects a set (prod α α), got type {τ}"
     unless α = α' do throw s!"id operator expects a set (prod α α), got type {τ}"
@@ -224,8 +238,13 @@ def String.toUnaryOp : String → B.BType → B.Term → Decoder B.Term
   -- | "conc" => throw "Unary operator not implemented"
   -- | "succ" => throw "Unary operator not implemented"
   -- | "pred" => throw "Unary operator not implemented"
-  -- | "rel", τ => fun S => do
-  -- | "fnc" => throw "Unary operator not implemented"
+  | "rel", τ => fun f => do
+    let .set (.prod α β) := τ | throw s!"rel operator expects a relation, got type {τ}"
+    B.Term.toRelation α β f
+  | "fnc", τ => fun r => do
+    let .set (.prod α (.set β)) := τ
+      | throw s!"fnc operator expects a set-valued function, got type {τ}"
+    B.Term.toFunction α β r
   -- | "real" => throw "Unary operator not implemented"
   -- | "floor" => throw "Unary operator not implemented"
   -- | "ceiling" => throw "Unary operator not implemented"
@@ -299,7 +318,7 @@ def decodeTerm : Xml.Element → Decoder B.Term
     match h : ts.size with
     | 1 => op ts[0]
     | n => throw s!"Expected 1 term, got {n}"
-  | ⟨"EmptySet", a, _⟩ => do
+  | ⟨"EmptySet", a, _⟩ | ⟨"EmptySeq", a, _⟩ => do
     let τ : B.BType := (← get).types[(a.get! "typref").toNat!]!
     let .set α := τ | throw s!"EmptySet type is expected to be a set, got {τ}"
     B.Term.emptyset α
@@ -333,7 +352,7 @@ def decodeTerm : Xml.Element → Decoder B.Term
               disj := disj ∨ᴮ ((.var x) =ᴮ e')
               distinct := distinct.concat e'
             | _ => throw "Invalid Set element"
-          let fin ← B.Term.finite τ n
+          let fin ← B.Term.mkFinite τ n
           modify λ st => { st with env := { st.env with
             distinct := st.env.distinct.concat distinct
             finite := st.env.finite.concat fin
@@ -345,7 +364,7 @@ def decodeTerm : Xml.Element → Decoder B.Term
         let τE : B.BType := (← get).types[(a.get! "typref").toNat!]!
         let .set τ := τE | throw s!"Set type is expected to be a set, got {τE}"
         let «∅» ← B.Term.emptyset τ
-        let finE ← B.Term.finite τ E
+        let finE ← B.Term.mkFinite τ E
         let hyps := (← get).env.hypotheses
         let sets_hyps := hyps.find? .sets |>.get! |>.concat (¬ᴮ (E =ᴮ «∅»))
         modify fun st ↦ { st with env.hypotheses := hyps.replace .sets sets_hyps } --, env.finite := st.env.finite.concat finE }
@@ -371,7 +390,11 @@ def decodeTerm : Xml.Element → Decoder B.Term
       else throw "Invalid entity in Quantified_Pred"
     | _ => throw "Invalid entity in Quantified_Pred"
   | ⟨"Quantified_Exp", a, c⟩ => do
-    let quantifier ← getQuantifier (a.get! "type")
+    let typemap := (← get).types
+    let τ : B.BType := match a.get? "typref" with
+      | none => .bool
+      | some n => typemap[n.toNat!]!
+    let quantifier ← getExpQuantifier (a.get! "type") τ
     match h : c.size with
     | 3 =>
       let ⟨.Element ⟨"Variables", _a₁, vars⟩, _⟩ := c.attach[0]'(by rw [Array.size_attach, h]; exact Nat.zero_lt_succ 2) | unreachable!
@@ -394,7 +417,7 @@ def decodeTerm : Xml.Element → Decoder B.Term
           let foldedDom :=
             .collect vs' (doms.tail.foldl (· ⨯ᴮ ·) doms.head!) <| B.substList vs (vs'.map .var) P
           let body ← decodeTerm body
-          return quantifier vs foldedDom body
+          quantifier vs foldedDom body
         else throw "Invalid entity in Quantified_Exp"
       else throw "Invalid entity in Quantified_Exp"
     | _ => throw "Invalid entity in Quantified_Exp"
@@ -444,7 +467,15 @@ def decodeTerm : Xml.Element → Decoder B.Term
           | acc, ⟨.Element e, _⟩ => do
             return acc ∨ᴮ (.var v =ᴮ (←decodeTerm e))
           | acc, _ => return acc) (.var v =ᴮ (←decodeTerm c₀)))
-        | "[" => throw "Sequence literals not implemented"
+        -- `[e₁, …, eₙ]` is the sequence `{1 ↦ e₁, …, n ↦ eₙ}`; `τ` is already
+        -- the pair type `int × σ`, so the same comprehension shape applies.
+        | "[" =>
+          -- `[e₁, …, eₙ]` is the sequence `{1 ↦ e₁, …, n ↦ eₙ}`; `τ` is already
+          -- the pair type `int × σ`, so the same comprehension shape applies.
+          .collect [v] τ.toTerm <$> Prod.snd <$> (c.attach[1:].foldlM (λ acc e => match acc, e with
+          | (i, acc), ⟨.Element e, _⟩ => do
+            return (i + 1, acc ∨ᴮ (.var v =ᴮ (.int (i + 1) ↦ᴮ (←decodeTerm e))))
+          | acc, _ => return acc) ((1 : Int), .var v =ᴮ (.int 1 ↦ᴮ (←decodeTerm c₀))))
         | s => throw s!"Unknown Nary_Exp operator {s}"
     else throw "Empty Nary_Exp"
   | ⟨"Boolean_Exp", _, c⟩ => do
@@ -542,9 +573,8 @@ decreasing_by
       _ < sizeOf c := by decreasing_trivial
       _ < _ := by decreasing_trivial
   · apply Nat.lt_trans (m := sizeOf <| Xml.Content.Element _) (by decreasing_trivial) (by decreasing_trivial)
-    -- first
-    -- | decreasing_trivial
-    -- | apply Nat.lt_trans (m := sizeOf <| Xml.Content.Element _) (by decreasing_trivial) (by subst_vars; decreasing_trivial)
+  -- `Boolean_Exp`
+  · apply Nat.lt_trans (m := sizeOf <| Xml.Content.Element _) (by decreasing_trivial) (by decreasing_trivial)
 
 def decodeDefineField (c : Array Xml.Content) : Decoder (List B.Term × B.TypeContext) := do
     let mut invs := []; let mut binds : B.TypeContext := ∅

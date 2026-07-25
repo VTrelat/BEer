@@ -64,59 +64,12 @@ inductive Term where
   | add (t₁ t₂ : Term)
   | sub (t₁ t₂ : Term)
   | mul (t₁ t₂ : Term)
+  /-- Saturated application of a symbol supplied by the SMT prelude (`bdiv`,
+  `bmod`, `bpow`, …) or declared by the encoder.  `τ` is the *result* type, so
+  the term stays self-describing for `getType`.  Prints as `(f a₁ … aₙ)`, or as
+  the bare symbol when `args` is empty. -/
+  | builtin (f : 𝒱) (τ : SMTType) (args : List Term)
   deriving Inhabited, BEq
-
-@[induction_eliminator]
-def Term.rec'.{u} {motive : Term → Sort u} (t : Term)
-  (var : (v : 𝒱) → motive (Term.var v)) (int : (n : Int) → motive (Term.int n))
-  (bool : (b : Bool) → motive (Term.bool b)) (app : (f x : Term) → motive f → motive x → motive (f.app x))
-  (lambda : (v : List 𝒱) → (τs : List SMTType) → (t : Term) → motive t → motive (Term.lambda v τs t))
-  («forall» : (v : List 𝒱) → (τs : List SMTType) → (t : Term) → motive t → motive (Term.forall v τs t))
-  («exists» : (v : List 𝒱) → (τs : List SMTType) → (t : Term) → motive t → motive (Term.exists v τs t))
-  (as : (t : Term) → (τ : SMTType) → motive t → motive (t.as τ))
-  (eq : (t₁ t₂ : Term) → motive t₁ → motive t₂ → motive (t₁.eq t₂))
-  (and : (t₁ t₂ : Term) → motive t₁ → motive t₂ → motive (t₁.and t₂))
-  (or : (t₁ t₂ : Term) → motive t₁ → motive t₂ → motive (t₁.or t₂))
-  (not : (t : Term) → motive t → motive t.not)
-  (imp : (t₁ t₂ : Term) → motive t₁ → motive t₂ → motive (t₁.imp t₂))
-  (ite : (c t e : Term) → motive c → motive t → motive e → motive (c.ite t e))
-  (some : (t : Term) → motive t → motive t.some) (the : (t : Term) → motive t → motive t.the)
-  (none : motive Term.none) (pair : (t₁ t₂ : Term) → motive t₁ → motive t₂ → motive (t₁.pair t₂))
-  (fst : (t : Term) → motive t → motive t.fst) (snd : (t : Term) → motive t → motive t.snd)
-  (distinct : (ts : List Term) → (∀ t ∈ ts, motive t) → motive (Term.distinct ts))
-  (le : (t₁ t₂ : Term) → motive t₁ → motive t₂ → motive (t₁.le t₂))
-  (add : (t₁ t₂ : Term) → motive t₁ → motive t₂ → motive (t₁.add t₂))
-  (sub : (t₁ t₂ : Term) → motive t₁ → motive t₂ → motive (t₁.sub t₂))
-  (mul : (t₁ t₂ : Term) → motive t₁ → motive t₂ → motive (t₁.mul t₂)) : motive t :=
-  match t with
-  | .var v => var v
-  | .bool b => bool b
-  | .int n => int n
-  | .mul x y => mul x y (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .sub x y => sub x y (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .add x y => add x y (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .le x y => le x y (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .snd x => snd x (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .fst x => fst x (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .pair x y => pair x y (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .none => none
-  | .the x => the x (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .some x => some x (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .ite c x y => ite c x y (rec' c var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .imp x y => imp x y (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .not x => not x (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .or x y => or x y (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .and x y => and x y (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .eq x y => eq x y (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' y var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .as x τ => as x τ (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .exists vs D P => «exists» vs D P (rec' P var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .forall vs D P => «forall» vs D P (rec' P var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .lambda vs D P => lambda vs D P (rec' P var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | .app f x => app f x (rec' f var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul) (rec' x var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul)
-  | @Term.distinct ts =>
-    distinct ts fun t _ ↦ t.rec' var int bool app lambda «forall» «exists» as eq and or not imp ite some the none pair fst snd distinct le add sub mul
-
-
 
 def noneCast : SMTType → Term := λ τ => .as .none (.option τ)
 prefix:50 "none$" => noneCast
@@ -166,6 +119,10 @@ def Term.toString : Term → String
   | .distinct ts =>
     let ds := ts.attach.map (λ ⟨t, _⟩ => Term.toString t) |>.intersperse " " |>.foldl (·++·) ""
     s!"(distinct {ds})"
+  | .builtin f _ [] => f
+  | .builtin f _ args =>
+    let as := args.attach.map (λ ⟨t, _⟩ => Term.toString t) |>.intersperse " " |>.foldl (·++·) ""
+    s!"({f} {as})"
 
 instance : ToString Term := ⟨Term.toString⟩
 
@@ -193,6 +150,7 @@ def fv : Term → List 𝒱
   | .mul t₁ t₂ => fv t₁ ++ fv t₂
   | .ite c t e => fv c ++ fv t ++ fv e
   | .distinct ts => ts.attach.map (λ ⟨x, _⟩ => fv x) |>.flatten
+  | .builtin _ _ args => args.attach.map (λ ⟨x, _⟩ => fv x) |>.flatten
 
 def bv : Term → List 𝒱
   | .var _ => []
@@ -218,112 +176,4 @@ def bv : Term → List 𝒱
   | .mul t₁ t₂ => bv t₁ ++ bv t₂
   | .ite c t e => bv c ++ bv t ++ bv e
   | .distinct ts => ts.attach.map (λ ⟨x, _⟩ => bv x) |>.flatten
-
-theorem fv.mem_var {v} : v ∈ fv (Term.var v) := by rw [fv, List.mem_singleton]
-theorem fv.mem_int {x n} : ¬ x ∈ fv (Term.int n) := by
-  unfold fv
-  exact List.not_mem_nil
-theorem fv.mem_bool {x b} : ¬ x ∈ fv (Term.bool b) := by
-  unfold fv
-  exact List.not_mem_nil
-theorem fv.mem_add {v x y} : v ∈ fv x ∨ v ∈ fv y → v ∈ fv (x +ˢ y) := by
-  rw [fv, List.mem_append]
-  rintro (h | h)
-  · exact Or.inl h
-  · exact Or.inr h
-theorem fv.mem_sub {v x y} : v ∈ fv x ∨ v ∈ fv y → v ∈ fv (x -ˢ y) := by
-  rw [fv, List.mem_append]
-  rintro (h | h)
-  · exact Or.inl h
-  · exact Or.inr h
-theorem fv.mem_mul {v x y} : v ∈ fv x ∨ v ∈ fv y → v ∈ fv (x *ˢ y) := by
-  rw [fv, List.mem_append]
-  rintro (h | h)
-  · exact Or.inl h
-  · exact Or.inr h
-theorem fv.mem_and {v x y} : v ∈ fv x ∨ v ∈ fv y → v ∈ fv (x ∧ˢ y) := by
-  rw [fv, List.mem_append]
-  rintro (h | h)
-  · exact Or.inl h
-  · exact Or.inr h
-theorem fv.mem_or {v x y} : v ∈ fv x ∨ v ∈ fv y → v ∈ fv (x ∨ˢ y) := by
-  rw [fv, List.mem_append]
-  rintro (h | h)
-  · exact Or.inl h
-  · exact Or.inr h
-theorem fv.mem_imp {v x y} : v ∈ fv x ∨ v ∈ fv y → v ∈ fv (x ⇒ˢ y) := by
-  rw [fv, List.mem_append]
-  rintro (h | h)
-  · exact Or.inl h
-  · exact Or.inr h
-theorem fv.mem_le {v x y} : v ∈ fv x ∨ v ∈ fv y → v ∈ fv (x ≤ˢ y) := by
-  rw [fv, List.mem_append]
-  rintro (h | h)
-  · exact Or.inl h
-  · exact Or.inr h
-theorem fv.mem_eq {v x y} : v ∈ fv x ∨ v ∈ fv y → v ∈ fv (x =ˢ y) := by
-  rw [fv, List.mem_append]
-  rintro (h | h)
-  · exact Or.inl h
-  · exact Or.inr h
-theorem fv.mem_not {v x} : v ∈ fv x → v ∈ fv (¬ˢ x) := by
-  rw [fv]
-  exact id
-theorem fv.mem_forall {v vs τs P} : v ∈ (fv P) ∧ v ∉ vs → v ∈ fv (.forall vs τs P) := by
-  rw [fv]
-  rintro ⟨_, _⟩
-  apply List.mem_filter.mpr
-  and_intros
-  · assumption
-  · rwa [List.elem_eq_mem, Bool.not_eq_eq_eq_not, Bool.not_true, decide_eq_false_iff_not]
-theorem fv.mem_lambda {v vs τs P} : v ∈ (fv P) ∧ v ∉ vs → v ∈ fv (.lambda vs τs P) := by
-  rw [fv]
-  rintro ⟨_, _⟩
-  apply List.mem_filter.mpr
-  and_intros
-  · assumption
-  · rwa [List.elem_eq_mem, Bool.not_eq_eq_eq_not, Bool.not_true, decide_eq_false_iff_not]
-theorem fv.mem_exists {v vs τs P} : v ∈ (fv P) ∧ v ∉ vs → v ∈ fv (.exists vs τs P) := by
-  rw [fv]
-  rintro ⟨_, _⟩
-  apply List.mem_filter.mpr
-  and_intros
-  · assumption
-  · rwa [List.elem_eq_mem, Bool.not_eq_eq_eq_not, Bool.not_true, decide_eq_false_iff_not]
-theorem fv.mem_app {v f x} : v ∈ fv f ∨ v ∈ fv x → v ∈ fv ((@ˢ f) x) := by
-  rw [fv, List.mem_append]
-  exact id
-theorem fv.mem_as {v x τ} : v ∈ fv x → v ∈ fv (.as x τ) := by
-  rw [fv]
-  exact id
-theorem fv.mem_some {v x} : v ∈ fv x → v ∈ fv (.some x) := by
-  rw [fv]
-  exact id
-theorem fv.mem_none {v} : ¬ v ∈ fv (.none) := by
-  rw [fv]
-  exact List.not_mem_nil
-theorem fv.mem_the {v x} : v ∈ fv x → v ∈ fv (.the x) := by
-  rw [fv]
-  exact id
-theorem fv.mem_pair {v x y} : v ∈ fv x ∨ v ∈ fv y → v ∈ fv (x.pair y) := by
-  rw [fv, List.mem_append]
-  rintro (h | h)
-  · exact Or.inl h
-  · exact Or.inr h
-theorem fv.mem_fst {v x} : v ∈ fv x → v ∈ fv (x.fst) := by
-  rw [fv]
-  exact id
-theorem fv.mem_snd {v x} : v ∈ fv x → v ∈ fv (x.snd) := by
-  rw [fv]
-  exact id
-theorem fv.mem_ite {v c t e} : v ∈ fv c ∨ v ∈ fv t ∨ v ∈ fv e → v ∈ fv (.ite c t e) := by
-  rw [fv, List.mem_append]
-  rintro (h | h | h)
-  · exact Or.inl <| List.mem_append_left (fv t) h
-  · exact Or.inl <| List.mem_append_right (fv c) h
-  · exact Or.inr h
-theorem fv.mem_distinct {v ts} (t : { x // x ∈ ts }) : v ∈ fv t → v ∈ fv (.distinct ts) := by
-  intro hv
-  rw [fv]
-  apply List.mem_flatten_of_mem _ hv
-  exact List.mem_map.mpr ⟨t, List.mem_attach ts t, rfl⟩
+  | .builtin _ _ args => args.attach.map (λ ⟨x, _⟩ => bv x) |>.flatten

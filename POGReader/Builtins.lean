@@ -104,16 +104,14 @@ def B.Term.bij (τ σ : BType) (f : Term) : Decoder Term := bij_on τ.toTerm σ 
 def B.Term.emptyset (τ : BType) : Decoder Term :=
   .Collect τ.toTerm <| fun _ => return (.bool .false)
 
-def B.Term.finite (τ : BType) (S : Term) : Decoder Term := do
-  let N := s!"x{← incrementFreshVarC}"
-  let f := s!"x{← incrementFreshVarC}"
-  let x := s!"x{← incrementFreshVarC}"
-  let y := s!"x{← incrementFreshVarC}"
-  addFunctionFlag f
-  return .exists [N] .ℤ (.exists [f] (S ⇸ᴮ .ℤ) (((← inj_on S (.var f)) ∧ᴮ (S =ᴮ (← dom τ .int (.var f)))) ∧ᴮ (.all [x, y] (S⨯ᴮ.ℤ) (.imp ((.var x) ↦ᴮ (.var y) ∈ᴮ (.var f)) ((.int 0 ≤ᴮ .var y) ∧ᴮ (.var y ≤ᴮ .var N))))))
-  -- TODO: exists could be factorized
-  -- ∃ N ∈ ℤ, ∃ f ∈ S ⇸ ℤ, inj f ∧ S = dom f ∧ ∀ x ∈ S, 0 <= f x ∧ f x <= N
-  -- FIXME: There was a confusion between `inj` and `inj_on`, check if the same happens with surj, etc, elsewhere...
+/-- `finite(S)`.
+
+The B-Book definition is `∃ N, ∃ f ∈ S ⇸ ℤ. f injective on S ∧ dom f = S ∧
+∀ x ∈ S. 0 ≤ f(x) ≤ N`, i.e. a quantifier alternation over a function space per
+occurrence — and every enumerated SETS clause emits one.  `beer-lite` uses the
+primitive `Term.finite` instead, which the encoder turns into a constant closed
+under subsets. -/
+def B.Term.mkFinite (_τ : BType) (S : Term) : Decoder Term := return .finite S
 
 def B.Term.range (i j : Term) : Decoder Term := .Collect .ℤ <| λ k => pure <| Term.and (i ≤ᴮ k) (k ≤ᴮ j)
 
@@ -155,3 +153,107 @@ def B.Term.perm (E : Term) : Decoder Term := do
   let S ← iseq E
   let Surj ← Nat ⤀ᴮ E
   return S ∩ᴮ Surj
+
+/-! ## Relations -/
+
+/-- `R ; S`, forward relational composition. `β` is the type joining the two
+relations, which the caller reads off `R`'s type. -/
+def B.Term.compose (α β γ : BType) (R S : Term) : Decoder Term := do
+  let x ← freshVar α
+  let z ← freshVar γ
+  let y ← freshVar β
+  return .collect [x, z] (α.toTerm ⨯ᴮ γ.toTerm)
+    (.exists [y] β.toTerm ((.var x ↦ᴮ .var y ∈ᴮ R) ∧ᴮ (.var y ↦ᴮ .var z ∈ᴮ S)))
+
+/-- `rel(f)` — the relation `{x ↦ y | y ∈ f(x)}` of a set-valued function.
+
+Atelier B also allows `rel` on a genuine relation `A ↔ POW(B)`, which would need
+an existential over `POW(B)` — a higher-order quantifier. Only the functional
+reading is produced here. -/
+def B.Term.toRelation (α β : BType) (f : Term) : Decoder Term := do
+  let x ← freshVar α
+  let y ← freshVar β
+  return .collect [x, y] (α.toTerm ⨯ᴮ β.toTerm) (.var y ∈ᴮ (@ᴮ f) (.var x))
+
+/-- `fnc(r)` — the set-valued function `λ x ∈ dom r. r[{x}]` of a relation. -/
+def B.Term.toFunction (α β : BType) (r : Term) : Decoder Term := do
+  let d ← r.dom α β
+  let x ← freshVar α
+  let y ← freshVar β
+  return .lambda [x] d (.collect [y] β.toTerm (.var x ↦ᴮ .var y ∈ᴮ r))
+
+/-! ## Sequences
+
+A B sequence over `E` is a function `1‥n → E`, i.e. a set of `int × E` pairs, so
+every operator below is a set comprehension over such pairs.  `size` is `card`
+of the domain, which the encoder now handles natively. -/
+
+/-- Element type of a sequence, read off its B type. -/
+def B.Term.seqElem (s : Term) : Decoder BType := do
+  match ← s.getType with
+  | .set (.prod .int σ) => return σ
+  | τ => throw s!"Expected a sequence, got type {τ}"
+
+def B.Term.size (σ : BType) (s : Term) : Decoder Term := .card <$> s.dom .int σ
+
+/-- Comprehension `{ i ↦ y ∈ ℤ × σ | P i y }`, the shape shared by every
+sequence-building operator. -/
+private def B.Term.seqBuild (σ : BType) (P : Term → Term → Decoder Term) : Decoder Term := do
+  let i ← freshVar .int
+  let y ← freshVar σ
+  .collect [i, y] (.ℤ ⨯ᴮ σ.toTerm) <$> P (.var i) (.var y)
+
+/-- `first(s) = s(1)`. -/
+def B.Term.seqFirst (s : Term) : Decoder Term := return (@ᴮ s) (.int 1)
+
+/-- `last(s) = s(size(s))`. -/
+def B.Term.seqLast (s : Term) : Decoder Term := do
+  return (@ᴮ s) (← s.size (← s.seqElem))
+
+/-- `front(s)` — all but the last element. -/
+def B.Term.seqFront (s : Term) : Decoder Term := do
+  let σ ← s.seqElem
+  let n ← s.size σ
+  seqBuild σ fun i y => return (i ↦ᴮ y ∈ᴮ s) ∧ᴮ (i ≤ᴮ (n -ᴮ .int 1))
+
+/-- `tail(s)` — all but the first element, re-indexed from 1. -/
+def B.Term.seqTail (s : Term) : Decoder Term := do
+  let σ ← s.seqElem
+  seqBuild σ fun i y => return (.int 1 ≤ᴮ i) ∧ᴮ ((i +ᴮ .int 1) ↦ᴮ y ∈ᴮ s)
+
+/-- `rev(s)` — the reversed sequence. -/
+def B.Term.seqRev (s : Term) : Decoder Term := do
+  let σ ← s.seqElem
+  let n ← s.size σ
+  seqBuild σ fun i y =>
+    return ((.int 1 ≤ᴮ i) ∧ᴮ (i ≤ᴮ n)) ∧ᴮ (((n -ᴮ i) +ᴮ .int 1) ↦ᴮ y ∈ᴮ s)
+
+/-- `s ^ t` — concatenation. -/
+def B.Term.seqConcat (s t : Term) : Decoder Term := do
+  let σ ← s.seqElem
+  let n ← s.size σ
+  seqBuild σ fun i y =>
+    return (i ↦ᴮ y ∈ᴮ s) ∨ᴮ ((n ≤ᴮ (i -ᴮ .int 1)) ∧ᴮ ((i -ᴮ n) ↦ᴮ y ∈ᴮ t))
+
+/-- `s <- e` — append `e` at the end. -/
+def B.Term.seqAppend (s e : Term) : Decoder Term := do
+  let σ ← s.seqElem
+  let n ← s.size σ
+  seqBuild σ fun i y =>
+    return (i ↦ᴮ y ∈ᴮ s) ∨ᴮ ((i =ᴮ (n +ᴮ .int 1)) ∧ᴮ (y =ᴮ e))
+
+/-- `e -> s` — insert `e` in front. -/
+def B.Term.seqPrepend (e s : Term) : Decoder Term := do
+  let σ ← s.seqElem
+  seqBuild σ fun i y =>
+    return ((i =ᴮ .int 1) ∧ᴮ (y =ᴮ e)) ∨ᴮ ((.int 2 ≤ᴮ i) ∧ᴮ ((i -ᴮ .int 1) ↦ᴮ y ∈ᴮ s))
+
+/-- `s /|\ n` — the first `n` elements. -/
+def B.Term.seqTake (s n : Term) : Decoder Term := do
+  let σ ← s.seqElem
+  seqBuild σ fun i y => return (i ↦ᴮ y ∈ᴮ s) ∧ᴮ (i ≤ᴮ n)
+
+/-- `s \|/ n` — everything after the first `n` elements, re-indexed from 1. -/
+def B.Term.seqDrop (s n : Term) : Decoder Term := do
+  let σ ← s.seqElem
+  seqBuild σ fun i y => return (.int 1 ≤ᴮ i) ∧ᴮ ((i +ᴮ n) ↦ᴮ y ∈ᴮ s)

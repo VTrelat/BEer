@@ -27,6 +27,7 @@ def subst (x : 𝒱) (t e : Term) : Term :=
   | Term.the e => .the (subst x t e)
   | Term.ite c ct cf => .ite (subst x t c) (subst x t ct) (subst x t cf)
   | Term.as a τ => .as (subst x t a) τ
+  | Term.builtin f τ args => .builtin f τ (args.attach.map (λ ⟨e, _⟩ => subst x t e))
   | Term.bool b => .bool b
   | Term.int n => .int n
 
@@ -101,6 +102,7 @@ partial def simplifier : Term → Term
   | Term.distinct ts => .distinct (ts.map simplifier)
   | Term.none => .none
   | Term.as e τ => .as e τ
+  | Term.builtin f τ args => .builtin f τ (args.map simplifier)
   | Term.bool b => .bool b
   | Term.int n => .int n
   | Term.var v => .var v

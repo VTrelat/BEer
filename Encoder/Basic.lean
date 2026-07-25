@@ -10,9 +10,28 @@ def B.BType.toSMTType : B.BType → SMTType
   | .set α => .fun (α.toSMTType) .bool
   | .prod α β => .pair (α.toSMTType) (β.toSMTType)
 
+/-- A constant standing for the value of an operator that SMT-LIB cannot
+express directly — `card`, `min`, `max`, `finite`.  Rather than declaring a
+higher-order symbol and quantifying over sets (which cvc5 cannot instantiate at
+a λ-term), the encoder introduces one constant per *occurrence* and asserts the
+defining properties for that occurrence only, keeping everything first order.
+
+`set` is the encoded argument and `τ` its element type; sites are matched on
+`set` so that two occurrences of the same B expression share one constant. -/
+structure Site where
+  op : String
+  set : SMT.Term
+  τ : SMT.SMTType
+  name : SMT.𝒱
+  deriving Inhabited
+
 structure EncoderState where
   env : SMT.Env
   types : SMT.TypeContext
+  /-- Sites introduced so far, most recent first.  Cleared between proof
+  obligations, since their defining assertions live inside the PO's
+  `(push 1) … (pop 1)`. -/
+  sites : List Site := []
   deriving Inhabited
 
 instance : EmptyCollection EncoderState where
@@ -93,6 +112,21 @@ def SMT.addToContext (v : 𝒱) (τ : SMTType) : Encoder Unit :=
 def SMT.eraseFromContext (v : 𝒱) : Encoder Unit :=
   modify λ e => { e with types := e.types.erase v }
 
+/-- The constant already standing for `op` applied to `S`, if any. -/
+def SMT.findSite (op : String) (S : Term) : Encoder (Option 𝒱) := do
+  return (← get).sites.find? (fun s => s.op == op && s.set == S) |>.map (·.name)
+
+/-- The sites recorded for `op` at element type `τ`; used to relate a new
+constant to the ones already introduced (e.g. `S ⊆ T → |S| ≤ |T|`). -/
+def SMT.sitesOf (op : String) (τ : SMTType) : Encoder (List Site) := do
+  return (← get).sites.filter (fun s => s.op == op && s.τ == τ)
+
+def SMT.recordSite (s : Site) : Encoder Unit :=
+  modify λ e => { e with sites := s :: e.sites }
+
+def SMT.clearSites : Encoder Unit :=
+  modify λ e => { e with sites := [] }
+
 partial def addInstr : Stages → Chunk → Stages
   | .instr is, as => .instr <| as ++ is --NOTE: is the order correct?
   | .asserts as, as' =>
@@ -125,16 +159,27 @@ def SMT.declareConstWithSpec (x! : 𝒱) (τ : SMTType)
   addSpec x! x!_spec
 
 /-- Reject a binder body that hoisted helper declarations depending on its
-bound variables.  Such helpers must be re-scoped before the binder can be
-sound; `collect` and `lambda` currently keep their historical output shape,
-so they accept only helper-free body encodings. -/
-def SMT.ensureDeclarationsUnchanged (before : Nat)
+bound variables.
+
+Helpers (cast constants, cardinality/extremum constants) are declared globally
+and their specifications asserted at the enclosing assert position.  That is
+only sound when the specification does not mention the binder's own variables:
+`collect` and `lambda` emit a λ over a fresh tuple variable and substitute `vs`
+away inside the body, which a hoisted specification would not follow.
+
+A helper whose specification is closed with respect to `vs` is indistinguishable
+from one created outside the binder, so it is accepted; anything mentioning `vs`
+is refused. -/
+def SMT.ensureHelpersScopeFree (before : Nat) (vs : List 𝒱)
     (location : String) : Encoder Unit := do
   let st ← get
-  if st.env.declarations.length = before then
-    pure ()
-  else
-    throw s!"{location}: body generated unscoped helper declarations"
+  let escaping := st.env.declarations.drop before |>.filterMap fun
+    | .define_fun n _ _ b | .define_const n _ b =>
+      let esc := (SMT.fv b).filter (· ∈ vs)
+      if esc.isEmpty then none else some (n, esc)
+    | _ => none
+  unless escaping.isEmpty do
+    throw s!"{location}: helper specifications depend on the bound variables {escaping}"
 
 def SMT.addAssert' (t : Term) : Encoder Unit := do
   let ass := (←get).env.asserts
@@ -205,6 +250,7 @@ def SMT.Term.getType : Term → Encoder SMTType
     | .pair _ β => return β
     | τ => throw s!"SMT.Term.getType: Expected pair, got {τ}"
   | .add _ _ | .sub _ _ | .mul _ _ => return .int
+  | .builtin _ τ _ => return τ
   | .ite _ t _ => t.getType -- TODO: could check if both branches have the same types
 
 def SMT.SMTType.fromProdl : SMTType → Nat → List SMTType

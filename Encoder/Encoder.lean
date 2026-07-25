@@ -125,6 +125,97 @@ def B.Env.initialUsedVars (E : B.Env) : List B.𝒱 := Id.run do
   used := (E.po.map B.ProofObligation.vars).flatten ++ used
   return used
 
+/-- `∀ x : τ. S x ⇒ T x` — extensional inclusion of two characteristic
+predicates, used to relate cardinality and finiteness sites. -/
+private def subsetOf (τ : SMTType) (S T : SMT.Term) : Encoder SMT.Term := do
+  let x ← freshVar τ
+  SMT.eraseFromContext x
+  return .forall [x] [τ] (.imp (.app S (.var x)) (.app T (.var x)))
+
+/-- `∀ x : τ. ¬ S x`. -/
+private def emptyOf (τ : SMTType) (S : SMT.Term) : Encoder SMT.Term := do
+  let x ← freshVar τ
+  SMT.eraseFromContext x
+  return .forall [x] [τ] (.not (.app S (.var x)))
+
+/-- Encode `|S|` for an encoded set `S : τ → bool`.
+
+SMT-LIB has no cardinality operator, and cvc5 has no parametric function
+declarations (only parametric *datatypes*), so a single polymorphic `card`
+symbol is not expressible.  Instead each occurrence gets its own integer
+constant `card!i` constrained by
+
+* `0 ≤ |S|`,
+* `|S| = 0 ↔ S = ∅`,
+* `S ⊆ T → |S| ≤ |T|` against every cardinality constant already introduced at
+  the same element type (which also yields `S = T → |S| = |T|`).
+
+These hold for finite sets.  B only defines `card` on finite sets and Atelier B
+discharges the corresponding well-definedness obligations separately, so the
+axioms are stated unguarded; the deliberately omitted rule is the successor law
+`a ∉ S → |S ∪ {a}| = |S| + 1`, which together with `0 ≤ |S|` is inconsistent
+once infinite sets are in scope. -/
+private def encodeCard (S : SMT.Term) (τ : SMTType) : Encoder (SMT.Term × SMTType) := do
+  if let some c ← SMT.findSite "card" S then
+    return (.var c, .int)
+  let prev ← SMT.sitesOf "card" τ
+  let c ← freshVar .int "card!"
+  let base := (.le (.int 0) (.var c)) ∧ˢ (.eq (.eq (.var c) (.int 0)) (← emptyOf τ S))
+  let spec ← prev.foldlM (init := base) fun acc s => do
+    let sub ← subsetOf τ S s.set
+    let sup ← subsetOf τ s.set S
+    return acc ∧ˢ (sub ⇒ˢ (.var c ≤ˢ .var s.name)) ∧ˢ (sup ⇒ˢ (.var s.name ≤ˢ .var c))
+  declareConstWithSpec c .int spec
+  recordSite ⟨"card", S, τ, c⟩
+  return (.var c, .int)
+
+/-- Encode `finite(S)` as a boolean constant closed under subsets.
+
+The alternative — the B-Book definition, an existentially quantified injection
+into an initial segment of ℕ — is a quantifier alternation per occurrence, and
+enumerated SETS clauses emit one for every machine.  An uninterpreted constant
+plus the facts that actually get used (∅ is finite, subsets of finite sets are
+finite) is strictly weaker and far cheaper. -/
+private def encodeFinite (S : SMT.Term) (τ : SMTType) : Encoder (SMT.Term × SMTType) := do
+  if let some f ← SMT.findSite "fin" S then
+    return (.var f, .bool)
+  let prev ← SMT.sitesOf "fin" τ
+  let f ← freshVar .bool "fin!"
+  let base := (← emptyOf τ S) ⇒ˢ .var f
+  let spec ← prev.foldlM (init := base) fun acc s => do
+    let sub ← subsetOf τ S s.set
+    let sup ← subsetOf τ s.set S
+    return acc ∧ˢ ((sub ∧ˢ .var s.name) ⇒ˢ .var f) ∧ˢ ((sup ∧ˢ .var f) ⇒ˢ .var s.name)
+  declareConstWithSpec f .bool spec
+  recordSite ⟨"fin", S, τ, f⟩
+  return (.var f, .bool)
+
+/-- Encode `min S` / `max S` for an encoded set of integers.
+
+`isMin` selects the comparison direction.  The defining property is guarded by
+"`S` is non-empty and bounded on the relevant side", which is exactly B's
+well-definedness condition for the operator: without the guard, asserting
+`S(min S)` would force every set to be inhabited. -/
+private def encodeExtremum (isMin : Bool) (S : SMT.Term) : Encoder (SMT.Term × SMTType) := do
+  let op := if isMin then "min" else "max"
+  if let some m ← SMT.findSite op S then
+    return (.var m, .int)
+  let m ← freshVar .int s!"{op}!"
+  let cmp := fun (a b : SMT.Term) => if isMin then a ≤ˢ b else b ≤ˢ a
+  let x ← freshVar .int; SMT.eraseFromContext x
+  let b ← freshVar .int; SMT.eraseFromContext b
+  let y ← freshVar .int; SMT.eraseFromContext y
+  let z ← freshVar .int; SMT.eraseFromContext z
+  let nonempty : SMT.Term := .exists [x] [.int] (.app S (.var x))
+  let bounded : SMT.Term :=
+    .exists [b] [.int] (.forall [y] [.int] (.imp (.app S (.var y)) (cmp (.var b) (.var y))))
+  let extremal : SMT.Term :=
+    (.app S (.var m)) ∧ˢ
+      .forall [z] [.int] (.imp (.app S (.var z)) (cmp (.var m) (.var z)))
+  declareConstWithSpec m .int ((nonempty ∧ˢ bounded) ⇒ˢ extremal)
+  recordSite ⟨op, S, .int, m⟩
+  return (.var m, .int)
+
 def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
   | .var v, E => do
     match (←get).types.lookup v with
@@ -169,6 +260,18 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     let ⟨x', .int⟩ ← encodeTerm x E | throw s!"encodeTerm:mul: Expected an integer, got {← encodeTerm x E}"
     let ⟨y', .int⟩ ← encodeTerm y E | throw s!"encodeTerm:mul: Expected an integer, got {← encodeTerm y E}"
     return (.mul x' y', .int)
+  | .div x y, E => do
+    let ⟨x', .int⟩ ← encodeTerm x E | throw s!"encodeTerm:div: Expected an integer, got {← encodeTerm x E}"
+    let ⟨y', .int⟩ ← encodeTerm y E | throw s!"encodeTerm:div: Expected an integer, got {← encodeTerm y E}"
+    return (.builtin "bdiv" .int [x', y'], .int)
+  | .mod x y, E => do
+    let ⟨x', .int⟩ ← encodeTerm x E | throw s!"encodeTerm:mod: Expected an integer, got {← encodeTerm x E}"
+    let ⟨y', .int⟩ ← encodeTerm y E | throw s!"encodeTerm:mod: Expected an integer, got {← encodeTerm y E}"
+    return (.builtin "bmod" .int [x', y'], .int)
+  | .exp x y, E => do
+    let ⟨x', .int⟩ ← encodeTerm x E | throw s!"encodeTerm:exp: Expected an integer, got {← encodeTerm x E}"
+    let ⟨y', .int⟩ ← encodeTerm y E | throw s!"encodeTerm:exp: Expected an integer, got {← encodeTerm y E}"
+    return (.builtin "bpow" .int [x', y'], .int)
   | .not x, E => do
     let ⟨x', .bool⟩ ← encodeTerm x E | throw s!"encodeTerm:not: Expected a boolean, got {← encodeTerm x E}"
     return (.not x', .bool)
@@ -226,7 +329,16 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     castUnion (← encodeTerm S E) (← encodeTerm T E)
   | .inter S T, E => do
     castInter (← encodeTerm S E) (← encodeTerm T E)
-  -- | .card S, E => _
+  | .card S, E => do
+    let ⟨S', τS⟩ ← encodeTerm S E
+    let .fun τ .bool := τS
+      | throw s!"encodeTerm:card: Expected a set, got {τS}"
+    encodeCard S' τ
+  | .finite S, E => do
+    let ⟨S', τS⟩ ← encodeTerm S E
+    let .fun τ .bool := τS
+      | throw s!"encodeTerm:finite: Expected a set, got {τS}"
+    encodeFinite S' τ
   | .app f x, E => do
     castApp (← encodeTerm f E) (← encodeTerm x E)
   | .collect vs D P, E => do
@@ -243,7 +355,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         modify λ e => { e with types := e.types.insert v ξ }
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
-      ensureDeclarationsUnchanged decls_snap.length "encodeTerm:collect"
+      ensureHelpersScopeFree decls_snap.length vs "encodeTerm:collect"
       -- Keep the emitted function at its advertised domain type `α`.  A
       -- multi-variable SMT lambda denotes over a right-associated tuple,
       -- whereas `α` and `toPairl` use the encoder's left-associated tuple
@@ -265,7 +377,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
-      ensureDeclarationsUnchanged decls_snap.length "encodeTerm:collect"
+      ensureHelpersScopeFree decls_snap.length vs "encodeTerm:collect"
       let z ← freshVar τ
       let P' := substList vs (toDestPair vs (.var z)) P'
       SMT.eraseFromContext z
@@ -287,7 +399,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', γ⟩ ← encodeTerm P E
-      ensureDeclarationsUnchanged decls_snap.length "encodeTerm:lambda"
+      ensureHelpersScopeFree decls_snap.length vs "encodeTerm:lambda"
       let x ← freshVar τ
       let Px := substList vs (toDestPair vs (.var x)) P'
       let x_mem_D' := .app D' (.var x)
@@ -322,8 +434,16 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
               (.app (.var R) (.pair (.var x) (.var y'))))
         (.eq (.var y) (.var y'))))
     ), .fun (.fun (.pair α β) .bool) .bool)
-  -- | .min S, E => _
-  -- | .max S, E => _
+  | .min S, E => do
+    let ⟨S', τS⟩ ← encodeTerm S E
+    let .fun .int .bool := τS
+      | throw s!"encodeTerm:min: Expected a set of integers, got {τS}"
+    encodeExtremum true S'
+  | .max S, E => do
+    let ⟨S', τS⟩ ← encodeTerm S E
+    let .fun .int .bool := τS
+      | throw s!"encodeTerm:max: Expected a set of integers, got {τS}"
+    encodeExtremum false S'
   | .all vs D P, E => do
     let ⟨D', τD⟩ ← encodeTerm D E
     match τD with
@@ -407,7 +527,6 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
       return (.forall xs τs scoped_body, .bool)
     | _ => throw s!"encodeTerm:all: Expected a set or a function, got {← encodeTerm D E}"
-  | t, _ => throw s!"Unsupported term {t}"
 
 def encodeTypeContext (e : B.Env) : Encoder Unit := do
   for ⟨v, τ⟩ in e.context.entries do
@@ -468,6 +587,9 @@ def encodeProofObligation (φ : B.ProofObligation) (E : B.Env) : Encoder Stages 
   -- PO's `(push 1) ... (pop 1)` so the same name can have different types
   -- in different POs (Atelier B reuses fresh names like `s392`).
   let typesSnapshot := (← get).types
+  -- Sites are keyed by encoded set and their defining assertions live inside
+  -- this PO's `(push 1) … (pop 1)`, so they must not leak across POs.
+  SMT.clearSites
   let mut localDecls : Chunk := []
   for ⟨v, τ⟩ in φ.localContext.entries do
     let smtτ : SMTType ←

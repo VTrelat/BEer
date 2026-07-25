@@ -41,8 +41,28 @@ def getQuantifier : String → Decoder (List 𝒱 → B.Term → B.Term → B.Te
   | "!" => pure .all
   | "#" => pure .exists
   | "%" => pure .lambda
-  -- TODO: add quantified sum, product, union, intersection, etc.
+  -- TODO: quantified sum (`iSIGMA`) and product (`iPI`) need an SMT-side
+  -- fold primitive, like `card`; see `getExpQuantifier` for `UNION`/`INTER`.
   | s => throw s!"Unknown quantifier {s}"
+
+/-- Quantified *expressions*.  `%` is λ-abstraction and is handled by
+`getQuantifier`; `UNION`/`INTER` build a set and so need the result type and a
+fresh variable, hence the `Decoder`-valued body.
+
+`UNION vs.(P | E)` is `{y | ∃ vs ∈ {vs | P}. y ∈ E}` and `INTER` is the same
+with `∀`. -/
+def getExpQuantifier (kind : String) (τ : BType) :
+    Decoder (List 𝒱 → B.Term → B.Term → Decoder B.Term) :=
+  match kind with
+  | "UNION" | "INTER" => do
+    let .set σ := τ | throw s!"{kind} expects a set type, got {τ}"
+    let quant := if kind == "UNION" then B.Term.exists else B.Term.all
+    return fun vs D E => do
+      let y ← freshVar σ
+      return .collect [y] σ.toTerm (quant vs D (.var y ∈ᴮ E))
+  | k => do
+    let q ← getQuantifier k
+    return fun vs D E => return q vs D E
 
 def stackQuantifiers : List 𝒱 → B.Term → (𝒱 → B.Term → B.Term → B.Term) → Decoder B.Term
   | [], b, _ => pure b
@@ -61,8 +81,11 @@ def B.BType.getFunctionType : BType → Decoder (BType × BType)
 
 def B.Term.getType : Term → Decoder B.BType
   | .var v => return (← get).env.context.find? v |>.get!
-  | .int _ | .add _ _ | .sub _ _ | .mul _ _ | .card _ => return .int
-  | .bool _ => return .bool
+  | .int _ | .add _ _ | .sub _ _ | .mul _ _ | .card _
+  | .div _ _ | .mod _ _ | .exp _ _
+  -- `min`/`max` take a set of integers to an integer.
+  | .min _ | .max _ => return .int
+  | .bool _ | .finite _ => return .bool
   | .maplet x y => return .prod (← x.getType) (← y.getType)
   | .le _ _ | .and _ _ | .not _ | .eq _ _ | .mem _ _ | .all _ _ _ => return .bool
   | .ℤ => return .set .int
@@ -85,4 +108,3 @@ def B.Term.getType : Term → Decoder B.BType
     | .set δ => return .set (.prod δ (← P.getType))
     | τ => throw s!"B.Term.getType:lambda: Expected a set type, got {τ}"
   | .pfun A B => return .set (.prod (← A.getType) (← B.getType))
-  | .min S | .max S => return ← S.getType

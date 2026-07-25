@@ -26,7 +26,11 @@ def Term.nexp (x : Term) : Nat → Term
   | 1 => x
   | n + 1 => .mul x (Term.nexp x n)
 
-def Term.exp (x : Term) (n : Int) : Term :=
+/-- `x ^ n` for a *literal* exponent, unfolded into repeated multiplication.
+Solvers handle this far better than the axiomatised `bpow`, so the POG reader
+prefers it whenever the exponent is a literal and falls back to `Term.exp`
+(the real exponentiation operator) only for symbolic exponents. -/
+def Term.expLit (x : Term) (n : Int) : Term :=
   if npos : n < 0 then
     let m := n.toNat
     if m % 2 = 0 then Term.nexp x m else .int (-1) *ᴮ Term.nexp x m
@@ -35,7 +39,6 @@ def Term.exp (x : Term) (n : Int) : Term :=
     cases n
     · rfl
     · nomatch (Int.negSucc_not_nonneg _).mp npos))
-infixl:200 "^ᴮ" => Term.exp
 
 -- Existential
 @[match_pattern]
@@ -70,6 +73,9 @@ partial def Term.pretty (b : Bool) : Term -> Nat -> Std.Format
   | .add x y => «infixl» (Term.pretty b) 180 "+ᴮ" x y
   | .sub x y => «infixl» (Term.pretty b) 180 "-ᴮ" x y
   | .mul x y => «infixl» (Term.pretty b) 190 "*ᴮ" x y
+  | .div x y => «infixl» (Term.pretty b) 190 "/ᴮ" x y
+  | .mod x y => «infixl» (Term.pretty b) 190 "modᴮ" x y
+  | .exp x y => «infixl» (Term.pretty b) 195 "^ᴮ" x y
   | .cprod x y => «infixl» (Term.pretty b) 190 "⨯ᴮ" x y
   | .exists v D P => binder (Term.pretty b) 250 "∃ᴮ " (v.map (bif b then GREEN else id)).toString' " ∈ᴮ " D ". " P ""
   | .not x => «prefix» (Term.pretty b) 250 "¬ᴮ" x
@@ -81,6 +87,7 @@ partial def Term.pretty (b : Bool) : Term -> Nat -> Std.Format
   | .min S => «prefix» (Term.pretty b) 290 "min " S
   | .max S => «prefix» (Term.pretty b) 290 "max " S
   | .card S => λ _ => "‖" ++ Term.pretty b S 0 ++ "‖ᴮ"
+  | .finite S => «prefix» (Term.pretty b) 290 "finite " S
 
 end B
 
