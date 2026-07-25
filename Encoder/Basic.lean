@@ -156,9 +156,20 @@ def SMT.addAssert (t : Term) : Encoder Unit := do
   | .instr _ => throw "SMT.addAssert: malformed asserts, cannot add assert here"
   | .asserts ass => modify λ e => { e with env := { e.env with asserts := addAssertAux (.asserts ass) [.assert t] }}
 
+/-- Define a helper's specification and assert it.
+
+The assertion is emitted next to the definition rather than into the assert
+tree, so that a helper's `declare-const`, `define-fun` and `assert` form one
+contiguous run of instructions.  Callers that need to relocate a helper — the
+quantifier cases, which re-scope it inside the binder, and
+`encodeProofObligation`, which moves it inside the obligation's `push` — then
+move or drop the three together.  Splitting them across the two lists used to
+leave the assertion behind, referring to a definition that had been reverted or
+rewritten. -/
 def SMT.addSpec (x! : 𝒱) (x!_spec : Term) : Encoder Unit := do
   defineFun s!"{x!}_spec" .unit .bool x!_spec
-  addAssert <| .var s!"{x!}_spec"
+  modify λ e => { e with env := { e.env with
+    declarations := e.env.declarations.concat <| .assert (.var s!"{x!}_spec") }}
 
 /-- Declare a cast helper and assert its defining specification.  Keeping the
 pair as one encoder operation lets quantifier encoding collect and re-scope

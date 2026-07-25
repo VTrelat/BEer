@@ -731,6 +731,11 @@ def encodeProofObligation (φ : B.ProofObligation) (E : B.Env) : Encoder Stages 
   -- Sites are keyed by encoded set and their defining assertions live inside
   -- this PO's `(push 1) … (pop 1)`, so they must not leak across POs.
   SMT.clearSites
+  -- Helpers created while encoding this obligation may mention its local
+  -- variables, which are declared inside the `push` below.  Emitting them into
+  -- the global declaration chunk would put them out of scope, so the run of
+  -- instructions they add is moved into the obligation itself.
+  let declsBefore := (← get).env.declarations.length
   let mut localDecls : Chunk := []
   for ⟨v, τ⟩ in φ.localContext.entries do
     let smtτ : SMTType ←
@@ -747,9 +752,13 @@ def encodeProofObligation (φ : B.ProofObligation) (E : B.Env) : Encoder Stages 
   let defs ← (φ.defs.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
   let globalHyps : Chunk ← (φ.hyps.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
   let goals : List Stages ← φ.negateGoals.goals.mapM (encodeSimpleGoal · E_local)
+  let helpers := (← get).env.declarations.drop declsBefore
   -- Pop PO-local types so subsequent POs start clean.
-  modify λ e => { e with types := typesSnapshot }
-  return Stages.asserts <| (.instr <| localDecls ++ defs ++ globalHyps) :: goals.map (fun s => Stages.asserts [s])
+  modify λ e => { e with
+    types := typesSnapshot
+    env := { e.env with declarations := e.env.declarations.take declsBefore } }
+  return Stages.asserts <|
+    (.instr <| localDecls ++ helpers ++ defs ++ globalHyps) :: goals.map (fun s => Stages.asserts [s])
 
 def encodeProofObligations (E : B.Env) : Encoder Unit := do
   let rec aux : List B.ProofObligation → Encoder Unit
