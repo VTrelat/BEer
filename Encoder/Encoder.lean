@@ -442,7 +442,15 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     castApp (← encodeTerm f E) (← encodeTerm x E)
   | .collect vs D P, E => do
     /- two cases : `D` is either a set or a function -/
-    let ⟨D', τD⟩ ← encodeTerm D E
+    let ⟨D₀, τD₀⟩ ← encodeTerm D E
+    -- A single binder ranges over the *pairs* of the domain, whereas the
+    -- option-valued branch below destructures a key and a value and so needs at
+    -- least two.  A domain stored as a partial function is therefore reified
+    -- into its graph first, which is the set the binder actually ranges over.
+    let ⟨D', τD⟩ ←
+      if vs.length < 2 then
+        do let ⟨Dc, τ⟩ ← asCharPred "collect" D₀ τD₀; pure (Dc, SMTType.fun τ .bool)
+      else pure (D₀, τD₀)
     match τD with
     | .fun α (.option β) => do
       -- `D` is a function
@@ -491,7 +499,10 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
        `D` must have SMT type `.fun τ .bool` (a set / characteristic function),
        guaranteed by `B.Typing.lambda`'s requirement that `D : .set τ`. -/
-    let ⟨D', τD⟩ ← encodeTerm D E
+    let ⟨D₀, τD₀⟩ ← encodeTerm D E
+    -- The domain of a λ is a set; reify it if it arrived as a partial function.
+    let ⟨Dc, τDc⟩ ← asCharPred "lambda" D₀ τD₀
+    let ⟨D', τD⟩ := (Dc, SMTType.fun τDc .bool)
     match τD with
     | .fun τ .bool => do
       -- `D` is a set of tuples with arity `vs.length`

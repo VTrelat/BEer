@@ -167,9 +167,11 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
       | throw s!"iterate operator expects a homogeneous relation, got type {τ}"
     unless α = α' do
       throw s!"iterate operator expects a homogeneous relation, got type {τ}"
+    -- Unfolding is only worth it while the term stays small; past that the
+    -- indexed-family encoding is the better trade, and a negative count has no
+    -- unfolding at all.
     let .int k := n | return .iterate R n
-    if k < 0 then throw s!"Cannot iterate a negative number of times ({k})"
-    if k > 16 then throw s!"Refusing to unfold iterate {k} times"
+    if k < 0 || k > 16 then return .iterate R n
     if k = 0 then
       let x ← freshVar α
       return .lambda [x] α.toTerm (.var x)

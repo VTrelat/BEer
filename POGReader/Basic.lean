@@ -131,10 +131,19 @@ def B.Term.getType : Term → Decoder B.BType
     match ← f.getType with
     | .set (.prod τ σ) =>
       let ξ ← x.getType
-      if τ = ξ then return σ else throw s!"Type mismatch: {τ} ≠ {ξ}"
+      if τ = ξ then return σ
+      else throw s!"Type mismatch: {τ} ≠ {ξ}\n  applying: {(toString f).take 150}\n  to: {(toString x).take 150}"
     | _ => throw s!"Expected a function type, got {← f.getType}"
   | .lambda _ D P => do
     match ← D.getType with
     | .set δ => return .set (.prod δ (← P.getType))
     | τ => throw s!"B.Term.getType:lambda: Expected a set type, got {τ}"
-  | .pfun A B => return .set (.prod (← A.getType) (← B.getType))
+  -- `A ⇸ B` is the *set of partial functions* from `A` to `B`, so for
+  -- `A : set α` and `B : set β` its type is `set (set (α × β))`.  Pairing the
+  -- operands' own types instead gave `set (set α × set β)` — a pair of sets
+  -- where a set of pairs was meant — which then surfaced far away as a
+  -- mismatch against a correctly typed relation.
+  | .pfun A B => do
+    match ← A.getType, ← B.getType with
+    | .set α, .set β => return .set (.set (.prod α β))
+    | τ, σ => throw s!"⇸ᴮ expects two sets, got {τ} and {σ}"
