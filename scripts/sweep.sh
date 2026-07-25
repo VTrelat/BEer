@@ -39,7 +39,7 @@ esac
 EOF
 chmod +x "$one"
 
-find "$CORPUS" -name '*.pog' | sort | awk "NR % $STRIDE == 1" |
+find "$CORPUS" -name '*.pog' | sort | awk "(NR - 1) % $STRIDE == 0" |
   xargs -P "$JOBS" -n 1 "$one" > "$OUT"
 
 echo "$(wc -l < "$OUT") files -> $OUT"
