@@ -138,6 +138,25 @@ private def emptyOf (τ : SMTType) (S : SMT.Term) : Encoder SMT.Term := do
   SMT.eraseFromContext x
   return .forall [x] [τ] (.not (.app S (.var x)))
 
+/-- Reify an encoded set into characteristic-predicate form, returning it with
+its element type.
+
+A B set of pairs may be stored as a partial function `α → Option β`.  Operators
+that are about the set itself — `card`, `finite` — mean the set of pairs either
+way (`|{0 ↦ 1, 1 ↦ 0}| = 2` is the cardinality of a partial function), so the
+graph is materialised first.  This is the same representation join `pow`
+performs. -/
+private def asCharPred (op : String) (S : SMT.Term) (τS : SMTType) :
+    Encoder (SMT.Term × SMTType) := do
+  match τS with
+  | .fun τ .bool => return (S, τ)
+  | .fun α (.option β) => do
+    let ⟨Sg, Sg_spec⟩ ← loosenAux_prf s!"{op}!"
+      (castPath.graph (castPath.reflexive α) (castPath.reflexive β)) S
+    declareConstWithSpec Sg (.fun (.pair α β) .bool) Sg_spec
+    return (.var Sg, .pair α β)
+  | _ => throw s!"encodeTerm:{op}: Expected a set, got {τS}"
+
 /-- Encode `|S|` for an encoded set `S : τ → bool`.
 
 SMT-LIB has no cardinality operator, and cvc5 has no parametric function
@@ -453,14 +472,12 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     castInter (← encodeTerm S E) (← encodeTerm T E)
   | .card S, E => do
     let ⟨S', τS⟩ ← encodeTerm S E
-    let .fun τ .bool := τS
-      | throw s!"encodeTerm:card: Expected a set, got {τS}"
-    encodeCard S' τ
+    let ⟨Sc, τ⟩ ← asCharPred "card" S' τS
+    encodeCard Sc τ
   | .finite S, E => do
     let ⟨S', τS⟩ ← encodeTerm S E
-    let .fun τ .bool := τS
-      | throw s!"encodeTerm:finite: Expected a set, got {τS}"
-    encodeFinite S' τ
+    let ⟨Sc, τ⟩ ← asCharPred "finite" S' τS
+    encodeFinite Sc τ
   | .fold isSum f, E => do
     let ⟨f', τf⟩ ← encodeTerm f E
     match τf with

@@ -23,10 +23,11 @@ def B.Term.domRestriction (F R : Term) : Decoder Term := do
   return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ .var x ∈ᴮ F)
 infix:90 "◁" => B.Term.domRestriction
 
+/-- `F ⩤ R` — drop the pairs of `R` whose *domain* element lies in `F`. -/
 def B.Term.domSubtraction (F R : Term) : Decoder Term := do
   let x := s!"x{← incrementFreshVarC}"
   let y := s!"y{← incrementFreshVarC}"
-  return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ ¬ᴮ(.var y ∈ᴮ F))
+  return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ ¬ᴮ(.var x ∈ᴮ F))
 infix:90 "⩤" => B.Term.domSubtraction
 
 def B.Term.ranRestriction (R F : Term) : Decoder Term := do
@@ -35,10 +36,11 @@ def B.Term.ranRestriction (R F : Term) : Decoder Term := do
   return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ .var y ∈ᴮ F)
 infix:90 "▷" => B.Term.ranRestriction
 
+/-- `R ⩥ F` — drop the pairs of `R` whose *range* element lies in `F`. -/
 def B.Term.ranSubtraction (R F : Term) : Decoder Term := do
   let x := s!"x{← incrementFreshVarC}"
   let y := s!"y{← incrementFreshVarC}"
-  return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ ¬ᴮ(.var x ∈ᴮ F))
+  return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ ¬ᴮ(.var y ∈ᴮ F))
 infix:90 "⩥" => B.Term.ranSubtraction
 
 def B.Term.dom (τ σ : BType) (f : Term) : Decoder Term := do
