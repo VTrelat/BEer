@@ -266,6 +266,42 @@ private def encodeFold (isSum : Bool) (f : SMT.Term) (τ : SMTType)
   recordSite ⟨op, f, τ, c⟩
   return (.var c, .int)
 
+/-- Encode `iterate(R, n)` for a symbolic count.
+
+Unlike `closure`, this one *is* definable: a family of relations indexed by the
+iteration count, declared as `it : Int → (α × α) → bool` and pinned down by
+
+* `it 0` is the identity,
+* `it k = it (k-1) ; R` for `k > 0`,
+
+which is the same shape as the prelude's `bpow` recursion, with an existential
+for the intermediate point.  Negative counts are left unconstrained. -/
+private def encodeIterate (R n : SMT.Term) (α : SMTType) :
+    Encoder (SMT.Term × SMTType) := do
+  let τ := SMTType.fun (.pair α α) .bool
+  let c ← match ← SMT.findSite "iterate" R with
+    | some c => pure c
+    | none => do
+      let c ← freshVar (.fun .int τ) "iter!"
+      let k ← freshVar .int; SMT.eraseFromContext k
+      let x ← freshVar α; SMT.eraseFromContext x
+      let y ← freshVar α; SMT.eraseFromContext y
+      let z ← freshVar α; SMT.eraseFromContext z
+      let it := fun (i a b : SMT.Term) => SMT.Term.app (.app (.var c) i) (.pair a b)
+      let base : SMT.Term :=
+        .forall [x, y] [α, α] (it (.int 0) (.var x) (.var y) =ˢ (.var x =ˢ .var y))
+      let step : SMT.Term :=
+        .forall [k, x, y] [.int, α, α]
+          ((.int 1 ≤ˢ .var k) ⇒ˢ
+            (it (.var k) (.var x) (.var y) =ˢ
+              .exists [z] [α]
+                (it (.var k -ˢ .int 1) (.var x) (.var z) ∧ˢ
+                  .app R (.pair (.var z) (.var y)))))
+      declareConstWithSpec c (.fun .int τ) (base ∧ˢ step)
+      recordSite ⟨"iterate", R, α, c⟩
+      pure c
+  return (.app (.var c) n, τ)
+
 def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
   | .var v, E => do
     match (←get).types.lookup v with
@@ -402,6 +438,23 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       encodeFold isSum f' τ
         (.forall [x, n] [τ, .int] (¬ˢ .app f' (.pair (.var x) (.var n))))
     | _ => throw s!"encodeTerm:fold: Expected an integer-valued function, got {τf}"
+  | .iterate R n, E => do
+    let ⟨n', .int⟩ ← encodeTerm n E
+      | throw s!"encodeTerm:iterate: Expected an integer count, got {(← encodeTerm n E).2}"
+    let ⟨R', τR⟩ ← encodeTerm R E
+    match τR with
+    | .fun (.pair α β) .bool =>
+      unless α == β do
+        throw s!"encodeTerm:iterate: Expected a homogeneous relation, got {τR}"
+      encodeIterate R' n' α
+    | .fun α (.option β) => do
+      unless α == β do
+        throw s!"encodeTerm:iterate: Expected a homogeneous relation, got {τR}"
+      let ⟨Rg, Rg_spec⟩ ← loosenAux_prf "iter!"
+        (castPath.graph (castPath.reflexive α) (castPath.reflexive β)) R'
+      declareConstWithSpec Rg (.fun (.pair α β) .bool) Rg_spec
+      encodeIterate (.var Rg) n' α
+    | _ => throw s!"encodeTerm:iterate: Expected a relation, got {τR}"
   | .closure refl R, E => do
     let ⟨R', τR⟩ ← encodeTerm R E
     match τR with
@@ -550,6 +603,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         let decls_snap := (← get).env.declarations
         let asserts_snap := (← get).env.asserts
         let types_snap := (← get).types
+        let sites_snap := (← get).sites
 
         let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:all: Expected a boolean, got {← encodeTerm P E}"
         let zs ← freshVarList τs
@@ -560,7 +614,10 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         -- Collect cast-helper delta and revert: declarations, asserts, and types.
         -- usedVars is kept growing to prevent future freshVar collisions.
         let new_decls := (← get).env.declarations.drop decls_snap.length
-        modify λ e => { e with env := { e.env with declarations := decls_snap, asserts := asserts_snap }, types := types_snap }
+        -- The helper declarations are about to be re-scoped inside the ∀, so a
+        -- site recorded while encoding the body must not outlive it: its
+        -- constant is no longer declared at this level.
+        modify λ e => { e with env := { e.env with declarations := decls_snap, asserts := asserts_snap }, types := types_snap, sites := sites_snap }
 
         -- Scope cast helpers inside the ∀ as universals guarded by their spec:
         -- `∀ helper. spec(helper) → body`. Using `∃ helper. spec ∧ body` would be
@@ -590,6 +647,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let decls_snap := (← get).env.declarations
       let asserts_snap := (← get).env.asserts
       let types_snap := (← get).types
+      let sites_snap := (← get).sites
 
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:all: Expected a boolean, got {← encodeTerm P E}"
       let P' := substList vs (xs.map .var) P'
@@ -597,7 +655,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let ⟨xsy_mem_D, _⟩ ← castMembership (xs.map .var |>.toPairl, τs.toProdl) (D', .fun α (.option β))
 
       let new_decls := (← get).env.declarations.drop decls_snap.length
-      modify λ e => { e with env := { e.env with declarations := decls_snap, asserts := asserts_snap }, types := types_snap }
+      modify λ e => { e with env := { e.env with declarations := decls_snap, asserts := asserts_snap }, types := types_snap, sites := sites_snap }
 
       let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
       let spec_bodies := new_decls.filterMap fun | .define_fun _ .unit .bool b => some b | _ => none

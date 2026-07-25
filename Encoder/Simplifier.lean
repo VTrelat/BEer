@@ -156,7 +156,13 @@ def rescopeHelpers (before : Nat) (vs : List 𝒱) (subs : List Term)
       return .define_fun n .unit .bool (.forall [z] [τ] (applyRen (substList vs subs b)))
     | i => return i
   modify fun e =>
-    { e with env := { e.env with declarations := e.env.declarations.take before ++ new' } }
+    { e with
+      env := { e.env with declarations := e.env.declarations.take before ++ new' }
+      -- A site recorded while encoding the body now names a constant that no
+      -- longer exists under that name; forget it, so a later occurrence of the
+      -- same argument introduces a fresh constant rather than referring to a
+      -- renamed one.  Costs sharing, not correctness.
+      sites := e.sites.filter (fun s => s.name ∉ helpers) }
   return applyRen body
 
 nonrec def Env.simplify (E : Env) : Env :=

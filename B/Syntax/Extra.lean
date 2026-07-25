@@ -90,6 +90,7 @@ partial def Term.pretty (b : Bool) : Term -> Nat -> Std.Format
   | .finite S => «prefix» (Term.pretty b) 290 "finite " S
   | .closure r R => «prefix» (Term.pretty b) 290 (if r then "closure " else "closure1 ") R
   | .fold s f => «prefix» (Term.pretty b) 290 (if s then "Σ " else "Π ") f
+  | .iterate R n => «infixl» (Term.pretty b) 195 "iterate" R n
 
 end B
 
