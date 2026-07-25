@@ -13,7 +13,11 @@ the translator.
 
 namespace SMT
 
-abbrev TypeContext := AList fun _ : 𝒱 ↦ SMTType
+/-- A hash map rather than an association list: the encoder inserts a binding
+per fresh variable, which made every insert linear in the size of the context.
+Iteration order is therefore unspecified — only the *set* of declarations
+matters, since they all precede the assertions that use them. -/
+abbrev TypeContext := Std.HashMap 𝒱 SMTType
 
 def TypeContext.update (Γ : TypeContext) (vs : List 𝒱) (τs : List SMTType)
     (hlen : vs.length = τs.length := by assumption) : TypeContext :=

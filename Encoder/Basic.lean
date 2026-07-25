@@ -175,7 +175,7 @@ def SMT.declareConstWithSpec (x! : 𝒱) (τ : SMTType)
   addSpec x! x!_spec
 
 def SMT.Term.getType : Term → Encoder SMTType
-  | .var v => return (←get).types.lookup v |>.get!
+  | .var v => return (←get).types.get? v |>.get!
   | .int _ => return .int
   | .bool _
   | .forall _ _ _| .exists _ _ _ | .eq _ _ | .and _ _ | .or _ _| .not _ | .imp _ _ | .le _ _ | .distinct _ => return .bool

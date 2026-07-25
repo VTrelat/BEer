@@ -335,7 +335,7 @@ private def encodeIterate (R n : SMT.Term) (α : SMTType) :
 
 def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
   | .var v, E => do
-    match (←get).types.lookup v with
+    match (←get).types.get? v with
     | none => throw s!"encodeTerm:var: Unknown variable {v} in SMT context"
     | some τ => do
       return (.var v, τ)
@@ -735,7 +735,7 @@ def encodeDefs (E : B.Env) : Encoder Unit := do
   let rec aux : List ((_ : B.𝒱) × B.Term) → List SMT.𝒱 → Encoder (List SMT.𝒱)
     | .nil, vs => return vs
     | .cons ⟨v, dv⟩ defs, vs => do
-      let .some τ := (←get).types.lookup v | throw s!"encodeDefs: missing type for {v}"
+      let .some τ := (←get).types.get? v | throw s!"encodeDefs: missing type for {v}"
       let ⟨t, _⟩ ← encodeTerm dv E
       /-
         NOTE: Using define_fun instead of define_const because cvc5 doesn't
@@ -747,7 +747,7 @@ def encodeDefs (E : B.Env) : Encoder Unit := do
   let e ← get
   let Γ : TypeContext := e.types.filter (λ k _ => k ∉ declared)
   -- for ⟨v, τ⟩ in e.types do if v ∉ declared then Γ := Γ.cons v τ
-  let decl := Γ.entries.map (λ ⟨v, τ⟩ => Instr.declare_const v τ)
+  let decl := Γ.toList.map (λ ⟨v, τ⟩ => Instr.declare_const v τ)
   -- NOTE: per-PO hypotheses come from `po.defs` (populated from each PO's
   -- `<Definition>` list in the POG). Asserting `E.hypotheses` globally is
   -- unsound because categories like `inv`/`ass` are GOALS for some POs
@@ -834,7 +834,7 @@ def finalBulkDeclare : Encoder Unit := do
     | .define_const v _ _ => some v
     | _ => none
   let Γ : TypeContext := e.types.filter (λ k _ => k ∉ alreadyDeclared)
-  let decl := Γ.entries.map (λ ⟨v, τ⟩ => Instr.declare_const v τ)
+  let decl := Γ.toList.map (λ ⟨v, τ⟩ => Instr.declare_const v τ)
   modify λ e => { e with env := { e.env with
     declarations := decl.reverse.toArray ++ e.env.declarations } }
 
@@ -855,7 +855,7 @@ def encodePOG (pogpath : System.FilePath) (show_encoding := false): IO String :=
   let st' ← match encode st.env |>.run ∅ with
     | .ok ⟨(), st'⟩ => pure st'
     | .error e => throw <| IO.userError e
-  -- dbg_trace st'.types.entries
+  -- dbg_trace st'.types.toList
   let r ← match EncoderState.toSMTFile |>.run st' with
     | .ok ⟨r, _⟩ => pure r
     | .error e => throw <| IO.userError e
