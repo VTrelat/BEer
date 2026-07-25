@@ -115,7 +115,10 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
         (.var yz =ᴮ .var y ↦ᴮ .var z) ∧ᴮ
         (.var x ↦ᴮ .var y ∈ᴮ E) ∧ᴮ
         (.var x ↦ᴮ .var z ∈ᴮ F)))
-  -- | "||" => throw "Not implemented"
+  | "||", τ => fun p q => do
+    let .set (.prod (.prod α γ) (.prod β δ)) := τ
+      | throw s!"|| operator should have type `set ((α × γ) × (β × δ))`, got {τ}"
+    B.Term.parallel α β γ δ p q
   | "\\/", _ => pure ∘₂ .union
   | "|->", _ => pure ∘₂ .maplet
   | "|>", τ => fun S T ↦ do

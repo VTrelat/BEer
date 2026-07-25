@@ -165,6 +165,21 @@ def B.Term.compose (α β γ : BType) (R S : Term) : Decoder Term := do
   return .collect [x, z] (α.toTerm ⨯ᴮ γ.toTerm)
     (.exists [y] β.toTerm ((.var x ↦ᴮ .var y ∈ᴮ R) ∧ᴮ (.var y ↦ᴮ .var z ∈ᴮ S)))
 
+/-- `p || q` — parallel product: `{(a, c) ↦ (b, d) | a ↦ b ∈ p ∧ c ↦ d ∈ q}`.
+
+Not to be confused with the direct product `><`, which pairs two relations
+sharing a source rather than running them side by side. -/
+def B.Term.parallel (α β γ δ : BType) (p q : Term) : Decoder Term := do
+  let ac ← freshVar (α ×ᴮ γ)
+  let bd ← freshVar (β ×ᴮ δ)
+  let a ← freshVar α; let c ← freshVar γ
+  let b ← freshVar β; let d ← freshVar δ
+  return .collect [ac, bd] ((α.toTerm ⨯ᴮ γ.toTerm) ⨯ᴮ (β.toTerm ⨯ᴮ δ.toTerm))
+    (.exists [a, c] (α.toTerm ⨯ᴮ γ.toTerm)
+      (.exists [b, d] (β.toTerm ⨯ᴮ δ.toTerm)
+        (((.var ac =ᴮ .var a ↦ᴮ .var c) ∧ᴮ (.var bd =ᴮ .var b ↦ᴮ .var d)) ∧ᴮ
+         ((.var a ↦ᴮ .var b ∈ᴮ p) ∧ᴮ (.var c ↦ᴮ .var d ∈ᴮ q)))))
+
 /-- `rel(f)` — the relation `{x ↦ y | y ∈ f(x)}` of a set-valued function.
 
 Atelier B also allows `rel` on a genuine relation `A ↔ POW(B)`, which would need
