@@ -46,6 +46,10 @@ inductive Term where
   -- `iterate(R, n)`: `R` composed with itself `n` times, for a symbolic `n`
   -- (a literal count is unfolded into compositions by the POG reader).
   | iterate (R n : Term)
+  -- `conc(ss)`: the sequences in `ss` concatenated in order.  `R` is the
+  -- result type as a term (`BType.toTerm`), carried so that typing `conc` does
+  -- not have to recurse through `ss`, which can be arbitrarily deep.
+  | conc (R ss : Term)
   -- functions
   | app (f x : Term)
   | lambda (vs : List 𝒱) (D P : Term)
@@ -98,6 +102,7 @@ def fv : Term → List 𝒱
   | .finite S => fv S
   | .closure _ R => fv R
   | .fold _ f => fv f
+  | .conc R ss => fv R ++ fv ss
   | .iterate R n => fv R ++ fv n
   | .min S => fv S
   | .max S => fv S
@@ -113,6 +118,7 @@ def bv : Term → List 𝒱
   | .pfun A B => bv A ++ bv B
   | .app f x => bv f ++ bv x
   | .card S | .finite S | .min S | .max S | .pow S | .closure _ S | .fold _ S => bv S
+  | .conc R ss => bv R ++ bv ss
   | .iterate R n => bv R ++ bv n
 
 abbrev MAXINT : Int := 2147483647

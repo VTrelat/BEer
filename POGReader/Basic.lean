@@ -99,6 +99,12 @@ def B.Term.getType : Term → Decoder B.BType
     | .set α, .set β => return .set (.prod α β)
     | τ, σ => throw s!"Cannot form cartesian product of {τ} and {σ}"
   | .union S _ | .inter S _ | .closure _ S | .iterate S _ => return (← S.getType)
+  -- Read off the carried result type rather than recursing through the
+  -- argument: `getType (τ.toTerm) = .set τ`.
+  | .conc R _ => do
+    match ← R.getType with
+    | .set σ => return σ
+    | τ => throw s!"conc carries a malformed result type {τ}"
   | .app f x => do
     match ← f.getType with
     | .set (.prod τ σ) =>

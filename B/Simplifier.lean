@@ -36,6 +36,7 @@ def subst (x : 𝒱) (e t : Term) : Term :=
   | .closure r R => .closure r (subst x e R)
   | .fold s f => .fold s (subst x e f)
   | .iterate R n => .iterate (subst x e R) (subst x e n)
+  | .conc R ss => .conc R (subst x e ss)
   | .collect vs D P =>
     if x ∈ vs then .collect vs (subst x e D) P else .collect vs (subst x e D) (subst x e P)
   | .lambda vs D P =>
@@ -159,6 +160,7 @@ def simplifier : Term → Term
   | Term.closure r R => .closure r (simplifier R)
   | Term.fold s f => .fold s (simplifier f)
   | Term.iterate R n => .iterate (simplifier R) (simplifier n)
+  | Term.conc R ss => .conc R (simplifier ss)
   | Term.div x y => .div (simplifier x) (simplifier y)
   | Term.mod x y => .mod (simplifier x) (simplifier y)
   | Term.exp x y => .exp (simplifier x) (simplifier y)

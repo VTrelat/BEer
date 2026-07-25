@@ -253,7 +253,7 @@ def String.toUnaryOp : String → B.BType → B.Term → Decoder B.Term
   -- | "tail" => throw "Unary operator not implemented"
   -- | "front" => throw "Unary operator not implemented"
   -- | "rev" => throw "Unary operator not implemented"
-  -- | "conc" => throw "Unary operator not implemented"
+  | "conc", τ => fun ss => return .conc τ.toTerm ss
   -- | "succ" => throw "Unary operator not implemented"
   -- | "pred" => throw "Unary operator not implemented"
   | "rel", τ => fun f => do

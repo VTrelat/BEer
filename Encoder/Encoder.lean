@@ -266,6 +266,37 @@ private def encodeFold (isSum : Bool) (f : SMT.Term) (τ : SMTType)
   recordSite ⟨op, f, τ, c⟩
   return (.var c, .int)
 
+/-- "`t` denotes the empty sequence", for either representation of one:
+a characteristic predicate over pairs, or an option-valued function. -/
+private def isEmptySeq (σ : SMTType) (t : SMT.Term) : Encoder (Option SMT.Term) := do
+  match σ with
+  | .fun (.pair α β) .bool => do
+    let x ← freshVar α; SMT.eraseFromContext x
+    let y ← freshVar β; SMT.eraseFromContext y
+    return some <| .forall [x, y] [α, β] (¬ˢ .app t (.pair (.var x) (.var y)))
+  | .fun α (.option β) => do
+    let x ← freshVar α; SMT.eraseFromContext x
+    return some <| .forall [x] [α] (.app t (.var x) =ˢ none$ β)
+  | _ => return none
+
+/-- Encode `conc(ss)`, the sequences in `ss` concatenated in order.
+
+Unrolling the fold would need the length of each partial result inside a
+quantified axiom, i.e. cardinality under a quantifier feeding another indexed
+family — a shape no solver makes progress on.  The constant is therefore only
+pinned down on the empty outer sequence, as for `SIGMA`/`PI`: enough for an
+obligation to mention `conc` without the translation failing, and
+under-constrained, so nothing becomes provable that was not. -/
+private def encodeConc (ss : SMT.Term) (τss σ : SMTType) : Encoder (SMT.Term × SMTType) := do
+  if let some c ← SMT.findSite "conc" ss then
+    return (.var c, σ)
+  let c ← freshVar σ "conc!"
+  match ← isEmptySeq τss ss, ← isEmptySeq σ (.var c) with
+  | some ssEmpty, some cEmpty => declareConstWithSpec c σ (ssEmpty ⇒ˢ cEmpty)
+  | _, _ => declareConst c σ
+  recordSite ⟨"conc", ss, σ, c⟩
+  return (.var c, σ)
+
 /-- Encode `iterate(R, n)` for a symbolic count.
 
 Unlike `closure`, this one *is* definable: a family of relations indexed by the
@@ -438,6 +469,13 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       encodeFold isSum f' τ
         (.forall [x, n] [τ, .int] (¬ˢ .app f' (.pair (.var x) (.var n))))
     | _ => throw s!"encodeTerm:fold: Expected an integer-valued function, got {τf}"
+  | .conc _ ss, E => do
+    let ⟨ss', τss⟩ ← encodeTerm ss E
+    -- The element type of the outer sequence is the type of the result: the
+    -- concatenation of sequences of type σ is again a sequence of type σ.
+    match τss with
+    | .fun (.pair .int σ) .bool | .fun .int (.option σ) => encodeConc ss' τss σ
+    | _ => throw s!"encodeTerm:conc: Expected a sequence of sequences, got {τss}"
   | .iterate R n, E => do
     let ⟨n', .int⟩ ← encodeTerm n E
       | throw s!"encodeTerm:iterate: Expected an integer count, got {(← encodeTerm n E).2}"
