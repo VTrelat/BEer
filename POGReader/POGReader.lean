@@ -649,7 +649,8 @@ def decodeType : Xml.Content → Decoder B.BType
       | 2 => .prod <$> (decodeType c[0]) <*> (decodeType c[1])
       | n => throw s!"* expects 2 arguments, {n} were given"
     | o => throw s!"Invalid binary operator {o} in Type"
-  | .Element ⟨"Struct", _, _⟩ => throw "decodeType: Struct not implemented"
+  -- Records are deliberately out of scope on this branch.
+  | .Element ⟨"Struct", _, _⟩ => throw "decodeType: records are not supported"
   | _ => throw "Invalid content in Type element"
 
 def removeEmptyDeep (c : Array Xml.Content) : Array Xml.Content :=
