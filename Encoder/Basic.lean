@@ -151,16 +151,6 @@ partial def addInstr : Stages → Chunk → Stages
       let a := as.getLast (Ne.symm (ne_of_apply_ne (·.attach.isEmpty) (h <| id <| Eq.symm ·)))
       .asserts <| as_ ++ [addInstr a as'] --NOTE: is the order correct?
 
-def SMT.addAssertAux : Stages → Chunk → Stages
-  | .instr is, ck => .instr <| is ++ ck
-  | .asserts [], ck => .asserts [.instr ck]
-  | .asserts (as::ass), ck => .asserts <| (addAssertAux as ck) :: ass
-
-def SMT.addAssert (t : Term) : Encoder Unit := do
-  match (←get).env.asserts with
-  | .instr _ => throw "SMT.addAssert: malformed asserts, cannot add assert here"
-  | .asserts ass => modify λ e => { e with env := { e.env with asserts := addAssertAux (.asserts ass) [.assert t] }}
-
 /-- Define a helper's specification and assert it.
 
 The assertion is emitted next to the definition rather than into the assert
@@ -183,35 +173,6 @@ def SMT.declareConstWithSpec (x! : 𝒱) (τ : SMTType)
     (x!_spec : Term) : Encoder Unit := do
   declareConst x! τ
   addSpec x! x!_spec
-
-def SMT.addAssert' (t : Term) : Encoder Unit := do
-  let ass := (←get).env.asserts
-  modify λ e => { e with env := { e.env with asserts := go t ass}}
-  where go (t : Term) : Stages → Stages
-    | .instr is => .instr <| is.concat <| .assert t
-    | .asserts [] => .asserts [.instr [.assert t]]
-    | .asserts [x] => .asserts [go t x]
-    | .asserts (as :: ass) =>
-      letI butLast := List.dropLast (as::ass)
-      letI last := (as::ass).getLast (List.cons_ne_nil as ass)
-      .asserts (butLast.concat (go t last))
-  termination_by s => s
-    decreasing_by (
-      · decreasing_trivial
-      · simp only [Stages.asserts.sizeOf_spec, List.cons.sizeOf_spec, gt_iff_lt]
-        induction ass with
-        | nil => simp +arith
-        | cons a ass ih =>
-          dsimp
-          cases ass with
-          | nil => simp +arith
-          | cons as' ass =>
-            simp +arith at ih
-            simp +arith
-            trans
-            · exact ih
-            · simp+arith
-    )
 
 def SMT.Term.getType : Term → Encoder SMTType
   | .var v => return (←get).types.lookup v |>.get!
