@@ -94,12 +94,12 @@ collision path, which the monotone counter makes rare. -/
 def SMT.freshVar (τ : SMTType) (name := "x") : Encoder SMT.𝒱 := do
   let n ← incrementFreshVarC
   let v₀ : SMT.𝒱 := s!"{name}{n}"
-  modifyGet λ st =>
-    let used := st.env.usedVars
+  -- Destructured rather than updated with `{ st with … }`: keeping `st` alive
+  -- across the update leaves the tables shared, and each insert then clones the
+  -- whole table.  Consuming the fields lets both inserts happen in place.
+  modifyGet fun ⟨⟨decls, asserts, fvc, used⟩, types, sites⟩ =>
     let v := if used.contains v₀ then SMT.superFresh used.toList else v₀
-    (v, { st with
-      env := { st.env with usedVars := used.insert v }
-      types := st.types.insert v τ })
+    (v, ⟨⟨decls, asserts, fvc, used.insert v⟩, types.insert v τ, sites⟩)
 
 def SMT.freshVarList : List SMTType → Encoder (List 𝒱)
   | [] => return []
@@ -112,10 +112,11 @@ def SMT.declareConst (v : 𝒱) (τ : SMTType) : Encoder Unit :=
   modify λ e => { e with env := { e.env with declarations := e.env.declarations.push <| .declare_const v τ }}
 
 def SMT.addToContext (v : 𝒱) (τ : SMTType) : Encoder Unit :=
-  modify λ e => { e with types := e.types.insert v τ, env.usedVars := e.env.usedVars.insert v }
+  modify fun ⟨⟨decls, asserts, fvc, used⟩, types, sites⟩ =>
+    ⟨⟨decls, asserts, fvc, used.insert v⟩, types.insert v τ, sites⟩
 
 def SMT.eraseFromContext (v : 𝒱) : Encoder Unit :=
-  modify λ e => { e with types := e.types.erase v }
+  modify fun ⟨env, types, sites⟩ => ⟨env, types.erase v, sites⟩
 
 /-- The constant already standing for `op` applied to `S`, if any. -/
 def SMT.findSite (op : String) (S : Term) : Encoder (Option 𝒱) := do
