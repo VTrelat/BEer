@@ -17,28 +17,35 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
       return ¬ᴮ (sub ∧ᴮ ¬ᴮ (S =ᴮ T))
   | "=", _ => pure ∘₂ .eq
   | "/=", _ => pure ∘₂ (.not ∘₂ .eq)
-  | ">=r", _ | ">=f", _ | ">=i", _ => pure ∘₂ (flip .le)
-  | ">r", _ | ">f", _ | ">i", _ => pure ∘₂ (.not ∘₂ .le)
-  | "<=r", _ | "<=f", _ | "<=i", _ => pure ∘₂ .le
-  | "<r", _ | "<f", _ | "<i", _ => pure ∘₂ (.not ∘₂ flip .le)
+  | ">=i", _ => pure ∘₂ (flip .le)
+  | ">i", _ => pure ∘₂ (.not ∘₂ .le)
+  | "<=i", _ => pure ∘₂ .le
+  | "<i", _ => pure ∘₂ (.not ∘₂ flip .le)
+  -- Real and float arithmetic have no counterpart here: the encoding has no
+  -- real sort, and reusing the integer operations silently changes what an
+  -- obligation means — `/r` would truncate.  Refuse them rather than answer
+  -- about a different problem.
+  | "*r", _ | "*f", _ | "+r", _ | "+f", _ | "-r", _ | "-f", _
+  | "/r", _ | "/f", _ | "**r", _
+  | "<r", _ | "<f", _ | "<=r", _ | "<=f", _
+  | ">r", _ | ">f", _ | ">=r", _ | ">=f", _ =>
+    λ _ _ => throw "Real and float arithmetic are not supported"
   -- binary exp operators
   -- | "," => throw "Not implemented"
-  | "*", _ | "*i", _ | "*r", _ | "*f", _ => pure ∘₂ .mul
+  | "*", _ | "*i", _ => pure ∘₂ .mul
   -- | "**" => throw "Not implemented"
   -- A literal exponent unfolds into repeated multiplication, which solvers
   -- handle much better than the axiomatised `bpow`; symbolic exponents fall
   -- back to the real exponentiation operator.
-  | "**i", _ | "**r", _ => fun x y => do
+  | "**i", _ => fun x y => do
       match y with
       | .int n => return x.expLit n
       | _ => return x ^ᴮ y
   | "*s", _ => pure ∘₂ .cprod
   -- | "**r" => throw "Not implemented"
-  | "+", _ | "+i", _ | "+r", _ | "+f", _ => pure ∘₂ .add
+  | "+", _ | "+i", _ => pure ∘₂ .add
   -- | "-" => throw "Not implemented"
   | "-i", _ => pure ∘₂ .sub
-  | "-r", _ => pure ∘₂ .sub
-  | "-f", _ => pure ∘₂ .sub
   | "-s", _ => λ A B => do
       let v := s!"x{← incrementFreshVarC}"
       return .collect [v] A (¬ᴮ ((.var v) ∈ᴮ B))
@@ -46,7 +53,7 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
   | "..", .set .int => λ a b => do
       let v := s!"x{← incrementFreshVarC}"
       return .collect [v] .ℤ ((a ≤ᴮ (.var v)) ∧ᴮ ((.var v) ≤ᴮ b))
-  | "/", _ | "/i", _ | "/r", _ | "/f", _ => pure ∘₂ .div
+  | "/", _ | "/i", _ => pure ∘₂ .div
   | "mod", _ => pure ∘₂ .mod
   | "/\\", _ => pure ∘₂ .inter
   | "/|\\", _ => B.Term.seqTake
@@ -224,6 +231,8 @@ def String.toUnaryOp : String → B.BType → B.Term → Decoder B.Term
     S.iseq1
   -- | "-" => throw "Unary operator not implemented"
   | "-i", _ => fun S => return .int 0 -ᴮ S
+  | "real", _ | "rmin", _ | "rmax", _ | "-r", _ | "floor", _ | "ceiling", _ =>
+    λ _ => throw "Real arithmetic is not supported"
   -- | "-r" => throw "Unary operator not implemented"
   | "~", τ => fun R => do
     let .set (.prod β α) := τ | throw s!"~ operator expects a relation, got type {τ}"
@@ -504,6 +513,7 @@ def decodeTerm : Xml.Element → Decoder B.Term
       let ⟨.Element e, _⟩ := c.attach[0]'(by rw [Array.size_attach, h]; exact Nat.zero_lt_one) | unreachable!
       decodeTerm e
     else throw s!"Boolean_Exp expects exactly one argument"
+  | ⟨"Real_Literal", _, _⟩ => throw "Real literals are not supported"
   | ⟨n,_,_⟩ => throw s!"{n} not implemented"
 termination_by e => e
 decreasing_by
