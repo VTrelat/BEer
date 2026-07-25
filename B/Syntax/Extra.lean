@@ -88,6 +88,7 @@ partial def Term.pretty (b : Bool) : Term -> Nat -> Std.Format
   | .max S => «prefix» (Term.pretty b) 290 "max " S
   | .card S => λ _ => "‖" ++ Term.pretty b S 0 ++ "‖ᴮ"
   | .finite S => «prefix» (Term.pretty b) 290 "finite " S
+  | .closure r R => «prefix» (Term.pretty b) 290 (if r then "closure " else "closure1 ") R
 
 end B
 

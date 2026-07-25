@@ -36,6 +36,10 @@ inductive Term where
   | inter (S T : Term)
   | card (S : Term)
   | finite (S : Term)
+  -- Transitive closure of a homogeneous relation; `refl` selects the
+  -- reflexive-transitive closure (`closure`) over the transitive one
+  -- (`closure1`).
+  | closure (refl : Bool) (R : Term)
   -- functions
   | app (f x : Term)
   | lambda (vs : List 𝒱) (D P : Term)
@@ -86,6 +90,7 @@ def fv : Term → List 𝒱
   | .app f x => fv f ++ fv x
   | .card S => fv S
   | .finite S => fv S
+  | .closure _ R => fv R
   | .min S => fv S
   | .max S => fv S
 
@@ -99,7 +104,7 @@ def bv : Term → List 𝒱
   | .cprod S T | .union S T | .inter S T => bv S ++ bv T
   | .pfun A B => bv A ++ bv B
   | .app f x => bv f ++ bv x
-  | .card S | .finite S | .min S | .max S | .pow S => bv S
+  | .card S | .finite S | .min S | .max S | .pow S | .closure _ S => bv S
 
 abbrev MAXINT : Int := 2147483647
 abbrev MININT : Int := -2147483647

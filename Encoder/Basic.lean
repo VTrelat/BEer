@@ -116,10 +116,20 @@ def SMT.eraseFromContext (v : 𝒱) : Encoder Unit :=
 def SMT.findSite (op : String) (S : Term) : Encoder (Option 𝒱) := do
   return (← get).sites.find? (fun s => s.op == op && s.set == S) |>.map (·.name)
 
-/-- The sites recorded for `op` at element type `τ`; used to relate a new
-constant to the ones already introduced (e.g. `S ⊆ T → |S| ≤ |T|`). -/
+/-- How many earlier sites a new one is related to.
+
+Relating every pair is quadratic in the number of sites, and a machine with many
+enumerated SETS clauses easily produces a few hundred `finite` sites — the
+resulting specifications dwarf the proof obligation itself.  Only the most
+recent sites are linked, which costs provable facts but never soundness: the
+axioms left out are ones the solver simply never learns. -/
+def SMT.maxSiteLinks : Nat := 8
+
+/-- The sites recorded for `op` at element type `τ`, most recent first and
+capped at `maxSiteLinks`; used to relate a new constant to the ones already
+introduced (e.g. `S ⊆ T → |S| ≤ |T|`). -/
 def SMT.sitesOf (op : String) (τ : SMTType) : Encoder (List Site) := do
-  return (← get).sites.filter (fun s => s.op == op && s.τ == τ)
+  return (← get).sites.filter (fun s => s.op == op && s.τ == τ) |>.take maxSiteLinks
 
 def SMT.recordSite (s : Site) : Encoder Unit :=
   modify λ e => { e with sites := s :: e.sites }

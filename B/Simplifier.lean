@@ -33,6 +33,7 @@ def subst (x : 𝒱) (e t : Term) : Term :=
   | .max S => .max (subst x e S)
   | .card S => .card (subst x e S)
   | .finite S => .finite (subst x e S)
+  | .closure r R => .closure r (subst x e R)
   | .collect vs D P =>
     if x ∈ vs then .collect vs (subst x e D) P else .collect vs (subst x e D) (subst x e P)
   | .lambda vs D P =>
@@ -153,6 +154,7 @@ def simplifier : Term → Term
   | Term.min S => .min (simplifier S)
   | Term.card S => .card (simplifier S)
   | Term.finite S => .finite (simplifier S)
+  | Term.closure r R => .closure r (simplifier R)
   | Term.div x y => .div (simplifier x) (simplifier y)
   | Term.mod x y => .mod (simplifier x) (simplifier y)
   | Term.exp x y => .exp (simplifier x) (simplifier y)

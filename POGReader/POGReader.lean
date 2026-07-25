@@ -230,8 +230,8 @@ def String.toUnaryOp : String → B.BType → B.Term → Decoder B.Term
     -- let y := s!"x{← incrementFreshVarC}"
     -- return .collect [x, y] (S ⨯ᴮ S) (.var x =ᴮ .var y)
     return .lambda [x] S (.var x)
-  -- | "closure" => throw "Unary operator not implemented"
-  -- | "closure1" => throw "Unary operator not implemented"
+  | "closure", _ => pure ∘ (.closure true)
+  | "closure1", _ => pure ∘ (.closure false)
   -- | "tail" => throw "Unary operator not implemented"
   -- | "front" => throw "Unary operator not implemented"
   -- | "rev" => throw "Unary operator not implemented"

@@ -96,7 +96,7 @@ def B.Term.getType : Term → Decoder B.BType
     match ← S.getType, ← T.getType with
     | .set α, .set β => return .set (.prod α β)
     | τ, σ => throw s!"Cannot form cartesian product of {τ} and {σ}"
-  | .union S _ | .inter S _ => return (← S.getType)
+  | .union S _ | .inter S _ | .closure _ S => return (← S.getType)
   | .app f x => do
     match ← f.getType with
     | .set (.prod τ σ) =>

@@ -216,6 +216,39 @@ private def encodeExtremum (isMin : Bool) (S : SMT.Term) : Encoder (SMT.Term × 
   recordSite ⟨op, S, .int, m⟩
   return (.var m, .int)
 
+/-- Encode `closure(R)` / `closure1(R)` for an encoded relation
+`R : (α × α) → bool`.
+
+The closure is a least fixpoint, which first-order SMT cannot define.  The
+constant introduced here is instead constrained to be *some* transitive
+relation containing `R` (plus reflexive for `closure`), i.e. an arbitrary
+superset of the real closure.  That direction is the sound one for validity
+checking: an obligation that holds for every such relation holds in particular
+for the closure.  What is lost is the induction principle, so goals that need
+the closure to be *least* — typically non-membership — stay unproved. -/
+private def encodeClosure (refl : Bool) (R : SMT.Term) (α : SMTType) :
+    Encoder (SMT.Term × SMTType) := do
+  let op := if refl then "closure" else "closure1"
+  let τ := SMTType.fun (.pair α α) .bool
+  if let some c ← SMT.findSite op R then
+    return (.var c, τ)
+  let c ← freshVar τ s!"{op}!"
+  let x ← freshVar α; SMT.eraseFromContext x
+  let y ← freshVar α; SMT.eraseFromContext y
+  let z ← freshVar α; SMT.eraseFromContext z
+  let cl := fun (a b : SMT.Term) => SMT.Term.app (.var c) (.pair a b)
+  let contains : SMT.Term :=
+    .forall [x, y] [α, α] (.app R (.pair (.var x) (.var y)) ⇒ˢ cl (.var x) (.var y))
+  let trans : SMT.Term :=
+    .forall [x, y, z] [α, α, α]
+      ((cl (.var x) (.var y) ∧ˢ cl (.var y) (.var z)) ⇒ˢ cl (.var x) (.var z))
+  let spec :=
+    if refl then contains ∧ˢ trans ∧ˢ .forall [x] [α] (cl (.var x) (.var x))
+    else contains ∧ˢ trans
+  declareConstWithSpec c τ spec
+  recordSite ⟨op, R, α, c⟩
+  return (.var c, τ)
+
 def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
   | .var v, E => do
     match (←get).types.lookup v with
@@ -339,6 +372,23 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     let .fun τ .bool := τS
       | throw s!"encodeTerm:finite: Expected a set, got {τS}"
     encodeFinite S' τ
+  | .closure refl R, E => do
+    let ⟨R', τR⟩ ← encodeTerm R E
+    match τR with
+    | .fun (.pair α β) .bool =>
+      unless α == β do
+        throw s!"encodeTerm:closure: Expected a homogeneous relation, got {τR}"
+      encodeClosure refl R' α
+    | .fun α (.option β) => do
+      -- A relation stored as a partial function: reify its graph first, the
+      -- same representation join `pow` performs.
+      unless α == β do
+        throw s!"encodeTerm:closure: Expected a homogeneous relation, got {τR}"
+      let ⟨Rg, Rg_spec⟩ ← loosenAux_prf "clos!"
+        (castPath.graph (castPath.reflexive α) (castPath.reflexive β)) R'
+      declareConstWithSpec Rg (.fun (.pair α β) .bool) Rg_spec
+      encodeClosure refl (.var Rg) α
+    | _ => throw s!"encodeTerm:closure: Expected a relation, got {τR}"
   | .app f x, E => do
     castApp (← encodeTerm f E) (← encodeTerm x E)
   | .collect vs D P, E => do
