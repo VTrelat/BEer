@@ -359,6 +359,15 @@ def decodeTerm : Xml.Element → Decoder B.Term
   | ⟨"Integer_Literal", a, _⟩ => do
     let n := (a.get! "value").toInt!
     pure <| .int n
+  -- `STRING` is one of Atelier B's basic types, next to `INTEGER` and `BOOL`,
+  -- and `decodeType` already treats it as an abstract set.  The generator
+  -- anonymises the text into a symbol, so a literal carries nothing beyond its
+  -- identity and becomes a constant of that type.
+  | ⟨"STRING_Literal", a, _⟩ => do
+    let τ : B.BType := (← get).types[(a.get! "typref").toNat!]!
+    let v ← disambiguate (a.get! "value") τ
+    addToContext v τ
+    return .var v
   | ⟨"Boolean_Literal", a, _⟩ => do
     match a.get! "value" with
       | "TRUE" => pure <| .bool true
