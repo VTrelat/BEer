@@ -28,6 +28,28 @@ def addFunctionFlag (name : String) : Decoder Unit :=
 def addToContext (v : String) (τ : BType) : Decoder Unit :=
   modify λ st => { st with env := { st.env with context := st.env.context.insert v τ } }
 
+/-- A short, injective rendering of a type, used to keep two same-named
+variables apart. -/
+def B.BType.mangle : BType → String
+  | .int => "i"
+  | .bool => "b"
+  | .set α => "P" ++ α.mangle
+  | .prod α β => "p" ++ α.mangle ++ β.mangle ++ "e"
+
+/-- The name to use for the source identifier `v` at type `τ`.
+
+A `.pog` may bind the same identifier at two different types in one file —
+Atelier B numbers fresh names per scope, and nothing suffixes them apart. Since
+the reader keeps a single name-to-type map, the second binding used to overwrite
+the first and one of the two uses was then encoded at the wrong type. Names are
+therefore disambiguated by type: the first type to claim a name keeps it, and
+any other type gets a suffix derived from the type itself, so every occurrence
+resolves the same way. -/
+def disambiguate (v : 𝒱) (τ : BType) : Decoder 𝒱 := do
+  match (← get).env.context.find? v with
+  | some τ' => if τ' = τ then return v else return s!"{v}!{τ.mangle}"
+  | none => return v
+
 def freshVar (τ : BType) : Decoder 𝒱 := do
   let x := s!"x{← incrementFreshVarC}"
   addToContext x τ

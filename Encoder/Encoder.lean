@@ -405,7 +405,12 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     modify λ e => { e with types := ctx } -- rollback context but keep freshvarsc incremented
     return (.lambda [v] [.bool] (.bool true), .fun .bool .bool)
   | .mem x S, E => do
-    castMembership (← encodeTerm x E) (← encodeTerm S E)
+    let x' ← encodeTerm x E
+    let S' ← encodeTerm S E
+    -- Report which source membership failed: the cast helpers only see SMT
+    -- types, which is rarely enough to find the construct responsible.
+    try castMembership x' S'
+    catch e => throw s!"{e}\n  in: {(toString x).take 120} ∈ {(toString S).take 200}"
   | .pow S, E => do
     let ⟨S', τS⟩ ← encodeTerm S E
     match τS with

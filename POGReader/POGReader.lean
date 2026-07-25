@@ -313,7 +313,7 @@ def decodeTerm : Xml.Element → Decoder B.Term
           modify λ st => { st with env.freshvarsc := max n st.env.freshvarsc }
       let typref := (a.get! "typref").toNat!
       let τ := (← get).types[typref]!
-      let v := s ++ (match a.get? "suffix" with | some s => "_" ++ s | none => "")
+      let v ← disambiguate (s ++ (match a.get? "suffix" with | some s => "_" ++ s | none => "")) τ
       addToContext v τ
       pure <| .var v
   | ⟨"Exp_Comparison",a,c⟩ | ⟨"Binary_Exp",a,c⟩ | ⟨"Binary_Pred",a,c⟩ => do
