@@ -484,8 +484,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let αs := α.fromProdl <| vs.length - 2
       unless αs.length == vs.length - 1 do
         throw s!"encodeTerm:collect: Expected {vs.length - 1} types, got {αs.length}"
-      for ⟨v, ξ⟩ in vs.zip (αs.concat β) do
-        modify λ e => { e with types := e.types.insert v ξ }
+      for ⟨v, ξ⟩ in vs.zip (αs.concat β) do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
       -- Keep the emitted function at its advertised domain type `α`.  A
@@ -673,11 +672,11 @@ def encodeTypeContext (e : B.Env) : Encoder Unit := do
   for ⟨v, τ⟩ in e.context.entries do
     if v ∈ e.flags then
       match τ with
-      | .set (.prod α β) => modify λ e =>
-        { e with types := e.types.insert v <| .fun (α.toSMTType) (.option β.toSMTType) }
+      | .set (.prod α β) =>
+        addToContext v <| .fun (α.toSMTType) (.option β.toSMTType)
       | ξ => throw s!"Unsupported flag type {v} : {ξ}"
     else
-      modify λ e => { e with types := e.types.insert v τ.toSMTType }
+      addToContext v τ.toSMTType
 
 def encodeDefs (E : B.Env) : Encoder Unit := do
   let rec aux : List ((_ : B.𝒱) × B.Term) → List SMT.𝒱 → Encoder (List SMT.𝒱)
@@ -744,7 +743,7 @@ def encodeProofObligation (φ : B.ProofObligation) (E : B.Env) : Encoder Stages 
         | .set (.prod α β) => pure <| .fun α.toSMTType (.option β.toSMTType)
         | ξ => throw s!"encodeProofObligation: unsupported flag type {v} : {ξ}"
       else pure τ.toSMTType
-    modify λ e => { e with types := e.types.insert v smtτ }
+    addToContext v smtτ
     localDecls := localDecls.concat (Instr.declare_const v smtτ)
   -- Augment the B environment with PO-local context/flags so `encodeTerm`'s
   -- B-side lookups succeed for the duration of this PO.
@@ -791,7 +790,7 @@ def finalBulkDeclare : Encoder Unit := do
 def encode (e : B.Env) : Encoder Unit := do
   modify λ st => { st with env := { st.env with
     freshvarsc := e.freshvarsc
-    usedVars := e.initialUsedVars } }
+    usedVars := Std.HashSet.ofList e.initialUsedVars } }
   encodeTypeContext e *> encodeDefs e *> encodeDistinctFinite e *> encodeProofObligations e *> finalBulkDeclare
 
 def EncoderState.toSMTFile : Encoder String := do

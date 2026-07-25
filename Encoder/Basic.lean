@@ -86,14 +86,19 @@ theorem SMT.superFresh_not_mem (xs : List SMT.𝒱) : SMT.superFresh xs ∉ xs :
     simp [SMT.superFresh, SMT.foldMaxLen]
   exact Nat.not_lt_of_ge hle hgt
 
+/-- A name not used anywhere yet.
+
+Every name that enters `types` also enters `usedVars` (see `addToContext`), so
+testing the set alone is enough; the fallback list is only materialised on the
+collision path, which the monotone counter makes rare. -/
 def SMT.freshVar (τ : SMTType) (name := "x") : Encoder SMT.𝒱 := do
-  let mut n ← incrementFreshVarC
-  let mut v₀ : SMT.𝒱 := s!"{name}{n}"
+  let n ← incrementFreshVarC
+  let v₀ : SMT.𝒱 := s!"{name}{n}"
   modifyGet λ st =>
-    let used := st.env.usedVars ++ st.types.keys
-    let v := if v₀ ∈ used then SMT.superFresh used else v₀
+    let used := st.env.usedVars
+    let v := if used.contains v₀ then SMT.superFresh used.toList else v₀
     (v, { st with
-      env := { st.env with usedVars := v :: st.env.usedVars }
+      env := { st.env with usedVars := used.insert v }
       types := st.types.insert v τ })
 
 def SMT.freshVarList : List SMTType → Encoder (List 𝒱)
@@ -107,7 +112,7 @@ def SMT.declareConst (v : 𝒱) (τ : SMTType) : Encoder Unit :=
   modify λ e => { e with env := { e.env with declarations := e.env.declarations.concat <| .declare_const v τ }}
 
 def SMT.addToContext (v : 𝒱) (τ : SMTType) : Encoder Unit :=
-  modify λ e => { e with types := e.types.insert v τ, env.usedVars := v :: e.env.usedVars }
+  modify λ e => { e with types := e.types.insert v τ, env.usedVars := e.env.usedVars.insert v }
 
 def SMT.eraseFromContext (v : 𝒱) : Encoder Unit :=
   modify λ e => { e with types := e.types.erase v }
