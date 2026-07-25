@@ -28,18 +28,6 @@ lake build BEer
 ```
 This may take about a few minutes, and should produce an executable `.lake/build/bin/BEer`.
 
-## Measuring
-
-```bash
-scripts/sweep.sh <corpus-dir> out.tsv
-```
-
-One row per `.pog` file: `OK`, `TIMEOUT`, or `FAIL` with the first error.
-Over the 5421-file ABZ benchmark, with a 25 s budget per file: 2935 translate,
-1756 exceed the budget, 730 fail. Of the failures, 678 are records (not
-supported) and 8 are real or float arithmetic (deliberately refused), leaving
-44 — 0.8% of the corpus.
-
 ## Paper
 An online version of the paper is available [here](https://vtrelat.github.io/papers/abz25.pdf).
 
