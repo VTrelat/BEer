@@ -52,8 +52,19 @@ at a λ-term in practice. Each occurrence therefore gets its own constant and
 first-order defining assertions, shared between occurrences of the same
 argument.
 
-Not supported: `iSIGMA`/`iPI`, `conc`, `iterate`, records (`Struct`), and real
+`iSIGMA`/`iPI` translate but are only pinned down on the empty index set — a
+fold has no useful finite axiomatisation — and `iterate` is unfolded only for a
+literal count. Not supported at all: `conc`, records (`Struct`), and real
 arithmetic.
+
+To measure coverage over a corpus of `.pog` files:
+
+```bash
+scripts/sweep.sh <corpus-dir> out.tsv
+```
+
+Large obligations are slow: a ~1 MB `.pog` takes on the order of a minute, all
+of it inside `encodeTerm`.
 
 ## Paper
 An online version of the paper is available [here](https://vtrelat.github.io/papers/abz25.pdf).
