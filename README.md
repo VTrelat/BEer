@@ -5,9 +5,6 @@
 BEer (**B** **E**ncod**er**) translates Atelier B proof obligation `.pog` files into SMT-LIB v2.7 `.smt` files via a _certified_ higher-order encoding.
 The tool is implemented in Lean and includes a proof of correctness of the encoding.
 
-> [!WARNING]
-> The tool has been proved correct in an earlier version, pinned in branch `beer-correctness`. Every change in the code from this point is consequently *unverified*.
-
 ## Usage
 ```
 BEer --in <input.pog> [--out <output.smt>] [--prelude <prelude.smt>]
@@ -25,7 +22,7 @@ This may take about a few minutes, and should produce an executable `.lake/build
 An online version of the paper is available [here](https://vtrelat.github.io/papers/abz25.pdf).
 
 ## Cite
-```bib
+```bib@
 @inproceedings{DBLP:conf/zum/Trelat25,
   author       = {Vincent Tr{\'{e}}lat},
   editor       = {Michael Leuschel and
