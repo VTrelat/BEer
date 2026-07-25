@@ -34,6 +34,7 @@ def subst (x : 𝒱) (e t : Term) : Term :=
   | .card S => .card (subst x e S)
   | .finite S => .finite (subst x e S)
   | .closure r R => .closure r (subst x e R)
+  | .fold s f => .fold s (subst x e f)
   | .collect vs D P =>
     if x ∈ vs then .collect vs (subst x e D) P else .collect vs (subst x e D) (subst x e P)
   | .lambda vs D P =>
@@ -155,6 +156,7 @@ def simplifier : Term → Term
   | Term.card S => .card (simplifier S)
   | Term.finite S => .finite (simplifier S)
   | Term.closure r R => .closure r (simplifier R)
+  | Term.fold s f => .fold s (simplifier f)
   | Term.div x y => .div (simplifier x) (simplifier y)
   | Term.mod x y => .mod (simplifier x) (simplifier y)
   | Term.exp x y => .exp (simplifier x) (simplifier y)

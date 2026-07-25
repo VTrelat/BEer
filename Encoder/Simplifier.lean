@@ -121,6 +121,44 @@ def simpAsserts : Stages → Stages
   | .instr is => .instr <| is.map simplify
   | .asserts as => .asserts <| as.attach.map (λ ⟨a, _⟩ => simpAsserts a)
 
+/-- Re-scope the helper constants a binder body introduced.
+
+Cast helpers and the constants behind `card`/`min`/`finite` are declared
+globally, with their specification asserted at the enclosing position.  Inside
+`collect` or `lambda` that is wrong as soon as the specification mentions the
+bound variables: the body is about to be abstracted over a fresh tuple `z` with
+`vs` substituted away, and a hoisted specification would not follow.
+
+Each helper `h : σ` therefore becomes a function `h^ : τ → σ`; occurrences of
+`h` become `h^ z`, and the specification `Φ(h, vs)` becomes
+`∀ z : τ. Φ(h^ z, destructure z)`.  That is the skolemised form of "for every
+`z` there is a helper satisfying `Φ`", which is what the body already meant, so
+nothing is assumed that was not.
+
+`subs` is the destructuring of `z` that the caller will substitute for `vs`.
+Returns the body with the helper occurrences rewritten. -/
+def rescopeHelpers (before : Nat) (vs : List 𝒱) (subs : List Term)
+    (z : 𝒱) (τ : SMTType) (body : Term) : Encoder Term := do
+  let st ← get
+  let new := st.env.declarations.drop before
+  let helpers := new.filterMap fun | .declare_const v _ => some v | _ => none
+  if helpers.isEmpty then return body
+  let applyRen := fun t =>
+    helpers.foldl (fun acc h => subst h (.app (.var s!"{h}^") (.var z)) acc) t
+  let new' ← new.mapM fun
+    | .declare_const v σ => do
+      eraseFromContext v
+      addToContext s!"{v}^" (.fun τ σ)
+      return .declare_const s!"{v}^" (.fun τ σ)
+    -- `addSpec` emits the specification as `define-fun h_spec () Bool …`; the
+    -- name is kept so the already-emitted `(assert h_spec)` still refers to it.
+    | .define_fun n .unit .bool b =>
+      return .define_fun n .unit .bool (.forall [z] [τ] (applyRen (substList vs subs b)))
+    | i => return i
+  modify fun e =>
+    { e with env := { e.env with declarations := e.env.declarations.take before ++ new' } }
+  return applyRen body
+
 nonrec def Env.simplify (E : Env) : Env :=
   -- dbg_trace "{E.declarations[0]!} ---> {simplify E.declarations[0]!}"
   { E with

@@ -147,7 +147,25 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
       let y := s!"y{← incrementFreshVarC}"
       let z := s!"z{← incrementFreshVarC}"
       return .collect [x, y, z] (E ⨯ᴮ F ⨯ᴮ E) (.var z =ᴮ .var y)
-  -- | "iterate" => throw "Not implemented"
+  -- `iterate(R, n)` is `R` composed with itself `n` times.  A symbolic `n`
+  -- would need a relation indexed by an integer, so only literal exponents are
+  -- unfolded — as for `**i`.
+  | "iterate", τ => fun R n => do
+    let .set (.prod α α') := τ
+      | throw s!"iterate operator expects a homogeneous relation, got type {τ}"
+    unless α = α' do
+      throw s!"iterate operator expects a homogeneous relation, got type {τ}"
+    let .int k := n | throw s!"Cannot iterate a symbolic number of times ({n})"
+    if k < 0 then throw s!"Cannot iterate a negative number of times ({k})"
+    if k > 16 then throw s!"Refusing to unfold iterate {k} times"
+    if k = 0 then
+      let x ← freshVar α
+      return .lambda [x] α.toTerm (.var x)
+    else
+      let mut acc := R
+      for _ in [1:k.toNat] do
+        acc ← B.Term.compose α α α acc R
+      return acc
   -- | "const" => throw "Not implemented"
   -- | "rank" => throw "Not implemented"
   -- | "father" => throw "Not implemented"

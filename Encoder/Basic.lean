@@ -168,29 +168,6 @@ def SMT.declareConstWithSpec (x! : 𝒱) (τ : SMTType)
   declareConst x! τ
   addSpec x! x!_spec
 
-/-- Reject a binder body that hoisted helper declarations depending on its
-bound variables.
-
-Helpers (cast constants, cardinality/extremum constants) are declared globally
-and their specifications asserted at the enclosing assert position.  That is
-only sound when the specification does not mention the binder's own variables:
-`collect` and `lambda` emit a λ over a fresh tuple variable and substitute `vs`
-away inside the body, which a hoisted specification would not follow.
-
-A helper whose specification is closed with respect to `vs` is indistinguishable
-from one created outside the binder, so it is accepted; anything mentioning `vs`
-is refused. -/
-def SMT.ensureHelpersScopeFree (before : Nat) (vs : List 𝒱)
-    (location : String) : Encoder Unit := do
-  let st ← get
-  let escaping := st.env.declarations.drop before |>.filterMap fun
-    | .define_fun n _ _ b | .define_const n _ b =>
-      let esc := (SMT.fv b).filter (· ∈ vs)
-      if esc.isEmpty then none else some (n, esc)
-    | _ => none
-  unless escaping.isEmpty do
-    throw s!"{location}: helper specifications depend on the bound variables {escaping}"
-
 def SMT.addAssert' (t : Term) : Encoder Unit := do
   let ass := (←get).env.asserts
   modify λ e => { e with env := { e.env with asserts := go t ass}}

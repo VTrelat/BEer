@@ -40,6 +40,9 @@ inductive Term where
   -- reflexive-transitive closure (`closure`) over the transitive one
   -- (`closure1`).
   | closure (refl : Bool) (R : Term)
+  -- Sum (`isSum`) or product over the values of an integer-valued function,
+  -- i.e. Atelier B's `iSIGMA` / `iPI`.
+  | fold (isSum : Bool) (f : Term)
   -- functions
   | app (f x : Term)
   | lambda (vs : List 𝒱) (D P : Term)
@@ -91,6 +94,7 @@ def fv : Term → List 𝒱
   | .card S => fv S
   | .finite S => fv S
   | .closure _ R => fv R
+  | .fold _ f => fv f
   | .min S => fv S
   | .max S => fv S
 
@@ -104,7 +108,7 @@ def bv : Term → List 𝒱
   | .cprod S T | .union S T | .inter S T => bv S ++ bv T
   | .pfun A B => bv A ++ bv B
   | .app f x => bv f ++ bv x
-  | .card S | .finite S | .min S | .max S | .pow S | .closure _ S => bv S
+  | .card S | .finite S | .min S | .max S | .pow S | .closure _ S | .fold _ S => bv S
 
 abbrev MAXINT : Int := 2147483647
 abbrev MININT : Int := -2147483647

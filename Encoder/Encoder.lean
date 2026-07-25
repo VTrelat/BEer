@@ -249,6 +249,23 @@ private def encodeClosure (refl : Bool) (R : SMT.Term) (α : SMTType) :
   recordSite ⟨op, R, α, c⟩
   return (.var c, τ)
 
+/-- Encode `SIGMA`/`PI` over the values of `f`.
+
+A fold has no first-order definition and no useful finite axiomatisation, so the
+constant introduced here is only pinned down on the empty function — enough for
+an obligation to mention `SIGMA` without the translation failing, not enough to
+reason about its value.  Being under-constrained is the safe direction: the
+solver may pick any value, so nothing becomes provable that was not. -/
+private def encodeFold (isSum : Bool) (f : SMT.Term) (τ : SMTType)
+    (isEmpty : SMT.Term) : Encoder (SMT.Term × SMTType) := do
+  let op := if isSum then "sigma" else "pi"
+  if let some c ← SMT.findSite op f then
+    return (.var c, .int)
+  let c ← freshVar .int s!"{op}!"
+  declareConstWithSpec c .int (isEmpty ⇒ˢ (.var c =ˢ .int (if isSum then 0 else 1)))
+  recordSite ⟨op, f, τ, c⟩
+  return (.var c, .int)
+
 def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
   | .var v, E => do
     match (←get).types.lookup v with
@@ -372,6 +389,19 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     let .fun τ .bool := τS
       | throw s!"encodeTerm:finite: Expected a set, got {τS}"
     encodeFinite S' τ
+  | .fold isSum f, E => do
+    let ⟨f', τf⟩ ← encodeTerm f E
+    match τf with
+    | .fun τ (.option .int) => do
+      let x ← freshVar τ; SMT.eraseFromContext x
+      encodeFold isSum f' τ
+        (.forall [x] [τ] (.app f' (.var x) =ˢ none$ .int))
+    | .fun (.pair τ .int) .bool => do
+      let x ← freshVar τ; SMT.eraseFromContext x
+      let n ← freshVar .int; SMT.eraseFromContext n
+      encodeFold isSum f' τ
+        (.forall [x, n] [τ, .int] (¬ˢ .app f' (.pair (.var x) (.var n))))
+    | _ => throw s!"encodeTerm:fold: Expected an integer-valued function, got {τf}"
   | .closure refl R, E => do
     let ⟨R', τR⟩ ← encodeTerm R E
     match τR with
@@ -405,7 +435,6 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         modify λ e => { e with types := e.types.insert v ξ }
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
-      ensureHelpersScopeFree decls_snap.length vs "encodeTerm:collect"
       -- Keep the emitted function at its advertised domain type `α`.  A
       -- multi-variable SMT lambda denotes over a right-associated tuple,
       -- whereas `α` and `toPairl` use the encoder's left-associated tuple
@@ -414,7 +443,9 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let z ← freshVar α
       let Dapp := .app D' (.var z)
       let Dz := .the Dapp
-      let P' := substList vs ((toDestPair vs.dropLast (.var z)).concat Dz) P'
+      let subs := (toDestPair vs.dropLast (.var z)).concat Dz
+      let P' ← SMT.rescopeHelpers decls_snap.length vs subs z α P'
+      let P' := substList vs subs P'
       -- `the` is total in the semantic model, so retain the option equality
       -- guard to rule out its arbitrary value when `Dapp` is `none`.
       let defined := .eq Dapp (.some Dz)
@@ -427,9 +458,10 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
-      ensureHelpersScopeFree decls_snap.length vs "encodeTerm:collect"
       let z ← freshVar τ
-      let P' := substList vs (toDestPair vs (.var z)) P'
+      let subs := toDestPair vs (.var z)
+      let P' ← SMT.rescopeHelpers decls_snap.length vs subs z τ P'
+      let P' := substList vs subs P'
       SMT.eraseFromContext z
       return (.lambda [z] [τ] (.ite (.app D' (.var z)) P' (.bool false)), .fun τ .bool)
     | _ => throw s!"encodeTerm:collect: Expected a set or a function, got {τD}"
@@ -449,9 +481,10 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', γ⟩ ← encodeTerm P E
-      ensureHelpersScopeFree decls_snap.length vs "encodeTerm:lambda"
       let x ← freshVar τ
-      let Px := substList vs (toDestPair vs (.var x)) P'
+      let subs := toDestPair vs (.var x)
+      let P' ← SMT.rescopeHelpers decls_snap.length vs subs x τ P'
+      let Px := substList vs subs P'
       let x_mem_D' := .app D' (.var x)
       SMT.eraseFromContext x
       return (.lambda [x] [τ]

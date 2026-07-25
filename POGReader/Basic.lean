@@ -41,8 +41,6 @@ def getQuantifier : String → Decoder (List 𝒱 → B.Term → B.Term → B.Te
   | "!" => pure .all
   | "#" => pure .exists
   | "%" => pure .lambda
-  -- TODO: quantified sum (`iSIGMA`) and product (`iPI`) need an SMT-side
-  -- fold primitive, like `card`; see `getExpQuantifier` for `UNION`/`INTER`.
   | s => throw s!"Unknown quantifier {s}"
 
 /-- Quantified *expressions*.  `%` is λ-abstraction and is handled by
@@ -54,6 +52,10 @@ with `∀`. -/
 def getExpQuantifier (kind : String) (τ : BType) :
     Decoder (List 𝒱 → B.Term → B.Term → Decoder B.Term) :=
   match kind with
+  | "iSIGMA" | "iPI" =>
+    -- `SIGMA vs.(P | E)` sums `E` over `{vs | P}`, which is exactly folding the
+    -- function `λ vs ∈ {vs | P}. E`.
+    return fun vs D E => return .fold (kind == "iSIGMA") (.lambda vs D E)
   | "UNION" | "INTER" => do
     let .set σ := τ | throw s!"{kind} expects a set type, got {τ}"
     let quant := if kind == "UNION" then B.Term.exists else B.Term.all
@@ -84,7 +86,7 @@ def B.Term.getType : Term → Decoder B.BType
   | .int _ | .add _ _ | .sub _ _ | .mul _ _ | .card _
   | .div _ _ | .mod _ _ | .exp _ _
   -- `min`/`max` take a set of integers to an integer.
-  | .min _ | .max _ => return .int
+  | .min _ | .max _ | .fold _ _ => return .int
   | .bool _ | .finite _ => return .bool
   | .maplet x y => return .prod (← x.getType) (← y.getType)
   | .le _ _ | .and _ _ | .not _ | .eq _ _ | .mem _ _ | .all _ _ _ => return .bool
