@@ -3,7 +3,8 @@
 #
 #   scripts/sweep.sh <corpus-dir> [out.tsv] [stride] [jobs]
 #
-# Writes one TSV row per file: <path> <OK|FAIL|TIMEOUT> <first error message>.
+# Writes one TSV row per file:
+#   <path> <OK|FAIL|TIMEOUT> <first error message> <elapsed seconds>
 # `stride` samples every Nth file (default 1, i.e. all of them) — useful to keep
 # a run cheap. Summarise a result with:
 #
@@ -30,11 +31,14 @@ one=$(mktemp)
 trap 'rm -f "$one"' EXIT
 cat > "$one" <<EOF
 #!/bin/sh
+start=\$(date +%s)
 err=\$(timeout $LIMIT "$BIN" --in "\$1" --out /dev/null --prelude "$PRELUDE" 2>&1 >/dev/null)
-case \$? in
-  124) printf '%s\tTIMEOUT\t\n' "\$1" ;;
-  0)   printf '%s\tOK\t\n' "\$1" ;;
-  *)   printf '%s\tFAIL\t%s\n' "\$1" "\$(printf '%s' "\$err" | tr '\n' ' ' | sed 's/uncaught exception: //')" ;;
+rc=\$?
+el=\$(( \$(date +%s) - start ))
+case \$rc in
+  124) printf '%s\tTIMEOUT\t\t%s\n' "\$1" "\$el" ;;
+  0)   printf '%s\tOK\t\t%s\n' "\$1" "\$el" ;;
+  *)   printf '%s\tFAIL\t%s\t%s\n' "\$1" "\$(printf '%s' "\$err" | tr '\n' ' ' | sed 's/uncaught exception: //')" "\$el" ;;
 esac
 EOF
 chmod +x "$one"
