@@ -62,7 +62,7 @@ partial def mismatches (Γ : TypeContext) (t : Term) : List String :=
       | some (.fun σ _), some ξ =>
         if σ == ξ then []
         else [s!"applied a function of domain {σ} to an argument of type {ξ}: " ++
-              (Term.toString x).take 90]
+              (Term.toString f).take 70 ++ " @ " ++ (Term.toString x).take 60]
       | _, _ => []
     here ++ mismatches Γ f ++ mismatches Γ x
   | .lambda vs τs b | .forall vs τs b | .exists vs τs b => mismatches (bind Γ vs τs) b
