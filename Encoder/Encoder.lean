@@ -459,6 +459,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let αs := α.fromProdl <| vs.length - 2
       unless αs.length == vs.length - 1 do
         throw s!"encodeTerm:collect: Expected {vs.length - 1} types, got {αs.length}"
+      let shadowed ← SMT.saveShadowed vs
       for ⟨v, ξ⟩ in vs.zip (αs.concat β) do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
@@ -477,11 +478,13 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       -- guard to rule out its arbitrary value when `Dapp` is `none`.
       let defined := .eq Dapp (.some Dz)
       SMT.eraseFromContext z
+      SMT.restoreShadowed shadowed
       return (.lambda [z] [α] (.ite (.and defined P') (.some Dz) (none$ β)),
         .fun α β.option)
     | .fun τ .bool => do
       -- `D` is a set
       let τs := τ.fromProdl <| vs.length - 1
+      let shadowed ← SMT.saveShadowed vs
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
@@ -490,6 +493,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let P' ← SMT.rescopeHelpers decls_snap.size vs subs z τ P'
       let P' := substList vs subs P'
       SMT.eraseFromContext z
+      SMT.restoreShadowed shadowed
       return (.lambda [z] [τ] (.ite (.app D' (.var z)) P' (.bool false)), .fun τ .bool)
     | _ => throw s!"encodeTerm:collect: Expected a set or a function, got {τD}"
   | .lambda vs D P, E => do
@@ -508,6 +512,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
     | .fun τ .bool => do
       -- `D` is a set of tuples with arity `vs.length`
       let τs := τ.fromProdl <| vs.length - 1
+      let shadowed ← SMT.saveShadowed vs
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', γ⟩ ← encodeTerm P E
@@ -517,6 +522,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let Px := substList vs subs P'
       let x_mem_D' := .app D' (.var x)
       SMT.eraseFromContext x
+      SMT.restoreShadowed shadowed
       return (.lambda [x] [τ]
         (.ite x_mem_D' (.some Px) (none$ γ)),
         .fun τ (.option γ))
@@ -576,6 +582,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
             | ξ => return ξ
           else return τ
 
+        let shadowed ← SMT.saveShadowed vs
         for ⟨v, τ⟩ in vs.zip τs do addToContext v τ
 
         -- Snapshot before encoding body + membership: cast helpers generated here
@@ -613,6 +620,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         let scoped_body := ex_binders.foldr (fun (v, τ) t => .forall [v] [τ] t) inner
 
         for v in zs do SMT.eraseFromContext v
+        SMT.restoreShadowed shadowed
         return (.forall zs τs scoped_body, .bool)
       else throw s!"encodeTerm:all: number of variables {vs.length} does not match number of gathered types {tmp_τs.length}"
     | .fun α (.option β) =>
@@ -620,6 +628,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       unless τs.length == vs.length do
         throw s!"encodeTerm:all: Expected {vs.length - 1} types, got {τs.length}"
 
+      let shadowed ← SMT.saveShadowed vs
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
 
       let xs ← freshVarList τs
@@ -647,6 +656,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
       for v in xs do SMT.eraseFromContext v
 
+      SMT.restoreShadowed shadowed
       return (.forall xs τs scoped_body, .bool)
     | _ => throw s!"encodeTerm:all: Expected a set or a function, got {← encodeTerm D E}"
 

@@ -118,6 +118,23 @@ def SMT.addToContext (v : 𝒱) (τ : SMTType) : Encoder Unit :=
 def SMT.eraseFromContext (v : 𝒱) : Encoder Unit :=
   modify fun ⟨env, types, sites⟩ => ⟨env, types.erase v, sites⟩
 
+/-- Remember the types that `vs` shadow, so a binder can be undone.
+
+Binder names come straight from the `.pog`, and Atelier B numbers fresh names
+per scope, so a binder routinely collides with a global.  Leaving its type
+behind meant every later use of the global was encoded at the binder's type
+while its declaration kept the original — the two set representations then
+disagreed and the emitted file was ill-typed. -/
+def SMT.saveShadowed (vs : List 𝒱) : Encoder (List (𝒱 × Option SMTType)) := do
+  let Γ := (← get).types
+  return vs.map fun v => (v, Γ[v]?)
+
+def SMT.restoreShadowed (saved : List (𝒱 × Option SMTType)) : Encoder Unit := do
+  for (v, old) in saved do
+    match old with
+    | some τ => addToContext v τ
+    | none => eraseFromContext v
+
 /-- The constant already standing for `op` applied to `S`, if any. -/
 def SMT.findSite (op : String) (S : Term) : Encoder (Option 𝒱) := do
   return (← get).sites.find? (fun s => s.op == op && s.set == S) |>.map (·.name)
