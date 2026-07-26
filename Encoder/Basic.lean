@@ -135,6 +135,30 @@ def SMT.restoreShadowed (saved : List (𝒱 × Option SMTType)) : Encoder Unit :
     | some τ => addToContext v τ
     | none => eraseFromContext v
 
+/-- Hide the sites a binder would capture, returning them so the caller can put
+them back.
+
+A site memoises its constant on the *term* its argument encoded to, and terms
+carry no scope.  Since a binder name routinely collides with a global (see
+`saveShadowed`), an outer site recorded against a term mentioning that name stays
+visible inside the body, where the name now denotes the binder — at the other set
+representation, in general.  Linking a new site against it then puts both
+readings of the name in one formula, and the substitution that closes the body
+rewrites them to the same variable: the graph use and the partial-function use
+end up on the same symbol, and the file no longer typechecks.
+
+The sites hidden here are only a memo table, so dropping them costs sharing and
+cross-site facts, never soundness. -/
+def SMT.hideCapturedSites (vs : List 𝒱) : Encoder (List Site) := do
+  let (captured, kept) := (← get).sites.partition fun s => (fv s.set).any (· ∈ vs)
+  modify fun e => { e with sites := kept }
+  return captured
+
+/-- Undo `hideCapturedSites`.  The hidden sites are older than anything the body
+recorded, so they go back at the end. -/
+def SMT.restoreSites (hidden : List Site) : Encoder Unit :=
+  modify fun e => { e with sites := e.sites ++ hidden }
+
 /-- The constant already standing for `op` applied to `S`, if any. -/
 def SMT.findSite (op : String) (S : Term) : Encoder (Option 𝒱) := do
   return (← get).sites.find? (fun s => s.op == op && s.set == S) |>.map (·.name)

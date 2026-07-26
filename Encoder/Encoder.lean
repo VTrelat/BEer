@@ -460,6 +460,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       unless αs.length == vs.length - 1 do
         throw s!"encodeTerm:collect: Expected {vs.length - 1} types, got {αs.length}"
       let shadowed ← SMT.saveShadowed vs
+      let hidden ← SMT.hideCapturedSites vs
       for ⟨v, ξ⟩ in vs.zip (αs.concat β) do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
@@ -479,12 +480,14 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let defined := .eq Dapp (.some Dz)
       SMT.eraseFromContext z
       SMT.restoreShadowed shadowed
+      SMT.restoreSites hidden
       return (.lambda [z] [α] (.ite (.and defined P') (.some Dz) (none$ β)),
         .fun α β.option)
     | .fun τ .bool => do
       -- `D` is a set
       let τs := τ.fromProdl <| vs.length - 1
       let shadowed ← SMT.saveShadowed vs
+      let hidden ← SMT.hideCapturedSites vs
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:collect: Expected a boolean, got {(← encodeTerm P E).2}"
@@ -494,6 +497,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let P' := substList vs subs P'
       SMT.eraseFromContext z
       SMT.restoreShadowed shadowed
+      SMT.restoreSites hidden
       return (.lambda [z] [τ] (.ite (.app D' (.var z)) P' (.bool false)), .fun τ .bool)
     | _ => throw s!"encodeTerm:collect: Expected a set or a function, got {τD}"
   | .lambda vs D P, E => do
@@ -513,6 +517,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       -- `D` is a set of tuples with arity `vs.length`
       let τs := τ.fromProdl <| vs.length - 1
       let shadowed ← SMT.saveShadowed vs
+      let hidden ← SMT.hideCapturedSites vs
       for ⟨v, ξ⟩ in vs.zip τs do addToContext v ξ
       let decls_snap := (← get).env.declarations
       let ⟨P', γ⟩ ← encodeTerm P E
@@ -523,6 +528,7 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let x_mem_D' := .app D' (.var x)
       SMT.eraseFromContext x
       SMT.restoreShadowed shadowed
+      SMT.restoreSites hidden
       return (.lambda [x] [τ]
         (.ite x_mem_D' (.some Px) (none$ γ)),
         .fun τ (.option γ))
@@ -592,6 +598,8 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         let asserts_snap := (← get).env.asserts
         let types_snap := (← get).types
         let sites_snap := (← get).sites
+        -- After the snapshot, so the wholesale restore below puts them back.
+        let _ ← SMT.hideCapturedSites vs
 
         let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:all: Expected a boolean, got {← encodeTerm P E}"
         let zs ← freshVarList τs
@@ -638,6 +646,8 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       let asserts_snap := (← get).env.asserts
       let types_snap := (← get).types
       let sites_snap := (← get).sites
+      -- After the snapshot, so the wholesale restore below puts them back.
+      let _ ← SMT.hideCapturedSites vs
 
       let ⟨P', .bool⟩ ← encodeTerm P E | throw s!"encodeTerm:all: Expected a boolean, got {← encodeTerm P E}"
       let P' := substList vs (xs.map .var) P'
