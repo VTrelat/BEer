@@ -18,67 +18,81 @@ file, which is worse than the leak it is guarding against.
 
 namespace SMT
 
+/-- Binders in scope, innermost first, layered over the declarations.
+
+Extending the declaration map itself would copy it at every binder — it is still
+referenced by the enclosing call, so the insert cannot happen in place — and that
+made checking a large file cost more than encoding it.  Nesting depth is small,
+so a scan of the layer is cheaper than any map. -/
+abbrev Locals := List (𝒱 × SMTType)
+
+private def lookup (Γ : TypeContext) (L : Locals) (v : 𝒱) : Option SMTType :=
+  match L.find? (·.1 == v) with
+  | some (_, τ) => some τ
+  | none => Γ[v]?
+
 /-- Best-effort type of an emitted term.  `none` means "cannot tell". -/
-partial def infer (Γ : TypeContext) : Term → Option SMTType
-  | .var v => Γ[v]?
+partial def infer (Γ : TypeContext) (L : Locals) : Term → Option SMTType
+  | .var v => lookup Γ L v
   | .int _ | .add .. | .sub .. | .mul .. => some .int
   | .bool _ | .forall .. | .exists .. | .eq .. | .and .. | .or .. | .not _
   | .imp .. | .le .. | .distinct _ => some .bool
   | .as _ τ => some τ
   | .builtin _ τ _ => some τ
   | .none => none
-  | .some t => (infer Γ t).map .option
-  | .the t => match infer Γ t with
+  | .some t => (infer Γ L t).map .option
+  | .the t => match infer Γ L t with
     | some (.option τ) => some τ
     | _ => none
-  | .pair a b => match infer Γ a, infer Γ b with
+  | .pair a b => match infer Γ L a, infer Γ L b with
     | some α, some β => some (.pair α β)
     | _, _ => none
-  | .fst t => match infer Γ t with
+  | .fst t => match infer Γ L t with
     | some (.pair α _) => some α
     | _ => none
-  | .snd t => match infer Γ t with
+  | .snd t => match infer Γ L t with
     | some (.pair _ β) => some β
     | _ => none
-  | .ite _ t e => (infer Γ t).orElse fun _ => infer Γ e
-  | .app f _ => match infer Γ f with
+  | .ite _ t e => (infer Γ L t).orElse fun _ => infer Γ L e
+  | .app f _ => match infer Γ L f with
     | some (.fun _ τ) => some τ
     | _ => none
   -- Only the single-binder form is inferred.  A multi-binder λ is curried by
   -- the solver but the encoder treats its domain as a tuple in places, and
   -- guessing wrong here would manufacture false alarms.
-  | .lambda [v] [τ] t => (infer (Γ.insert v τ) t).map (SMTType.fun τ)
+  | .lambda [v] [τ] t => (infer Γ ((v, τ) :: L) t).map (SMTType.fun τ)
   | .lambda .. => none
 
-/-- Extend `Γ` with a binder list, ignoring a malformed one. -/
-private def bind (Γ : TypeContext) (vs : List 𝒱) (τs : List SMTType) : TypeContext :=
-  (vs.zip τs).foldl (fun Δ (v, τ) => Δ.insert v τ) Γ
+/-- Push a binder list onto the local layer, ignoring a malformed one.  Innermost
+first, so `lookup`'s first hit is the one in scope. -/
+private def bind (L : Locals) (vs : List 𝒱) (τs : List SMTType) : Locals :=
+  (vs.zip τs).reverse ++ L
 
 /-- Applications in `t` whose argument type contradicts the function's domain. -/
-partial def mismatches (Γ : TypeContext) (t : Term) : List String :=
+partial def mismatches (Γ : TypeContext) (L : Locals) (t : Term) : List String :=
   match t with
   | .app f x =>
-    let here := match infer Γ f, infer Γ x with
+    let here := match infer Γ L f, infer Γ L x with
       | some (.fun σ _), some ξ =>
         if σ == ξ then []
         else [s!"applied a function of domain {σ} to an argument of type {ξ}: " ++
               (Term.toString f).take 70 ++ " @ " ++ (Term.toString x).take 60]
       | _, _ => []
-    here ++ mismatches Γ f ++ mismatches Γ x
-  | .lambda vs τs b | .forall vs τs b | .exists vs τs b => mismatches (bind Γ vs τs) b
+    here ++ mismatches Γ L f ++ mismatches Γ L x
+  | .lambda vs τs b | .forall vs τs b | .exists vs τs b => mismatches Γ (bind L vs τs) b
   | .eq a b | .and a b | .or a b | .imp a b | .le a b | .pair a b
-  | .add a b | .sub a b | .mul a b => mismatches Γ a ++ mismatches Γ b
-  | .not a | .some a | .the a | .fst a | .snd a | .as a _ => mismatches Γ a
-  | .ite c a b => mismatches Γ c ++ mismatches Γ a ++ mismatches Γ b
-  | .distinct ts | .builtin _ _ ts => ts.attach.flatMap (fun ⟨u, _⟩ => mismatches Γ u)
+  | .add a b | .sub a b | .mul a b => mismatches Γ L a ++ mismatches Γ L b
+  | .not a | .some a | .the a | .fst a | .snd a | .as a _ => mismatches Γ L a
+  | .ite c a b => mismatches Γ L c ++ mismatches Γ L a ++ mismatches Γ L b
+  | .distinct ts | .builtin _ _ ts => ts.attach.flatMap (fun ⟨u, _⟩ => mismatches Γ L u)
   | .var _ | .int _ | .bool _ | .none => []
 
 /-- Record what an instruction declares, and report what it asserts. -/
 private def step (Γ : TypeContext) : Instr → TypeContext × List String
   | .declare_const v τ => (Γ.insert v τ, [])
-  | .define_fun v _ τ t => (Γ.insert v τ, mismatches Γ t)
-  | .define_const v τ t => (Γ.insert v τ, mismatches Γ t)
-  | .assert t => (Γ, mismatches Γ t)
+  | .define_fun v _ τ t => (Γ.insert v τ, mismatches Γ [] t)
+  | .define_const v τ t => (Γ.insert v τ, mismatches Γ [] t)
+  | .assert t => (Γ, mismatches Γ [] t)
   | _ => (Γ, [])
 
 private def chunk (Γ : TypeContext) (is : Chunk) : TypeContext × List String :=
