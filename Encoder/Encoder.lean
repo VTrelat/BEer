@@ -1,5 +1,6 @@
 import Encoder.Simplifier
 import Encoder.Loosening
+import SMT.Check
 
 open Batteries SMT
 
@@ -780,7 +781,12 @@ def encode (e : B.Env) : Encoder Unit := do
 
 def EncoderState.toSMTFile : Encoder String := do
   let env := (← get).env.simplify
-  return toString <| Stages.asserts [.instr env.declarations.toList, env.asserts]
+  -- Refuse to emit a file a solver would reject.  A missed conversion between
+  -- the two set representations is otherwise invisible here and only surfaces
+  -- as a solver type error, far from the code responsible.
+  match SMT.Env.mismatches env with
+  | [] => return toString <| Stages.asserts [.instr env.declarations.toList, env.asserts]
+  | ps => throw <| "emitted SMT is ill-typed:\n  " ++ String.intercalate "\n  " (ps.take 3)
 
 def encodePOG (pogpath : System.FilePath) (show_encoding := false): IO String := do
   let pog ← readPOG pogpath |>.propagateError
