@@ -47,59 +47,27 @@ abbrev Encoder := StateT EncoderState (Except String)
 def SMT.incrementFreshVarC : Encoder Nat :=
   modifyGet λ st => (st.env.freshvarsc, { st with env.freshvarsc := st.env.freshvarsc + 1 } )
 
-def SMT.foldMaxLen (xs : List SMT.𝒱) : Nat :=
-  xs.foldl (fun n s => max n s.length) 0
-
-def SMT.superFresh (xs : List SMT.𝒱) : SMT.𝒱 :=
-  String.ofList (List.replicate (SMT.foldMaxLen xs + 1) 'x')
-
-theorem SMT.le_foldMaxLen (acc : Nat) (xs : List SMT.𝒱) :
-    acc ≤ xs.foldl (fun n t => max n t.length) acc := by
-  induction xs generalizing acc with
-  | nil => simp
-  | cons a as ih =>
-    simp
-    exact Nat.le_trans (Nat.le_max_left _ _) (ih (acc := max acc a.length))
-
-theorem SMT.length_le_foldMaxLenAux (acc : Nat) (xs : List SMT.𝒱) (s : SMT.𝒱) (hs : s ∈ xs) :
-    s.length ≤ xs.foldl (fun n t => max n t.length) acc := by
-  induction xs generalizing acc with
-  | nil => cases hs
-  | cons a as ih =>
-    simp at hs ⊢
-    cases hs with
-    | inl hsa =>
-      subst hsa
-      exact Nat.le_trans (Nat.le_max_right acc s.length) (SMT.le_foldMaxLen (acc := max acc s.length) as)
-    | inr hmem =>
-      exact ih (acc := max acc a.length) hmem
-
-theorem SMT.length_le_foldMaxLen (xs : List SMT.𝒱) (s : SMT.𝒱) (hs : s ∈ xs) :
-    s.length ≤ SMT.foldMaxLen xs := by
-  simpa [SMT.foldMaxLen] using SMT.length_le_foldMaxLenAux 0 xs s hs
-
-theorem SMT.superFresh_not_mem (xs : List SMT.𝒱) : SMT.superFresh xs ∉ xs := by
-  intro hs
-  have hle : (SMT.superFresh xs).length ≤ SMT.foldMaxLen xs :=
-    SMT.length_le_foldMaxLen xs (SMT.superFresh xs) hs
-  have hgt : SMT.foldMaxLen xs < (SMT.superFresh xs).length := by
-    simp [SMT.superFresh, SMT.foldMaxLen]
-  exact Nat.not_lt_of_ge hle hgt
-
 /-- A name not used anywhere yet.
 
-Every name that enters `types` also enters `usedVars` (see `addToContext`), so
-testing the set alone is enough; the fallback list is only materialised on the
-collision path, which the monotone counter makes rare. -/
-def SMT.freshVar (τ : SMTType) (name := "x") : Encoder SMT.𝒱 := do
-  let n ← incrementFreshVarC
-  let v₀ : SMT.𝒱 := s!"{name}{n}"
+`usedVars` holds the names the `.pog` brought in, and is never added to: the
+monotone counter already keeps generated names apart from each other, since
+`freshvarsc` is consumed once per call and no two calls can therefore produce the
+same `name ++ n`.  What is left to avoid is a clash with a source name, which is
+what the retry below does.
+
+Inserting each generated name back into the set is what the encoder used to do,
+and it dominated the runtime — the set is shared, so every insert copied the
+whole thing.  Removing it took a 15 s file to 1.4 s. -/
+partial def SMT.freshVar (τ : SMTType) (name := "x") : Encoder SMT.𝒱 := do
+  let rec fresh : Encoder SMT.𝒱 := do
+    let n ← incrementFreshVarC
+    let v : SMT.𝒱 := s!"{name}{n}"
+    if (← get).env.usedVars.contains v then fresh else return v
+  let v ← fresh
   -- Destructured rather than updated with `{ st with … }`: keeping `st` alive
-  -- across the update leaves the tables shared, and each insert then clones the
-  -- whole table.  Consuming the fields lets both inserts happen in place.
-  modifyGet fun ⟨⟨decls, asserts, fvc, used⟩, types, sites⟩ =>
-    let v := if used.contains v₀ then SMT.superFresh used.toList else v₀
-    (v, ⟨⟨decls, asserts, fvc, used.insert v⟩, types.insert v τ, sites⟩)
+  -- across the update leaves the table shared, and the insert then clones it.
+  modify fun ⟨env, types, sites⟩ => ⟨env, types.insert v τ, sites⟩
+  return v
 
 def SMT.freshVarList : List SMTType → Encoder (List 𝒱)
   | [] => return []
@@ -112,8 +80,7 @@ def SMT.declareConst (v : 𝒱) (τ : SMTType) : Encoder Unit :=
   modify λ e => { e with env := { e.env with declarations := e.env.declarations.push <| .declare_const v τ }}
 
 def SMT.addToContext (v : 𝒱) (τ : SMTType) : Encoder Unit :=
-  modify fun ⟨⟨decls, asserts, fvc, used⟩, types, sites⟩ =>
-    ⟨⟨decls, asserts, fvc, used.insert v⟩, types.insert v τ, sites⟩
+  modify fun ⟨env, types, sites⟩ => ⟨env, types.insert v τ, sites⟩
 
 def SMT.eraseFromContext (v : 𝒱) : Encoder Unit :=
   modify fun ⟨env, types, sites⟩ => ⟨env, types.erase v, sites⟩

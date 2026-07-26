@@ -14,10 +14,15 @@ end B
 def B.SimpleGoal.vars (g : B.SimpleGoal) : List B.𝒱 :=
   (g.hyps.map B.Term.vars).flatten ++ g.goal.vars
 
+/-- Every name the obligation mentions.  The local context and flags are listed
+too, even though a name that occurs in no term cannot clash with anything the
+encoder emits: `freshVar` only consults this set, so a source name missing from
+it could be handed out a second time. -/
 def B.ProofObligation.vars (po : B.ProofObligation) : List B.𝒱 :=
   (po.defs.map B.Term.vars).flatten ++
   (po.hyps.map B.Term.vars).flatten ++
-  (po.goals.map B.SimpleGoal.vars).flatten
+  (po.goals.map B.SimpleGoal.vars).flatten ++
+  po.localContext.keys ++ po.localFlags
 
 def B.Env.initialUsedVars (E : B.Env) : List B.𝒱 := Id.run do
   let mut used := E.context.keys
