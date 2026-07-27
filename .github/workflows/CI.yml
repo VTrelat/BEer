@@ -6,40 +6,51 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Two editions are built from two branches, on three platforms each.
+  #
+  #   BEer       (main)       the certified encoder
+  #   BEer-zero  (beer-lite)  Zero-Proof BEer: no correctness proofs, wider B
+  #                           coverage, and the optimised encoder
+  #
+  # Both branches expose the same `BEer` executable target, so only the checked
+  # out ref differs.  `main`'s defaultTargets include `Correctness`, which is why
+  # the target is named explicitly rather than left to `lake build`.
   build:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        edition:
+          - id: BEer
+            ref: main
+          - id: BEer-zero
+            ref: beer-lite
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.edition.ref }}
 
-      # Build BEer with Lean on each OS.
-      # `build: false` skips the action's default `lake build` (which would
-      # only build `defaultTargets`, i.e. the libraries used for doc generation);
-      # we then build the `BEer` executable explicitly below.
       - uses: leanprover/lean-action@v1
         with:
           use-github-cache: true
           build: true
           build-args: "BEer"
 
-      # Upload artifacts per-OS
-      - name: Upload BEer artifact (Linux/macOS)
+      - name: Upload ${{ matrix.edition.id }} artifact (Linux/macOS)
         if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: BEer-${{ runner.os }} # BEer-Linux / BEer-macOS
+          name: ${{ matrix.edition.id }}-${{ runner.os }}
           path: .lake/build/bin/BEer
           if-no-files-found: error
 
-      - name: Upload BEer artifact (Windows)
+      - name: Upload ${{ matrix.edition.id }} artifact (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: BEer-${{ runner.os }} # BEer-Windows
+          name: ${{ matrix.edition.id }}-${{ runner.os }}
           path: .lake/build/bin/BEer.exe
           if-no-files-found: error
 
@@ -50,90 +61,50 @@ jobs:
       contents: write
 
     steps:
-      # pack release
-      - name: Fetch release by tag
-        id: fetch-release
-        uses: pdamianik/release-tag-to-upload-url-action@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag: beer
-          token: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
-      - uses: dev-drprasad/delete-tag-and-release@v1.1
-        name: Delete release if already existing
-        with:
-          delete_release: true
-          tag_name: beer
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        if: steps.fetch-release.outcome == 'success'
-
-      - name: Create release
-        id: create-release
-        uses: actions/create-release@latest
-        with:
-          tag_name: beer
-          release_name: "BEer"
-          body: |
-            Automated release of BEer for Linux, macOS, and Windows.
-          prerelease: false
-          draft: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Download artifacts from the build matrix
-      - name: Download Linux artifact
+      # No `name`, so every artifact from the matrix lands in its own
+      # subdirectory of `dist/`.
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: BEer-Linux
-          path: dist/linux
+          path: dist
 
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: BEer-macOS
-          path: dist/macos
-
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: BEer-Windows
-          path: dist/windows
-
-      - name: List downloaded artifacts
+      # Artifact directories are `<edition>-<RunnerOS>`; assets are
+      # `<edition>-<platform>`, keeping the names the previous release used.
+      - name: Collect release assets
         run: |
-          echo "Linux:" && ls -la dist/linux || true
-          echo "macOS:" && ls -la dist/macos || true
-          echo "Windows:" && ls -la dist/windows || true
+          set -euo pipefail
+          mkdir -p out
+          for d in dist/*/; do
+            name=$(basename "$d")
+            edition=${name%-*}
+            case ${name##*-} in
+              Linux)   platform=linux ;;
+              macOS)   platform=macos ;;
+              Windows) platform=windows.exe ;;
+              *) echo "unexpected artifact $name" >&2; exit 1 ;;
+            esac
+            binary=$(find "$d" -type f | head -1)
+            [ -n "$binary" ] || { echo "no binary in $d" >&2; exit 1; }
+            cp "$binary" "out/${edition}-${platform}"
+          done
+          ls -l out
+          test "$(ls out | wc -l)" -eq 6
 
-      # Upload all platform binaries to the same release
-      - name: Upload Linux asset
-        uses: actions/upload-release-asset@v1
+      # `gh` replaces the previous fetch/delete/create/upload chain, two steps of
+      # which used actions GitHub has archived.
+      - name: Publish release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create-release.outputs.upload_url }}
-          asset_path: dist/linux/BEer
-          asset_name: BEer-linux
-          asset_content_type: application/octet-stream
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release delete beer --yes --cleanup-tag || true
+          gh release create beer out/* \
+            --target "${{ github.sha }}" \
+            --title "BEer" \
+            --notes "Automated release for Linux, macOS, and Windows.
 
-      - name: Upload macOS asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create-release.outputs.upload_url }}
-          asset_path: dist/macos/BEer
-          asset_name: BEer-macos
-          asset_content_type: application/octet-stream
-
-      - name: Upload Windows asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create-release.outputs.upload_url }}
-          asset_path: dist/windows/BEer.exe
-          asset_name: BEer-windows.exe
-          asset_content_type: application/octet-stream
+          | asset | branch | what it is |
+          | --- | --- | --- |
+          | \`BEer-*\` | \`main\` | the certified encoder |
+          | \`BEer-zero-*\` | \`beer-lite\` | Zero-Proof BEer — no correctness proofs, wider B coverage |"
