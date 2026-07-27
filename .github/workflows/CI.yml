@@ -5,6 +5,15 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+# Pushes to `main` and to `beer-lite` (forwarded by that branch's
+# `release-dispatch.yml`) both land here, so two runs can overlap.  They would
+# then race on deleting and recreating the `beer` release.  Serialise them, and
+# supersede an older run rather than queueing it: every run rebuilds both
+# branches at their current heads, so the newer one subsumes the older.
+concurrency:
+  group: release
+  cancel-in-progress: true
+
 jobs:
   # Two editions are built from two branches, on three platforms each.
   #
