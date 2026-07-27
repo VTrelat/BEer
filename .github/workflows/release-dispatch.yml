@@ -1,0 +1,29 @@
+name: Release dispatch
+
+# The matrix that builds both editions and publishes the release lives on `main`
+# (`.github/workflows/CI.yml`); it checks out each branch itself, so there is one
+# source of truth for how a release is assembled.  GitHub runs a workflow from
+# the branch that was pushed, though, so a push here would never reach it.  This
+# forwards the event.
+#
+# `GITHUB_TOKEN` is normally barred from starting further workflow runs, to stop
+# a workflow triggering itself; `workflow_dispatch` is one of the two documented
+# exceptions, which is why this can dispatch rather than having to push.
+
+on:
+  push:
+    branches: ["beer-lite"]
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+
+    steps:
+      - name: Run the release build on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run CI.yml --ref main
