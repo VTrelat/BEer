@@ -20,8 +20,9 @@ jobs:
       - uses: leanprover/lean-action@v1
       - uses: leanprover-community/docgen-action@v1
         with:
-          # `docs/` here holds prose notes, not a Jekyll site, and the action's
-          # default `homepage: docs` makes it run `bundle exec jekyll build`
-          # there — which fails for want of a Gemfile.  Only the API docs are
-          # wanted.
-          build-page: "false" # string, as the action compares it to 'true'
+          # The action treats `homepage` as a Jekyll site: if that folder exists
+          # it runs `bundle exec jekyll build` there.  The default is `docs`,
+          # which here holds prose notes and no Gemfile, so the build failed.
+          # Pointing at a folder that only the action creates skips Jekyll; the
+          # API docs are generated into it and deployed from there.
+          homepage: site
