@@ -20,6 +20,27 @@ The tool is implemented in Lean 4.
 BEer --in <input.pog> [--out <output.smt>] [--prelude <prelude.smt>]
 ```
 
+By default the whole `.pog` becomes one script, its obligations and goals kept
+apart by `push`/`pop` — so solving it needs cvc5's `--incremental`. Two flags
+split it instead, `--out` then naming a directory:
+
+| Flag | Writes | Notes |
+| --- | --- | --- |
+| `--per-po` | `po_<i>.smt2` | one file per proof obligation; its goals still bracketed |
+| `--per-goal` | `po_<i>_goal_<j>.smt2` | one file per goal, a single `(check-sat)` and no `push`/`pop`, so no `--incremental` |
+
+Both indices are 0-based in `.pog` order, matching ppTrans `-n`'s
+`out-<PO>-<goal>.smt2`. Both report per-unit cost on stderr, and `--out
+/dev/null` keeps that report without writing anything.
+
+Each split script repeats the whole global context, `--per-goal` most of all:
+one goal of the corpus's `0002/00041` is 10 MiB, so its 1033 goals come to
+10.5 GiB. Stream them — emit, solve, discard — rather than writing a corpus to
+disk.
+
+`scripts/check-per-po.sh` and `scripts/check-per-goal.sh` check either split
+against the whole-file encoding.
+
 ## Build
 Clone this repository, install Lean 4, and build using lake.
 ```bash
