@@ -23,6 +23,12 @@ structure Site where
   set : SMT.Term
   τ : SMT.SMTType
   name : SMT.𝒱
+  /-- `fv set`, deduplicated.  `hideCapturedSites` tests this at every binder,
+  and recomputing it walks the whole encoded set each time: `SMT.fv` returns one
+  entry per *occurrence*, so on a large set term the list it builds dwarfs the
+  handful of distinct names the test actually needs.  Filled in by
+  `recordSite`; the default keeps the anonymous-constructor call sites short. -/
+  fvs : List SMT.𝒱 := []
   deriving Inhabited
 
 structure EncoderState where
@@ -117,7 +123,7 @@ end up on the same symbol, and the file no longer typechecks.
 The sites hidden here are only a memo table, so dropping them costs sharing and
 cross-site facts, never soundness. -/
 def SMT.hideCapturedSites (vs : List 𝒱) : Encoder (List Site) := do
-  let (captured, kept) := (← get).sites.partition fun s => (fv s.set).any (· ∈ vs)
+  let (captured, kept) := (← get).sites.partition fun s => s.fvs.any (· ∈ vs)
   modify fun e => { e with sites := kept }
   return captured
 
@@ -145,8 +151,16 @@ introduced (e.g. `S ⊆ T → |S| ≤ |T|`). -/
 def SMT.sitesOf (op : String) (τ : SMTType) : Encoder (List Site) := do
   return (← get).sites.filter (fun s => s.op == op && s.τ == τ) |>.take maxSiteLinks
 
-def SMT.recordSite (s : Site) : Encoder Unit :=
-  modify λ e => { e with sites := s :: e.sites }
+/-- Record the constant `name` as standing for `op` applied to `set`.
+
+Takes the components rather than a `Site` so that `fvs` is always the cache of
+`set` and cannot be passed inconsistently. -/
+def SMT.recordSite (op : String) (set : Term) (τ : SMTType) (name : 𝒱) :
+    Encoder Unit :=
+  -- Cache the free names once, deduplicated through a hash set: `fv` yields one
+  -- entry per occurrence, and every later binder scans this list.
+  let fvs := (fv set).foldl (init := (∅ : Std.HashSet 𝒱)) (·.insert ·) |>.toList
+  modify λ e => { e with sites := ⟨op, set, τ, name, fvs⟩ :: e.sites }
 
 def SMT.clearSites : Encoder Unit :=
   modify λ e => { e with sites := [] }

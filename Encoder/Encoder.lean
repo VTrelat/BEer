@@ -97,7 +97,7 @@ private def encodeCard (S : SMT.Term) (τ : SMTType) : Encoder (SMT.Term × SMTT
     let sup ← subsetOf τ s.set S
     return acc ∧ˢ (sub ⇒ˢ (.var c ≤ˢ .var s.name)) ∧ˢ (sup ⇒ˢ (.var s.name ≤ˢ .var c))
   declareConstWithSpec c .int spec
-  recordSite ⟨"card", S, τ, c⟩
+  recordSite "card" S τ c
   return (.var c, .int)
 
 /-- Encode `finite(S)` as a boolean constant closed under subsets.
@@ -118,7 +118,7 @@ private def encodeFinite (S : SMT.Term) (τ : SMTType) : Encoder (SMT.Term × SM
     let sup ← subsetOf τ s.set S
     return acc ∧ˢ ((sub ∧ˢ .var s.name) ⇒ˢ .var f) ∧ˢ ((sup ∧ˢ .var f) ⇒ˢ .var s.name)
   declareConstWithSpec f .bool spec
-  recordSite ⟨"fin", S, τ, f⟩
+  recordSite "fin" S τ f
   return (.var f, .bool)
 
 /-- Encode `min S` / `max S` for an encoded set of integers.
@@ -144,7 +144,7 @@ private def encodeExtremum (isMin : Bool) (S : SMT.Term) : Encoder (SMT.Term × 
     (.app S (.var m)) ∧ˢ
       .forall [z] [.int] (.imp (.app S (.var z)) (cmp (.var m) (.var z)))
   declareConstWithSpec m .int ((nonempty ∧ˢ bounded) ⇒ˢ extremal)
-  recordSite ⟨op, S, .int, m⟩
+  recordSite op S .int m
   return (.var m, .int)
 
 /-- Encode `closure(R)` / `closure1(R)` for an encoded relation
@@ -177,7 +177,7 @@ private def encodeClosure (refl : Bool) (R : SMT.Term) (α : SMTType) :
     if refl then contains ∧ˢ trans ∧ˢ .forall [x] [α] (cl (.var x) (.var x))
     else contains ∧ˢ trans
   declareConstWithSpec c τ spec
-  recordSite ⟨op, R, α, c⟩
+  recordSite op R α c
   return (.var c, τ)
 
 /-- Encode `SIGMA`/`PI` over the values of `f`.
@@ -194,7 +194,7 @@ private def encodeFold (isSum : Bool) (f : SMT.Term) (τ : SMTType)
     return (.var c, .int)
   let c ← freshVar .int s!"{op}!"
   declareConstWithSpec c .int (isEmpty ⇒ˢ (.var c =ˢ .int (if isSum then 0 else 1)))
-  recordSite ⟨op, f, τ, c⟩
+  recordSite op f τ c
   return (.var c, .int)
 
 /-- "`t` denotes the empty sequence", for either representation of one:
@@ -225,7 +225,7 @@ private def encodeConc (ss : SMT.Term) (τss σ : SMTType) : Encoder (SMT.Term �
   match ← isEmptySeq τss ss, ← isEmptySeq σ (.var c) with
   | some ssEmpty, some cEmpty => declareConstWithSpec c σ (ssEmpty ⇒ˢ cEmpty)
   | _, _ => declareConst c σ
-  recordSite ⟨"conc", ss, σ, c⟩
+  recordSite "conc" ss σ c
   return (.var c, σ)
 
 /-- Encode `iterate(R, n)` for a symbolic count.
@@ -260,7 +260,7 @@ private def encodeIterate (R n : SMT.Term) (α : SMTType) :
                 (it (.var k -ˢ .int 1) (.var x) (.var z) ∧ˢ
                   .app R (.pair (.var z) (.var y)))))
       declareConstWithSpec c (.fun .int τ) (base ∧ˢ step)
-      recordSite ⟨"iterate", R, α, c⟩
+      recordSite "iterate" R α c
       pure c
   return (.app (.var c) n, τ)
 
