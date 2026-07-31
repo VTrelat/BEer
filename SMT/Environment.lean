@@ -49,6 +49,22 @@ decreasing_by
 instance : ToString Stages where
   toString := λ s => String.intercalate "\n" <| s.toList.map λ ⟨n, a⟩ => s!"{"  ".dup n}{a}"
 
+/-- The same instructions as `toList`, without the `push`/`pop` bracketing.
+
+A script that holds a single `check-sat` never returns to a popped scope, so the
+brackets say nothing there — they only force the solver into incremental mode.
+`--per-goal` renders through this; every other path keeps the nesting. -/
+def Stages.toFlatList : SMT.Stages → Chunk
+  | .instr is => is
+  | .asserts as => (as.attach.map (λ ⟨a, _⟩ => a.toFlatList)) |>.flatten
+termination_by s => s
+decreasing_by
+  all_goals simp_wf
+  decreasing_trivial
+
+def Stages.toFlatString (s : Stages) : String :=
+  String.intercalate "\n" <| s.toFlatList.map Instr.toString
+
 def Stages.map (f : Chunk → Chunk) : Stages → Stages
   | .instr is => .instr (f is)
   | .asserts as => .asserts (as.attach.map (λ ⟨a,_⟩ => a.map f))

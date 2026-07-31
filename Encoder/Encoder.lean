@@ -804,14 +804,21 @@ def encode (e : B.Env) : Encoder Unit := do
     usedVars := Std.HashSet.ofList e.initialUsedVars } }
   encodeTypeContext e *> encodeDefs e *> encodeDistinctFinite e *> encodeProofObligations e *> finalBulkDeclare
 
-def EncoderState.toSMTFile : Encoder String := do
+def EncoderState.toSMTFileWith (render : Stages → String) : Encoder String := do
   let env := (← get).env.simplify
   -- Refuse to emit a file a solver would reject.  A missed conversion between
   -- the two set representations is otherwise invisible here and only surfaces
   -- as a solver type error, far from the code responsible.
   match SMT.Env.mismatches env with
-  | [] => return toString <| Stages.asserts [.instr env.declarations.toList, env.asserts]
+  | [] => return render <| Stages.asserts [.instr env.declarations.toList, env.asserts]
   | ps => throw <| "emitted SMT is ill-typed:\n  " ++ String.intercalate "\n  " (ps.take 3)
+
+def EncoderState.toSMTFile : Encoder String := toSMTFileWith toString
+
+/-- Serialise as a flat script: the instructions of `toSMTFile` with the
+`push`/`pop` pairs dropped.  Only sound when the state holds a single goal —
+with several, the brackets are what keeps their assertions apart. -/
+def EncoderState.toSMTFileFlat : Encoder String := toSMTFileWith Stages.toFlatString
 
 def encodePOG (pogpath : System.FilePath) (show_encoding := false): IO String := do
   let pog ← readPOG pogpath |>.propagateError
