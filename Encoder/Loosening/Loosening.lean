@@ -21,64 +21,80 @@ def castEq : Term × SMTType → Term × SMTType → Encoder (Term × SMTType) |
     return (((.var B!) =ˢ A) ∧ˢ B!_spec, .bool)
   else throw s!"castEq: Failed to unify {α} with {β}"
 
+/-- A loosening of `x` to `β`, shared with any earlier occurrence of the same
+term at the same target type.
+
+Two loosenings of one term along one type change have the same specification,
+so sharing them is a matter of not saying the same thing twice.  Only for
+callers that do *not* thread the specification into the term they return: the
+specification is asserted once, next to the declaration.  Sites are cleared per
+obligation and hidden at binders, so a shared constant is never referred to
+from a scope it is not declared in. -/
+private def loosenShared (name : String) {α β : SMTType} (c : α ~> β) (x : Term) :
+    Encoder 𝒱 := do
+  let op := s!"loosen:{β}"
+  if let some v ← findSite op x then return v
+  let ⟨x!, spec⟩ ← loosenAux_prf name c x
+  declareConstWithSpec x! β spec
+  recordSite op x β x!
+  return x!
+
+/-- The partial-function form of an encoded relation `R : (τ × σ) → bool`,
+pinned down by `R⟨u,v⟩ ↔ f u = some v`.
+
+Memoised on `R`, like the `card`/`finite` sites: a machine that applies the
+same function three times used to get three constants, three copies of that
+axiom, and the obligation to prove them equal before any of them could be used.
+The site table is cleared per obligation and hidden at binders, so the sharing
+never crosses a scope the constant is not declared in. -/
+private def asPartialFun (R : Term) (τ σ : SMTType) : Encoder 𝒱 := do
+  if let some c ← findSite "asFun" R then return c
+  let f ← freshVar (τ.fun (.option σ)) "app!"
+  declareConst f (τ.fun (.option σ))
+  let u ← freshVar τ
+  let v ← freshVar σ
+  let spec : Term := .forall [u, v] [τ, σ] (.eq
+    (.app R (.pair (.var u) (.var v)))
+    (.eq (.app (.var f) (.var u)) (.some (.var v))))
+  -- `u` and `v` occur only below the universal binder.
+  eraseFromContext u
+  eraseFromContext v
+  addSpec f spec
+  recordSite "asFun" R τ f
+  return f
+
 def castApp : Term × SMTType → Term × SMTType → Encoder (Term × SMTType)
   | (f, .fun (.pair τ σ) .bool), (x, ξ) => do
     /- NOTE: This is the only special case where a relation is cast to a function -/
     if h : τ ⊑ ξ then
       -- loosen f
-      let ⟨«f!», f!_spec⟩ ← loosenAux_prf "app!" (β := (.fun (.pair ξ σ) .bool)) (.chpred (.pair h.toCastPath (castPath.reflexive σ))) f
-      declareConstWithSpec «f!» (.fun (.pair ξ σ) .bool) f!_spec
+      let «f!» ← loosenShared "app!" (β := (.fun (.pair ξ σ) .bool)) (.chpred (.pair h.toCastPath (castPath.reflexive σ))) f
 
       -- cast to function
-      let f!! ← freshVar (ξ.fun (.option σ)) "app!!"
-      declareConst f!! (ξ.fun (.option σ))
-      let u ← freshVar ξ
-      let v ← freshVar σ
-      let f!!_spec : Term := .forall [u, v] [ξ, σ] (.eq
-        (.app (.var «f!») (.pair (.var u) (.var v)))
-        (.eq (.app (.var f!!) (.var u)) (.some (.var v))))
-      -- `u` and `v` occur only below the universal binder.
-      eraseFromContext u
-      eraseFromContext v
-      addSpec f!! f!!_spec
+      let f!! ← asPartialFun (.var «f!») ξ σ
       return (.the (.app (.var «f!!») x), σ)
     else if h : ξ ⊑ τ then
       -- loosen x
-      let ⟨x!, x!_spec⟩ ← loosenAux_prf "app!" h.toCastPath x
-      declareConstWithSpec x! τ x!_spec
+      let x! ← loosenShared "app!" h.toCastPath x
 
       -- cast to function
-      let «f!» ← freshVar (τ.fun (.option σ)) "app!"
-      declareConst «f!» (τ.fun (.option σ))
-      let u ← freshVar τ
-      let v ← freshVar σ
-      let f!_spec : Term := .forall [u, v] [τ, σ] (.eq
-        (.app f (.pair (.var u) (.var v)))
-        (.eq (.app (.var «f!») (.var u)) (.some (.var v))))
-      -- `u` and `v` occur only below the universal binder.
-      eraseFromContext u
-      eraseFromContext v
-      addSpec «f!» f!_spec
+      let «f!» ← asPartialFun f τ σ
       return (.the (.app (.var «f!») (.var x!)), σ)
     else throw s!"encodeTerm:app: Failed to unify {τ} with {ξ}"
   | (f, .fun α .bool), (x, α') => do
     if h : α ⊑ α' then
-      let ⟨«f!», f!_spec⟩ ← loosenAux_prf "app!" (castPath.chpred h.toCastPath) f
-      declareConstWithSpec «f!» (α'.fun .bool) f!_spec
+      let «f!» ← loosenShared "app!" (castPath.chpred h.toCastPath) f
       return (.app (.var «f!») x, .bool)
     else if h : α' ⊑ α then
-      let ⟨x!, x!_spec⟩ ← loosenAux_prf "app!" (castPath.chpred h.toCastPath) x
-      declareConstWithSpec x! α x!_spec
+      let x! ← loosenShared "app!" (castPath.chpred h.toCastPath) x
       return (.app f (.var x!), .bool)
     else throw s!"encodeTerm:app: Failed to unify {α} with {α'}"
   | (f, .fun τ (.option σ)), (x, ξ) => do
     if h : τ ⊑ ξ then
-      let ⟨«f!», f!_spec⟩ ← loosenAux_prf "app!" (β := ξ.fun (.option σ)) (castPath.fun (by nofun) h.toCastPath (castPath.reflexive σ.option)) f
-      declareConstWithSpec «f!» (ξ.fun (.option σ)) f!_spec
+      let «f!» ← loosenShared "app!" (β := ξ.fun (.option σ)) (castPath.fun (by nofun) h.toCastPath (castPath.reflexive σ.option)) f
       return (.the (.app (.var «f!») x), σ)
     else if h : ξ ⊑ τ then
-      let ⟨x!, x!_spec⟩ ← loosenAux_prf "app!" h.toCastPath x
-      declareConstWithSpec x! τ x!_spec
+      let x! ← loosenShared "app!" h.toCastPath x
       return (.the (.app f (.var x!)), σ)
     else throw s!"encodeTerm:app: Failed to unify {τ} with {ξ}"
   | (_, τ), _ => throw s!"encodeTerm:app: Expected a function, got {τ}"
