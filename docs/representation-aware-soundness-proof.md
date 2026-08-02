@@ -663,12 +663,11 @@ axiom lines: base=32 head=32
 added placeholder/axiom lines: none
 ```
 
-The seven project axiom declarations are the same at base and head:
+At that checkpoint the project had seven named axiom declarations. The
+now-orphaned variable-scoping axiom module has since been retired; the
+remaining declarations are:
 
 ```text
-SMT.RenamingContext.ExtendsOnSourceFV.dom_sub_B_fv
-B.Term.fv_preserved_by_encoder
-SMT.RenamingContext.ExtendsOnSourceFV.wt
 encoder_wp_admit_hasflag_empty_a1
 encoder_spec_body_fv_in_ex_binders_or_renaming
 castMembership_fresh_in_declared
@@ -679,20 +678,13 @@ No new `sorry`, `admit`, or `axiom` was introduced by this branch.
 
 ### 12.3 `#print axioms`
 
-The final audit reported:
+The historical audit reported named dependencies for the legacy correctness
+dispatcher. That dispatcher has since been retired. The current public
+representation-aware audit is:
 
 ```text
-encodeTerm_spec:
-  propext, sorryAx, Classical.choice, Quot.sound,
-  castMembership_fresh_in_declared,
-  encoder_all_result_well_typed,
-  encoder_spec_body_fv_in_ex_binders_or_renaming,
-  ExtendsOnSourceFV.dom_sub_B_fv,
-  ExtendsOnSourceFV.wt
-
 encodeTerm_rep_spec and encodeTerm_rep_bool_spec:
-  propext, sorryAx, Classical.choice, Quot.sound,
-  ExtendsOnSourceFV.dom_sub_B_fv
+  propext, sorryAx, Classical.choice, Quot.sound
 
 encodeTerm_rep_spec.functionalUnionSubset_case:
   propext, sorryAx, Classical.choice, Quot.sound
@@ -1155,12 +1147,12 @@ axiom lines            32          32
 
 No added line contains `sorry`, `admit`, or a named `axiom` declaration.
 
-The current `#print axioms` output is:
+The current `#print axioms` output after retiring the source-domain
+containment axiom is:
 
 ```text
 encodeTerm_rep_spec and encodeTerm_rep_scoped_spec:
-  propext, sorryAx, Classical.choice, Quot.sound,
-  SMT.RenamingContext.ExtendsOnSourceFV.dom_sub_B_fv
+  propext, sorryAx, Classical.choice, Quot.sound
 
 encodeTerm_rep_spec.functionalUnionSubset_case:
   propext, sorryAx, Classical.choice, Quot.sound

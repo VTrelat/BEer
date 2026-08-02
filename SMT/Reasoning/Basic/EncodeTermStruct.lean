@@ -1,6 +1,5 @@
 import SMT.Reasoning.Basic.StateSpecs
 import SMT.Reasoning.SubstLemmas
-import SMT.Reasoning.Axioms
 
 /-!
 # `encodeTerm` structural specification
@@ -9,12 +8,11 @@ import SMT.Reasoning.Axioms
 state monotonicity, free-variable coverage of the encoded term, source-variable
 coverage/preservation, and the existence of a covering renaming context.
 
-Unlike `encodeTerm_spec`, it requires neither the `respects` hypothesis nor any
-`B`-typing, and asserts neither `σ = α.toSMTType` nor any denotational fact —
-precisely the parts unavailable (indeed false) for a flagged binder. It is
-consumed by the HAS-FLAG branch of `encodeTerm_spec.all_case`, which needs
-structural facts about the encoding of the binder body `P` without a (false)
-`respects`.
+It requires neither a `respects` hypothesis nor any `B`-typing, and asserts
+neither `σ = α.toSMTType` nor any denotational fact — precisely the parts
+unavailable for a flagged binder. Representation-aware cases consume these
+structural facts when reasoning about an encoded binder body without assuming
+an ordinary representation relation.
 
 The renaming witness is discharged generically (`renaming_witness`): the
 encoded term's free variables all live in the final context `Γ' ⊆ usedVars`,
