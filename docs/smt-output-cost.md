@@ -225,6 +225,39 @@ counts; it was not tuned further.
 
 ## Negative results
 
+### Triggers are at their plateau
+
+Four further axes were tried and none moved the number.
+
+**Coverage is already maximal.** 65% of quantifiers get a pattern; of the rest,
+3218 of 3220 sampled have *no legal candidate at all* — their binders occur only
+under arithmetic or equality, and SMT-LIB forbids an interpreted symbol at the
+head of a trigger. There is nothing to give them.
+
+**`--user-pat=use` recovers nothing.** cvc5's default is `trust`: where a
+quantifier carries a user pattern, its own selection is discarded. `use` keeps
+both. Result 181 against 181, +1/-1, and **0 of the 9 goals lost to patterns
+come back**. So the losses are not "cvc5's own trigger was better" — putting it
+back changes nothing.
+
+**Selection policy is a wash** (sample 1, 2000 ms, 396 goals):
+
+```
+no patterns                       168   median 616 ms   wall 860 s
+smallest covering term (shipped)  184   median 283 ms   wall 612 s
+one :pattern clause per term      184   median 309 ms   wall 623 s
+largest covering term             182   median 343 ms   wall 632 s
+```
+
+**Triggers on the prelude's `bpow` axioms do nothing.** `prelude.smt` is a
+fixed text file, so it never passes through the printer and carried no patterns
+— and `bpow`'s recursion `bpow a n = a * bpow a (n-1)` is the one family that
+can unfold forever, which is why ppTrans pins its `exp` axioms with
+`:pattern ((exp x n))`. Adding the analogous patterns: 181 against 181, +0/-0,
+on a sample where 274 of 396 goals do use `bpow`. cvc5 already picks
+`(bpow a n)` itself. Change reverted.
+
+
 ### The instantiation strategy is not the lever
 
 The smallest `ppTrans-only` goal in the corpus — `0030/00001` PO 4 goal 2, four
