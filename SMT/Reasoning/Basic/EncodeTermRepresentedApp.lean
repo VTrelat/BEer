@@ -1,6 +1,6 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedScopedEq
 import SMT.Reasoning.Basic.EncodeTermRepresentedScopedMaplet
-import SMT.Reasoning.Basic.EncodeTermCorrectPFun
+import SMT.Reasoning.Basic.QuantifierDenotation
 
 open Std.Do B SMT ZFSet Classical
 

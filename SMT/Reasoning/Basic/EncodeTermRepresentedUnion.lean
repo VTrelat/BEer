@@ -1,6 +1,6 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedArith
 import SMT.Reasoning.Basic.EncodeTermRepresentedBinders
-import SMT.Reasoning.Basic.EncodeTermCorrectUnion
+import SMT.Reasoning.Basic.CastUnionDenotation
 
 open Std.Do B SMT ZFSet
 

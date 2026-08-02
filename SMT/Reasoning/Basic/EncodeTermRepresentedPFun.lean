@@ -1,5 +1,5 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedCprod
-import SMT.Reasoning.Basic.EncodeTermCorrectPFun
+import SMT.Reasoning.Basic.QuantifierDenotation
 
 open Std.Do B SMT ZFSet Classical
 

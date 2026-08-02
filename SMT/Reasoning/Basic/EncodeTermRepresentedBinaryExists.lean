@@ -1,5 +1,5 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedBinders
-import SMT.Reasoning.Basic.EncodeTermCorrectPFun
+import SMT.Reasoning.Basic.QuantifierDenotation
 
 open SMT ZFSet Classical
 

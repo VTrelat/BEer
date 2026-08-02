@@ -1,6 +1,6 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedBase
 import SMT.Reasoning.Basic.EncodeTermBvUsed
-import SMT.Reasoning.Basic.EncodeTermCorrectArith
+import SMT.Reasoning.Basic.SourceBinaryDenotation
 
 open Std.Do B SMT ZFSet Classical
 
@@ -102,15 +102,15 @@ theorem denote_inv.{u} (op : CheckedOp) {Γ : B.TypeContext}
   cases op with
   | add =>
       simpa [term, eval] using
-        EncodeTermCorrectArith.Arith.denote_inv
+        SourceBinaryDenotation.Arith.denote_inv
           (.add) typ_t Δ_fv den_t
   | sub =>
       simpa [term, eval] using
-        EncodeTermCorrectArith.Arith.denote_inv
+        SourceBinaryDenotation.Arith.denote_inv
           (.sub) typ_t Δ_fv den_t
   | mul =>
       simpa [term, eval] using
-        EncodeTermCorrectArith.Arith.denote_inv
+        SourceBinaryDenotation.Arith.denote_inv
           (.mul) typ_t Δ_fv den_t
 
 theorem smt_typing {Γ : SMT.TypeContext} (op : CheckedOp)
@@ -956,7 +956,7 @@ theorem encodeTerm_rep_spec.le_case.{u}
   apply B.Typing.leE at typ_t
   obtain ⟨rfl, typ_x, typ_y⟩ := typ_t
   obtain ⟨X, hX, den_x, Y, hY, den_y, T_eq⟩ :=
-    EncodeTermCorrectArith.Arith.denote_inv
+    SourceBinaryDenotation.Arith.denote_inv
       (.le) (B.Typing.le typ_x typ_y) Δ_fv den_t
   subst T
 
@@ -1075,7 +1075,7 @@ theorem encodeTerm_rep_spec.le_case.{u}
             Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
           obtain ⟨X_alt, hX_alt, den_x_alt, Y_alt, hY_alt,
               den_y_alt, T_alt_eq⟩ :=
-            EncodeTermCorrectArith.Arith.denote_inv
+            SourceBinaryDenotation.Arith.denote_inv
               (.le) (B.Typing.le typ_x typ_y) Δ_fv_alt den_t_alt
           subst T_alt
           let Δ_fv_pair_alt :

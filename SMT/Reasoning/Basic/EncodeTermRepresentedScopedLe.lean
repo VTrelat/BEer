@@ -1,3 +1,4 @@
+import SMT.Reasoning.Basic.SourceBinaryDenotation
 import SMT.Reasoning.Basic.EncodeTermRepresentedScopedMaplet
 
 open Std.Do B SMT ZFSet Classical
@@ -139,7 +140,7 @@ theorem encodeTerm_rep_scoped.le_case_from.{u}
   apply B.Typing.leE at typ_t
   obtain ⟨rfl, typ_x, typ_y⟩ := typ_t
   obtain ⟨X, hX, den_x, Y, hY, den_y, T_eq⟩ :=
-    EncodeTermCorrectArith.Arith.denote_inv
+    SourceBinaryDenotation.Arith.denote_inv
       (.le) (B.Typing.le typ_x typ_y) Δ_fv den_t
   subst T
 
@@ -252,7 +253,7 @@ theorem encodeTerm_rep_scoped.le_case_from.{u}
         Δ₀_alt_none respects_alt Δ₀_alt_dom T_alt hT_alt den_t_alt
       obtain ⟨X_alt, hX_alt, den_x_alt, Y_alt, hY_alt,
           den_y_alt, T_alt_eq⟩ :=
-        EncodeTermCorrectArith.Arith.denote_inv
+        SourceBinaryDenotation.Arith.denote_inv
           (.le) (B.Typing.le typ_x typ_y) Δ_fv_alt den_t_alt
       subst T_alt
       let Δ_fv_pair_alt :
@@ -339,7 +340,7 @@ theorem encodeTerm_rep_scoped.le_case_from.{u}
         hcov denOut hdenOut hdenOut_type
       obtain ⟨X_alt, hX_alt, den_x_alt, Y_alt, hY_alt,
           den_y_alt, T_alt_eq⟩ :=
-        EncodeTermCorrectArith.Arith.denote_inv
+        SourceBinaryDenotation.Arith.denote_inv
           (.le) (B.Typing.le typ_x typ_y) Δ_fv_alt den_t_alt
       subst T_alt
       obtain ⟨Xenc_alt, hXenc_alt, hden_x_target,

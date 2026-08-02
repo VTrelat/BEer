@@ -1,6 +1,5 @@
 import SMT.Reasoning.Basic.EncodeTermRepresentedApp
 import SMT.Reasoning.Basic.EncodeTermRepresentedBinders
-import SMT.Reasoning.Basic.EncodeTermCorrectSet
 
 open Std.Do B SMT ZFSet Classical
 
