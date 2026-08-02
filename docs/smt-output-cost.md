@@ -25,18 +25,34 @@ Encoder tags: `base` = `f5e4e03`; `onepoint` = base + one-point elimination;
 ## Results
 
 ```
-sample                       budget      n   base  changed  gained  lost   net
-sample 1 (396 goals)        5000 ms    396    168      182     +26   -12   +14
-sample 1 (396 goals)        2000 ms    396    132      168     +42    -6   +36
-sample 2 (302 goals)        2000 ms    302    104      123     +20    -1   +19
+                                    sample 1        sample 1        sample 2
+                                    @5000 ms        @2000 ms        @2000 ms
+                                   (396 goals)     (396 goals)     (302 goals)
+baseline f5e4e03                        168             132             104
++ one-point, pruning, dedup, sharing    182             168             123
++ instantiation patterns                193             184             133
+                                     (48.7%)                          (44.0%)
 ```
 
-On the goals both encodings prove:
+Step by step, on the goals common to each pair:
 
 ```
-sample 1 @5000 ms   156 goals   median 1045 -> 659 ms   median per-goal 1.33x
-sample 1 @2000 ms   126 goals   median 1222 -> 391 ms   median per-goal 2.53x
-sample 2 @2000 ms   103 goals   median 1143 -> 709 ms   median per-goal 1.66x
+step                                     sample/budget       n   from    to  gained  lost
+encoder changes                          s1 @5000 ms       396    168   182     +26   -12
+encoder changes                          s1 @2000 ms       396    132   168     +42    -6
+encoder changes                          s2 @2000 ms       302    104   123     +20    -1
+patterns                                 s1 @5000 ms       396    182   193     +19    -8
+patterns                                 s2 @2000 ms       302    123   133     +14    -4
+```
+
+On the goals both settings prove:
+
+```
+encoder changes   s1 @5000 ms  156 goals   median 1045 -> 659 ms   1.33x
+encoder changes   s1 @2000 ms  126 goals   median 1222 -> 391 ms   2.53x
+encoder changes   s2 @2000 ms  103 goals   median 1143 -> 709 ms   1.66x
+patterns          s1 @5000 ms  174 goals   median  735 -> 367 ms   1.60x
+patterns          s2 @2000 ms  119 goals   median  810 -> 404 ms   1.96x
 ```
 
 Script size, and encoding cost (sum of per-file wall seconds):
@@ -169,6 +185,44 @@ the same B set term encode to α-equivalent but non-identical SMT terms and are
 not shared. Making site lookup α-insensitive, or memoising `encodeTerm` at the
 B level, is the remaining work here.
 
+### 5. Instantiation patterns (`SMT/Syntax.lean`)
+
+Worth about as much as the other four together. cvc5 selects triggers itself
+when a quantifier carries none, and on this output it selects badly.
+
+`Term.toString` now computes a trigger set when it prints a `forall`: candidate
+application terms are collected from the body, the smallest set covering every
+bound variable is kept, and the body is wrapped in
+`(! … :pattern (…))`. Nothing else in the encoder changes — no new `Term`
+constructor, so no new cases in `subst`/`fv`/`bv`/`simplifier`/typing. The
+printer becomes `partial`, since a chosen pattern is not a structural subterm
+of what is being printed.
+
+Three constraints make a candidate legal, and the third is specific to this
+encoder: a trigger must be a term rather than a formula; it must not contain a
+binder; and it must not mention a variable bound *outside* the quantifier being
+printed. `encodeTerm .all` re-scopes cast helpers as `∀ h. spec ⇒ body`, so
+`app!N` is frequently a bound variable rather than a constant, and a pattern
+naming it is out of scope where it is written. A first attempt that scanned the
+text with a regex got exactly this wrong and produced files cvc5 rejected with
+`Symbol 'app!4157' not declared as a variable`.
+
+**Incompleteness.** Triggers *restrict* instantiation, so this errs in the safe
+direction: a goal needing an instantiation no pattern matches is lost, none
+becomes provable that was not. Measured at 8 lost against 19 gained (sample 1,
+5000 ms) and 4 against 14 (sample 2). A quantifier whose binders cannot all be
+covered keeps no pattern, leaving cvc5's own choice in place.
+
+Four goals move from `unknown` to cvc5 *error*, all of the
+`Could not evaluate … in getValue` class below: the files parse, and patterns
+simply get cvc5 far enough to trip its own model-construction bug. No proof is
+lost by it.
+
+A textual post-processor over the emitted scripts scores slightly better than
+the in-encoder selection (196 against 193 at 5000 ms, 11 goals where they
+disagree). The gap is trigger-choice detail and is within the noise of these
+counts; it was not tuned further.
+
 ## Negative results
 
 ### The instantiation strategy is not the lever
@@ -264,12 +318,12 @@ order 4            both  4%   ppTrans-only 61%
 ```
 
 Closing that is a change of encoding strategy, not a change of encoder detail.
-The changes above move BEer from 42.4% to 46.0% of the sample at campaign
+The changes above move BEer from 42.4% to 48.7% of the sample at campaign
 settings; ppTrans is at 71.3%.
 
 ## Caveats
 
-- `Test/EncodingRegressions/run.sh` gives 5/8. The three failures
+- `Test/EncodingRegressions/run.sh` gives 5/8, unchanged by any of this. The three failures
   (`CartesianProduct`, `PowerSetMembership`, `LambdaAbstraction`, all
   `sat`-expected and answered `unknown`) reproduce on the baseline binary, so
   they predate this work.
