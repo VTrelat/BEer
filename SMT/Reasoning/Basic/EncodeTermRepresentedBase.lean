@@ -1,5 +1,6 @@
 import SMT.Reasoning.EncodeTermRepresentedDefs
-import SMT.Reasoning.Basic.EncodeTermCorrectBase
+import SMT.Reasoning.Basic.EncodeTermBaseOperational
+import SMT.Reasoning.Basic.EncodeTermStruct
 
 open Std.Do B SMT ZFSet
 
@@ -525,36 +526,28 @@ theorem encodeTerm_rep_spec.ℤ_case.{u}
   mintro pre ∀St
   mpure pre
   obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
-  have Δ₀_ext : RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» B.Term.ℤ := by
-    intro v d hv
-    simp [B.RenamingContext.toSMTOnFV, B.RenamingContext.toSMT,
-      B.RenamingContext.restrictToFV,
-      B.RenamingContext.restrictToVars, B.fv] at hv
-  have canonical_respects :
-      B.RenamingContext.RespectsTypeContextOnFV
-        (B.RenamingContext.toSMT «Δ») St.types B.Term.ℤ := by
-    intro v τ hv
-    simp [B.fv] at hv
   mspec (Std.Do.Triple.and _
-    (encodeTerm_spec.ℤ_case E typ_t Δ_fv Δ₀_ext
-      Δ₀_none_out den_t vars_used Λ_inv bv_nodup
-      canonical_respects fv_in_Λ wf)
+    (Std.Do.Triple.and _
+      (encodeTerm_state E typ_t vars_used Λ_inv bv_nodup)
+        (encodeTerm_base_operational.intSet E typ_t Δ_fv den_t
+        (used := used)))
     (encodeTerm_ℤ_fv_nil E))
   rename_i out
   obtain ⟨t', σ⟩ := out
   mrename_i post
   mintro ∀St'
   mpure post
-  obtain ⟨old_post, fv_nil⟩ := post
-  obtain ⟨used_sub, types_sub, keys_sub, source_used, σ_eq,
-    typ_t', preserves, Δold, hcov_old, _Δold_ext,
-    _Δold_source, _Δold_none, denOld, hden_old, old_rel,
-    _old_total⟩ := old_post
+  obtain ⟨⟨state_post, semantic_post⟩, fv_nil⟩ := post
+  obtain ⟨used_sub, types_sub, keys_sub, source_used,
+    _fv_sub, preserves⟩ := state_post
+  obtain ⟨_fresh_succ, _types_eq, σ_eq, typ_t',
+    hcov_old, denOld, hden_old, old_rel⟩ := semantic_post
   have hcov₀ : RenamingContext.CoversFV Δ₀ t' := by
     intro v hv
     rw [fv_nil] at hv
     contradiction
-  have hagree₀ : RenamingContext.AgreesOnFV Δ₀ Δold t' := by
+  have hagree₀ : RenamingContext.AgreesOnFV Δ₀
+      (B.RenamingContext.toSMT «Δ») t' := by
     intro v hv
     rw [fv_nil] at hv
     contradiction
@@ -600,7 +593,8 @@ theorem encodeTerm_rep_spec.ℤ_case.{u}
         intro v hv
         rw [fv_nil] at hv
         contradiction
-      have hagree_alt : RenamingContext.AgreesOnFV Δ₀_alt Δold t' := by
+      have hagree_alt : RenamingContext.AgreesOnFV Δ₀_alt
+          (B.RenamingContext.toSMT «Δ») t' := by
         intro v hv
         rw [fv_nil] at hv
         contradiction
@@ -653,36 +647,28 @@ theorem encodeTerm_rep_spec.𝔹_case.{u}
   mintro pre ∀St
   mpure pre
   obtain ⟨rfl, rfl, St_sub, St_used_eq⟩ := pre
-  have Δ₀_ext : RenamingContext.ExtendsOnSourceFV Δ₀ «Δ» B.Term.𝔹 := by
-    intro v d hv
-    simp [B.RenamingContext.toSMTOnFV, B.RenamingContext.toSMT,
-      B.RenamingContext.restrictToFV,
-      B.RenamingContext.restrictToVars, B.fv] at hv
-  have canonical_respects :
-      B.RenamingContext.RespectsTypeContextOnFV
-        (B.RenamingContext.toSMT «Δ») St.types B.Term.𝔹 := by
-    intro v τ hv
-    simp [B.fv] at hv
   mspec (Std.Do.Triple.and _
-    (encodeTerm_spec.𝔹_case E typ_t Δ_fv Δ₀_ext
-      Δ₀_none_out den_t vars_used Λ_inv bv_nodup
-      canonical_respects fv_in_Λ wf)
+    (Std.Do.Triple.and _
+      (encodeTerm_state E typ_t vars_used Λ_inv bv_nodup)
+        (encodeTerm_base_operational.boolSet E typ_t Δ_fv den_t
+        (used := used)))
     (encodeTerm_𝔹_fv_nil E))
   rename_i out
   obtain ⟨t', σ⟩ := out
   mrename_i post
   mintro ∀St'
   mpure post
-  obtain ⟨old_post, fv_nil⟩ := post
-  obtain ⟨used_sub, types_sub, keys_sub, source_used, σ_eq,
-    typ_t', preserves, Δold, hcov_old, _Δold_ext,
-    _Δold_source, _Δold_none, denOld, hden_old, old_rel,
-    _old_total⟩ := old_post
+  obtain ⟨⟨state_post, semantic_post⟩, fv_nil⟩ := post
+  obtain ⟨used_sub, types_sub, keys_sub, source_used,
+    _fv_sub, preserves⟩ := state_post
+  obtain ⟨_fresh_succ, _types_eq, σ_eq, typ_t',
+    hcov_old, denOld, hden_old, old_rel⟩ := semantic_post
   have hcov₀ : RenamingContext.CoversFV Δ₀ t' := by
     intro v hv
     rw [fv_nil] at hv
     contradiction
-  have hagree₀ : RenamingContext.AgreesOnFV Δ₀ Δold t' := by
+  have hagree₀ : RenamingContext.AgreesOnFV Δ₀
+      (B.RenamingContext.toSMT «Δ») t' := by
     intro v hv
     rw [fv_nil] at hv
     contradiction
@@ -728,7 +714,8 @@ theorem encodeTerm_rep_spec.𝔹_case.{u}
         intro v hv
         rw [fv_nil] at hv
         contradiction
-      have hagree_alt : RenamingContext.AgreesOnFV Δ₀_alt Δold t' := by
+      have hagree_alt : RenamingContext.AgreesOnFV Δ₀_alt
+          (B.RenamingContext.toSMT «Δ») t' := by
         intro v hv
         rw [fv_nil] at hv
         contradiction
