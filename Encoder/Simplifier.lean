@@ -38,6 +38,134 @@ def substList (xs : List 𝒱) (ts : List Term) (e : Term) : Term :=
   | x :: xs, t :: ts => substList xs ts (subst x t e)
   | _, _ => e
 
+/-! ### One-point elimination
+
+The loosening layer states every cast as "there is a value related to the
+source", even when the relation is the identity: `castPath.pair` on two
+reflexive components emits `∃ a b. p = ⟨a,b⟩ ∧ a = fst q ∧ b = snd q`, which
+says no more than `p = q`.  Every such binder is a variable the solver has to
+instantiate, and the shape nests once per level of type structure, so the cost
+grows with the type order — exactly where the encoder loses ground.
+
+The rewrites below are the standard one-point rules,
+
+* `∃ v⃗. … ∧ v = t ∧ …`  ⟶  the rest with `t` for `v`   (`v ∉ fv t`),
+* `∀ v⃗. … ⇒ v = t ⇒ …`  ⟶  the rest with `t` for `v`,
+
+plus their `Pair` analogues, which hold because `Pair` has a single
+constructor and is therefore surjective:
+
+* `∃ a b. … ∧ x = ⟨a,b⟩ ∧ …`  ⟶  the rest with `fst x` / `snd x`.
+
+All four are equivalences, so nothing is gained or lost logically; what changes
+is how much the solver has to guess. -/
+
+/-- Terms cheap enough to duplicate at every occurrence of the binder they
+replace.  Restricting substitution to these keeps the rule from copying a
+lambda — the specification of a cast helper — into a dozen positions, which
+would trade quantifiers for size. -/
+private def duplicable : Term → Bool
+  | .var _ | .int _ | .bool _ | .none => true
+  | .fst t | .snd t | .the t | .some t | .as t _ => duplicable t
+  | .pair a b => duplicable a && duplicable b
+  | _ => false
+
+private def conjuncts : Term → List Term
+  | .and a b => conjuncts a ++ conjuncts b
+  | t => [t]
+
+private def andAll : List Term → Term
+  | [] => .bool true
+  | [t] => t
+  | t :: ts => .and t (andAll ts)
+
+/-- The antecedents of an implication chain, flattened through conjunctions
+(`(p ∧ q) ⇒ r` is `p ⇒ q ⇒ r`), together with the final conclusion. -/
+private def antecedents : Term → List Term × Term
+  | .imp a b => let (as, c) := antecedents b; (conjuncts a ++ as, c)
+  | t => ([], t)
+
+/-- Read one side of an equation as a definition of a single binder. -/
+private def solveSideVar (vs : List 𝒱) : Term → Term → Option (List 𝒱 × List (𝒱 × Term))
+  | .var v, t =>
+    if vs.contains v && duplicable t && !(fv t).contains v then
+      some ([v], [(v, t)])
+    else none
+  | _, _ => none
+
+/-- Read one side of an equation as a definition of a pair of binders, using
+that `Pair` is surjective: `x = ⟨a,b⟩` determines `a` and `b` as `fst x` and
+`snd x`. -/
+private def solveSidePair (vs : List 𝒱) : Term → Term → Option (List 𝒱 × List (𝒱 × Term))
+  | .pair (.var a) (.var b), x =>
+    if vs.contains a && vs.contains b && a != b && duplicable x
+        && !(fv x).contains a && !(fv x).contains b then
+      some ([a, b], [(a, .fst x), (b, .snd x)])
+    else none
+  | _, _ => none
+
+private def solveEq (side : List 𝒱 → Term → Term → Option (List 𝒱 × List (𝒱 × Term)))
+    (vs : List 𝒱) : Term → Option (List 𝒱 × List (𝒱 × Term))
+  | .eq a b => (side vs a b).orElse fun _ => side vs b a
+  | _ => none
+
+/-- The first of `cs` that pins binders of `vs`, as the binders removed, the
+substitution it licenses, and the conjuncts left. -/
+private def scanFor (side : List 𝒱 → Term → Term → Option (List 𝒱 × List (𝒱 × Term)))
+    (vs : List 𝒱) :
+    List Term → List Term → Option (List 𝒱 × List (𝒱 × Term) × List Term)
+  | _, [] => none
+  | seen, c :: rest =>
+    match solveEq side vs c with
+    | some (elim, σ) => some (elim, σ, seen.reverse ++ rest)
+    | none => scanFor side vs (c :: seen) rest
+
+/-- Single-variable equations are tried before pair ones: `p = ⟨a,b⟩` with
+`a = fst q` and `b = snd q` alongside collapses to `p = q` when the components
+are eliminated first, and to the strictly larger `fst p = fst q ∧ snd p = snd q`
+when the pair is. -/
+private def firstSolvable (vs : List 𝒱) (cs : List Term) :
+    Option (List 𝒱 × List (𝒱 × Term) × List Term) :=
+  (scanFor solveSideVar vs [] cs).orElse fun _ => scanFor solveSidePair vs [] cs
+
+private def applySubst (σ : List (𝒱 × Term)) (t : Term) : Term :=
+  σ.foldl (fun acc (v, s) => subst v s acc) t
+
+/-- Whether substituting `σ` into `rest` would capture.
+
+`subst` does not rename, so a replacement mentioning a name that `rest` binds
+would change what that name refers to.  Encoder-generated names are globally
+unique, but source names are not — Atelier B numbers binders per scope, which is
+why `saveShadowed` exists — so the check is made rather than assumed. -/
+private def capturing (σ : List (𝒱 × Term)) (rest : List Term) : Bool :=
+  let bound := (rest.map bv).flatten
+  σ.any fun (_, s) => (fv s).any bound.contains
+
+/-- `∃ v⃗. body` with one binder eliminated, or `none` if no conjunct pins one. -/
+private def onePointExists (vs : List 𝒱) (τs : List SMTType) (body : Term) :
+    Option Term :=
+  match firstSolvable vs (conjuncts body) with
+  | none => none
+  | some (elim, σ, rest) =>
+    if capturing σ rest then none else
+    let inner := andAll (rest.map (applySubst σ))
+    let keep := (vs.zip τs).filter fun (v, _) => !elim.contains v
+    some <| if keep.isEmpty then inner
+            else .exists (keep.map Prod.fst) (keep.map Prod.snd) inner
+
+/-- `∀ v⃗. body` with one binder eliminated by an antecedent that pins it. -/
+private def onePointForall (vs : List 𝒱) (τs : List SMTType) (body : Term) :
+    Option Term :=
+  let (as, concl) := antecedents body
+  match firstSolvable vs as with
+  | none => none
+  | some (elim, σ, rest) =>
+    if capturing σ (concl :: rest) then none else
+    let inner := (rest.map (applySubst σ)).foldr (.imp · ·) (applySubst σ concl)
+    let keep := (vs.zip τs).filter fun (v, _) => !elim.contains v
+    some <| if keep.isEmpty then inner
+            else .forall (keep.map Prod.fst) (keep.map Prod.snd) inner
+
 partial def simplifier : Term → Term
   | Term.app (.var "NATURAL") x => .le (.int 0) x
   | Term.app (.var "NATURAL1") x => .le (.int 1) x
@@ -90,9 +218,15 @@ partial def simplifier : Term → Term
   | Term.eq (.bool false) p | .eq p (.bool false) => .not p
   | Term.eq a b => if a == b then .bool true else .eq (simplifier a) (simplifier b)
   | Term.exists _ _ (.bool b) => .bool b
-  | Term.exists vs τs e => .exists vs τs (simplifier e)
+  | Term.exists vs τs e =>
+    match onePointExists vs τs e with
+    | some t => t
+    | none => .exists vs τs (simplifier e)
   | Term.forall _ _ (.bool b) => .bool b
-  | Term.forall vs τs e => .forall vs τs (simplifier e)
+  | Term.forall vs τs e =>
+    match onePointForall vs τs e with
+    | some t => t
+    | none => .forall vs τs (simplifier e)
   | Term.lambda vs τs e => .lambda vs τs (simplifier e)
   | Term.ite (.bool true) t _ | .ite (.bool false) _ t => t
   | Term.ite c t e => .ite (simplifier c) (simplifier t) (simplifier e)
