@@ -80,6 +80,43 @@ structure Env where
   usedVars : Std.HashSet SMT.𝒱 := ∅
   deriving Inhabited
 
+/-- The names an instruction *uses*, as opposed to the one it introduces.
+
+`Term.builtin` heads are not counted: they name prelude symbols (`bdiv`,
+`bmod`, `bpow`), which are never `declare-const`s. -/
+def Instr.refs : Instr → List 𝒱
+  | .define_fun _ _ _ t | .define_const _ _ t | .assert t => fv t
+  | .declare_const _ _ | .push _ | .pop _ | .check_sat => []
+
+def Stages.refs : Stages → List 𝒱
+  | .instr is => (is.map Instr.refs).flatten
+  | .asserts as => (as.attach.map (λ ⟨a, _⟩ => a.refs)).flatten
+termination_by s => s
+decreasing_by
+  all_goals simp_wf
+  decreasing_trivial
+
+/-- Drop the `declare-const`s nothing refers to.
+
+`freshVar` records every generated name in the type context, and the
+bulk-declare passes turn whatever is left there into a declaration.  A binder
+variable that survives its `eraseFromContext` therefore reaches the file as a
+free constant occurring nowhere else — measured at 2032 of the 2919
+declarations of a median per-goal script, a quarter of its bytes.  An
+unconstrained constant says nothing logically, but it is still a term the
+solver's quantifier instantiation has to consider, so it is not free.
+
+Only `declare-const` is dropped: a `define-fun` may be the definition that a
+later `assert` names, and a name that occurs solely as a binder is shadowed
+there anyway, so it is right for it not to count as a use. -/
+def Env.pruneUnused (E : Env) : Env :=
+  let used : Std.HashSet 𝒱 :=
+    ((E.declarations.toList.map Instr.refs).flatten ++ E.asserts.refs).foldl
+      (·.insert ·) ∅
+  { E with declarations := E.declarations.filter fun
+      | .declare_const v _ => used.contains v
+      | _ => true }
+
 instance : ToString Env where
   toString E :=
     let nl := "\n"

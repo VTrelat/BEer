@@ -715,16 +715,24 @@ def encodeDefs (E : B.Env) : Encoder Unit := do
   modify λ e => { e with env := { e.env with
     declarations := decl.reverse.toArray ++ e.env.declarations }}
 
+/-- The `distinct` groups and `finite` facts of the environment, asserted once
+each.
+
+A `.pog` routinely repeats them — the same enumerated set is `distinct` under
+every machine that sees it — and the encoder used to emit one assertion per
+repeat.  Deduplicating here rather than on the emitted terms keeps the
+comparison on the small B side; the encoded form is where the size is. -/
 def encodeDistinctFinite (E : B.Env) : Encoder Unit := do
-  let ds ← E.distinct.mapM λ ds => Term.distinct <$> ds.mapM (λ t => Prod.fst <$> (encodeTerm t E))
-  let fs ← E.finite.mapM λ fin => (Prod.fst <$> encodeTerm fin E)
+  let ds ← E.distinct.eraseDups.mapM λ ds =>
+    Term.distinct <$> ds.mapM (λ t => Prod.fst <$> (encodeTerm t E))
+  let fs ← E.finite.eraseDups.mapM λ fin => (Prod.fst <$> encodeTerm fin E)
   modify λ e => { e with env := { e.env with
     asserts := match e.env.asserts with
     | .asserts as => .asserts <| as.concat (Stages.instr <| (ds ++ fs).map Instr.assert)
     | _ => panic! "encodeDefs: malformed assert in environment" }}
 
 def encodeSimpleGoal (g : B.SimpleGoal) (E : B.Env) : Encoder <| Stages := do
-  let lh ← g.hyps.mapM (encodeTerm · E)
+  let lh ← g.hyps.eraseDups.mapM (encodeTerm · E)
   let g ← encodeTerm g.goal E
   return .instr <| (lh.map Prod.fst).concat g.1 |>.map Instr.assert |>.concat .check_sat
 
@@ -760,7 +768,9 @@ def encodeProofObligation (φ : B.ProofObligation) (E : B.Env) : Encoder Stages 
   -- B-side lookups succeed for the duration of this PO.
   let E_local : B.Env := φ.extendEnv E
   let defs ← (φ.defs.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
-  let globalHyps : Chunk ← (φ.hyps.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
+  -- Repeated hypotheses are common in the corpus and say nothing twice; drop
+  -- them before encoding, so the cast helpers they need are also built once.
+  let globalHyps : Chunk ← (φ.hyps.eraseDups.mapM ((Instr.assert ∘ Prod.fst) <$> encodeTerm · E_local))
   let goals : List Stages ← φ.negateGoals.goals.mapM (encodeSimpleGoal · E_local)
   let helpers := ((← get).env.declarations.extract declsBefore).toList
   -- Pop PO-local types so subsequent POs start clean.
@@ -805,7 +815,7 @@ def encode (e : B.Env) : Encoder Unit := do
   encodeTypeContext e *> encodeDefs e *> encodeDistinctFinite e *> encodeProofObligations e *> finalBulkDeclare
 
 def EncoderState.toSMTFileWith (render : Stages → String) : Encoder String := do
-  let env := (← get).env.simplify
+  let env := (← get).env.simplify.pruneUnused
   -- Refuse to emit a file a solver would reject.  A missed conversion between
   -- the two set representations is otherwise invisible here and only surfaces
   -- as a solver type error, far from the code responsible.
