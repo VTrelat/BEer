@@ -151,12 +151,61 @@ introduced (e.g. `S ⊆ T → |S| ≤ |T|`). -/
 def SMT.sitesOf (op : String) (τ : SMTType) : Encoder (List Site) := do
   return (← get).sites.filter (fun s => s.op == op && s.τ == τ) |>.take maxSiteLinks
 
+/-- The largest encoded set the table will hold, in nodes of its tree unfolding.
+
+Everything a site costs is paid on `set` *unfolded*: `recordSite` takes its free
+variables, `findSite` compares it against the candidate, and `sitesOf` hands it
+to `subsetOf`, which inlines it twice into the new site's specification.  That
+last one is a feedback loop — the specification becomes part of a later site's
+argument — and on the obligations where it runs away the argument grows by more
+than an order of magnitude per goal.
+
+Refusing to record the oversized ones cuts the loop at the only point where the
+size is still observable.  What it costs is what `hideCapturedSites` already
+costs when it drops a site: the memo is lost, so a second occurrence of the same
+expression introduces a second constant, and the cross-site facts relating the
+two are not stated.  Both are provable facts the solver does not learn, never
+unsoundness — the constants each keep their own base axioms.
+
+Sized generously.  A site argument in the corpus is a variable or a small
+lambda; the ones this excludes are already past a million nodes by the time
+anything notices. -/
+def SMT.maxSiteSize : Nat := 20000
+
+/-- The largest encoded body the encoder will carry into a binder, in nodes of
+its tree unfolding.
+
+Sharing keeps the *representation* of such a body small — that is what makes the
+encoder's memory bounded — but nothing downstream of the encoder can use it:
+`fv`, structural equality, the type check and above all `Term.toString` all walk
+the tree, and an SMT-LIB script is a tree.  A body past this bound denotes a
+file no solver would be given and no disk would hold, so the honest outcome is
+an error naming the obligation rather than an encoder that runs until the
+machine gives out.
+
+The bound is on the unfolding rather than on the DAG deliberately: it is the
+unfolding that every consumer pays for, and the two sizes are far apart exactly
+on the obligations this is meant to catch.  At five million nodes it is some
+fifty megabytes of SMT-LIB, roughly fifty times the largest goal the corpus
+produces. -/
+def SMT.maxTermSize : Nat := 5000000
+
+/-- Fail rather than carry an unusably large body further.  Costs one traversal
+of the body, which stops as soon as the bound is reached. -/
+def SMT.guardSize (site : String) (t : Term) : Encoder Unit := do
+  if Term.sizeUpTo maxTermSize t ≥ maxTermSize then
+    throw s!"encodeTerm:{site}: encoded body exceeds {maxTermSize} nodes \
+             unfolded; refusing to build a script that cannot be written or read"
+
 /-- Record the constant `name` as standing for `op` applied to `set`.
 
 Takes the components rather than a `Site` so that `fvs` is always the cache of
 `set` and cannot be passed inconsistently. -/
 def SMT.recordSite (op : String) (set : Term) (τ : SMTType) (name : 𝒱) :
-    Encoder Unit :=
+    Encoder Unit := do
+  -- Before `fv`, which is itself an unfolding walk and would pay the whole cost
+  -- of an oversized argument just to find out that it is oversized.
+  if Term.sizeUpTo maxSiteSize set ≥ maxSiteSize then return
   -- Cache the free names once, deduplicated through a hash set: `fv` yields one
   -- entry per occurrence, and every later binder scans this list.
   let fvs := (fv set).foldl (init := (∅ : Std.HashSet 𝒱)) (·.insert ·) |>.toList

@@ -97,6 +97,36 @@ to exhaust the stack.  Order is not preserved; callers only test membership. -/
 def removeAll (xs ys : List 𝒱) : List 𝒱 :=
   xs.foldl (fun acc x => if ys.contains x then acc else x :: acc) []
 
+/-- Worklist rather than recursion: encoded terms nest deeply enough that the
+free-variable walk had to be rewritten for stack depth once already. -/
+private partial def sizeUpToAux (limit : Nat) : List Term → Nat → Nat
+  | [], acc => acc
+  | t :: ts, acc =>
+    if acc ≥ limit then acc else
+    let acc := acc + 1
+    match t with
+    | .var _ | .int _ | .bool _ | .none => sizeUpToAux limit ts acc
+    | .not a | .some a | .the a | .fst a | .snd a | .as a _ =>
+      sizeUpToAux limit (a :: ts) acc
+    | .lambda _ _ a | .forall _ _ a | .exists _ _ a =>
+      sizeUpToAux limit (a :: ts) acc
+    | .app a b | .eq a b | .and a b | .or a b | .imp a b | .le a b
+    | .pair a b | .add a b | .sub a b | .mul a b =>
+      sizeUpToAux limit (a :: b :: ts) acc
+    | .ite c a b => sizeUpToAux limit (c :: a :: b :: ts) acc
+    | .distinct as | .builtin _ _ as => sizeUpToAux limit (as ++ ts) acc
+
+/-- The node count of `t`, abandoned once it reaches `limit` — so the walk costs
+`limit` steps at worst, whatever `t` is.
+
+Shared subterms are counted once per occurrence, deliberately: what a caller
+bounds with this is the cost of *unfolding* the term — printing it, taking its
+free variables, comparing it, inlining it into an assertion — and every one of
+those walks the tree the term denotes, not the DAG that represents it.  The two
+sizes are far apart on this encoder's output, and it is the larger one that has
+to be controlled. -/
+def Term.sizeUpTo (limit : Nat) (t : Term) : Nat := sizeUpToAux limit [t] 0
+
 def fv : Term → List 𝒱
   | .var v => [v]
   | .int _ => []

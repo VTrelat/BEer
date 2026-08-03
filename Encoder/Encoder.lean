@@ -627,6 +627,10 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
         -- satisfiable.
         let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
         let spec_bodies := new_decls.filterMap fun | .define_fun _ .unit .bool b => some b | _ => none
+        -- Same level as `rescopeHelpers`, and the same runaway: each of these is
+        -- inlined into the formula this returns, which is what the level above
+        -- rewrites again.  Empty when no helper was declared, so nothing is paid.
+        for b in spec_bodies do SMT.guardSize "all" b
         -- Spec bodies constrain cast helpers via `vs`; rename to `zs` like `P'`.
         let spec_bodies := spec_bodies.map (substList vs (zs.map .var))
         let inner := spec_bodies.foldr (.imp · ·) (.imp z_mem_D' P')
@@ -664,6 +668,10 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
 
       let ex_binders := new_decls.filterMap fun | .declare_const v τ => some (v, τ) | _ => none
       let spec_bodies := new_decls.filterMap fun | .define_fun _ .unit .bool b => some b | _ => none
+      -- Same level as `rescopeHelpers`, and the same runaway: each of these is
+      -- inlined into the formula this returns, which is what the level above
+      -- rewrites again.  Empty when no helper was declared, so nothing is paid.
+      for b in spec_bodies do SMT.guardSize "all" b
       -- Spec bodies constrain cast helpers via `vs`; rename to `xs` like `P'`.
       let spec_bodies := spec_bodies.map (substList vs (xs.map .var))
       let inner := spec_bodies.foldr (.imp · ·) (xsy_mem_D ⇒ˢ P')

@@ -2,41 +2,117 @@ import Encoder.Basic
 
 namespace SMT
 
+/-! ### Substitution
+
+`encodeTerm` produces a DAG, not a tree.  A cast helper's specification, an
+encoded domain and a site's argument are each reachable through many paths, and
+the encoder depends on that sharing to keep an obligation roughly the size of
+the `.pog` that produced it.
+
+A substitution that allocates a fresh node for every node it visits replaces the
+DAG by its tree unfolding.  The quantifier cases substitute once per level of
+nesting — `rescopeHelpers` renames the helper constants, then `substList`
+α-renames the binders to the fresh ones — so every level unfolds what the level
+below it built and the size compounds.  That is what `--per-goal` on
+`0003/00341` obligation 1 goal 0 was doing when it passed 40 GB on a 1.2 MB
+input.
+
+The two properties that stop it are both in `substAux`: it reports *unchanged*
+rather than rebuilding, so a subterm no substitution reaches keeps the node it
+already had and stays shared; and it takes the whole substitution at once,
+rather than one variable per traversal. -/
+
+/-- `f` mapped over `ts`, `none` when it changed nothing. -/
+private def mapChanged (f : Term → Option Term) : List Term → Option (List Term)
+  | [] => Option.none
+  | t :: ts =>
+    match f t, mapChanged f ts with
+    | Option.none, Option.none => Option.none
+    | t', ts' => Option.some (t'.getD t :: ts'.getD ts)
+
+/-- Rebuild a binary node only if one of its children moved. -/
+@[inline] private def keep₂ (c : Term → Term → Term) (a b : Term)
+    (a' b' : Option Term) : Option Term :=
+  match a', b' with
+  | Option.none, Option.none => Option.none
+  | _, _ => Option.some (c (a'.getD a) (b'.getD b))
+
+/-- `σ` with the names a binder shadows removed; `none` when nothing is left,
+which is the case where the whole subterm is unchanged.  The map is only rebuilt
+when the binder really shadows something — it is shared with the caller, so an
+`erase` would copy it. -/
+private def restrict (σ : Std.HashMap 𝒱 Term) (vs : List 𝒱) :
+    Option (Std.HashMap 𝒱 Term) :=
+  if vs.any (σ.contains ·) then
+    let σ' := vs.foldl (·.erase ·) σ
+    if σ'.isEmpty then Option.none else Option.some σ'
+  else Option.some σ
+
+/-- Simultaneous substitution, `none` meaning "this subterm is unchanged".
+
+Capture is not avoided, as in the substitution this replaces: a replacement
+mentioning a name the term binds would change what that name refers to, and it
+is the callers that rule it out (`capturing`, and the fact that the encoder's
+own names are generated).  -/
+private partial def substAux (σ : Std.HashMap 𝒱 Term) : Term → Option Term
+  | .var v => σ[v]?
+  | .int _ | .bool _ | .none => Option.none
+  | .app f x => keep₂ .app f x (substAux σ f) (substAux σ x)
+  | .eq a b => keep₂ .eq a b (substAux σ a) (substAux σ b)
+  | .and a b => keep₂ .and a b (substAux σ a) (substAux σ b)
+  | .or a b => keep₂ .or a b (substAux σ a) (substAux σ b)
+  | .imp a b => keep₂ .imp a b (substAux σ a) (substAux σ b)
+  | .le a b => keep₂ .le a b (substAux σ a) (substAux σ b)
+  | .pair a b => keep₂ .pair a b (substAux σ a) (substAux σ b)
+  | .add a b => keep₂ .add a b (substAux σ a) (substAux σ b)
+  | .sub a b => keep₂ .sub a b (substAux σ a) (substAux σ b)
+  | .mul a b => keep₂ .mul a b (substAux σ a) (substAux σ b)
+  | .not a => (substAux σ a).map .not
+  | .some a => (substAux σ a).map .some
+  | .the a => (substAux σ a).map .the
+  | .fst a => (substAux σ a).map .fst
+  | .snd a => (substAux σ a).map .snd
+  | .as a τ => (substAux σ a).map (.as · τ)
+  | .ite c t e =>
+    match substAux σ c, substAux σ t, substAux σ e with
+    | Option.none, Option.none, Option.none => Option.none
+    | c', t', e' => Option.some (.ite (c'.getD c) (t'.getD t) (e'.getD e))
+  | .distinct ts => (mapChanged (substAux σ) ts).map .distinct
+  | .builtin f τ args => (mapChanged (substAux σ) args).map (.builtin f τ)
+  | .lambda vs τs b => match restrict σ vs with
+    | Option.none => Option.none
+    | Option.some σ' => (substAux σ' b).map (.lambda vs τs)
+  | .forall vs τs b => match restrict σ vs with
+    | Option.none => Option.none
+    | Option.some σ' => (substAux σ' b).map (.forall vs τs)
+  | .exists vs τs b => match restrict σ vs with
+    | Option.none => Option.none
+    | Option.some σ' => (substAux σ' b).map (.exists vs τs)
+
+/-- `e` with every `σ`-bound name replaced, in one traversal. -/
+def substMany (σ : Std.HashMap 𝒱 Term) (e : Term) : Term :=
+  if σ.isEmpty then e else (substAux σ e).getD e
+
 def subst (x : 𝒱) (t e : Term) : Term :=
-  match e with
-  | Term.var v => if v = x then t else e
-  | Term.mul a b => .mul (subst x t a) (subst x t b)
-  | Term.add a b => .add (subst x t a) (subst x t b)
-  | Term.sub a b => .sub (subst x t a) (subst x t b)
-  | Term.le a b => .le (subst x t a) (subst x t b)
-  | Term.pair a b => .pair (subst x t a) (subst x t b)
-  | Term.some a => .some (subst x t a)
-  | Term.imp a b => .imp (subst x t a) (subst x t b)
-  | Term.not a => .not (subst x t a)
-  | Term.or a b => .or (subst x t a) (subst x t b)
-  | Term.and a b => .and (subst x t a) (subst x t b)
-  | Term.eq a b => .eq (subst x t a) (subst x t b)
-  | Term.forall vs τs body => if x ∈ vs then .forall vs τs body else .forall vs τs (subst x t body)
-  | Term.exists vs τs body => if x ∈ vs then .exists vs τs body else .exists vs τs (subst x t body)
-  | Term.lambda vs τs body => if x ∈ vs then .lambda vs τs body else .lambda vs τs (subst x t body)
-  | Term.app f a => .app (subst x t f) (subst x t a)
-  | Term.distinct ts => .distinct (ts.attach.map (λ ⟨e, _⟩ => subst x t e))
-  | Term.snd p => .snd (subst x t p)
-  | Term.fst p => .fst (subst x t p)
-  | Term.none => .none
-  | Term.the e => .the (subst x t e)
-  | Term.ite c ct cf => .ite (subst x t c) (subst x t ct) (subst x t cf)
-  | Term.as a τ => .as (subst x t a) τ
-  | Term.builtin f τ args => .builtin f τ (args.attach.map (λ ⟨e, _⟩ => subst x t e))
-  | Term.bool b => .bool b
-  | Term.int n => .int n
+  substMany (Std.HashMap.emptyWithCapacity 1 |>.insert x t) e
 
+/-- `xs` paired with `ts`, the leftmost binding of a repeated name winning —
+which is what the sequential fold this replaces did, since the first
+substitution left no occurrence for the second to find. -/
+private def zipSubst : List 𝒱 → List Term → Std.HashMap 𝒱 Term
+  | x :: xs, t :: ts => (zipSubst xs ts).insert x t
+  | _, _ => ∅
 
--- e[xs[i] ← ts[i]] for all i
+/-- `e[xs[i] ← ts[i]]` for all `i`, **simultaneously**.
+
+This used to be a fold of one-variable substitutions, which differs when a
+replacement mentions a later variable of `xs`: the fold would rewrite inside the
+replacement it had just introduced.  No caller relies on that — every one of
+them substitutes source binders by terms over encoder-generated names, which
+`xs` cannot contain — and where the two disagree it is because the fold was
+capturing. -/
 def substList (xs : List 𝒱) (ts : List Term) (e : Term) : Term :=
-  match xs, ts with
-  | x :: xs, t :: ts => substList xs ts (subst x t e)
-  | _, _ => e
+  substMany (zipSubst xs ts) e
 
 /-! ### One-point elimination
 
@@ -129,7 +205,7 @@ private def firstSolvable (vs : List 𝒱) (cs : List Term) :
   (scanFor solveSideVar vs [] cs).orElse fun _ => scanFor solveSidePair vs [] cs
 
 private def applySubst (σ : List (𝒱 × Term)) (t : Term) : Term :=
-  σ.foldl (fun acc (v, s) => subst v s acc) t
+  substMany (σ.foldr (fun (v, s) m => m.insert v s) ∅) t
 
 /-- Whether substituting `σ` into `rest` would capture.
 
@@ -277,8 +353,19 @@ def rescopeHelpers (before : Nat) (vs : List 𝒱) (subs : List Term)
   let new := st.env.declarations.extract before
   let helpers := new.filterMap fun | .declare_const v _ => some v | _ => none
   if helpers.isEmpty then return body
-  let applyRen := fun t =>
-    helpers.foldl (fun acc h => subst h (.app (.var s!"{h}^") (.var z)) acc) t
+  -- Checked here rather than at each binder case: this is the level at which
+  -- the body compounds — a helper's specification is inlined into it and the
+  -- result becomes the next level's body — and it is a level that already
+  -- traverses the body, so the check does not add a new order of cost.  With no
+  -- helpers to re-scope nothing is inlined and the early return above skips it.
+  guardSize "rescope" body
+  -- One traversal for the whole renaming.  Folding a one-variable substitution
+  -- over the helpers walked the term once per helper and rebuilt it each time,
+  -- and it is applied to every specification as well as to the body, so the
+  -- traversals went as the square of the helper count.
+  let ren : Std.HashMap 𝒱 Term :=
+    helpers.foldl (fun m h => m.insert h (.app (.var s!"{h}^") (.var z))) ∅
+  let applyRen := fun t => substMany ren t
   let new' ← new.mapM fun
     | .declare_const v σ => do
       eraseFromContext v
@@ -286,7 +373,11 @@ def rescopeHelpers (before : Nat) (vs : List 𝒱) (subs : List Term)
       return .declare_const s!"{v}^" (.fun τ σ)
     -- `addSpec` emits the specification as `define-fun h_spec () Bool …`; the
     -- name is kept so the already-emitted `(assert h_spec)` still refers to it.
-    | .define_fun n .unit .bool b =>
+    | .define_fun n .unit .bool b => do
+      -- The specifications, not the body, are where this runs away: each is
+      -- rewritten here and then inlined into the enclosing formula, so the one
+      -- built at this level is what the level above rewrites again.
+      guardSize "rescope" b
       return .define_fun n .unit .bool (.forall [z] [τ] (applyRen (substList vs subs b)))
     | i => return i
   modify fun e =>
