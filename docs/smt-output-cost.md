@@ -372,6 +372,33 @@ which instantiation strategy runs.
 `(set-option :enum-inst true)` in the prelude works only when cvc5 is not given
 `--mbqi` on the command line. Given the above there is no reason to add it.
 
+### Trigger benefit is specific to cvc5's E-matching
+
+`:pattern` is standard SMT-LIB 2.6 syntax, but *which* triggers help is an
+artefact of the implementation.  z3 4.16 reads only the 75 sample scripts that
+avoid higher-order application, and on those patterns cost goals rather than
+winning them:
+
+```
+              z3 -T:2          z3 -T:5
+no patterns    48 unsat        50 unsat
+patterns       41 unsat        41 unsat
+               +5 / -12        +5 / -14
+```
+
+This does not argue against shipping them.  Higher-order logic is not
+standardised in SMT-LIB 2.6 or 2.7 — `HO_ALL` and `(@ f x)` are cvc5
+extensions, and 329 of 404 emitted scripts use `(@ …)` — so cvc5 is the only
+solver that can read most of this output at all.  It does mean the honest claim
+is "tuned for cvc5's quantifier instantiation", not "better everywhere".
+
+The split worth documenting for users:
+
+* **solver-independent** — one-point elimination, dead-declaration pruning,
+  assertion dedup, helper sharing.  Smaller, logically equivalent formulas,
+  committing to no instantiation policy.
+* **cvc5-tuned** — instantiation patterns.
+
 ### Datatype axioms: cvc5 already has them
 
 Each of these is `unsat` in cvc5 1.3.2 with no extra axioms and no flags, so
