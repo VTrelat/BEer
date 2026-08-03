@@ -258,6 +258,91 @@ on a sample where 274 of 396 goals do use `bpow`. cvc5 already picks
 `(bpow a n)` itself. Change reverted.
 
 
+### The 5359 goals lost to patterns cannot be bought back
+
+The full campaign A/B of `f5e4e03` against `7da3479` moved 5359 goals from
+`both prove` to `ppTrans only`. All 5359 are timeouts at the 5000 ms budget, on
+*smaller* scripts, so nothing was lost from the encoding — and one of them,
+`0015/00350` PO 0 goal 4, is a 3876-byte file that flips on a single
+annotation:
+
+```
+cvc5 --tlimit-per=5000 --mbqi                     -> unknown  5.08 s
+cvc5 --tlimit-per=5000 --mbqi --user-pat=ignore   -> unsat    0.01 s
+```
+
+The annotation is the shared partial-function axiom of `b6f1766`, whose
+inferred trigger names a constructed pair:
+
+```
+(forall ((x129 Int) (x130 Int))
+  (! (= (app!123 (pair x129 x130)) (= (app!128 x129) (some x130)))
+     :pattern ((app!128 x129) (app!123 (pair x129 x130)))))
+```
+
+Rewriting that one trigger by hand identifies the culprit precisely — and it is
+not "a constructor over the binders", which is the reading the shape invites:
+
+```
+{app!128 x, app!123 (pair x y)}   as emitted        unknown  5 s
+{app!123 (pair x y)}              alone             unknown  5 s
+{app!128 x, pair x y}             no λ-defined head unknown  5 s
+{app!128 x, some y}               constructor!      unsat    0.01 s
+no pattern                                          unsat
+```
+
+`(some y)` over a binder is fine; `(pair x y)` is fatal. The discriminator is
+how many ground terms the element matches — this encoding builds a `Pair` per
+relation application, so a `Pair`-sorted element restricts nothing, while
+`some`-headed terms are comparatively rare. It is a matching *blowup*, not a
+matching loop, with the same signature: the budget goes on enumerating
+instances and MBQI is never reached.
+
+Five policies were then measured against `7da3479` on 400-goal samples of each
+of three populations — the 5359 regressed, the 26263 newly won, and the 107153
+proved under both — one script per goal at campaign settings:
+
+```
+policy                                    regressed    won   held   corpus net
+B  reject built structure over binders          +78      -       -            -
+C  B, plus constructor terms as candidates      +79    -81     -2       -4713
+D  C with `some`/`the` only                     +80    -79     -1        ~ C
+E  constructor candidates, no rejection          +3     -4      0        -228
+F  rewrite only the partial-function axiom       +2      0      0        -103
+```
+
+`C` is the interesting one and it fails outright. The `(R (pair u v))` family
+is *simultaneously* what loses the 5359 and what wins the 26263: on the 84 won
+goals `C` gives up it strips patterns 192 → 34. Suppressing the family recovers
+about 20% of a population of 5359 and gives back about 20% of a population 4.9
+times larger. Breaking even needs a 4.9:1 recovery-to-loss ratio; `C` manages
+1.35:1. `D` differs only in which constructor heads are admissible and lands in
+the same place, so the specific rule is not what is wrong — the strategy is.
+
+`E` and `F` are the other direction: leave every candidate in place and let a
+better one outrank it (`E`), or rewrite nothing but the one axiom measured to
+blow up (`F`). Both are inside the noise floor. `F` rewrites 1584 triggers in
+the regressed sample and moves two goals. The reproducer is genuine and
+unrepresentative of its own population.
+
+**Only about a third of the regression is patterns at all.** On the regressed
+sample `f5e4e03` proves 376 of 404 and `7da3479` proves 6; emitting no patterns
+whatever reaches 125. So (125-6)/(376-6) = 32% is attributable to `4596e9c`,
+and the remaining 68% belongs to `2036e54`, `b6f1766` or `cfee023`. Not
+isolated further.
+
+Two measurement notes for anyone repeating this:
+
+- **`--user-pat=ignore` is not the same as emitting no patterns.** On identical
+  goals it scores 92 where a build that emits none scores 125 — it understates
+  the trigger ceiling by a quarter, so it is a good diagnostic and a bad
+  yardstick.
+- **The noise floor is wide.** Across three runs of the same 400 goals under the
+  same binary, `7da3479` scored 395/401/399 on the held sample and 314/331/339
+  on the won sample. Deltas under about ±2% on `won` are not real, which is why
+  `E` and `F` are reported as no-ops rather than as small losses.
+
+
 ### The instantiation strategy is not the lever
 
 The smallest `ppTrans-only` goal in the corpus — `0030/00001` PO 4 goal 2, four
