@@ -444,6 +444,43 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       declareConstWithSpec Rg (.fun (.pair α β) .bool) Rg_spec
       encodeClosure refl (.var Rg) α
     | _ => throw s!"encodeTerm:closure: Expected a relation, got {τR}"
+  | .dom R, E => do
+    /- `dom R`.  This is the case the partial-function representation exists
+       for: when `R` is stored as `α → Option β`, its domain is the points
+       where it is defined, which is a *quantifier-free* test.  The reader
+       cannot make that choice — it does not know the representation — which is
+       why `dom` is a constructor rather than a derived operator.  Encoded as a
+       comprehension it would be `{x | ∃ y. x ↦ y ∈ R}`, an existential inlined
+       at every occurrence, and `dom` appears in nearly every obligation of the
+       corpus. -/
+    let ⟨R', τR⟩ ← encodeTerm R E
+    match τR with
+    | .fun α (.option β) => do
+      let x ← freshVar α; SMT.eraseFromContext x
+      return (.lambda [x] [α] (¬ˢ (.app R' (.var x) =ˢ none$ β)), .fun α .bool)
+    | .fun (.pair α β) .bool => do
+      let x ← freshVar α; SMT.eraseFromContext x
+      let y ← freshVar β; SMT.eraseFromContext y
+      return (.lambda [x] [α] (.exists [y] [β] (.app R' (.pair (.var x) (.var y)))),
+        .fun α .bool)
+    | _ => throw s!"encodeTerm:dom: Expected a relation, got {τR}"
+  | .ran R, E => do
+    /- `ran R`.  Both representations need the existential — a partial function
+       is not invertible — so this is only the derived form written directly,
+       without the domain guards `Collect`/`Exists` wrap it in. -/
+    let ⟨R', τR⟩ ← encodeTerm R E
+    match τR with
+    | .fun α (.option β) => do
+      let x ← freshVar α; SMT.eraseFromContext x
+      let y ← freshVar β; SMT.eraseFromContext y
+      return (.lambda [y] [β] (.exists [x] [α] (.app R' (.var x) =ˢ .some (.var y))),
+        .fun β .bool)
+    | .fun (.pair α β) .bool => do
+      let x ← freshVar α; SMT.eraseFromContext x
+      let y ← freshVar β; SMT.eraseFromContext y
+      return (.lambda [y] [β] (.exists [x] [α] (.app R' (.pair (.var x) (.var y)))),
+        .fun β .bool)
+    | _ => throw s!"encodeTerm:ran: Expected a relation, got {τR}"
   | .app f x, E => do
     castApp (← encodeTerm f E) (← encodeTerm x E)
   | .collect vs D P, E => do

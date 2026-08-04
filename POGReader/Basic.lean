@@ -121,6 +121,13 @@ def B.Term.getType : Term → Decoder B.BType
     | .set α, .set β => return .set (.prod α β)
     | τ, σ => throw s!"Cannot form cartesian product of {τ} and {σ}"
   | .union S _ | .inter S _ | .closure _ S | .iterate S _ => return (← S.getType)
+  -- `dom R : POW(τ)` and `ran R : POW(σ)` for `R : POW(τ × σ)`.
+  | .dom R => do
+    let .set (.prod τ _) ← R.getType | throw "dom expects a relation"
+    return .set τ
+  | .ran R => do
+    let .set (.prod _ σ) ← R.getType | throw "ran expects a relation"
+    return .set σ
   -- Read off the carried result type rather than recursing through the
   -- argument: `getType (τ.toTerm) = .set τ`.
   | .conc R _ => do

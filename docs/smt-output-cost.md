@@ -31,7 +31,27 @@ Encoder tags: `base` = `f5e4e03`; `onepoint` = base + one-point elimination;
 baseline f5e4e03                        168             132             104
 + one-point, pruning, dedup, sharing    182             168             123
 + instantiation patterns                193             184             133
-                                     (48.7%)                          (44.0%)
++ dom/ran as constructors               244              --             166
+                                     (61.6%)                          (55.0%)
+```
+
+Against ppTrans on the same 396 goals at 5000 ms, `ppTrans-only` falls from
+**152 to 82**:
+
+```
+baseline      both 136   BEer-only 32   ppTrans-only 152   neither 76
+all changes   both 206   BEer-only 38   ppTrans-only  82   neither 70
+```
+
+By type order, the whole of the order-2 deficit closes:
+
+```
+order    n    base    now   ppTrans
+  0     12     83%    92%     100%
+  1    171     57%    70%      83%
+  2    179     28%    58%      60%
+  3     32     28%    28%      78%
+  4      2      0%     0%     100%
 ```
 
 Step by step, on the goals common to each pair:
@@ -222,6 +242,39 @@ A textual post-processor over the emitted scripts scores slightly better than
 the in-encoder selection (196 against 193 at 5000 ms, 11 goals where they
 disagree). The gap is trigger-choice detail and is within the noise of these
 counts; it was not tuned further.
+
+
+### 6. `dom`/`ran` as constructors (`B/Syntax/Basic.lean`, `Encoder/Encoder.lean`)
+
+The largest single change here: +59/-8 at 5000 ms, +35/-2 on the second sample.
+
+`dom` was derived in `POGReader/Builtins.lean` as
+`{ x | ∃ y. x ↦ y ∈ R }`.  That expansion happens in the *reader*, which cannot
+see which representation the encoder will pick, so it always produced the
+relational form — including for a variable flagged as a partial function, where
+the domain is simply the points at which it is defined:
+
+```smt
+(lambda ((x A)) (not (= (R x) (as none (Option B)))))
+```
+
+No quantifier, no helper, no axiom.  That is the payoff the `α → Option β`
+representation exists for, and deriving `dom` at read time threw it away at
+every occurrence — in a corpus where 400 sampled `.pog` files contain 41547
+`dom` and 31404 `ran` nodes, and 383 of the 400 use `dom` at all.
+
+Making them constructors moves the choice into `encodeTerm`, which is where the
+representation is known — the same reason `pow` and `closure` are constructors.
+The other three cells (`dom` of a relation, `ran` of either) still need the
+existential, but are emitted directly rather than through `Collect`/`Exists`,
+so they lose the domain guards the derived form wrapped around them.
+
+The derived `B.Term.dom`/`ran` are gone, so `overload`, `tot`, `toFunction` and
+`size` inherit the same treatment — `overload` in particular built a `dom`
+internally on every use.
+
+Nothing is axiomatised, so unlike a `Site` this carries no completeness risk in
+either direction.
 
 ## Negative results
 

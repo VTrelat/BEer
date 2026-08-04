@@ -43,16 +43,10 @@ def B.Term.ranSubtraction (R F : Term) : Decoder Term := do
   return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ ¬ᴮ(.var y ∈ᴮ F))
 infix:90 "⩥" => B.Term.ranSubtraction
 
-def B.Term.dom (τ σ : BType) (f : Term) : Decoder Term := do
-  .Collect τ.toTerm <| λ x => .Exists σ.toTerm <| fun y => return (x ↦ᴮ y) ∈ᴮ f
-
-def B.Term.ran (τ σ : BType) (f : Term) : Decoder Term := do
-  .Collect σ.toTerm <| λ y => .Exists τ.toTerm <| fun x => return (x ↦ᴮ y) ∈ᴮ f
-
 def B.Term.overload (τ σ : BType) (Q R : Term) : Decoder Term := do
   let x ← freshVar τ
   let y ←  freshVar σ
-  let domR ← R.dom τ σ
+  let domR := Term.dom R
   return .collect [x, y] (τ.toTerm ⨯ᴮ σ.toTerm)
     (((.var x ↦ᴮ .var y ∈ᴮ Q) ∧ᴮ ¬ᴮ(.var x ∈ᴮ domR)) ∨ᴮ (.var x ↦ᴮ .var y ∈ᴮ R))
 
@@ -60,7 +54,7 @@ def B.Term.tot_on (D : Term) (σ : BType) (f : Term) : Decoder Term := do
   .All D <| λ x => .Exists σ.toTerm <| fun y => return (x ↦ᴮ y) ∈ᴮ f
 
 def B.Term.tot (τ σ : BType) (f : Term) : Decoder Term := do
-  .eq τ.toTerm <$> (B.Term.dom τ σ f)
+  return .eq τ.toTerm (.dom f)
 
 def B.Term.tfun (A B : Term) : Decoder Term :=
   .Collect (A ⇸ᴮ B) fun f => .All A fun x => .Exists B fun y => return (x ↦ᴮ y) ∈ᴮ f
@@ -194,7 +188,7 @@ def B.Term.toRelation (α β : BType) (f : Term) : Decoder Term := do
 
 /-- `fnc(r)` — the set-valued function `λ x ∈ dom r. r[{x}]` of a relation. -/
 def B.Term.toFunction (α β : BType) (r : Term) : Decoder Term := do
-  let d ← r.dom α β
+  let d := Term.dom r
   let x ← freshVar α
   let y ← freshVar β
   return .lambda [x] d (.collect [y] β.toTerm (.var x ↦ᴮ .var y ∈ᴮ r))
@@ -211,7 +205,7 @@ def B.Term.seqElem (s : Term) : Decoder BType := do
   | .set (.prod .int σ) => return σ
   | τ => throw s!"Expected a sequence, got type {τ}"
 
-def B.Term.size (σ : BType) (s : Term) : Decoder Term := .card <$> s.dom .int σ
+def B.Term.size (_σ : BType) (s : Term) : Decoder Term := return .card (.dom s)
 
 /-- Comprehension `{ i ↦ y ∈ ℤ × σ | P i y }`, the shape shared by every
 sequence-building operator. -/

@@ -199,12 +199,8 @@ def String.toUnaryOp : String → B.BType → B.Term → Decoder B.Term
   | "imin", _ => pure ∘ .min
   -- | "rmin" => throw "Unary operator not implemented"
   | "card", .int => pure ∘ .card
-  | "dom", .set τ => λ S => do
-    let .set (.prod _ σ) ← S.getType | unreachable!
-    B.Term.dom τ σ S
-  | "ran", .set σ => λ S => do
-    let .set (.prod τ _) ← S.getType | unreachable!
-    B.Term.ran τ σ S
+  | "dom", .set _ => pure ∘ .dom
+  | "ran", .set _ => pure ∘ .ran
   | "POW", τ => fun S => do
     let .set (.set _) := τ | throw s!"POW operator expects a set, got type {τ}"
     return S.pow
@@ -246,7 +242,7 @@ def String.toUnaryOp : String → B.BType → B.Term → Decoder B.Term
   | "size", τ => fun S => do
     unless τ == .int do throw s!"size operator expects a type int, got {τ}"
     let .set (.prod .int α) ← S.getType | throw s!"size operator expects a sequence."
-    B.Term.card <$> (S.dom .int α)
+    return .card (.dom S)
   | "perm", τ => fun S => do
     let .set _ := τ | throw s!"perm operator expects a set, got type {τ}"
     S.perm

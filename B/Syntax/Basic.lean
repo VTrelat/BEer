@@ -50,6 +50,14 @@ inductive Term where
   -- result type as a term (`BType.toTerm`), carried so that typing `conc` does
   -- not have to recurse through `ss`, which can be arbitrarily deep.
   | conc (R ss : Term)
+  -- `dom(R)` / `ran(R)`.  Kept as constructors rather than derived in
+  -- `POGReader/Builtins.lean` because the useful definition depends on the
+  -- representation the encoder picks, which the reader cannot see: for a
+  -- relation stored as a partial function, `dom f` is `λ x. f x ≠ none`, with
+  -- no quantifier at all, whereas the derived form
+  -- `{ x | ∃ y. x ↦ y ∈ f }` inlines an existential at every occurrence.
+  | dom (R : Term)
+  | ran (R : Term)
   -- functions
   | app (f x : Term)
   | lambda (vs : List 𝒱) (D P : Term)
@@ -109,6 +117,7 @@ def fv : Term → List 𝒱
   | .card S => fv S
   | .finite S => fv S
   | .closure _ R => fv R
+  | .dom R | .ran R => fv R
   | .fold _ f => fv f
   | .conc R ss => fv R ++ fv ss
   | .iterate R n => fv R ++ fv n
@@ -125,7 +134,8 @@ def bv : Term → List 𝒱
   | .cprod S T | .union S T | .inter S T => bv S ++ bv T
   | .pfun A B => bv A ++ bv B
   | .app f x => bv f ++ bv x
-  | .card S | .finite S | .min S | .max S | .pow S | .closure _ S | .fold _ S => bv S
+  | .card S | .finite S | .min S | .max S | .pow S | .closure _ S | .fold _ S
+  | .dom S | .ran S => bv S
   | .conc R ss => bv R ++ bv ss
   | .iterate R n => bv R ++ bv n
 
