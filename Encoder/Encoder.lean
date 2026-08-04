@@ -481,6 +481,100 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
       return (.lambda [y] [β] (.exists [x] [α] (.app R' (.pair (.var x) (.var y)))),
         .fun β .bool)
     | _ => throw s!"encodeTerm:ran: Expected a relation, got {τR}"
+  | .domRestrict neg F R, E => do
+    /- `F ◁ R` / `F ⩤ R`.  Quantifier-free under *both* representations, and
+       under the partial-function one the result is still a partial function —
+       restricting a function does not make it a relation — so the graph never
+       has to be reified. -/
+    let ⟨F₀, τF₀⟩ ← encodeTerm F E
+    let ⟨Fc, φ⟩ ← asCharPred "restrict" F₀ τF₀
+    let ⟨R', τR⟩ ← encodeTerm R E
+    let sel := fun (t : SMT.Term) => if neg then ¬ˢ t else t
+    match τR with
+    | .fun α (.option β) => do
+      unless α == φ do throw s!"encodeTerm:domRestrict: {α} restricted by a set of {φ}"
+      let x ← freshVar α; SMT.eraseFromContext x
+      return (.lambda [x] [α]
+        (.ite (sel (.app Fc (.var x))) (.app R' (.var x)) (none$ β)), .fun α (.option β))
+    | .fun (.pair α β) .bool => do
+      unless α == φ do throw s!"encodeTerm:domRestrict: {α} restricted by a set of {φ}"
+      let p ← freshVar (.pair α β); SMT.eraseFromContext p
+      return (.lambda [p] [.pair α β]
+        (.app R' (.var p) ∧ˢ sel (.app Fc (.fst (.var p)))), .fun (.pair α β) .bool)
+    | _ => throw s!"encodeTerm:domRestrict: Expected a relation, got {τR}"
+  | .ranRestrict neg R F, E => do
+    /- `R ▷ F` / `R ⩥ F`.  In the partial-function case `the (R x)` is only
+       consulted inside the `ite`, and when `R x` is `none` both branches are
+       `none`, so no definedness guard is needed. -/
+    let ⟨R', τR⟩ ← encodeTerm R E
+    let ⟨F₀, τF₀⟩ ← encodeTerm F E
+    let ⟨Fc, φ⟩ ← asCharPred "restrict" F₀ τF₀
+    let sel := fun (t : SMT.Term) => if neg then ¬ˢ t else t
+    match τR with
+    | .fun α (.option β) => do
+      unless β == φ do throw s!"encodeTerm:ranRestrict: {β} restricted by a set of {φ}"
+      let x ← freshVar α; SMT.eraseFromContext x
+      return (.lambda [x] [α]
+        (.ite (sel (.app Fc (.the (.app R' (.var x))))) (.app R' (.var x)) (none$ β)),
+        .fun α (.option β))
+    | .fun (.pair α β) .bool => do
+      unless β == φ do throw s!"encodeTerm:ranRestrict: {β} restricted by a set of {φ}"
+      let p ← freshVar (.pair α β); SMT.eraseFromContext p
+      return (.lambda [p] [.pair α β]
+        (.app R' (.var p) ∧ˢ sel (.app Fc (.snd (.var p)))), .fun (.pair α β) .bool)
+    | _ => throw s!"encodeTerm:ranRestrict: Expected a relation, got {τR}"
+  | .overload Q R, E => do
+    /- `Q <+ R`.  When both sides are partial functions this is exactly
+       "`R` where it is defined, `Q` elsewhere" — no quantifier, and the result
+       is still a function.  Otherwise both are taken as graphs and the
+       `∃ y. R⟨x,y⟩` of the derived definition reappears, once. -/
+    let ⟨Q', τQ⟩ ← encodeTerm Q E
+    let ⟨R', τR⟩ ← encodeTerm R E
+    match τQ, τR with
+    | .fun α (.option β), .fun α' (.option β') =>
+      if α == α' && β == β' then do
+        let x ← freshVar α; SMT.eraseFromContext x
+        return (.lambda [x] [α]
+          (.ite (.app R' (.var x) =ˢ none$ β) (.app Q' (.var x)) (.app R' (.var x))),
+          .fun α (.option β))
+      else throw s!"encodeTerm:overload: {τQ} overridden by {τR}"
+    | _, _ => do
+      let ⟨Qc, γ⟩ ← asCharPred "overload" Q' τQ
+      let ⟨Rc, δ⟩ ← asCharPred "overload" R' τR
+      unless γ == δ do throw s!"encodeTerm:overload: {γ} overridden by {δ}"
+      let .pair α β := γ | throw s!"encodeTerm:overload: Expected a relation, got {γ}"
+      let p ← freshVar γ; SMT.eraseFromContext p
+      let y ← freshVar β; SMT.eraseFromContext y
+      let inDomR : SMT.Term :=
+        .exists [y] [β] (.app Rc (.pair (.fst (.var p)) (.var y)))
+      return (.lambda [p] [γ]
+        ((.app Qc (.var p) ∧ˢ ¬ˢ inDomR) ∨ˢ .app Rc (.var p)), .fun γ .bool)
+  | .compose R S, E => do
+    /- `R ; S`.  Two partial functions compose into a partial function without
+       a quantifier; anything else needs the intermediate point existentially. -/
+    let ⟨R', τR⟩ ← encodeTerm R E
+    let ⟨S', τS⟩ ← encodeTerm S E
+    match τR, τS with
+    | .fun α (.option β), .fun β' (.option γ) =>
+      if β == β' then do
+        let x ← freshVar α; SMT.eraseFromContext x
+        return (.lambda [x] [α]
+          (.ite (.app R' (.var x) =ˢ none$ β) (none$ γ)
+                (.app S' (.the (.app R' (.var x))))), .fun α (.option γ))
+      else throw s!"encodeTerm:compose: {τR} composed with {τS}"
+    | _, _ => do
+      let ⟨Rc, ρ⟩ ← asCharPred "compose" R' τR
+      let ⟨Sc, σ⟩ ← asCharPred "compose" S' τS
+      let .pair α β := ρ | throw s!"encodeTerm:compose: Expected a relation, got {ρ}"
+      let .pair β' γ := σ | throw s!"encodeTerm:compose: Expected a relation, got {σ}"
+      unless β == β' do throw s!"encodeTerm:compose: {ρ} composed with {σ}"
+      let p ← freshVar (.pair α γ); SMT.eraseFromContext p
+      let y ← freshVar β; SMT.eraseFromContext y
+      return (.lambda [p] [.pair α γ]
+        (.exists [y] [β]
+          (.app Rc (.pair (.fst (.var p)) (.var y)) ∧ˢ
+           .app Sc (.pair (.var y) (.snd (.var p))))),
+        .fun (.pair α γ) .bool)
   | .app f x, E => do
     castApp (← encodeTerm f E) (← encodeTerm x E)
   | .collect vs D P, E => do

@@ -58,6 +58,18 @@ inductive Term where
   -- `{ x | ∃ y. x ↦ y ∈ f }` inlines an existential at every occurrence.
   | dom (R : Term)
   | ran (R : Term)
+  -- The rest of B's relational vocabulary, kept as constructors for the same
+  -- reason as `dom`: under the partial-function representation each has a
+  -- quantifier-free definition that the derived comprehension throws away, and
+  -- the restrictions additionally *stay* functions rather than forcing the
+  -- graph to be reified.  `neg` selects the subtracting variant
+  -- (`⩤` over `◁`, `⩥` over `▷`).
+  | domRestrict (neg : Bool) (F R : Term)
+  | ranRestrict (neg : Bool) (R F : Term)
+  -- `Q <+ R` — `R` overriding `Q`.
+  | overload (Q R : Term)
+  -- `R ; S` — forward relational composition.
+  | compose (R S : Term)
   -- functions
   | app (f x : Term)
   | lambda (vs : List 𝒱) (D P : Term)
@@ -118,6 +130,9 @@ def fv : Term → List 𝒱
   | .finite S => fv S
   | .closure _ R => fv R
   | .dom R | .ran R => fv R
+  | .domRestrict _ F R | .ranRestrict _ R F => fv F ++ fv R
+  | .overload Q R => fv Q ++ fv R
+  | .compose R S => fv R ++ fv S
   | .fold _ f => fv f
   | .conc R ss => fv R ++ fv ss
   | .iterate R n => fv R ++ fv n
@@ -136,6 +151,8 @@ def bv : Term → List 𝒱
   | .app f x => bv f ++ bv x
   | .card S | .finite S | .min S | .max S | .pow S | .closure _ S | .fold _ S
   | .dom S | .ran S => bv S
+  | .domRestrict _ F R | .ranRestrict _ R F => bv F ++ bv R
+  | .overload Q R | .compose Q R => bv Q ++ bv R
   | .conc R ss => bv R ++ bv ss
   | .iterate R n => bv R ++ bv n
 

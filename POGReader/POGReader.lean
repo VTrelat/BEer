@@ -61,29 +61,14 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
   | "^", _ => B.Term.seqConcat
   | "<-", _ => B.Term.seqAppend
   | "->", _ => B.Term.seqPrepend
-  | ";", τ => fun R S ↦ do
-      let .set (.prod α γ) := τ | throw s!"; operator expects a relation, got type {τ}"
-      let .set (.prod _ β) ← R.getType
-        | throw s!"; operator expects a relation on the left, got type {← R.getType}"
-      B.Term.compose α β γ R S
-  | "<+", τ => fun S T ↦ do
-      let .set (.prod α β) := τ | throw s!"<+ operator should have type `set (α × β)`, got {τ}"
-      B.Term.overload α β S T
+  | ";", _ => pure ∘₂ .compose
+  | "<+", _ => pure ∘₂ .overload
   | "<->", ξ => fun S T ↦ do
       let .set (.set (.prod τ σ)) := ξ | throw s!"<-> operator expects a relation, got type {ξ}"
       return 𝒫ᴮ (S ⨯ᴮ T)
   -- | "<-" => throw "Not implemented"
-  | "<<|", τ =>
-      fun F R ↦ do
-      let .set (.prod α β) := τ | throw s!"<<| operator expects a relation, got type {τ}"
-      let x ← freshVar α
-      let y ← freshVar β
-      return .collect [x, y] (α.toTerm ⨯ᴮ β.toTerm) (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ ¬ᴮ(.var x ∈ᴮ F))
-  | "<|", τ => fun F R ↦ do
-      let .set (.prod α β) := τ | throw s!"<| operator expects a relation, got type {τ}"
-      let x ← freshVar α
-      let y ← freshVar β
-      return .collect [x, y] (α.toTerm ⨯ᴮ β.toTerm) (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ .var x ∈ᴮ F)
+  | "<<|", _ => pure ∘₂ (.domRestrict true)
+  | "<|", _ => pure ∘₂ (.domRestrict false)
   | "+->", ξ => fun S T ↦ do
     let ⟨τ, σ⟩ ← ξ.getFunctionType
     return S.pfun T
@@ -128,12 +113,8 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
     B.Term.parallel α β γ δ p q
   | "\\/", _ => pure ∘₂ .union
   | "|->", _ => pure ∘₂ .maplet
-  | "|>", τ => fun S T ↦ do
-      let .set (.prod _ _) := τ | throw s!"<| operator expects a relation, got type {τ}"
-      S ▷ T
-  | "|>>", τ => fun S T ↦ do
-      let .set (.prod _ _) := τ | throw s!"<<| operator expects a relation, got type {τ}"
-      S ⩥ T
+  | "|>", _ => pure ∘₂ (.ranRestrict false)
+  | "|>>", _ => pure ∘₂ (.ranRestrict true)
   | "[", τ =>
     -- if R ⊆ A ⨯ B then R[E] = { y ∈ B | ∃ x ∈ E, (x, y) ∈ R }
     fun R E ↦ do
@@ -178,7 +159,7 @@ def String.toBinaryOp : String → B.BType → B.Term → B.Term → Decoder B.T
     else
       let mut acc := R
       for _ in [1:k.toNat] do
-        acc ← B.Term.compose α α α acc R
+        acc := .compose acc R
       return acc
   -- | "const" => throw "Not implemented"
   -- | "rank" => throw "Not implemented"

@@ -34,7 +34,8 @@ baseline f5e4e03                        168             132             104
 + one-point, pruning, dedup, sharing    182             168             123
 + instantiation patterns                193             184             133
 + dom/ran as constructors               244              --             166
-                                     (61.6%)                          (55.0%)
++ compose/overload/restrictions         249              --             166
+                                     (62.9%)                          (55.0%)
 ```
 
 Against ppTrans on the same 396 goals at 5000 ms, `ppTrans-only` falls from
@@ -42,7 +43,7 @@ Against ppTrans on the same 396 goals at 5000 ms, `ppTrans-only` falls from
 
 ```
 baseline      both 136   BEer-only 32   ppTrans-only 152   neither 76
-all changes   both 206   BEer-only 38   ppTrans-only  82   neither 70
+all changes   both 207   BEer-only 42   ppTrans-only  81   neither 66
 ```
 
 By type order, the whole of the order-2 deficit closes:
@@ -50,8 +51,8 @@ By type order, the whole of the order-2 deficit closes:
 ```
 order    n    base    now   ppTrans
   0     12     83%    92%     100%
-  1    171     57%    70%      83%
-  2    179     28%    58%      60%
+  1    171     57%    72%      83%
+  2    179     28%    59%      60%
   3     32     28%    28%      78%
   4      2      0%     0%     100%
 ```
@@ -277,6 +278,36 @@ internally on every use.
 
 Nothing is axiomatised, so unlike a `Site` this carries no completeness risk in
 either direction.
+
+
+### 7. `compose`, `overload` and the restrictions
+
+Same treatment as `dom`/`ran`, and correct, but worth much less: +6/-1 on
+sample 1 and +0/-0 on sample 2.
+
+```
+                partial-function representation           relation representation
+F ◁ R, F ⩤ R    λx. ite (F x) (R x) none                  λp. R p ∧ F (fst p)
+R ▷ F, R ⩥ F    λx. ite (F (the (R x))) (R x) none        λp. R p ∧ F (snd p)
+Q <+ R          λx. ite (R x = none) (Q x) (R x)          one ∃y
+R ; S           λx. ite (R x = none) none (S (the (R x))) one ∃y
+```
+
+The restrictions are quantifier-free under *both* representations, where the
+derived form was always a two-binder comprehension, and all four keep
+`α → Option β` on the function path, so a chain like `dom (f ⩤ g)` no longer
+forces the graph to be reified.
+
+`ranRestrict` on a function reads `the (R x)`, which is arbitrary when `R x` is
+`none` — harmless here, because that is exactly when both branches of the `ite`
+are `none`, so no definedness guard is needed.
+
+Why the yield is low despite the frequency (150 sampled `.pog` files: `<+`
+10946 occurrences in 112 files, `;` 2047, `<|` 706, `|>>` 247, `<<|` 215,
+`|>` none): override and composition only lose their quantifier when *both*
+operands are partial functions, and the right operand of `<+` is typically a
+set literal such as `{x ↦ v}`, which is a relation. The two operators that are
+unconditionally quantifier-free — the restrictions — are the rare ones.
 
 ## Negative results
 

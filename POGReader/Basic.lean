@@ -128,6 +128,13 @@ def B.Term.getType : Term → Decoder B.BType
   | .ran R => do
     let .set (.prod _ σ) ← R.getType | throw "ran expects a relation"
     return .set σ
+  -- Restriction and override keep the relation's own type; composition joins
+  -- the source of the left with the target of the right.
+  | .domRestrict _ _ R | .ranRestrict _ R _ | .overload _ R => R.getType
+  | .compose R S => do
+    let .set (.prod α _) ← R.getType | throw "; expects a relation on the left"
+    let .set (.prod _ γ) ← S.getType | throw "; expects a relation on the right"
+    return .set (.prod α γ)
   -- Read off the carried result type rather than recursing through the
   -- argument: `getType (τ.toTerm) = .set τ`.
   | .conc R _ => do

@@ -91,6 +91,10 @@ partial def Term.pretty (b : Bool) : Term -> Nat -> Std.Format
   | .closure r R => «prefix» (Term.pretty b) 290 (if r then "closure " else "closure1 ") R
   | .dom R => «prefix» (Term.pretty b) 290 "dom " R
   | .ran R => «prefix» (Term.pretty b) 290 "ran " R
+  | .domRestrict n F R => «infixl» (Term.pretty b) 90 (if n then "⩤" else "◁") F R
+  | .ranRestrict n R F => «infixl» (Term.pretty b) 90 (if n then "⩥" else "▷") R F
+  | .overload Q R => «infixl» (Term.pretty b) 90 "<+" Q R
+  | .compose R S => «infixl» (Term.pretty b) 90 ";" R S
   | .fold s f => «prefix» (Term.pretty b) 290 (if s then "Σ " else "Π ") f
   | .iterate R n => «infixl» (Term.pretty b) 195 "iterate" R n
   | .conc _ ss => «prefix» (Term.pretty b) 290 "conc " ss

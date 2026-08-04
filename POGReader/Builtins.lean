@@ -17,38 +17,11 @@ def Decoder.Exists (D : Term) (P : Term → Decoder Term) : Decoder Term := do
   let x := s!"x{← incrementFreshVarC}"
   .exists [x] D <$> (P <| .var x)
 
-def B.Term.domRestriction (F R : Term) : Decoder Term := do
-  let x := s!"x{← incrementFreshVarC}"
-  let y := s!"y{← incrementFreshVarC}"
-  return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ .var x ∈ᴮ F)
-infix:90 "◁" => B.Term.domRestriction
+infix:90 "◁" => B.Term.domRestrict false
+infix:90 "⩤" => B.Term.domRestrict true
+infix:90 "▷" => fun R F => B.Term.ranRestrict false R F
+infix:90 "⩥" => fun R F => B.Term.ranRestrict true R F
 
-/-- `F ⩤ R` — drop the pairs of `R` whose *domain* element lies in `F`. -/
-def B.Term.domSubtraction (F R : Term) : Decoder Term := do
-  let x := s!"x{← incrementFreshVarC}"
-  let y := s!"y{← incrementFreshVarC}"
-  return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ ¬ᴮ(.var x ∈ᴮ F))
-infix:90 "⩤" => B.Term.domSubtraction
-
-def B.Term.ranRestriction (R F : Term) : Decoder Term := do
-  let x := s!"x{← incrementFreshVarC}"
-  let y := s!"y{← incrementFreshVarC}"
-  return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ .var y ∈ᴮ F)
-infix:90 "▷" => B.Term.ranRestriction
-
-/-- `R ⩥ F` — drop the pairs of `R` whose *range* element lies in `F`. -/
-def B.Term.ranSubtraction (R F : Term) : Decoder Term := do
-  let x := s!"x{← incrementFreshVarC}"
-  let y := s!"y{← incrementFreshVarC}"
-  return .collect [x, y] R (.var x ↦ᴮ .var y ∈ᴮ R ∧ᴮ ¬ᴮ(.var y ∈ᴮ F))
-infix:90 "⩥" => B.Term.ranSubtraction
-
-def B.Term.overload (τ σ : BType) (Q R : Term) : Decoder Term := do
-  let x ← freshVar τ
-  let y ←  freshVar σ
-  let domR := Term.dom R
-  return .collect [x, y] (τ.toTerm ⨯ᴮ σ.toTerm)
-    (((.var x ↦ᴮ .var y ∈ᴮ Q) ∧ᴮ ¬ᴮ(.var x ∈ᴮ domR)) ∨ᴮ (.var x ↦ᴮ .var y ∈ᴮ R))
 
 def B.Term.tot_on (D : Term) (σ : BType) (f : Term) : Decoder Term := do
   .All D <| λ x => .Exists σ.toTerm <| fun y => return (x ↦ᴮ y) ∈ᴮ f
@@ -152,14 +125,6 @@ def B.Term.perm (E : Term) : Decoder Term := do
 
 /-! ## Relations -/
 
-/-- `R ; S`, forward relational composition. `β` is the type joining the two
-relations, which the caller reads off `R`'s type. -/
-def B.Term.compose (α β γ : BType) (R S : Term) : Decoder Term := do
-  let x ← freshVar α
-  let z ← freshVar γ
-  let y ← freshVar β
-  return .collect [x, z] (α.toTerm ⨯ᴮ γ.toTerm)
-    (.exists [y] β.toTerm ((.var x ↦ᴮ .var y ∈ᴮ R) ∧ᴮ (.var y ↦ᴮ .var z ∈ᴮ S)))
 
 /-- `p || q` — parallel product: `{(a, c) ↦ (b, d) | a ↦ b ∈ p ∧ c ↦ d ∈ q}`.
 
