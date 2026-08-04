@@ -20,7 +20,9 @@ Grid'5000 campaign measured.
 - **Prelude.** `:produce-unsat-cores` stripped, as the campaign harness does.
 
 Encoder tags: `base` = `f5e4e03`; `onepoint` = base + one-point elimination;
-`full` = onepoint + dead-declaration pruning + assertion dedup + helper sharing.
+`full` = onepoint + dead-declaration pruning + assertion dedup + helper sharing;
+`trigE` = full + instantiation patterns; `dom` = trigE + `dom`/`ran` as
+constructors, i.e. the final state.
 
 ## Results
 
@@ -92,28 +94,28 @@ work. On sample 2 the changed encoder finished **310** goals against the
 baseline's 302 under the same 90 s cap — the size reduction buys a little
 coverage as well.
 
-Against ppTrans on sample 1 at 5000 ms, same 396 goals:
+Intermediate step, for attribution — after the four formula-level changes but
+*before* patterns and `dom`/`ran` (sample 1, 5000 ms, same 396 goals). At this
+point order 2 was still moving the wrong way; `dom`/`ran` is what fixed it:
 
 ```
-base   both 136   BEer-only 32   ppTrans-only 152   neither 76
-full   both 149   BEer-only 33   ppTrans-only 139   neither 75
+              both  BEer-only  ppTrans-only  neither
+base           136         32           152       76
+full           149         33           139       75
+
+order    n    base   full   ppTrans
+  0     12     83%    83%     100%
+  1    171     57%    67%      83%
+  2    179     28%    26%      60%
+  3     32     28%    34%      78%
+  4      2      0%     0%     100%
 ```
 
-By type order (sample 1, 5000 ms) — the gain is at orders 1 and 3, and order 2
-moves slightly the wrong way:
-
-```
-order    n    base  changed  ppTrans
-  0     12     83%      83%     100%
-  1    171     57%      67%      83%
-  2    179     28%      26%      60%
-  3     32     28%      34%      78%
-  4      2      0%       0%     100%
-```
-
-**The gain shrinks as the budget grows** (+36 at 2000 ms, +14 at 5000 ms): most
-of what these changes buy is speed, so a longer budget lets the baseline catch
-up. Quote the 5000 ms column when predicting the full campaign.
+**For the formula-level changes and patterns, the gain shrinks as the budget
+grows** (+36 at 2000 ms against +14 at 5000 ms): most of what they buy is
+speed, so a longer budget lets the baseline catch up. `dom`/`ran` is not like
+that — it removes a quantifier rather than shortening a search, and it gains
++59 at 5000 ms.
 
 ## The changes
 
