@@ -42,11 +42,18 @@ def loosenAux_prf (name : String) {α β : SMTType} (c : α ~> β) (x : Term) : 
             (((.app x (.fst (.var z))) =ˢ .some (.snd (.var z))) ∧ˢ z!_spec)))
     ⟩
   | @castPath.chpred α α' c_α =>
-    let z ← SMT.freshVar α s!"{x!}_charPred"
-    let ⟨z!, z!_spec⟩ ← loosenAux_prf s!"{name}_char_pred" c_α (.var z)
-    SMT.eraseFromContext z
-    SMT.eraseFromContext z!
-    return ⟨x!, .var x! =ˢ (.lambda [z!] [α'] (.exists [z] [α] ((.app x (.var z)) ∧ˢ z!_spec)))⟩
+    -- A reflexive component is the identity, and spelling it out as
+    -- `λ z!. ∃ z. x z ∧ z! = z` leaves an η-expansion the one-point rule
+    -- cannot see through — the shape that kept every order-3 membership
+    -- quantified.  `loosenAux_impl` has had this shortcut all along.
+    match c_α with
+    | .refl _ => return ⟨x!, .var x! =ˢ x⟩
+    | c_α =>
+      let z ← SMT.freshVar α s!"{x!}_charPred"
+      let ⟨z!, z!_spec⟩ ← loosenAux_prf s!"{name}_char_pred" c_α (.var z)
+      SMT.eraseFromContext z
+      SMT.eraseFromContext z!
+      return ⟨x!, .var x! =ˢ (.lambda [z!] [α'] (.exists [z] [α] ((.app x (.var z)) ∧ˢ z!_spec)))⟩
   | @castPath.opt α α' c_α =>
     match _hx : x with
     | .none   => return ⟨x!, .var x! =ˢ none$α'⟩
@@ -64,13 +71,16 @@ def loosenAux_prf (name : String) {α β : SMTType} (c : α ~> β) (x : Term) : 
           (.exists [the_x!] [α'] ((.var x! =ˢ .some (.var the_x!)) ∧ˢ the_x!_spec))
       ⟩
   | @castPath.pair α β α' β' c_α c_β =>
-    let ⟨fst!, fst!_spec⟩ ← loosenAux_prf s!"{name}_pair_fst" c_α (.fst x)
-    let ⟨snd!, snd!_spec⟩ ← loosenAux_prf s!"{name}_pair_snd" c_β (.snd x)
-    SMT.eraseFromContext fst!
-    SMT.eraseFromContext snd!
-    return ⟨x!,
-      .exists [fst!, snd!] [α', β'] ((.var x! =ˢ .pair (.var fst!) (.var snd!)) ∧ˢ (fst!_spec ∧ˢ snd!_spec))
-    ⟩
+    match c_α, c_β with
+    | .refl _, .refl _ => return ⟨x!, .var x! =ˢ x⟩
+    | c_α, c_β =>
+      let ⟨fst!, fst!_spec⟩ ← loosenAux_prf s!"{name}_pair_fst" c_α (.fst x)
+      let ⟨snd!, snd!_spec⟩ ← loosenAux_prf s!"{name}_pair_snd" c_β (.snd x)
+      SMT.eraseFromContext fst!
+      SMT.eraseFromContext snd!
+      return ⟨x!,
+        .exists [fst!, snd!] [α', β'] ((.var x! =ˢ .pair (.var fst!) (.var snd!)) ∧ˢ (fst!_spec ∧ˢ snd!_spec))
+      ⟩
   | .refl _ => return ⟨x!, .var x! =ˢ x⟩
   | @castPath.fun α β α' β' _ c_α c_β =>
     let a ← SMT.freshVar α s!"{x!}_funFun_src_arg"

@@ -303,6 +303,12 @@ partial def simplifier : Term → Term
     match onePointForall vs τs e with
     | some t => t
     | none => .forall vs τs (simplifier e)
+  -- η: `λ v. f v` is `f`.  The loosening layer produces this whenever a
+  -- component cast is the identity at a set-valued position, and leaving it
+  -- blocks the one-point rule, which is looking for `v = t`.
+  | Term.lambda [v] [τ] (.app f (.var v')) =>
+    if v == v' && !(fv f).contains v then simplifier f
+    else .lambda [v] [τ] (.app (simplifier f) (.var v'))
   | Term.lambda vs τs e => .lambda vs τs (simplifier e)
   | Term.ite (.bool true) t _ | .ite (.bool false) _ t => t
   | Term.ite c t e => .ite (simplifier c) (simplifier t) (simplifier e)

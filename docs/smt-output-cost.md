@@ -35,7 +35,8 @@ baseline f5e4e03                        168             132             104
 + instantiation patterns                193             184             133
 + dom/ran as constructors               244              --             166
 + compose/overload/restrictions         249              --             166
-                                     (62.9%)                          (55.0%)
++ identity casts at set-valued fields   261              --             178
+                                     (65.9%)                          (58.9%)
 ```
 
 Against ppTrans on the same 396 goals at 5000 ms, `ppTrans-only` falls from
@@ -43,7 +44,7 @@ Against ppTrans on the same 396 goals at 5000 ms, `ppTrans-only` falls from
 
 ```
 baseline      both 136   BEer-only 32   ppTrans-only 152   neither 76
-all changes   both 207   BEer-only 42   ppTrans-only  81   neither 66
+all changes   both 223   BEer-only 38   ppTrans-only  65   neither 70
 ```
 
 By type order, the whole of the order-2 deficit closes:
@@ -51,10 +52,10 @@ By type order, the whole of the order-2 deficit closes:
 ```
 order    n    base    now   ppTrans
   0     12     83%    92%     100%
-  1    171     57%    72%      83%
-  2    179     28%    59%      60%
-  3     32     28%    28%      78%
-  4      2      0%     0%     100%
+  1    171     57%    69%      83%
+  2    179     28%    61%      60%
+  3     32     28%    69%      78%
+  4      2      0%    50%     100%
 ```
 
 Step by step, on the goals common to each pair:
@@ -308,6 +309,43 @@ Why the yield is low despite the frequency (150 sampled `.pog` files: `<+`
 operands are partial functions, and the right operand of `<+` is typically a
 set literal such as `{x ↦ v}`, which is a relation. The two operators that are
 unconditionally quantifier-free — the restrictions — are the rare ones.
+
+
+### 8. Identity casts at set-valued fields
+
++19/-7 on sample 1, +12/-0 on sample 2, and it is what finally moved order 3:
+**28% to 69%**, with order 4 going from 0% to 50%.
+
+Order-3 goals are dominated by functions whose *values* are sets, e.g.
+`s51 : (Pair Int Int) → Option (Int → Bool)`.  Loosening one hits
+`castPath.chpred` at the set-valued component, and `loosenAux_prf` spelled that
+out as `λ z!. ∃ z. x z ∧ z! = z` **even when the component's cast is the
+identity**.  One-point elimination collapses the inner equation, but what it
+leaves behind is
+
+```smt
+(= (snd p) (lambda ((c Int)) (@ (snd z) c)))
+```
+
+an η-expansion rather than a variable, so the rule cannot fire a second time and
+the existential survives.  The higher the order, the more set-valued components,
+the more existentials survive — which is why orders 1 and 2 responded to
+everything above and order 3 responded to none of it.
+
+Two changes, both equivalences:
+
+* `.refl` shortcuts in `loosenAux_prf` for `chpred` and `pair`, so the identity
+  cast emits `x! = x` outright.  `loosenAux_impl` has had them all along; the
+  encoder calls `loosenAux_prf`.
+* η-contraction in the simplifier — `λ v. f v` is `f` when `v ∉ fv f` — as a
+  net for the same shape arising elsewhere.
+
+The specification of the reproducer above goes from a nested existential with an
+η-expansion inside it to
+
+```smt
+(= mem!896 (lambda ((p ...)) (= (s51 (fst p)) (some (snd p)))))
+```
 
 ## Negative results
 
