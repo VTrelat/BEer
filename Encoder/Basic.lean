@@ -142,8 +142,14 @@ Relating every pair is quadratic in the number of sites, and a machine with many
 enumerated SETS clauses easily produces a few hundred `finite` sites — the
 resulting specifications dwarf the proof obligation itself.  Only the most
 recent sites are linked, which costs provable facts but never soundness: the
-axioms left out are ones the solver simply never learns. -/
-def SMT.maxSiteLinks : Nat := 8
+axioms left out are ones the solver simply never learns.
+
+Measured at 2 rather than 8: the linking axioms are `∀ x. S x ⇒ T x` pairs that
+the solver almost never uses, and they dominate the quantifier count of a
+per-goal script (`fin!` alone accounts for 51973 occurrences across the goals
+BEer still fails).  Dropping from 8 to 2 gains +5/-1 on one sample and +6/-0 on
+the other, and takes the median script from 245 KB to 208 KB. -/
+def SMT.maxSiteLinks : Nat := 2
 
 /-- The sites recorded for `op` at element type `τ`, most recent first and
 capped at `maxSiteLinks`; used to relate a new constant to the ones already
