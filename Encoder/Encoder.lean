@@ -69,6 +69,26 @@ private def asCharPred (op : String) (S : SMT.Term) (τS : SMTType) :
     return (.var Sg, .pair α β)
   | _ => throw s!"encodeTerm:{op}: Expected a set, got {τS}"
 
+/-- Put two encoded characteristic predicates at a common element type.
+
+`asCharPred` reifies the *outer* representation, but the element type can still
+disagree underneath — a pair whose second component is a relation stored as a
+characteristic predicate on one side and as a partial function on the other.
+The castable relation relates those, so loosen the narrower side rather than
+refusing the operator. -/
+private def joinCharPred (op : String) (A : SMT.Term) (γ : SMTType)
+    (B : SMT.Term) (δ : SMTType) : Encoder (SMT.Term × SMT.Term × SMTType) := do
+  if γ == δ then return (A, B, γ)
+  else if h : γ ⊑ δ then do
+    let ⟨A!, spec⟩ ← loosenAux_prf s!"{op}!" (castPath.chpred h.toCastPath) A
+    declareConstWithSpec A! (.fun δ .bool) spec
+    return (.var A!, B, δ)
+  else if h : δ ⊑ γ then do
+    let ⟨B!, spec⟩ ← loosenAux_prf s!"{op}!" (castPath.chpred h.toCastPath) B
+    declareConstWithSpec B! (.fun γ .bool) spec
+    return (A, .var B!, γ)
+  else throw s!"encodeTerm:{op}: cannot unify {γ} with {δ}"
+
 /-- Encode `|S|` for an encoded set `S : τ → bool`.
 
 SMT-LIB has no cardinality operator, and cvc5 has no parametric function
@@ -530,18 +550,25 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
        `∃ y. R⟨x,y⟩` of the derived definition reappears, once. -/
     let ⟨Q', τQ⟩ ← encodeTerm Q E
     let ⟨R', τR⟩ ← encodeTerm R E
-    match τQ, τR with
-    | .fun α (.option β), .fun α' (.option β') =>
-      if α == α' && β == β' then do
-        let x ← freshVar α; SMT.eraseFromContext x
-        return (.lambda [x] [α]
-          (.ite (.app R' (.var x) =ˢ none$ β) (.app Q' (.var x)) (.app R' (.var x))),
-          .fun α (.option β))
-      else throw s!"encodeTerm:overload: {τQ} overridden by {τR}"
-    | _, _ => do
-      let ⟨Qc, γ⟩ ← asCharPred "overload" Q' τQ
-      let ⟨Rc, δ⟩ ← asCharPred "overload" R' τR
-      unless γ == δ do throw s!"encodeTerm:overload: {γ} overridden by {δ}"
+    -- The fast path needs both sides at *the same* partial-function type;
+    -- anything else falls through to the graph form rather than failing, since
+    -- the two may be the same B set at different representations.
+    let fast : Option (Encoder (SMT.Term × SMTType)) :=
+      match τQ, τR with
+      | .fun α (.option β), .fun α' (.option β') =>
+        if α == α' && β == β' then Option.some do
+          let x ← freshVar α; SMT.eraseFromContext x
+          return (.lambda [x] [α]
+            (.ite (.app R' (.var x) =ˢ none$ β) (.app Q' (.var x)) (.app R' (.var x))),
+            .fun α (.option β))
+        else Option.none
+      | _, _ => Option.none
+    match fast with
+    | Option.some k => k
+    | Option.none => do
+      let ⟨Qc₀, γ₀⟩ ← asCharPred "overload" Q' τQ
+      let ⟨Rc₀, δ₀⟩ ← asCharPred "overload" R' τR
+      let (Qc, Rc, γ) ← joinCharPred "overload" Qc₀ γ₀ Rc₀ δ₀
       let .pair α β := γ | throw s!"encodeTerm:overload: Expected a relation, got {γ}"
       let p ← freshVar γ; SMT.eraseFromContext p
       let y ← freshVar β; SMT.eraseFromContext y
@@ -554,19 +581,25 @@ def encodeTerm : B.Term → B.Env → Encoder (SMT.Term × SMTType)
        a quantifier; anything else needs the intermediate point existentially. -/
     let ⟨R', τR⟩ ← encodeTerm R E
     let ⟨S', τS⟩ ← encodeTerm S E
-    match τR, τS with
-    | .fun α (.option β), .fun β' (.option γ) =>
-      if β == β' then do
-        let x ← freshVar α; SMT.eraseFromContext x
-        return (.lambda [x] [α]
-          (.ite (.app R' (.var x) =ˢ none$ β) (none$ γ)
-                (.app S' (.the (.app R' (.var x))))), .fun α (.option γ))
-      else throw s!"encodeTerm:compose: {τR} composed with {τS}"
-    | _, _ => do
+    let fast : Option (Encoder (SMT.Term × SMTType)) :=
+      match τR, τS with
+      | .fun α (.option β), .fun β' (.option γ) =>
+        if β == β' then Option.some do
+          let x ← freshVar α; SMT.eraseFromContext x
+          return (.lambda [x] [α]
+            (.ite (.app R' (.var x) =ˢ none$ β) (none$ γ)
+                  (.app S' (.the (.app R' (.var x))))), .fun α (.option γ))
+        else Option.none
+      | _, _ => Option.none
+    match fast with
+    | Option.some k => k
+    | Option.none => do
       let ⟨Rc, ρ⟩ ← asCharPred "compose" R' τR
       let ⟨Sc, σ⟩ ← asCharPred "compose" S' τS
       let .pair α β := ρ | throw s!"encodeTerm:compose: Expected a relation, got {ρ}"
       let .pair β' γ := σ | throw s!"encodeTerm:compose: Expected a relation, got {σ}"
+      -- The joining type must agree; loosening one side of a composition would
+      -- change which pairs it relates, so this one really is an error.
       unless β == β' do throw s!"encodeTerm:compose: {ρ} composed with {σ}"
       let p ← freshVar (.pair α γ); SMT.eraseFromContext p
       let y ← freshVar β; SMT.eraseFromContext y

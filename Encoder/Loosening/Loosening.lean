@@ -3,7 +3,26 @@ import Encoder.Simplifier
 import Encoder.Loosening.Rules
 open SMT
 
-def castEq : Term × SMTType → Term × SMTType → Encoder (Term × SMTType) | (A, α), (B, β) => do
+/-- Reify an option-valued function as its graph, leaving anything else alone.
+
+Used as `castEq`'s last resort: the relational operators now *preserve* the
+partial-function representation, so an equality can have one side stored as
+`α → Option β` and the other as the characteristic predicate of its graph, with
+the two also disagreeing on the representation of the *element* type.  The
+castable relation relates one such change at a time, not both at once; putting
+both sides in graph form first is what the derived comprehensions used to do
+unconditionally. -/
+private def reifyGraph (name : String) (t : Term) (τ : SMTType) :
+    Encoder (Term × SMTType) :=
+  match τ with
+  | .fun α (.option β) => do
+    let ⟨g, spec⟩ ← loosenAux_prf name
+      (castPath.graph (castPath.reflexive α) (castPath.reflexive β)) t
+    declareConstWithSpec g (.fun (.pair α β) .bool) spec
+    return (.var g, .fun (.pair α β) .bool)
+  | _ => return (t, τ)
+
+private def castEqCore : Term × SMTType → Term × SMTType → Encoder (Term × SMTType) | (A, α), (B, β) => do
   if h : α = β then do
     /-
       A : α    B : β    α = β
@@ -20,6 +39,14 @@ def castEq : Term × SMTType → Term × SMTType → Encoder (Term × SMTType) |
     declareConstWithSpec B! α B!_spec
     return (((.var B!) =ˢ A) ∧ˢ B!_spec, .bool)
   else throw s!"castEq: Failed to unify {α} with {β}"
+
+def castEq (a b : Term × SMTType) : Encoder (Term × SMTType) := do
+  try castEqCore a b
+  catch e =>
+    let (A, α) ← reifyGraph "eq!" a.1 a.2
+    let (B, β) ← reifyGraph "eq!" b.1 b.2
+    -- Nothing to reify means the original failure stands.
+    if α == a.2 && β == b.2 then throw e else castEqCore (A, α) (B, β)
 
 /-- A loosening of `x` to `β`, shared with any earlier occurrence of the same
 term at the same target type.
