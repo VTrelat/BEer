@@ -1,4 +1,4 @@
-name = "B"
+name = "BEer"
 defaultTargets = ["Encoder", "POGReader", "Correctness"]
 
 [leanOptions]
