@@ -33,11 +33,6 @@ Both indices are 0-based in `.pog` order, matching ppTrans `-n`'s
 `out-<PO>-<goal>.smt2`. Both report per-unit cost on stderr, and `--out
 /dev/null` keeps that report without writing anything.
 
-Each split script repeats the whole global context, `--per-goal` most of all:
-one goal of the corpus's `0002/00041` is 10 MiB, so its 1033 goals come to
-10.5 GiB. Stream them — emit, solve, discard — rather than writing a corpus to
-disk.
-
 `scripts/check-per-po.sh` and `scripts/check-per-goal.sh` check either split
 against the whole-file encoding.
 
